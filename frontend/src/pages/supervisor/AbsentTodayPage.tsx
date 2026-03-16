@@ -11,7 +11,6 @@ export default function AbsentTodayPage() {
   const [records, setRecords] = useState<Attendance[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
-  const today = new Date().toISOString().split('T')[0];
 
   const load = () => {
     supervisorApi.getAbsentToday()
