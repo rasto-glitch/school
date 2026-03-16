@@ -1,0 +1,169 @@
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+import { useAuthStore } from './store/authStore';
+
+// Auth
+import LoginPage, { SCHOOL_STORAGE_KEY } from './pages/auth/LoginPage';
+import SchoolPickerPage from './pages/auth/SchoolPickerPage';
+import ForgotPasswordPage from './pages/auth/ForgotPasswordPage';
+
+// Parent
+import ParentDashboard from './pages/parent/ParentDashboard';
+import HomeworkPage from './pages/parent/HomeworkPage';
+import HomeworkDetailPage from './pages/parent/HomeworkDetailPage';
+import AssignmentsPage from './pages/parent/AssignmentsPage';
+import AssignmentDetailPage from './pages/parent/AssignmentDetailPage';
+import ParentAnnouncementsPage from './pages/parent/AnnouncementsPage';
+import AnnouncementDetailPage from './pages/parent/AnnouncementDetailPage';
+import ReportsPage from './pages/parent/ReportsPage';
+import BusTrackingPage from './pages/parent/BusTrackingPage';
+import NotificationsPage from './pages/parent/NotificationsPage';
+import ProfilePage from './pages/parent/ProfilePage';
+
+// Teacher
+import TeacherDashboard from './pages/teacher/TeacherDashboard';
+import WriteHomeworkPage from './pages/teacher/WriteHomeworkPage';
+import GradingPage from './pages/teacher/GradingPage';
+import WeeklySummaryPage from './pages/teacher/WeeklySummaryPage';
+import StudentsPage from './pages/teacher/StudentsPage';
+import WriteReportPage from './pages/teacher/WriteReportPage';
+import TeacherNotificationsPage from './pages/teacher/TeacherNotificationsPage';
+
+// Admin
+import AdminDashboard from './pages/admin/AdminDashboard';
+import StudentsManagement from './pages/admin/StudentsManagement';
+import TeachersManagement from './pages/admin/TeachersManagement';
+import DriversManagement from './pages/admin/DriversManagement';
+import AppointmentsPage from './pages/admin/AppointmentsPage';
+import AccountsPage from './pages/admin/AccountsPage';
+import ClassesPage from './pages/admin/ClassesPage';
+import AdminNotificationsPage from './pages/admin/AdminNotificationsPage';
+import StudentBriefPage from './pages/admin/StudentBriefPage';
+import AnnouncementsPage from './pages/admin/AnnouncementsPage';
+import AdminStudentsListPage from './pages/admin/AdminStudentsListPage';
+import AdminTeachersListPage from './pages/admin/AdminTeachersListPage';
+import AdminDriversListPage from './pages/admin/AdminDriversListPage';
+import AdminWeeklySummaryPage from './pages/admin/AdminWeeklySummaryPage';
+import SettingsPage from './pages/admin/SettingsPage';
+import ParentAppointmentsPage from './pages/parent/AppointmentsPage';
+import WriteAssignmentsPage from './pages/teacher/WriteAssignmentsPage';
+
+// Driver
+import DriverDashboard from './pages/driver/DriverDashboard';
+import StartDrivePage from './pages/driver/StartDrivePage';
+import DriverStudentsPage from './pages/driver/DriverStudentsPage';
+
+// Supervisor
+import SupervisorDashboard from './pages/supervisor/SupervisorDashboard';
+import AbsentTodayPage from './pages/supervisor/AbsentTodayPage';
+import AttendanceOverviewPage from './pages/supervisor/AttendanceOverviewPage';
+
+// Parent Grades
+import GradesPage from './pages/parent/GradesPage';
+
+// Teacher Attendance
+import AttendancePage from './pages/teacher/AttendancePage';
+
+function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode; allowedRoles?: string[] }) {
+  const { isAuthenticated, user } = useAuthStore();
+  if (!isAuthenticated()) return <Navigate to="/login" replace />;
+  if (allowedRoles && user && !allowedRoles.includes(user.role)) {
+    const roleRedirects: Record<string, string> = {
+      parent: '/parent/dashboard',
+      teacher: '/teacher/dashboard',
+      admin: '/admin/dashboard',
+      driver: '/driver/dashboard',
+      supervisor: '/supervisor/dashboard',
+    };
+    return <Navigate to={roleRedirects[user.role] || '/login'} replace />;
+  }
+  return <>{children}</>;
+}
+
+function RootRedirect() {
+  const { isAuthenticated, user } = useAuthStore();
+  const roleRedirects: Record<string, string> = {
+    parent: '/parent/dashboard',
+    teacher: '/teacher/dashboard',
+    admin: '/admin/dashboard',
+    driver: '/driver/dashboard',
+    supervisor: '/supervisor/dashboard',
+  };
+  if (isAuthenticated()) return <Navigate to={roleRedirects[user?.role || ''] || '/login'} replace />;
+  const hasStoredSchool = !!localStorage.getItem(SCHOOL_STORAGE_KEY);
+  return <Navigate to={hasStoredSchool ? '/login' : '/select-school'} replace />;
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <ToastContainer position="top-right" autoClose={4000} />
+      <Routes>
+        <Route path="/" element={<RootRedirect />} />
+        <Route path="/select-school" element={<SchoolPickerPage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+
+        {/* Parent Portal */}
+        <Route path="/parent/dashboard" element={<ProtectedRoute allowedRoles={['parent']}><ParentDashboard /></ProtectedRoute>} />
+        <Route path="/parent/homework" element={<ProtectedRoute allowedRoles={['parent']}><HomeworkPage /></ProtectedRoute>} />
+        <Route path="/parent/homework/:id" element={<ProtectedRoute allowedRoles={['parent']}><HomeworkDetailPage /></ProtectedRoute>} />
+        <Route path="/parent/assignments" element={<ProtectedRoute allowedRoles={['parent']}><AssignmentsPage /></ProtectedRoute>} />
+        <Route path="/parent/assignments/:id" element={<ProtectedRoute allowedRoles={['parent']}><AssignmentDetailPage /></ProtectedRoute>} />
+        <Route path="/parent/announcements" element={<ProtectedRoute allowedRoles={['parent']}><ParentAnnouncementsPage /></ProtectedRoute>} />
+        <Route path="/parent/announcements/:id" element={<ProtectedRoute allowedRoles={['parent']}><AnnouncementDetailPage /></ProtectedRoute>} />
+        <Route path="/parent/reports" element={<ProtectedRoute allowedRoles={['parent']}><ReportsPage /></ProtectedRoute>} />
+        <Route path="/parent/bus" element={<ProtectedRoute allowedRoles={['parent']}><BusTrackingPage /></ProtectedRoute>} />
+        <Route path="/parent/notifications" element={<ProtectedRoute allowedRoles={['parent']}><NotificationsPage /></ProtectedRoute>} />
+        <Route path="/parent/appointments" element={<ProtectedRoute allowedRoles={['parent']}><ParentAppointmentsPage /></ProtectedRoute>} />
+        <Route path="/parent/grades" element={<ProtectedRoute allowedRoles={['parent']}><GradesPage /></ProtectedRoute>} />
+        <Route path="/parent/profile" element={<ProtectedRoute allowedRoles={['parent']}><ProfilePage /></ProtectedRoute>} />
+
+        {/* Teacher Portal */}
+        <Route path="/teacher/dashboard" element={<ProtectedRoute allowedRoles={['teacher']}><TeacherDashboard /></ProtectedRoute>} />
+        <Route path="/teacher/attendance" element={<ProtectedRoute allowedRoles={['teacher']}><AttendancePage /></ProtectedRoute>} />
+        <Route path="/teacher/homework" element={<ProtectedRoute allowedRoles={['teacher']}><WriteHomeworkPage /></ProtectedRoute>} />
+        <Route path="/teacher/assignments" element={<ProtectedRoute allowedRoles={['teacher']}><WriteAssignmentsPage /></ProtectedRoute>} />
+        <Route path="/teacher/reports" element={<ProtectedRoute allowedRoles={['teacher']}><WriteReportPage /></ProtectedRoute>} />
+        <Route path="/teacher/grades" element={<ProtectedRoute allowedRoles={['teacher']}><GradingPage /></ProtectedRoute>} />
+        <Route path="/teacher/weekly-summary" element={<ProtectedRoute allowedRoles={['teacher']}><WeeklySummaryPage /></ProtectedRoute>} />
+        <Route path="/teacher/students" element={<ProtectedRoute allowedRoles={['teacher']}><StudentsPage /></ProtectedRoute>} />
+        <Route path="/teacher/notifications" element={<ProtectedRoute allowedRoles={['teacher']}><TeacherNotificationsPage /></ProtectedRoute>} />
+        <Route path="/teacher/profile" element={<ProtectedRoute allowedRoles={['teacher']}><ProfilePage /></ProtectedRoute>} />
+
+        {/* Admin Portal */}
+        <Route path="/admin/dashboard" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>} />
+        <Route path="/admin/list/students" element={<ProtectedRoute allowedRoles={['admin']}><AdminStudentsListPage /></ProtectedRoute>} />
+        <Route path="/admin/list/teachers" element={<ProtectedRoute allowedRoles={['admin']}><AdminTeachersListPage /></ProtectedRoute>} />
+        <Route path="/admin/list/drivers" element={<ProtectedRoute allowedRoles={['admin']}><AdminDriversListPage /></ProtectedRoute>} />
+        <Route path="/admin/students" element={<ProtectedRoute allowedRoles={['admin']}><StudentsManagement /></ProtectedRoute>} />
+        <Route path="/admin/classes" element={<ProtectedRoute allowedRoles={['admin']}><ClassesPage /></ProtectedRoute>} />
+        <Route path="/admin/teachers" element={<ProtectedRoute allowedRoles={['admin']}><TeachersManagement /></ProtectedRoute>} />
+        <Route path="/admin/drivers" element={<ProtectedRoute allowedRoles={['admin']}><DriversManagement /></ProtectedRoute>} />
+        <Route path="/admin/student-brief" element={<ProtectedRoute allowedRoles={['admin']}><StudentBriefPage /></ProtectedRoute>} />
+        <Route path="/admin/weekly-summary" element={<ProtectedRoute allowedRoles={['admin']}><AdminWeeklySummaryPage /></ProtectedRoute>} />
+        <Route path="/admin/appointments" element={<ProtectedRoute allowedRoles={['admin']}><AppointmentsPage /></ProtectedRoute>} />
+        <Route path="/admin/notifications" element={<ProtectedRoute allowedRoles={['admin']}><AdminNotificationsPage /></ProtectedRoute>} />
+        <Route path="/admin/announcements" element={<ProtectedRoute allowedRoles={['admin']}><AnnouncementsPage /></ProtectedRoute>} />
+        <Route path="/admin/accounts" element={<ProtectedRoute allowedRoles={['admin']}><AccountsPage /></ProtectedRoute>} />
+        <Route path="/admin/settings" element={<ProtectedRoute allowedRoles={['admin']}><SettingsPage /></ProtectedRoute>} />
+        <Route path="/admin/profile" element={<ProtectedRoute allowedRoles={['admin']}><ProfilePage /></ProtectedRoute>} />
+
+        {/* Supervisor Portal */}
+        <Route path="/supervisor/dashboard" element={<ProtectedRoute allowedRoles={['supervisor']}><SupervisorDashboard /></ProtectedRoute>} />
+        <Route path="/supervisor/absent-today" element={<ProtectedRoute allowedRoles={['supervisor']}><AbsentTodayPage /></ProtectedRoute>} />
+        <Route path="/supervisor/attendance" element={<ProtectedRoute allowedRoles={['supervisor']}><AttendanceOverviewPage /></ProtectedRoute>} />
+        <Route path="/supervisor/profile" element={<ProtectedRoute allowedRoles={['supervisor']}><ProfilePage /></ProtectedRoute>} />
+
+        {/* Driver Portal */}
+        <Route path="/driver/dashboard" element={<ProtectedRoute allowedRoles={['driver']}><DriverDashboard /></ProtectedRoute>} />
+        <Route path="/driver/drive" element={<ProtectedRoute allowedRoles={['driver']}><StartDrivePage /></ProtectedRoute>} />
+        <Route path="/driver/students" element={<ProtectedRoute allowedRoles={['driver']}><DriverStudentsPage /></ProtectedRoute>} />
+        <Route path="/driver/profile" element={<ProtectedRoute allowedRoles={['driver']}><ProfilePage /></ProtectedRoute>} />
+
+        <Route path="*" element={<RootRedirect />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}

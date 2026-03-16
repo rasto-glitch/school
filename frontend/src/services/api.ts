@@ -1,0 +1,149 @@
+import axios from 'axios';
+import { useAuthStore } from '../store/authStore';
+
+const api = axios.create({
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
+  timeout: 15000,
+});
+
+// Attach JWT token to every request
+api.interceptors.request.use((config) => {
+  const token = useAuthStore.getState().token;
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
+// Handle 401 - auto logout (but not on the login request itself)
+api.interceptors.response.use(
+  (res) => res,
+  (error) => {
+    const isLoginRequest = error.config?.url?.includes('/auth/login');
+    if (error.response?.status === 401 && !isLoginRequest) {
+      useAuthStore.getState().logout();
+      window.location.href = '/login';
+    }
+    return Promise.reject(error);
+  }
+);
+
+export default api;
+
+// ---- AUTH ----
+export const authApi = {
+  getSchools: () => api.get('/schools'),
+  login: (username: string, password: string, schoolSlug: string) =>
+    api.post('/auth/login', { username, password, schoolSlug }),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    api.post('/auth/change-password', { currentPassword, newPassword }),
+  forgotPassword: (username: string, schoolSlug: string) =>
+    api.post('/auth/forgot-password', { username, schoolSlug }),
+};
+
+// ---- SUPERVISOR ----
+export const supervisorApi = {
+  getClasses: () => api.get('/supervisor/classes'),
+  getStudentsByClass: (classId: string) => api.get(`/supervisor/classes/${classId}/students`),
+  getAbsentToday: () => api.get('/supervisor/absent-today'),
+  getAttendanceByClass: (classId: string, date: string) =>
+    api.get('/supervisor/attendance', { params: { classId, date } }),
+  getAttendanceSummary: (date?: string) =>
+    api.get('/supervisor/attendance-summary', { params: date ? { date } : {} }),
+  updateAttendanceRecord: (id: string, status: string, notes?: string) =>
+    api.patch(`/supervisor/attendance/${id}`, { status, notes }),
+};
+
+// ---- PARENT ----
+export const parentApi = {
+  getChildren: () => api.get('/parent/children'),
+  getHomework: (params?: Record<string, string>) => api.get('/parent/homework', { params }),
+  getAssignments: (params?: Record<string, string>) => api.get('/parent/assignments', { params }),
+  getAnnouncements: () => api.get('/parent/announcements'),
+  getReports: (params?: Record<string, string>) => api.get('/parent/reports', { params }),
+  getGrades: (studentId?: string) => api.get('/parent/grades', { params: studentId ? { studentId } : {} }),
+  getBusLocation: (studentId?: string) => api.get('/parent/bus-location', { params: { studentId } }),
+  getNotifications: () => api.get('/parent/notifications'),
+  markRead: (id: string) => api.patch(`/parent/notifications/${id}/read`),
+  createAppointment: (data: object) => api.post('/parent/appointments', data),
+  getAppointments: () => api.get('/parent/appointments'),
+};
+
+// ---- TEACHER ----
+export const teacherApi = {
+  getAttendance: (classId: string, date: string) =>
+    api.get('/teacher/attendance', { params: { classId, date } }),
+  markAttendance: (data: object) => api.post('/teacher/attendance', data),
+  getHomework: (params?: Record<string, string>) => api.get('/teacher/homework', { params }),
+  createHomework: (data: FormData | object) =>
+    api.post('/teacher/homework', data,
+      data instanceof FormData ? { headers: { 'Content-Type': 'multipart/form-data' } } : {}),
+  deleteHomework: (id: string) => api.delete(`/teacher/homework/${id}`),
+  getAssignments: (params?: Record<string, string>) => api.get('/teacher/assignments', { params }),
+  createAssignment: (data: object) => api.post('/teacher/assignments', data),
+  deleteAssignment: (id: string) => api.delete(`/teacher/assignments/${id}`),
+  createReport: (data: object) => api.post('/teacher/reports', data),
+  getGrades: (studentId: string) => api.get('/teacher/grades', { params: { studentId } }),
+  upsertGrade: (data: object) => api.post('/teacher/grades', data),
+  getWeeklySummary: (params?: Record<string, string>) => api.get('/teacher/weekly-summary', { params }),
+  upsertWeeklySummary: (data: object) => api.post('/teacher/weekly-summary', data),
+  getStudents: (params?: Record<string, string>) => api.get('/teacher/students', { params }),
+  getClasses: () => api.get('/teacher/classes'),
+  getSettings: () => api.get('/teacher/settings'),
+};
+
+// ---- ADMIN ----
+export const adminApi = {
+  getStudents: (params?: Record<string, string>) => api.get('/admin/students', { params }),
+  createStudent: (data: object) => api.post('/admin/students', data),
+  updateStudent: (id: string, data: object) => api.put(`/admin/students/${id}`, data),
+  deleteStudent: (id: string) => api.delete(`/admin/students/${id}`),
+  assignStudent: (data: object) => api.post('/admin/students/assign', data),
+  bulkUploadStudents: (file: File) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return api.post('/admin/students/bulk-upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
+  getStudentBrief: (id: string) => api.get(`/admin/students/${id}/brief`),
+  getGraduatedStudents: (search?: string) => api.get('/admin/students/graduated', { params: search ? { search } : {} }),
+  getParents: () => api.get('/admin/parents'),
+  deleteParent: (id: string) => api.delete(`/admin/parents/${id}`),
+  getClasses: () => api.get('/admin/classes'),
+  createClass: (data: object) => api.post('/admin/classes', data),
+  updateClass: (id: string, data: object) => api.put(`/admin/classes/${id}`, data),
+  deleteClass: (id: string) => api.delete(`/admin/classes/${id}`),
+  getWeeklySummaries: (params?: Record<string, string>) => api.get('/admin/weekly-summaries', { params }),
+  getWeeklySummaryStatus: (weekStartDate: string) => api.get('/admin/weekly-summary-status', { params: { weekStartDate } }),
+  getTeachers: () => api.get('/admin/teachers'),
+  createTeacher: (data: object) => api.post('/admin/teachers', data),
+  updateTeacher: (id: string, data: object) => api.put(`/admin/teachers/${id}`, data),
+  deleteTeacher: (id: string) => api.delete(`/admin/teachers/${id}`),
+  getDrivers: () => api.get('/admin/drivers'),
+  createDriver: (data: object) => api.post('/admin/drivers', data),
+  updateDriver: (id: string, data: object) => api.put(`/admin/drivers/${id}`, data),
+  deleteDriver: (id: string) => api.delete(`/admin/drivers/${id}`),
+  getSubjects: () => api.get('/admin/subjects'),
+  createSubject: (data: object) => api.post('/admin/subjects', data),
+  updateSubject: (id: string, data: object) => api.put(`/admin/subjects/${id}`, data),
+  deleteSubject: (id: string) => api.delete(`/admin/subjects/${id}`),
+  createAccount: (data: object) => api.post('/admin/accounts', data),
+  getResetRequests: () => api.get('/admin/reset-requests'),
+  resetUserPassword: (userId: string, newPassword: string) =>
+    api.post(`/admin/users/${userId}/reset-password`, { newPassword }),
+  getAppointments: () => api.get('/admin/appointments'),
+  respondToAppointment: (id: string, data: object) => api.put(`/admin/appointments/${id}`, data),
+  sendNotification: (data: object) => api.post('/admin/notifications', data),
+  getAnnouncements: () => api.get('/admin/announcements'),
+  createAnnouncement: (data: object) => api.post('/admin/announcements', data),
+  deleteAnnouncement: (id: string) => api.delete(`/admin/announcements/${id}`),
+  getSettings: () => api.get('/admin/settings'),
+  updateSettings: (data: object) => api.put('/admin/settings', data),
+  yearTransition: (data: { newAcademicYear: string; studentIdsToGraduate: string[]; classAssignments: { studentId: string; classId: string }[] }) =>
+    api.post('/admin/year-transition', data),
+};
+
+// ---- DRIVER ----
+export const driverApi = {
+  getStudents: (search?: string) => api.get('/driver/students', { params: { search } }),
+  updateLocation: (data: object) => api.post('/driver/location', data),
+  startDrive: (excludedStudentIds: string[]) => api.post('/driver/start', { excludedStudentIds }),
+  stopDrive: () => api.post('/driver/stop'),
+};
