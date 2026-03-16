@@ -11,7 +11,14 @@
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#4F46E5"
+      },
+      "package": "com.rastoelkurdi.schoolportal"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "41cd079b-7217-4df8-be77-3cce354e6f3f"
       }
-    }
+    },
+    "owner": "rastoelkurdi"
   }
 }

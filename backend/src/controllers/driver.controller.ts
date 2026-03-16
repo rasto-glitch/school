@@ -3,6 +3,7 @@ import { supabase } from '../config/supabase';
 import type { AuthRequest } from '../middleware/auth';
 import { Server as SocketServer } from 'socket.io';
 import { toCC } from '../utils/transform';
+import { notifyMany } from '../utils/notify';
 
 // Haversine distance in miles
 function distanceMiles(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -98,17 +99,12 @@ export async function updateLocation(req: AuthRequest, res: Response, io?: Socke
             ? (student.parents as any[]).map((p: any) => p.user_id)
             : [(student.parents as any).user_id];
 
-          // Insert notification and emit via socket
-          const records = parentUserIds.map((uid: string) => ({
-            school_id: schoolId,
-            user_id: uid,
-            title: notifTitle,
-            message: notifMsg,
-            notification_type: 'bus',
-          }));
+          // Notify parents via DB + socket + push
+          await notifyMany(parentUserIds.map((uid: string) => ({
+            schoolId, userId: uid, title: notifTitle, message: notifMsg, type: 'bus',
+          })));
 
-          await supabase.from('notifications').insert(records);
-
+          // Also emit busAlert so the app can show an in-app banner
           if (io) {
             parentUserIds.forEach((uid: string) => {
               io.to(`school:${schoolId}:user:${uid}`).emit('busAlert', { title: notifTitle, message: notifMsg, latitude, longitude });

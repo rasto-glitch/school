@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { supabase } from '../config/supabase';
 import type { AuthRequest } from '../middleware/auth';
 import { toCC } from '../utils/transform';
+import { notify, notifyMany } from '../utils/notify';
 
 // ---- TEACHER PROFILE ----
 export async function getProfileData(req: AuthRequest, res: Response): Promise<void> {
@@ -81,6 +82,25 @@ export async function createHomework(req: AuthRequest, res: Response): Promise<v
   }).select().single();
 
   if (error) { res.status(500).json({ error: error.message }); return; }
+
+  // Notify all parents of students in this class
+  if (classId) {
+    const { data: students } = await supabase
+      .from('students')
+      .select('full_name, parents(user_id)')
+      .eq('class_id', classId)
+      .eq('school_id', schoolId);
+    if (students) {
+      const payloads = students.flatMap((s: any) => {
+        const uids: string[] = Array.isArray(s.parents)
+          ? s.parents.map((p: any) => p.user_id)
+          : s.parents?.user_id ? [s.parents.user_id] : [];
+        return uids.map(uid => ({ schoolId, userId: uid, title: 'New Homework', message: `${title}${subject ? ` (${subject})` : ''}${dueDate ? ` — due ${dueDate}` : ''}`, type: 'homework' }));
+      });
+      notifyMany(payloads).catch(() => {});
+    }
+  }
+
   res.status(201).json(toCC(data));
 }
 
@@ -130,6 +150,21 @@ export async function createAssignment(req: AuthRequest, res: Response): Promise
   }).select().single();
 
   if (error) { res.status(500).json({ error: error.message }); return; }
+
+  // Notify parent(s)
+  const targetId = studentId || null;
+  const studentsQuery = targetId
+    ? supabase.from('students').select('full_name, parents(user_id)').eq('id', targetId)
+    : supabase.from('students').select('full_name, parents(user_id)').eq('class_id', classId).eq('school_id', schoolId);
+  const { data: assignedStudents } = await studentsQuery;
+  if (assignedStudents) {
+    const payloads = (assignedStudents as any[]).flatMap((s: any) => {
+      const uids: string[] = Array.isArray(s.parents) ? s.parents.map((p: any) => p.user_id) : s.parents?.user_id ? [s.parents.user_id] : [];
+      return uids.map(uid => ({ schoolId, userId: uid, title: 'New Assignment', message: `${title}${subject ? ` (${subject})` : ''}${dueDate ? ` — due ${dueDate}` : ''}`, type: 'assignment' }));
+    });
+    notifyMany(payloads).catch(() => {});
+  }
+
   res.status(201).json(toCC(data));
 }
 
@@ -168,6 +203,17 @@ export async function createReport(req: AuthRequest, res: Response): Promise<voi
   }).select().single();
 
   if (error) { res.status(500).json({ error: error.message }); return; }
+
+  // Notify parent of this student
+  const { data: student } = await supabase
+    .from('students').select('full_name, parents(user_id)').eq('id', studentId).single();
+  if (student) {
+    const uids: string[] = Array.isArray((student as any).parents)
+      ? (student as any).parents.map((p: any) => p.user_id)
+      : (student as any).parents?.user_id ? [(student as any).parents.user_id] : [];
+    uids.forEach(uid => notify({ schoolId, userId: uid, title: 'New Report', message: `A report has been submitted for ${(student as any).full_name}${subject ? ` in ${subject}` : ''}.`, type: 'general' }).catch(() => {}));
+  }
+
   res.status(201).json(toCC(data));
 }
 
@@ -198,6 +244,17 @@ export async function upsertGrade(req: AuthRequest, res: Response): Promise<void
   }, { onConflict: 'student_id,subject,grading_period,academic_year' }).select().single();
 
   if (error) { res.status(500).json({ error: error.message }); return; }
+
+  // Notify parent of this student
+  const { data: gradedStudent } = await supabase
+    .from('students').select('full_name, parents(user_id)').eq('id', studentId).single();
+  if (gradedStudent) {
+    const uids: string[] = Array.isArray((gradedStudent as any).parents)
+      ? (gradedStudent as any).parents.map((p: any) => p.user_id)
+      : (gradedStudent as any).parents?.user_id ? [(gradedStudent as any).parents.user_id] : [];
+    uids.forEach(uid => notify({ schoolId, userId: uid, title: 'Grades Updated', message: `Grades for ${(gradedStudent as any).full_name} in ${subject} have been submitted.`, type: 'grade' }).catch(() => {}));
+  }
+
   res.json(toCC(data));
 }
 

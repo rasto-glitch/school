@@ -7,6 +7,7 @@ import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import jwt from 'jsonwebtoken';
 import { createRouter } from './routes/index';
+import { setIo } from './utils/notify';
 
 dotenv.config();
 
@@ -117,6 +118,9 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {});
 });
+
+// Register io instance with notification helper
+setIo(io);
 
 const PORT = process.env.PORT || 5000;
 httpServer.listen(PORT, () => {

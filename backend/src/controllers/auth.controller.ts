@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { supabase } from '../config/supabase';
 import { toCC } from '../utils/transform';
+import type { AuthRequest } from '../middleware/auth';
 
 export async function getSchools(_req: Request, res: Response): Promise<void> {
   const { data, error } = await supabase
@@ -120,6 +121,26 @@ export async function forgotPassword(req: Request, res: Response): Promise<void>
   }
 
   res.json({ message: 'If this username exists, a reset request has been submitted to your school administrator.' });
+}
+
+export async function registerDeviceToken(req: AuthRequest, res: Response): Promise<void> {
+  const { userId, schoolId } = req.user!;
+  const { token } = req.body;
+  if (!token) { res.status(400).json({ error: 'token is required' }); return; }
+
+  await supabase.from('device_tokens')
+    .upsert({ user_id: userId, school_id: schoolId, token }, { onConflict: 'user_id,token' });
+
+  res.json({ message: 'Device token registered' });
+}
+
+export async function removeDeviceToken(req: AuthRequest, res: Response): Promise<void> {
+  const { userId } = req.user!;
+  const { token } = req.body;
+  if (!token) { res.status(400).json({ error: 'token is required' }); return; }
+
+  await supabase.from('device_tokens').delete().eq('user_id', userId).eq('token', token);
+  res.json({ message: 'Device token removed' });
 }
 
 export async function changePassword(req: Request, res: Response): Promise<void> {

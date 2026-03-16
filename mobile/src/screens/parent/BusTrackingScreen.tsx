@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker } from 'react-native-maps';
@@ -102,6 +102,9 @@ export default function BusTrackingScreen() {
       setBusData(prev => prev ? { ...prev, location: { ...prev.location, latitude: data.latitude, longitude: data.longitude, isDriving: data.isDriving } } : prev);
     });
     socket.on('driveEnded', () => reset());
+    socket.on('busAlert', (data: { title: string; message: string }) => {
+      Alert.alert(data.title, data.message);
+    });
     return () => { socket.disconnect(); };
   }, [busData?.location?.driverId, reset, token]);
 

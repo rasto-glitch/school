@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx';
 import { supabase } from '../config/supabase';
 import type { AuthRequest } from '../middleware/auth';
 import { toCC } from '../utils/transform';
+import { notify, notifyMany } from '../utils/notify';
 
 // ---- STUDENTS ----
 export async function getStudents(req: AuthRequest, res: Response): Promise<void> {
@@ -686,9 +687,27 @@ export async function respondToAppointment(req: AuthRequest, res: Response): Pro
 
   const { data, error } = await supabase.from('appointments')
     .update({ response_message: responseMessage, scheduled_date: scheduledDate || null, status })
-    .eq('id', id).eq('school_id', schoolId).select().single();
+    .eq('id', id).eq('school_id', schoolId)
+    .select('*, parents(user_id)')
+    .single();
 
   if (error) { res.status(500).json({ error: error.message }); return; }
+
+  // Notify parent of approval/denial
+  const parentUserId = (data as any)?.parents?.user_id;
+  if (parentUserId) {
+    const approved = status === 'approved';
+    notify({
+      schoolId,
+      userId: parentUserId,
+      title: approved ? 'Appointment Approved' : 'Appointment Update',
+      message: approved
+        ? `Your appointment has been approved${scheduledDate ? ` on ${scheduledDate}` : ''}.${responseMessage ? ' ' + responseMessage : ''}`
+        : `Your appointment request has been ${status}.${responseMessage ? ' ' + responseMessage : ''}`,
+      type: 'general',
+    }).catch(() => {});
+  }
+
   res.json(toCC(data));
 }
 
@@ -709,14 +728,8 @@ export async function sendNotification(req: AuthRequest, res: Response): Promise
 
   if (targetUserIds.length === 0) { res.json({ sent: 0 }); return; }
 
-  const records = targetUserIds.map((uid) => ({
-    school_id: schoolId, user_id: uid, title, message,
-    notification_type: type || 'general',
-  }));
-
-  const { error } = await supabase.from('notifications').insert(records);
-  if (error) { res.status(500).json({ error: error.message }); return; }
-  res.json({ sent: records.length });
+  await notifyMany(targetUserIds.map(uid => ({ schoolId, userId: uid, title, message, type: type || 'general' })));
+  res.json({ sent: targetUserIds.length });
 }
 
 // ---- ANNOUNCEMENTS ----
@@ -745,6 +758,17 @@ export async function createAnnouncement(req: AuthRequest, res: Response): Promi
   }).select().single();
 
   if (error) { res.status(500).json({ error: error.message }); return; }
+
+  // Notify target audience in real-time + push
+  const audience = targetAudience || 'all';
+  const roleFilter = audience === 'all'
+    ? supabase.from('users').select('id').eq('school_id', schoolId).eq('is_active', true)
+    : supabase.from('users').select('id').eq('school_id', schoolId).eq('role', audience).eq('is_active', true);
+  const { data: targets } = await roleFilter;
+  if (targets && targets.length > 0) {
+    notifyMany(targets.map((u: any) => ({ schoolId, userId: u.id, title, message: content, type: 'announcement' }))).catch(() => {});
+  }
+
   res.status(201).json(toCC(data));
 }
 
@@ -1033,14 +1057,7 @@ export async function resetUserPassword(req: AuthRequest, res: Response): Promis
   if (error) { res.status(500).json({ error: error.message }); return; }
   await supabase.from('password_reset_requests').update({ status: 'resolved' })
     .eq('user_id', userId).eq('school_id', schoolId).eq('status', 'pending');
-  // Notify the user their password has been reset
-  await supabase.from('notifications').insert({
-    school_id: schoolId,
-    user_id: userId,
-    title: 'Password Reset',
-    message: 'Your password has been reset by the school administrator. Please log in with your new credentials.',
-    notification_type: 'system',
-  });
+  notify({ schoolId, userId: userId as string, title: 'Password Reset', message: 'Your password has been reset by the school administrator. Please log in with your new credentials.', type: 'system' }).catch(() => {});
   res.json({ message: 'Password reset successfully' });
 }
 

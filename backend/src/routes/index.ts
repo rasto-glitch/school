@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import multer from 'multer';
-import { login, changePassword, getSchools, forgotPassword } from '../controllers/auth.controller';
+import { login, changePassword, getSchools, forgotPassword, registerDeviceToken, removeDeviceToken } from '../controllers/auth.controller';
 import * as admin from '../controllers/admin.controller';
 import * as teacher from '../controllers/teacher.controller';
 import * as parent from '../controllers/parent.controller';
@@ -23,6 +23,8 @@ export function createRouter(io: SocketServer) {
   // ---- AUTH ----
   router.post('/auth/login', login);
   router.post('/auth/change-password', authenticate, (req, res) => changePassword(req, res));
+  router.post('/auth/device-token', authenticate, (req, res) => registerDeviceToken(req as AuthRequest, res));
+  router.delete('/auth/device-token', authenticate, (req, res) => removeDeviceToken(req as AuthRequest, res));
 
   // ---- ADMIN ----
   router.get('/admin/students', authenticate, authorize('admin'), (req, res) => admin.getStudents(req as AuthRequest, res));

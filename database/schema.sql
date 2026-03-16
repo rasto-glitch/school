@@ -347,6 +347,19 @@ CREATE INDEX IF NOT EXISTS idx_grades_student ON grades(student_id);
 CREATE INDEX IF NOT EXISTS idx_reports_student ON reports(student_id);
 CREATE INDEX IF NOT EXISTS idx_bus_locations_driver ON bus_locations(driver_id, recorded_at DESC);
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, is_read);
+
+-- ============================================================
+-- DEVICE TOKENS (Expo push notifications)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS device_tokens (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  token TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(user_id, token)
+);
+CREATE INDEX IF NOT EXISTS idx_device_tokens_user ON device_tokens(user_id);
 CREATE INDEX IF NOT EXISTS idx_announcements_school ON announcements(school_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_attendance_student ON attendance(student_id, date DESC);
 CREATE INDEX IF NOT EXISTS idx_attendance_class ON attendance(class_id, date DESC);
