@@ -1,0 +1,11 @@
+[phases.setup]
+nixPkgs = ["nodejs_20"]
+
+[phases.install]
+cmds = ["npm --prefix backend install"]
+
+[phases.build]
+cmds = ["npm --prefix backend run build"]
+
+[start]
+cmd = "node backend/dist/server.js"
