@@ -1,0 +1,17 @@
+{
+  "expo": {
+    "name": "School Portal",
+    "slug": "school-portal",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": false
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#4F46E5"
+      }
+    }
+  }
+}

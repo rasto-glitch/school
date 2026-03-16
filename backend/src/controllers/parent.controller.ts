@@ -165,8 +165,11 @@ export async function getBusLocation(req: AuthRequest, res: Response): Promise<v
     .limit(1)
     .single();
 
-  // Only return data if the most recent record is an active drive
-  if (!location || !location.is_driving) { res.status(404).json({ error: 'inactive' }); return; }
+  // Only return data if the most recent record is an active drive within the last 5 minutes
+  const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  if (!location || !location.is_driving || location.recorded_at < fiveMinutesAgo) {
+    res.status(404).json({ error: 'inactive' }); return;
+  }
 
   res.json(toCC({
     location,

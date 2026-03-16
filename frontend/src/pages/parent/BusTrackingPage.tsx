@@ -196,7 +196,7 @@ export default function BusTrackingPage() {
                   <p className="text-sm font-medium text-gray-900">{t('bus.bus_active')}</p>
                   <p className="text-xs text-gray-500">{t('bus.bus_number', { number: busData.location.drivers?.buses?.busNumber || 'N/A' })}</p>
                 </div>
-                <span className="ml-auto flex h-2.5 w-2.5">
+                <span className="ml-auto relative flex h-2.5 w-2.5">
                   <span className="animate-ping absolute inline-flex h-2.5 w-2.5 rounded-full bg-green-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500"></span>
                 </span>
