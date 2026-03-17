@@ -1,5 +1,5 @@
 import { Server as SocketServer } from 'socket.io';
-import supabase from '../config/supabase';
+import { supabase } from '../config/supabase';
 
 let _io: SocketServer | null = null;
 
