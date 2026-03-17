@@ -5,6 +5,14 @@ import { Server as SocketServer } from 'socket.io';
 import { toCC } from '../utils/transform';
 import { notifyMany } from '../utils/notify';
 
+// Proximity threshold levels (in ascending urgency)
+type ProxThreshold = '10min' | '5min' | 'arriving';
+const THRESH_RANK: Record<ProxThreshold, number> = { '10min': 1, '5min': 2, 'arriving': 3 };
+
+// In-memory dedup: driverId → { studentId → last notified threshold }
+// Cleared on startDrive / stopDrive; lost on server restart (acceptable)
+const proximityState = new Map<string, Map<string, ProxThreshold>>();
+
 // Haversine distance in miles
 function distanceMiles(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 3958.8;
@@ -83,15 +91,32 @@ export async function updateLocation(req: AuthRequest, res: Response, io?: Socke
         let notifTitle = '';
         let notifMsg = '';
 
+        let threshold: ProxThreshold | null = null;
         if (dist <= 0.1) {
+          threshold = 'arriving';
           notifTitle = 'Bus Arriving Now!';
           notifMsg = 'The school bus is arriving at your location now!';
         } else if (dist <= 0.5) {
+          threshold = '5min';
           notifTitle = 'Bus 5 Minutes Away';
           notifMsg = 'The school bus is approximately 5 minutes away.';
         } else if (dist <= 1.0) {
+          threshold = '10min';
           notifTitle = 'Bus 10 Minutes Away';
           notifMsg = 'The school bus is approximately 10 minutes away.';
+        }
+
+        // Dedup: only notify if this threshold is more urgent than the last one sent
+        if (threshold) {
+          const driverState = proximityState.get(driver.id) ?? new Map<string, ProxThreshold>();
+          proximityState.set(driver.id, driverState);
+          const lastThreshold = driverState.get(student.id);
+          if (lastThreshold && THRESH_RANK[threshold] <= THRESH_RANK[lastThreshold]) {
+            notifTitle = '';
+            notifMsg = '';
+          } else if (notifTitle) {
+            driverState.set(student.id, threshold);
+          }
         }
 
         if (notifTitle && student.parents) {
@@ -134,6 +159,34 @@ export async function startDrive(req: AuthRequest, res: Response): Promise<void>
   const { error } = await supabase.from('drivers').update({ excluded_student_ids: excludedStudentIds }).eq('id', driver.id);
   if (error) { res.status(500).json({ error: error.message }); return; }
 
+  // Reset proximity dedup for this drive session
+  proximityState.set(driver.id, new Map());
+
+  // Notify all parents of students on this driver's route
+  let studentsQuery = supabase
+    .from('students')
+    .select('parents(user_id)')
+    .eq('driver_id', driver.id)
+    .eq('school_id', schoolId)
+    .eq('is_graduated', false);
+  if (excludedStudentIds.length > 0) {
+    studentsQuery = (studentsQuery as any).not('id', 'in', `(${excludedStudentIds.join(',')})`);
+  }
+  const { data: students } = await studentsQuery;
+  if (students) {
+    const parentUserIds = students
+      .map((s: any) => (Array.isArray(s.parents) ? s.parents.map((p: any) => p.user_id) : s.parents ? [s.parents.user_id] : []))
+      .flat()
+      .filter(Boolean) as string[];
+    const uniqueParentIds = [...new Set(parentUserIds)];
+    notifyMany(uniqueParentIds.map(uid => ({
+      schoolId, userId: uid,
+      title: 'Bus Is On The Way',
+      message: 'Your child\'s bus has started the route and is heading your way.',
+      type: 'bus',
+    }))).catch(() => {});
+  }
+
   res.json({ message: 'Drive started', driverId: driver.id });
 }
 
@@ -142,8 +195,9 @@ export async function stopDrive(req: AuthRequest, res: Response, io?: SocketServ
   const { data: driver } = await supabase.from('drivers').select('id, bus_id').eq('user_id', userId).eq('school_id', schoolId).single();
   if (!driver) { res.status(404).json({ error: 'Driver not found' }); return; }
 
-  // Clear excluded students list when drive ends
+  // Clear excluded students list and proximity state when drive ends
   await supabase.from('drivers').update({ excluded_student_ids: [] }).eq('id', driver.id);
+  proximityState.delete(driver.id);
 
   // Insert a "stopped" location record
   const { data: lastLoc } = await supabase.from('bus_locations')

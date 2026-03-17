@@ -49,6 +49,8 @@ export async function notify(payload: NotifyPayload): Promise<void> {
       body: message,
       data: { type },
       sound: 'default',
+      channelId: 'default',
+      priority: 'high',
     }));
 
     try {
@@ -90,7 +92,7 @@ export async function notifyMany(payloads: NotifyPayload[]): Promise<void> {
 async function sendPush(userId: string, title: string, body: string, type: string): Promise<void> {
   const { data: tokens } = await supabase.from('device_tokens').select('token').eq('user_id', userId);
   if (!tokens || tokens.length === 0) return;
-  const messages = tokens.map((t: { token: string }) => ({ to: t.token, title, body, data: { type }, sound: 'default' }));
+  const messages = tokens.map((t: { token: string }) => ({ to: t.token, title, body, data: { type }, sound: 'default', channelId: 'default', priority: 'high' }));
   try {
     await fetch('https://exp.host/--/api/v2/push/send', {
       method: 'POST',
