@@ -12,7 +12,12 @@
       "adaptiveIcon": {
         "backgroundColor": "#4F46E5"
       },
-      "package": "com.rastoelkurdi.schoolportal"
+      "package": "com.rastoelkurdi.schoolportal",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyBVk3f73EcNizizPWCnK6-j6TEDs6GuPhA"
+        }
+      }
     },
     "extra": {
       "eas": {
