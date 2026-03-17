@@ -1,8 +1,8 @@
-import { useEffect, useState, useCallback } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import { useEffect, useState, useCallback, Component } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Platform } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import MapView, { Marker } from 'react-native-maps';
+import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { io as socketIO } from 'socket.io-client';
 import { RefreshCw, User, AlertCircle, Bus } from 'lucide-react-native';
@@ -37,6 +37,22 @@ function computeETA(busLat: number, busLng: number, targetLat: number, targetLng
   const speedKmh = speedMs > 1 ? speedMs * 3.6 : 30;
   const etaMs = (distKm / speedKmh) * 3600000;
   return new Date(Date.now() + etaMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
+class MapErrorBoundary extends Component<{ children: React.ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  render() {
+    if (this.state.failed) {
+      return (
+        <View style={{ height: 280, borderRadius: 12, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+          <Text style={{ fontSize: 13, fontWeight: '600', color: '#6B7280' }}>Map unavailable on this device</Text>
+          <Text style={{ fontSize: 12, color: '#9CA3AF', textAlign: 'center', paddingHorizontal: 24 }}>Google Maps API key required for Android</Text>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
 }
 
 export default function BusTrackingScreen() {
@@ -195,15 +211,17 @@ export default function BusTrackingScreen() {
 
           {mapRegion && (
             <View style={styles.mapContainer}>
-              <MapView style={styles.map} region={mapRegion}>
-                <Marker coordinate={{ latitude: busData.location.latitude, longitude: busData.location.longitude }} title="Bus" />
-                {busData.studentHome?.latitude && (
-                  <Marker coordinate={{ latitude: busData.studentHome.latitude, longitude: busData.studentHome.longitude }} title="Home" pinColor="green" />
-                )}
-                {parentLocation && (
-                  <Marker coordinate={parentLocation} title="Your Location" pinColor="orange" />
-                )}
-              </MapView>
+              <MapErrorBoundary>
+                <MapView style={styles.map} provider={PROVIDER_DEFAULT} region={mapRegion}>
+                  <Marker coordinate={{ latitude: busData.location.latitude, longitude: busData.location.longitude }} title="Bus" />
+                  {busData.studentHome?.latitude && (
+                    <Marker coordinate={{ latitude: busData.studentHome.latitude, longitude: busData.studentHome.longitude }} title="Home" pinColor="green" />
+                  )}
+                  {parentLocation && (
+                    <Marker coordinate={parentLocation} title="Your Location" pinColor="orange" />
+                  )}
+                </MapView>
+              </MapErrorBoundary>
             </View>
           )}
         </>

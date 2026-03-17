@@ -1,5 +1,6 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useTranslation } from 'react-i18next';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Home, BookOpen, Star, Bus, User } from 'lucide-react-native';
 import FeedScreen from '../screens/parent/FeedScreen';
 import HomeworkScreen from '../screens/parent/HomeworkScreen';
@@ -12,6 +13,7 @@ const Tab = createBottomTabNavigator();
 
 export default function ParentTabs() {
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
 
   return (
     <Tab.Navigator
@@ -23,8 +25,8 @@ export default function ParentTabs() {
           backgroundColor: colors.card,
           borderTopColor: colors.border,
           borderTopWidth: 1,
-          height: 60,
-          paddingBottom: 8,
+          height: 60 + insets.bottom,
+          paddingBottom: insets.bottom + 6,
           paddingTop: 6,
         },
         tabBarLabelStyle: { fontSize: 11, fontWeight: '500' },
