@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Linking,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { LogOut, Bell, Globe, ChevronRight, User } from 'lucide-react-native';
+import { LogOut, Bell, Globe, User, CheckCircle, XCircle, AlertCircle } from 'lucide-react-native';
 import i18n from '../../i18n';
 import { useAuthStore } from '../../store/authStore';
+import { getPushStatus, retryPushRegistration, type PushStatus } from '../../hooks/usePushNotifications';
 import { colors, spacing, radius, shadow, font } from '../../theme';
 
 const LANGUAGES = [
@@ -20,11 +21,37 @@ export default function MeScreen() {
   const { user, school, logout } = useAuthStore();
   const insets = useSafeAreaInsets();
   const [lang, setLang] = useState(i18n.language || 'en');
+  const [pushStatus, setPushStatus] = useState<PushStatus>(getPushStatus());
+  const [retrying, setRetrying] = useState(false);
 
   const changeLang = (code: string) => {
     setLang(code);
     i18n.changeLanguage(code);
   };
+
+  const handleRetryPush = async () => {
+    setRetrying(true);
+    const s = await retryPushRegistration();
+    setPushStatus(s);
+    setRetrying(false);
+    if (s === 'registered') Alert.alert('✓ Notifications enabled', 'You will now receive push notifications.');
+    else if (s === 'denied') Alert.alert('Permission denied', 'Go to Settings → Apps → School Portal → Notifications and enable them.');
+    else Alert.alert('Error', 'Could not register for notifications. Try again.');
+  };
+
+  const pushLabel: Record<PushStatus, string> = {
+    idle: 'Checking…',
+    registered: 'Enabled',
+    denied: 'Disabled — tap to fix',
+    error: 'Error — tap to retry',
+  };
+  const pushColor: Record<PushStatus, string> = {
+    idle: colors.textMuted,
+    registered: colors.success,
+    denied: colors.warning,
+    error: colors.danger,
+  };
+  const PushIcon = pushStatus === 'registered' ? CheckCircle : pushStatus === 'denied' ? XCircle : AlertCircle;
 
   const handleLogout = () => {
     Alert.alert(t('nav.logout'), 'Are you sure you want to sign out?', [
@@ -74,6 +101,27 @@ export default function MeScreen() {
           ))}
         </View>
       </View>
+
+      {/* Push notifications */}
+      <TouchableOpacity
+        style={styles.card}
+        onPress={pushStatus !== 'registered' ? handleRetryPush : undefined}
+        disabled={retrying}
+        activeOpacity={pushStatus !== 'registered' ? 0.7 : 1}
+      >
+        <View style={styles.cardRow}>
+          <View style={[styles.iconBox, { backgroundColor: pushColor[pushStatus] + '22' }]}>
+            <Bell size={18} color={pushColor[pushStatus]} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.cardLabel}>Push Notifications</Text>
+            <Text style={[styles.pushSub, { color: pushColor[pushStatus] }]}>
+              {retrying ? 'Registering…' : pushLabel[pushStatus]}
+            </Text>
+          </View>
+          <PushIcon size={18} color={pushColor[pushStatus]} />
+        </View>
+      </TouchableOpacity>
 
       {/* Logout */}
       <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
@@ -125,4 +173,5 @@ const styles = StyleSheet.create({
     borderRadius: radius.md, padding: spacing.md, marginTop: spacing.md,
   },
   logoutText: { fontSize: font.md, fontWeight: '700', color: colors.danger },
+  pushSub: { fontSize: font.xs, fontWeight: '600', marginTop: 2 },
 });
