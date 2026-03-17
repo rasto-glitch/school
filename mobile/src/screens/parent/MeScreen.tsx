@@ -8,6 +8,7 @@ import { LogOut, Bell, Globe, User, CheckCircle, XCircle, AlertCircle } from 'lu
 import i18n from '../../i18n';
 import { useAuthStore } from '../../store/authStore';
 import { getPushStatus, retryPushRegistration, type PushStatus } from '../../hooks/usePushNotifications';
+import { authApi } from '../../services/api';
 import { colors, spacing, radius, shadow, font } from '../../theme';
 
 const LANGUAGES = [
@@ -27,6 +28,7 @@ export default function MeScreen() {
   const changeLang = (code: string) => {
     setLang(code);
     i18n.changeLanguage(code);
+    authApi.updateDeviceLanguage(code).catch(() => {});
   };
 
   const handleRetryPush = async () => {

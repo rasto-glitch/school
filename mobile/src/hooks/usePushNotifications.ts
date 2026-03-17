@@ -3,6 +3,7 @@ import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { authApi } from '../services/api';
+import i18n from '../i18n';
 import { useAuthStore } from '../store/authStore';
 
 // How foreground notifications are presented
@@ -49,7 +50,7 @@ async function doRegister(): Promise<PushStatus> {
     '41cd079b-7217-4df8-be77-3cce354e6f3f';
 
   const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
-  await authApi.registerDeviceToken(tokenData.data);
+  await authApi.registerDeviceToken(tokenData.data, i18n.language || 'en');
   return 'registered';
 }
 

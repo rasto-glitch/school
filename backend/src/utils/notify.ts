@@ -1,5 +1,6 @@
 import { Server as SocketServer } from 'socket.io';
 import { supabase } from '../config/supabase';
+import { translatePush } from './notifyI18n';
 
 let _io: SocketServer | null = null;
 
@@ -39,19 +40,14 @@ export async function notify(payload: NotifyPayload): Promise<void> {
   // 3. Expo push notification
   const { data: tokens } = await supabase
     .from('device_tokens')
-    .select('token')
+    .select('token, language')
     .eq('user_id', userId);
 
   if (tokens && tokens.length > 0) {
-    const messages = tokens.map((t: { token: string }) => ({
-      to: t.token,
-      title,
-      body: message,
-      data: { type },
-      sound: 'default',
-      channelId: 'default',
-      priority: 'high',
-    }));
+    const messages = tokens.map((t: { token: string; language: string | null }) => {
+      const { title: tTitle, body: tBody } = translatePush(title, message, type, t.language ?? 'en');
+      return { to: t.token, title: tTitle, body: tBody, data: { type }, sound: 'default', channelId: 'default', priority: 'high' };
+    });
 
     try {
       await fetch('https://exp.host/--/api/v2/push/send', {
@@ -90,9 +86,12 @@ export async function notifyMany(payloads: NotifyPayload[]): Promise<void> {
 }
 
 async function sendPush(userId: string, title: string, body: string, type: string): Promise<void> {
-  const { data: tokens } = await supabase.from('device_tokens').select('token').eq('user_id', userId);
+  const { data: tokens } = await supabase.from('device_tokens').select('token, language').eq('user_id', userId);
   if (!tokens || tokens.length === 0) return;
-  const messages = tokens.map((t: { token: string }) => ({ to: t.token, title, body, data: { type }, sound: 'default', channelId: 'default', priority: 'high' }));
+  const messages = tokens.map((t: { token: string; language: string | null }) => {
+    const { title: tTitle, body: tBody } = translatePush(title, body, type, t.language ?? 'en');
+    return { to: t.token, title: tTitle, body: tBody, data: { type }, sound: 'default', channelId: 'default', priority: 'high' };
+  });
   try {
     await fetch('https://exp.host/--/api/v2/push/send', {
       method: 'POST',

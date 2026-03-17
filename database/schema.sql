@@ -356,6 +356,7 @@ CREATE TABLE IF NOT EXISTS device_tokens (
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
   token TEXT NOT NULL,
+  language VARCHAR(10) DEFAULT 'en',
   created_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(user_id, token)
 );

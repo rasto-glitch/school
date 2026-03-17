@@ -32,8 +32,10 @@ export const authApi = {
   getSchools: () => api.get('/schools'),
   login: (username: string, password: string, schoolSlug: string) =>
     api.post('/auth/login', { username, password, schoolSlug }),
-  registerDeviceToken: (token: string) =>
-    api.post('/auth/device-token', { token }),
+  registerDeviceToken: (token: string, language: string) =>
+    api.post('/auth/device-token', { token, language }),
+  updateDeviceLanguage: (language: string) =>
+    api.put('/auth/device-language', { language }),
 };
 
 // ---- PARENT ----

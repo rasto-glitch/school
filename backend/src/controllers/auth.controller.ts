@@ -125,13 +125,22 @@ export async function forgotPassword(req: Request, res: Response): Promise<void>
 
 export async function registerDeviceToken(req: AuthRequest, res: Response): Promise<void> {
   const { userId, schoolId } = req.user!;
-  const { token } = req.body;
+  const { token, language = 'en' } = req.body;
   if (!token) { res.status(400).json({ error: 'token is required' }); return; }
 
   await supabase.from('device_tokens')
-    .upsert({ user_id: userId, school_id: schoolId, token }, { onConflict: 'user_id,token' });
+    .upsert({ user_id: userId, school_id: schoolId, token, language }, { onConflict: 'user_id,token' });
 
   res.json({ message: 'Device token registered' });
+}
+
+export async function updateDeviceLanguage(req: AuthRequest, res: Response): Promise<void> {
+  const { userId } = req.user!;
+  const { language } = req.body;
+  if (!language) { res.status(400).json({ error: 'language is required' }); return; }
+
+  await supabase.from('device_tokens').update({ language }).eq('user_id', userId);
+  res.json({ message: 'Language updated' });
 }
 
 export async function removeDeviceToken(req: AuthRequest, res: Response): Promise<void> {
