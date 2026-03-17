@@ -20,7 +20,7 @@ export default function StartDriveScreen() {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    driverApi.getStudents().then(r => setStudents(r.data || []));
+    driverApi.getStudents().then(r => setStudents(r.data || [])).catch(() => {});
   }, []);
 
   const toggleExclude = (id: string) => {

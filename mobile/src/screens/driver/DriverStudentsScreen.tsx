@@ -17,11 +17,12 @@ export default function DriverStudentsScreen() {
   useEffect(() => {
     driverApi.getStudents()
       .then(r => setStudents(r.data || []))
+      .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
   const filtered = students.filter(s =>
-    s.fullName.toLowerCase().includes(search.toLowerCase())
+    (s.fullName ?? '').toLowerCase().includes(search.toLowerCase())
   );
 
   return (
@@ -54,7 +55,7 @@ export default function DriverStudentsScreen() {
         filtered.map(s => (
           <View key={s.id} style={styles.card}>
             <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{s.fullName.charAt(0)}</Text>
+              <Text style={styles.avatarText}>{(s.fullName ?? '?').charAt(0)}</Text>
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.name}>{s.fullName}</Text>

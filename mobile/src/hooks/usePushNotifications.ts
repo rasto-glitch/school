@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { authApi } from '../services/api';
 import { useAuthStore } from '../store/authStore';
@@ -39,9 +40,10 @@ export function usePushNotifications() {
       }
       if (finalStatus !== 'granted') return;
 
-      const tokenData = await Notifications.getExpoPushTokenAsync();
+      const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+      const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
       await authApi.registerDeviceToken(tokenData.data).catch(() => {});
       registered.current = true;
-    })();
+    })().catch(() => {});
   }, [authToken]);
 }
