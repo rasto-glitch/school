@@ -11,6 +11,8 @@ Notifications.setNotificationHandler({
     shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
   }),
 });
 
@@ -76,9 +78,15 @@ export function usePushNotifications() {
   return status;
 }
 
-export async function retryPushRegistration(): Promise<PushStatus> {
-  const s = await doRegister().catch(() => 'error' as PushStatus);
-  _currentStatus = s;
-  _setStatus?.(s);
-  return s;
+export async function retryPushRegistration(): Promise<{ status: PushStatus; error?: string }> {
+  try {
+    const s = await doRegister();
+    _currentStatus = s;
+    _setStatus?.(s);
+    return { status: s };
+  } catch (e: any) {
+    _currentStatus = 'error';
+    _setStatus?.('error');
+    return { status: 'error', error: e?.message ?? String(e) };
+  }
 }

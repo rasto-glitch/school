@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Linking,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -31,12 +31,12 @@ export default function MeScreen() {
 
   const handleRetryPush = async () => {
     setRetrying(true);
-    const s = await retryPushRegistration();
-    setPushStatus(s);
+    const result = await retryPushRegistration();
+    setPushStatus(result.status);
     setRetrying(false);
-    if (s === 'registered') Alert.alert('✓ Notifications enabled', 'You will now receive push notifications.');
-    else if (s === 'denied') Alert.alert('Permission denied', 'Go to Settings → Apps → School Portal → Notifications and enable them.');
-    else Alert.alert('Error', 'Could not register for notifications. Try again.');
+    if (result.status === 'registered') Alert.alert('✓ Notifications enabled', 'You will now receive push notifications.');
+    else if (result.status === 'denied') Alert.alert('Permission denied', 'Go to Settings → Apps → School Portal → Notifications and enable them.');
+    else Alert.alert('Registration failed', result.error ?? 'Unknown error');
   };
 
   const pushLabel: Record<PushStatus, string> = {
