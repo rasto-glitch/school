@@ -5,7 +5,8 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LogOut, Bell, Globe, User, CheckCircle, XCircle, AlertCircle } from 'lucide-react-native';
-import i18n from '../../i18n';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import i18n, { LANGUAGE_KEY } from '../../i18n';
 import { useAuthStore } from '../../store/authStore';
 import { getPushStatus, retryPushRegistration, type PushStatus } from '../../hooks/usePushNotifications';
 import { authApi } from '../../services/api';
@@ -22,12 +23,20 @@ export default function MeScreen() {
   const { user, school, logout } = useAuthStore();
   const insets = useSafeAreaInsets();
   const [lang, setLang] = useState(i18n.language || 'en');
+
+  // Keep lang state in sync if i18n language changes (e.g. restored from AsyncStorage on startup)
+  useEffect(() => {
+    const handler = (lng: string) => setLang(lng);
+    i18n.on('languageChanged', handler);
+    return () => { i18n.off('languageChanged', handler); };
+  }, []);
   const [pushStatus, setPushStatus] = useState<PushStatus>(getPushStatus());
   const [retrying, setRetrying] = useState(false);
 
   const changeLang = (code: string) => {
     setLang(code);
     i18n.changeLanguage(code);
+    AsyncStorage.setItem(LANGUAGE_KEY, code);
     authApi.updateDeviceLanguage(code).catch(() => {});
   };
 
