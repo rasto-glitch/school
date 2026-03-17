@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1024068169849",
+    "project_id": "school-5a6e5",
+    "storage_bucket": "school-5a6e5.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1024068169849:android:5b525d8b821f3c55ab64a8",
+        "android_client_info": {
+          "package_name": "com.rastoelkurdi.schoolportal"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDL5_VpZM23j-2e55lGl2zXjiDuKHAaLJ0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

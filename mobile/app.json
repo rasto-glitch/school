@@ -13,6 +13,7 @@
         "backgroundColor": "#4F46E5"
       },
       "package": "com.rastoelkurdi.schoolportal",
+      "googleServicesFile": "./google-services.json",
       "config": {
         "googleMaps": {
           "apiKey": "AIzaSyBVk3f73EcNizizPWCnK6-j6TEDs6GuPhA"
