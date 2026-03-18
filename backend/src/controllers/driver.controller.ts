@@ -74,7 +74,7 @@ export async function updateLocation(req: AuthRequest, res: Response, io?: Socke
     const excluded: string[] = (driver as any).excluded_student_ids || [];
     let studentsQuery = supabase
       .from('students')
-      .select('id, home_latitude, home_longitude, parents(user_id)')
+      .select('id, parents(id, user_id, latitude, longitude)')
       .eq('driver_id', driver.id)
       .eq('school_id', schoolId)
       .eq('is_graduated', false);
@@ -85,13 +85,18 @@ export async function updateLocation(req: AuthRequest, res: Response, io?: Socke
 
     if (students) {
       for (const student of students) {
-        if (!student.home_latitude || !student.home_longitude) continue;
-        const dist = distanceMiles(latitude, longitude, student.home_latitude, student.home_longitude);
+        const parent = Array.isArray(student.parents) ? student.parents[0] : student.parents;
+        if (!parent?.user_id) continue;
+
+        // Parent hasn't set their pickup location — skip proximity (they were already notified at drive start)
+        if (!parent.latitude || !parent.longitude) continue;
+
+        const dist = distanceMiles(latitude, longitude, parent.latitude, parent.longitude);
 
         let notifTitle = '';
         let notifMsg = '';
-
         let threshold: ProxThreshold | null = null;
+
         if (dist <= 0.2) {
           threshold = 'arriving';
           notifTitle = 'Your Child Has Arrived';
@@ -113,27 +118,15 @@ export async function updateLocation(req: AuthRequest, res: Response, io?: Socke
           const lastThreshold = driverState.get(student.id);
           if (lastThreshold && THRESH_RANK[threshold] <= THRESH_RANK[lastThreshold]) {
             notifTitle = '';
-            notifMsg = '';
           } else if (notifTitle) {
             driverState.set(student.id, threshold);
           }
         }
 
-        if (notifTitle && student.parents) {
-          const parentUserIds = Array.isArray(student.parents)
-            ? (student.parents as any[]).map((p: any) => p.user_id)
-            : [(student.parents as any).user_id];
-
-          // Notify parents via DB + socket + push
-          await notifyMany(parentUserIds.map((uid: string) => ({
-            schoolId, userId: uid, title: notifTitle, message: notifMsg, type: 'bus',
-          })));
-
-          // Also emit busAlert so the app can show an in-app banner
+        if (notifTitle) {
+          await notifyMany([{ schoolId, userId: parent.user_id, title: notifTitle, message: notifMsg, type: 'bus' }]);
           if (io) {
-            parentUserIds.forEach((uid: string) => {
-              io.to(`school:${schoolId}:user:${uid}`).emit('busAlert', { title: notifTitle, message: notifMsg, latitude, longitude });
-            });
+            io.to(`school:${schoolId}:user:${parent.user_id}`).emit('busAlert', { title: notifTitle, message: notifMsg, latitude, longitude });
           }
         }
       }
@@ -165,7 +158,7 @@ export async function startDrive(req: AuthRequest, res: Response): Promise<void>
   // Notify all parents of students on this driver's route
   let studentsQuery = supabase
     .from('students')
-    .select('parents(user_id)')
+    .select('parents(user_id, latitude, longitude)')
     .eq('driver_id', driver.id)
     .eq('school_id', schoolId)
     .eq('is_graduated', false);
@@ -174,17 +167,37 @@ export async function startDrive(req: AuthRequest, res: Response): Promise<void>
   }
   const { data: students } = await studentsQuery;
   if (students) {
-    const parentUserIds = students
-      .map((s: any) => (Array.isArray(s.parents) ? s.parents.map((p: any) => p.user_id) : s.parents ? [s.parents.user_id] : []))
-      .flat()
-      .filter(Boolean) as string[];
-    const uniqueParentIds = [...new Set(parentUserIds)];
-    notifyMany(uniqueParentIds.map(uid => ({
-      schoolId, userId: uid,
-      title: 'Bus Is On The Way',
-      message: 'Your child\'s bus has started the route and is heading your way.',
-      type: 'bus',
-    }))).catch(() => {});
+    const parents = students
+      .map((s: any) => (Array.isArray(s.parents) ? s.parents[0] : s.parents))
+      .filter(Boolean);
+    const seen = new Set<string>();
+    const withLocation: string[] = [];
+    const noLocation: string[] = [];
+    for (const p of parents) {
+      if (!p.user_id || seen.has(p.user_id)) continue;
+      seen.add(p.user_id);
+      if (p.latitude && p.longitude) withLocation.push(p.user_id);
+      else noLocation.push(p.user_id);
+    }
+    // Notify all: bus is on the way
+    const allIds = [...withLocation, ...noLocation];
+    if (allIds.length > 0) {
+      notifyMany(allIds.map(uid => ({
+        schoolId, userId: uid,
+        title: 'Bus Is On The Way',
+        message: "Your child's bus has started the route and is heading your way.",
+        type: 'bus',
+      }))).catch(() => {});
+    }
+    // Also prompt parents without a pickup location to set one
+    if (noLocation.length > 0) {
+      notifyMany(noLocation.map(uid => ({
+        schoolId, userId: uid,
+        title: 'Set Your Pickup Location',
+        message: 'Open the app and set your location to receive bus proximity alerts.',
+        type: 'bus',
+      }))).catch(() => {});
+    }
   }
 
   res.json({ message: 'Drive started', driverId: driver.id });

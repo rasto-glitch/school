@@ -4,12 +4,13 @@ import {
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { LogOut, Bell, Globe, User, CheckCircle, XCircle, AlertCircle } from 'lucide-react-native';
+import { LogOut, Bell, Globe, User, CheckCircle, XCircle, AlertCircle, MapPin, ChevronRight } from 'lucide-react-native';
+import { useNavigation } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import i18n, { LANGUAGE_KEY } from '../../i18n';
 import { useAuthStore } from '../../store/authStore';
 import { getPushStatus, retryPushRegistration, type PushStatus } from '../../hooks/usePushNotifications';
-import { authApi } from '../../services/api';
+import { authApi, parentApi } from '../../services/api';
 import { colors, spacing, radius, shadow, font } from '../../theme';
 
 const LANGUAGES = [
@@ -22,7 +23,9 @@ export default function MeScreen() {
   const { t } = useTranslation();
   const { user, school, logout } = useAuthStore();
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<any>();
   const [lang, setLang] = useState(i18n.language || 'en');
+  const [hasPickupLocation, setHasPickupLocation] = useState<boolean | null>(null);
 
   // Keep lang state in sync if i18n language changes (e.g. restored from AsyncStorage on startup)
   useEffect(() => {
@@ -30,6 +33,23 @@ export default function MeScreen() {
     i18n.on('languageChanged', handler);
     return () => { i18n.off('languageChanged', handler); };
   }, []);
+
+  // Load pickup location status
+  useEffect(() => {
+    parentApi.getPickupLocation().then(r => {
+      setHasPickupLocation(!!(r.data.latitude && r.data.longitude));
+    }).catch(() => setHasPickupLocation(false));
+  }, []);
+
+  // Refresh pickup status when returning from SetPickupLocation screen
+  useEffect(() => {
+    const unsub = navigation.addListener('focus', () => {
+      parentApi.getPickupLocation().then(r => {
+        setHasPickupLocation(!!(r.data.latitude && r.data.longitude));
+      }).catch(() => {});
+    });
+    return unsub;
+  }, [navigation]);
   const [pushStatus, setPushStatus] = useState<PushStatus>(getPushStatus());
   const [retrying, setRetrying] = useState(false);
 
@@ -131,6 +151,22 @@ export default function MeScreen() {
             </Text>
           </View>
           <PushIcon size={18} color={pushColor[pushStatus]} />
+        </View>
+      </TouchableOpacity>
+
+      {/* Pickup location */}
+      <TouchableOpacity style={styles.card} onPress={() => navigation.navigate('SetPickupLocation')} activeOpacity={0.7}>
+        <View style={[styles.cardRow, { marginBottom: 0 }]}>
+          <View style={[styles.iconBox, { backgroundColor: hasPickupLocation ? colors.success + '22' : colors.warning + '22' }]}>
+            <MapPin size={18} color={hasPickupLocation ? colors.success : colors.warning} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.cardLabel}>{t('pickup.profile_row')}</Text>
+            <Text style={[styles.pushSub, { color: hasPickupLocation ? colors.success : colors.warning }]}>
+              {hasPickupLocation === null ? '...' : hasPickupLocation ? t('pickup.set') : t('pickup.not_set')}
+            </Text>
+          </View>
+          <ChevronRight size={16} color={colors.textMuted} />
         </View>
       </TouchableOpacity>
 

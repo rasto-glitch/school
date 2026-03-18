@@ -137,6 +137,20 @@
     "title": "Profile",
     "subtitle": "Your account information"
   },
+  "pickup": {
+    "profile_row": "Pickup Location",
+    "not_set": "Tap to set pickup location",
+    "set": "Location saved",
+    "title": "Set Pickup Location",
+    "subtitle": "Set once — alerts you when bus is nearby",
+    "use_current": "Use My Current Location",
+    "drag_hint": "Drag the pin to adjust your exact location",
+    "confirm": "Save Location",
+    "getting": "Getting location...",
+    "saved": "Pickup location saved!",
+    "save_error": "Failed to save location",
+    "permission_denied": "Location permission is required"
+  },
   "driver": {
     "dashboard_title": "Driver Dashboard",
     "dashboard_subtitle": "Welcome, {{name}}!",

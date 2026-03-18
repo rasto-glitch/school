@@ -32,7 +32,7 @@ export default function StartDrivePage() {
           isDriving: true,
         }).catch(() => {});
       },
-      () => {}
+      (err) => { toast.error(`Location error: ${err.message}`); }
     );
   };
 
@@ -46,7 +46,7 @@ export default function StartDrivePage() {
       setIsDriving(true);
       toast.success('Drive started! GPS tracking is active.');
       sendLocation();
-      intervalRef.current = setInterval(sendLocation, 30000);
+      intervalRef.current = setInterval(sendLocation, 20000);
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Failed to start drive');
     }

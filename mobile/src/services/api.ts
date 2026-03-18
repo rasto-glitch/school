@@ -48,6 +48,8 @@ export const parentApi = {
   getBusLocation: (studentId?: string) => api.get('/parent/bus-location', { params: { studentId } }),
   getNotifications: () => api.get('/parent/notifications'),
   markRead: (id: string) => api.patch(`/parent/notifications/${id}/read`),
+  getPickupLocation: () => api.get('/parent/pickup-location'),
+  updatePickupLocation: (latitude: number, longitude: number) => api.put('/parent/pickup-location', { latitude, longitude }),
 };
 
 // ---- DRIVER ----

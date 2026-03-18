@@ -7,6 +7,8 @@ interface PushStrings {
   bus_2min_body: string;
   bus_arriving_title: string;
   bus_arriving_body: string;
+  bus_set_location_title: string;
+  bus_set_location_body: string;
   prefix_homework: string;
   prefix_assignment: string;
   prefix_announcement: string;
@@ -26,6 +28,8 @@ const T: Record<string, PushStrings> = {
     bus_2min_body: 'Your kid is 2 minutes away.',
     bus_arriving_title: 'Your Child Has Arrived',
     bus_arriving_body: 'Your child has arrived.',
+    bus_set_location_title: 'Set Your Pickup Location',
+    bus_set_location_body: 'Open the app and set your location to receive bus proximity alerts.',
     prefix_homework: 'New Homework',
     prefix_assignment: 'New Assignment',
     prefix_announcement: 'New Announcement',
@@ -43,6 +47,8 @@ const T: Record<string, PushStrings> = {
     bus_2min_body: 'منداڵەکەت ٢ خولەک دووری.',
     bus_arriving_title: 'منداڵەکەت گەیشت!',
     bus_arriving_body: 'منداڵەکەت گەیشتووەتەوە.',
+    bus_set_location_title: 'شوێنی وەرگرتنت دیاری بکە',
+    bus_set_location_body: 'ئەپەکە بکەرەوە و شوێنەکەت دیاری بکە بۆ وەرگرتنی ئاگادارکردنەوەی پاس.',
     prefix_homework: 'ئەرکی ماڵەوە',
     prefix_assignment: 'ئەرکی نوێ',
     prefix_announcement: 'ڕاگەیاندنی نوێ',
@@ -60,6 +66,8 @@ const T: Record<string, PushStrings> = {
     bus_2min_body: 'طفلك على بعد دقيقتين.',
     bus_arriving_title: 'وصل طفلك!',
     bus_arriving_body: 'وصل طفلك.',
+    bus_set_location_title: 'حدد موقع التسليم',
+    bus_set_location_body: 'افتح التطبيق وحدد موقعك لتلقي تنبيهات اقتراب الحافلة.',
     prefix_homework: 'الواجب المنزلي',
     prefix_assignment: 'مهمة جديدة',
     prefix_announcement: 'إعلان جديد',
@@ -71,11 +79,12 @@ const T: Record<string, PushStrings> = {
 };
 
 // Maps the English bus notification title to a translation key
-const BUS_TITLE_KEY: Record<string, 'bus_started' | 'bus_5min' | 'bus_2min' | 'bus_arriving'> = {
+const BUS_TITLE_KEY: Record<string, 'bus_started' | 'bus_5min' | 'bus_2min' | 'bus_arriving' | 'bus_set_location'> = {
   'Bus Is On The Way': 'bus_started',
   'Bus 5 Minutes Away': 'bus_5min',
   'Bus 2 Minutes Away': 'bus_2min',
   'Your Child Has Arrived': 'bus_arriving',
+  'Set Your Pickup Location': 'bus_set_location',
 };
 
 /**

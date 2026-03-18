@@ -4,11 +4,13 @@ import { useAuthStore } from '../store/authStore';
 import LoginScreen from '../screens/auth/LoginScreen';
 import ParentTabs from './ParentTabs';
 import DriverTabs from './DriverTabs';
+import SetPickupLocationScreen from '../screens/parent/SetPickupLocationScreen';
 
 export type RootStackParamList = {
   Login: undefined;
   ParentTabs: undefined;
   DriverTabs: undefined;
+  SetPickupLocation: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -25,7 +27,10 @@ export default function Navigation() {
         ) : user?.role === 'driver' ? (
           <Stack.Screen name="DriverTabs" component={DriverTabs} />
         ) : (
-          <Stack.Screen name="ParentTabs" component={ParentTabs} />
+          <>
+            <Stack.Screen name="ParentTabs" component={ParentTabs} />
+            <Stack.Screen name="SetPickupLocation" component={SetPickupLocationScreen} />
+          </>
         )}
       </Stack.Navigator>
     </NavigationContainer>

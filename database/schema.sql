@@ -75,6 +75,8 @@ CREATE TABLE IF NOT EXISTS parents (
   full_name TEXT NOT NULL,
   phone_number TEXT,
   email TEXT,
+  latitude DOUBLE PRECISION,
+  longitude DOUBLE PRECISION,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

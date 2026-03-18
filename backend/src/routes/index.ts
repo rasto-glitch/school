@@ -115,6 +115,8 @@ export function createRouter(io: SocketServer) {
   router.patch('/parent/notifications/:id/read', authenticate, authorize('parent'), (req, res) => parent.markNotificationRead(req as AuthRequest, res));
   router.get('/parent/appointments', authenticate, authorize('parent'), (req, res) => parent.getAppointments(req as AuthRequest, res));
   router.post('/parent/appointments', authenticate, authorize('parent'), (req, res) => parent.createAppointment(req as AuthRequest, res));
+  router.put('/parent/pickup-location', authenticate, authorize('parent'), (req, res) => parent.updatePickupLocation(req as AuthRequest, res));
+  router.get('/parent/pickup-location', authenticate, authorize('parent'), (req, res) => parent.getPickupLocation(req as AuthRequest, res));
 
   // ---- SUPERVISOR ----
   router.get('/supervisor/classes', authenticate, authorize('supervisor'), (req, res) => supervisor.getClasses(req as AuthRequest, res));
