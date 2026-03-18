@@ -1,10 +1,10 @@
 interface PushStrings {
   bus_started_title: string;
   bus_started_body: string;
-  bus_10min_title: string;
-  bus_10min_body: string;
   bus_5min_title: string;
   bus_5min_body: string;
+  bus_2min_title: string;
+  bus_2min_body: string;
   bus_arriving_title: string;
   bus_arriving_body: string;
   prefix_homework: string;
@@ -20,12 +20,12 @@ const T: Record<string, PushStrings> = {
   en: {
     bus_started_title: 'Bus Is On The Way',
     bus_started_body: "Your child's bus has started the route and is heading your way.",
-    bus_10min_title: 'Bus 10 Minutes Away',
-    bus_10min_body: 'The school bus is approximately 10 minutes away.',
     bus_5min_title: 'Bus 5 Minutes Away',
-    bus_5min_body: 'The school bus is approximately 5 minutes away.',
-    bus_arriving_title: 'Bus Arriving Now!',
-    bus_arriving_body: 'The school bus is arriving at your location now!',
+    bus_5min_body: 'Your kid is 5 minutes away.',
+    bus_2min_title: 'Bus 2 Minutes Away',
+    bus_2min_body: 'Your kid is 2 minutes away.',
+    bus_arriving_title: 'Your Child Has Arrived',
+    bus_arriving_body: 'Your child has arrived.',
     prefix_homework: 'New Homework',
     prefix_assignment: 'New Assignment',
     prefix_announcement: 'New Announcement',
@@ -37,12 +37,12 @@ const T: Record<string, PushStrings> = {
   ku: {
     bus_started_title: 'پاس لە ڕێگایە',
     bus_started_body: 'پاسی منداڵەکەت دەستی بە ڕێگاکەی کردووە و بەرەو ماڵەکەتەوەیە.',
-    bus_10min_title: 'پاس ١٠ خولەک دووری',
-    bus_10min_body: 'پاسی قوتابخانە نزیکەی ١٠ خولەک دوورە.',
     bus_5min_title: 'پاس ٥ خولەک دووری',
-    bus_5min_body: 'پاسی قوتابخانە نزیکەی ٥ خولەک دوورە.',
-    bus_arriving_title: 'پاس ئێستا گەیشتووە!',
-    bus_arriving_body: 'پاسی قوتابخانە ئێستا گەیشتووە بۆ شوێنەکەت!',
+    bus_5min_body: 'منداڵەکەت ٥ خولەک دووری.',
+    bus_2min_title: 'پاس ٢ خولەک دووری',
+    bus_2min_body: 'منداڵەکەت ٢ خولەک دووری.',
+    bus_arriving_title: 'منداڵەکەت گەیشت!',
+    bus_arriving_body: 'منداڵەکەت گەیشتووەتەوە.',
     prefix_homework: 'ئەرکی ماڵەوە',
     prefix_assignment: 'ئەرکی نوێ',
     prefix_announcement: 'ڕاگەیاندنی نوێ',
@@ -54,12 +54,12 @@ const T: Record<string, PushStrings> = {
   ar: {
     bus_started_title: 'الحافلة في الطريق',
     bus_started_body: 'بدأت حافلة طفلك المسار وهي في طريقها إليك.',
-    bus_10min_title: 'الحافلة على بعد 10 دقائق',
-    bus_10min_body: 'الحافلة المدرسية على بعد حوالي 10 دقائق.',
     bus_5min_title: 'الحافلة على بعد 5 دقائق',
-    bus_5min_body: 'الحافلة المدرسية على بعد حوالي 5 دقائق.',
-    bus_arriving_title: 'الحافلة وصلت الآن!',
-    bus_arriving_body: 'وصلت الحافلة المدرسية إلى موقعك الآن!',
+    bus_5min_body: 'طفلك على بعد 5 دقائق.',
+    bus_2min_title: 'الحافلة على بعد دقيقتين',
+    bus_2min_body: 'طفلك على بعد دقيقتين.',
+    bus_arriving_title: 'وصل طفلك!',
+    bus_arriving_body: 'وصل طفلك.',
     prefix_homework: 'الواجب المنزلي',
     prefix_assignment: 'مهمة جديدة',
     prefix_announcement: 'إعلان جديد',
@@ -71,11 +71,11 @@ const T: Record<string, PushStrings> = {
 };
 
 // Maps the English bus notification title to a translation key
-const BUS_TITLE_KEY: Record<string, 'bus_started' | 'bus_10min' | 'bus_5min' | 'bus_arriving'> = {
+const BUS_TITLE_KEY: Record<string, 'bus_started' | 'bus_5min' | 'bus_2min' | 'bus_arriving'> = {
   'Bus Is On The Way': 'bus_started',
-  'Bus 10 Minutes Away': 'bus_10min',
   'Bus 5 Minutes Away': 'bus_5min',
-  'Bus Arriving Now!': 'bus_arriving',
+  'Bus 2 Minutes Away': 'bus_2min',
+  'Your Child Has Arrived': 'bus_arriving',
 };
 
 /**

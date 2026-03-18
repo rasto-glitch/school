@@ -54,7 +54,7 @@ export default function StartDriveScreen() {
       await driverApi.startDrive(Array.from(excluded));
       setIsDriving(true);
       await sendLocation();
-      intervalRef.current = setInterval(sendLocation, 30000);
+      intervalRef.current = setInterval(sendLocation, 20000);
     } catch (err: any) {
       Alert.alert('Error', err.response?.data?.error || 'Could not start drive');
     } finally {
