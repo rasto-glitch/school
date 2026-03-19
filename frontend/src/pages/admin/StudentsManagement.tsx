@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { Search, Paperclip, ArrowRight } from 'lucide-react';
+import { Search, Paperclip } from 'lucide-react';
 import { adminApi } from '../../services/api';
 import { useDebounce } from '../../hooks/useDebounce';
 import PageLayout from '../../components/layout/PageLayout';
@@ -16,7 +15,6 @@ import type { Student, Class } from '../../types';
 interface Parent { id: string; fullName: string; phoneNumber?: string; }
 
 export default function StudentsManagement() {
-  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'active' | 'graduated'>('active');
   const [students, setStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);

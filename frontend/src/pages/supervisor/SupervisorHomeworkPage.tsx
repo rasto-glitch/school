@@ -48,7 +48,7 @@ export default function SupervisorHomeworkPage() {
     <PageLayout title="Homework" subtitle="All homework assigned by teachers">
       <div className="space-y-3 max-w-3xl">
         {loading ? <LoadingSpinner /> : items.length === 0 ? (
-          <EmptyState icon={BookOpen} title="No homework found" description="No homework has been assigned yet." />
+          <EmptyState icon={<BookOpen className="w-8 h-8 text-gray-400" />} title="No homework found" description="No homework has been assigned yet." />
         ) : items.map(item => (
           <Card key={item.id} className="flex items-start gap-4">
             <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0 mt-0.5">

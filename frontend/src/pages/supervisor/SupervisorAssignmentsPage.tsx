@@ -48,7 +48,7 @@ export default function SupervisorAssignmentsPage() {
     <PageLayout title="Assignments" subtitle="All assignments assigned by teachers">
       <div className="space-y-3 max-w-3xl">
         {loading ? <LoadingSpinner /> : items.length === 0 ? (
-          <EmptyState icon={ClipboardList} title="No assignments found" description="No assignments have been created yet." />
+          <EmptyState icon={<ClipboardList className="w-8 h-8 text-gray-400" />} title="No assignments found" description="No assignments have been created yet." />
         ) : items.map(item => (
           <Card key={item.id} className="flex items-start gap-4">
             <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center flex-shrink-0 mt-0.5">
