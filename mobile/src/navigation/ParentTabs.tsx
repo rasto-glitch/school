@@ -1,15 +1,30 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Home, BookOpen, Star, Bus, User } from 'lucide-react-native';
+import { useNavigation } from '@react-navigation/native';
+import { TouchableOpacity, View, Text, StyleSheet } from 'react-native';
+import { Home, BookOpen, ClipboardList, Bus, Bell, User } from 'lucide-react-native';
 import FeedScreen from '../screens/parent/FeedScreen';
 import HomeworkScreen from '../screens/parent/HomeworkScreen';
-import GradesScreen from '../screens/parent/GradesScreen';
+import AssignmentsScreen from '../screens/parent/AssignmentsScreen';
 import BusTrackingScreen from '../screens/parent/BusTrackingScreen';
-import MeScreen from '../screens/parent/MeScreen';
-import { colors } from '../theme';
+import NotificationsScreen from '../screens/parent/NotificationsScreen';
+import { colors, radius, font } from '../theme';
 
 const Tab = createBottomTabNavigator();
+
+function ProfileButton() {
+  const navigation = useNavigation<any>();
+  return (
+    <TouchableOpacity
+      onPress={() => navigation.navigate('Me')}
+      style={styles.profileBtn}
+      activeOpacity={0.7}
+    >
+      <User size={20} color={colors.primary} />
+    </TouchableOpacity>
+  );
+}
 
 export default function ParentTabs() {
   const { t } = useTranslation();
@@ -18,7 +33,11 @@ export default function ParentTabs() {
   return (
     <Tab.Navigator
       screenOptions={{
-        headerShown: false,
+        headerShown: true,
+        headerStyle: { backgroundColor: colors.card },
+        headerTitleStyle: { fontSize: font.lg, fontWeight: '700', color: colors.text },
+        headerShadowVisible: false,
+        headerRight: () => <ProfileButton />,
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textMuted,
         tabBarStyle: {
@@ -35,28 +54,57 @@ export default function ParentTabs() {
       <Tab.Screen
         name="Feed"
         component={FeedScreen}
-        options={{ tabBarLabel: t('dashboard.title'), tabBarIcon: ({ color }) => <Home size={22} color={color} /> }}
+        options={{
+          headerTitle: t('dashboard.title'),
+          tabBarLabel: t('dashboard.title'),
+          tabBarIcon: ({ color }) => <Home size={22} color={color} />,
+        }}
       />
       <Tab.Screen
         name="Homework"
         component={HomeworkScreen}
-        options={{ tabBarLabel: t('nav.homework'), tabBarIcon: ({ color }) => <BookOpen size={22} color={color} /> }}
+        options={{
+          headerTitle: t('nav.homework'),
+          tabBarLabel: t('nav.homework'),
+          tabBarIcon: ({ color }) => <BookOpen size={22} color={color} />,
+        }}
       />
       <Tab.Screen
-        name="Grades"
-        component={GradesScreen}
-        options={{ tabBarLabel: t('nav.grades'), tabBarIcon: ({ color }) => <Star size={22} color={color} /> }}
+        name="Assignments"
+        component={AssignmentsScreen}
+        options={{
+          headerTitle: t('nav.assignments', 'Assignments'),
+          tabBarLabel: t('nav.assignments', 'Assignments'),
+          tabBarIcon: ({ color }) => <ClipboardList size={22} color={color} />,
+        }}
       />
       <Tab.Screen
         name="BusTracking"
         component={BusTrackingScreen}
-        options={{ tabBarLabel: t('nav.track_bus'), tabBarIcon: ({ color }) => <Bus size={22} color={color} /> }}
+        options={{
+          headerTitle: t('nav.track_bus'),
+          tabBarLabel: t('nav.track_bus'),
+          tabBarIcon: ({ color }) => <Bus size={22} color={color} />,
+        }}
       />
       <Tab.Screen
-        name="Me"
-        component={MeScreen}
-        options={{ tabBarLabel: t('nav.profile'), tabBarIcon: ({ color }) => <User size={22} color={color} /> }}
+        name="Notifications"
+        component={NotificationsScreen}
+        options={{
+          headerTitle: t('nav.notifications', 'Notifications'),
+          tabBarLabel: t('nav.notifications', 'Notifications'),
+          tabBarIcon: ({ color }) => <Bell size={22} color={color} />,
+        }}
       />
     </Tab.Navigator>
   );
 }
+
+const styles = StyleSheet.create({
+  profileBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center', justifyContent: 'center',
+    marginRight: 12,
+  },
+});

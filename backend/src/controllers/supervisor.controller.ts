@@ -100,6 +100,46 @@ export async function getAttendanceSummary(req: AuthRequest, res: Response): Pro
   res.json(toCC(summary));
 }
 
+// ---- HOMEWORK (all school homework, read + delete) ----
+export async function getHomework(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { data, error } = await supabase
+    .from('homework')
+    .select('id, title, description, subject, due_date, file_url, created_at, teachers(full_name), classes(name)')
+    .eq('school_id', schoolId)
+    .order('created_at', { ascending: false });
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json(toCC(data));
+}
+
+export async function deleteHomework(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { id } = req.params;
+  const { error } = await supabase.from('homework').delete().eq('id', id).eq('school_id', schoolId);
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json({ success: true });
+}
+
+// ---- ASSIGNMENTS (all school assignments, read + delete) ----
+export async function getAssignments(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { data, error } = await supabase
+    .from('assignments')
+    .select('id, title, description, subject, due_date, file_url, created_at, teachers(full_name), classes(name)')
+    .eq('school_id', schoolId)
+    .order('created_at', { ascending: false });
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json(toCC(data));
+}
+
+export async function deleteAssignment(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { id } = req.params;
+  const { error } = await supabase.from('assignments').delete().eq('id', id).eq('school_id', schoolId);
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json({ success: true });
+}
+
 // ---- OVERRIDE ATTENDANCE (supervisor can correct a record) ----
 export async function updateAttendanceRecord(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;

@@ -5,7 +5,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { io as socketIO } from 'socket.io-client';
-import { RefreshCw, User, AlertCircle, Bus } from 'lucide-react-native';
+import { RefreshCw, User, AlertCircle, Bus, MapPin, ChevronRight } from 'lucide-react-native';
+import { useNavigation } from '@react-navigation/native';
 import { parentApi } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { colors, spacing, radius, shadow, font } from '../../theme';
@@ -58,6 +59,14 @@ class MapErrorBoundary extends Component<{ children: React.ReactNode }, { failed
 export default function BusTrackingScreen() {
   const { t } = useTranslation();
   const { token } = useAuthStore();
+  const navigation = useNavigation<any>();
+  const [hasPickupLocation, setHasPickupLocation] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    parentApi.getPickupLocation().then(r => {
+      setHasPickupLocation(!!(r.data.latitude && r.data.longitude));
+    }).catch(() => setHasPickupLocation(false));
+  }, []);
   const [children, setChildren] = useState<Student[]>([]);
   const [selectedChild, setSelectedChild] = useState('');
   const [busData, setBusData] = useState<BusData | null>(null);
@@ -227,6 +236,20 @@ export default function BusTrackingScreen() {
         </>
       )}
 
+      {/* Pickup location */}
+      <TouchableOpacity style={styles.pickupRow} onPress={() => navigation.navigate('SetPickupLocation')} activeOpacity={0.7}>
+        <View style={[styles.pickupIcon, { backgroundColor: hasPickupLocation ? colors.success + '22' : colors.warning + '22' }]}>
+          <MapPin size={16} color={hasPickupLocation ? colors.success : colors.warning} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.pickupLabel}>{t('pickup.profile_row')}</Text>
+          <Text style={[styles.pickupSub, { color: hasPickupLocation ? colors.success : colors.warning }]}>
+            {hasPickupLocation === null ? '...' : hasPickupLocation ? t('pickup.set') : t('pickup.not_set')}
+          </Text>
+        </View>
+        <ChevronRight size={16} color={colors.textMuted} />
+      </TouchableOpacity>
+
       {/* Driver info */}
       {driverInfo && (
         <View style={styles.driverCard}>
@@ -274,6 +297,10 @@ const styles = StyleSheet.create({
   etaNote: { fontSize: font.xs, color: '#818CF8', marginTop: 4 },
   mapContainer: { borderRadius: radius.md, overflow: 'hidden', marginBottom: spacing.sm, height: 280 },
   map: { flex: 1 },
+  pickupRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm, ...shadow.sm },
+  pickupIcon: { width: 32, height: 32, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+  pickupLabel: { fontSize: font.sm, fontWeight: '600', color: colors.text },
+  pickupSub: { fontSize: font.xs, fontWeight: '600', marginTop: 1 },
   driverCard: { backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, ...shadow.sm },
   sectionLabel: { fontSize: font.xs, fontWeight: '700', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.sm },
   driverRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },

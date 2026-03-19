@@ -50,6 +50,10 @@ export const supervisorApi = {
     api.get('/supervisor/attendance-summary', { params: date ? { date } : {} }),
   updateAttendanceRecord: (id: string, status: string, notes?: string) =>
     api.patch(`/supervisor/attendance/${id}`, { status, notes }),
+  getHomework: () => api.get('/supervisor/homework'),
+  deleteHomework: (id: string) => api.delete(`/supervisor/homework/${id}`),
+  getAssignments: () => api.get('/supervisor/assignments'),
+  deleteAssignment: (id: string) => api.delete(`/supervisor/assignments/${id}`),
 };
 
 // ---- PARENT ----

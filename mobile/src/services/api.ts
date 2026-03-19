@@ -42,6 +42,7 @@ export const authApi = {
 export const parentApi = {
   getChildren: () => api.get('/parent/children'),
   getHomework: (params?: Record<string, string>) => api.get('/parent/homework', { params }),
+  getAssignments: (params?: Record<string, string>) => api.get('/parent/assignments', { params }),
   getGrades: (studentId?: string) => api.get('/parent/grades', { params: studentId ? { studentId } : {} }),
   getReports: (params?: Record<string, string>) => api.get('/parent/reports', { params }),
   getAnnouncements: () => api.get('/parent/announcements'),

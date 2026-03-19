@@ -58,6 +58,8 @@ import DriverStudentsPage from './pages/driver/DriverStudentsPage';
 import SupervisorDashboard from './pages/supervisor/SupervisorDashboard';
 import AbsentTodayPage from './pages/supervisor/AbsentTodayPage';
 import AttendanceOverviewPage from './pages/supervisor/AttendanceOverviewPage';
+import SupervisorHomeworkPage from './pages/supervisor/SupervisorHomeworkPage';
+import SupervisorAssignmentsPage from './pages/supervisor/SupervisorAssignmentsPage';
 
 // Parent Grades
 import GradesPage from './pages/parent/GradesPage';
@@ -154,6 +156,8 @@ export default function App() {
         <Route path="/supervisor/dashboard" element={<ProtectedRoute allowedRoles={['supervisor']}><SupervisorDashboard /></ProtectedRoute>} />
         <Route path="/supervisor/absent-today" element={<ProtectedRoute allowedRoles={['supervisor']}><AbsentTodayPage /></ProtectedRoute>} />
         <Route path="/supervisor/attendance" element={<ProtectedRoute allowedRoles={['supervisor']}><AttendanceOverviewPage /></ProtectedRoute>} />
+        <Route path="/supervisor/homework" element={<ProtectedRoute allowedRoles={['supervisor']}><SupervisorHomeworkPage /></ProtectedRoute>} />
+        <Route path="/supervisor/assignments" element={<ProtectedRoute allowedRoles={['supervisor']}><SupervisorAssignmentsPage /></ProtectedRoute>} />
         <Route path="/supervisor/profile" element={<ProtectedRoute allowedRoles={['supervisor']}><ProfilePage /></ProtectedRoute>} />
 
         {/* Driver Portal */}

@@ -6,11 +6,19 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { Megaphone, BookOpen, FileText, ClipboardList, MapPin, Bell, Calendar } from 'lucide-react-native';
+import { Megaphone, BookOpen, FileText, ClipboardList, MapPin, Bell, Calendar, Star } from 'lucide-react-native';
 import { useAuthStore } from '../../store/authStore';
 import { parentApi } from '../../services/api';
 import { colors, spacing, radius, shadow, font } from '../../theme';
 import type { Homework, Announcement } from '../../types';
+
+interface Grade {
+  id: string;
+  subject?: string;
+  grade?: number;
+  maxGrade?: number;
+  students?: { fullName: string };
+}
 
 type FeedItem =
   | { type: 'announcement'; date: string; data: Announcement }
@@ -30,16 +38,19 @@ export default function FeedScreen() {
   const navigation = useNavigation<any>();
   const [homework, setHomework] = useState<Homework[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [grades, setGrades] = useState<Grade[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = async () => {
-    const [hw, ann] = await Promise.allSettled([
+    const [hw, ann, gr] = await Promise.allSettled([
       parentApi.getHomework(),
       parentApi.getAnnouncements(),
+      parentApi.getGrades(),
     ]);
     if (hw.status === 'fulfilled') setHomework(hw.value.data || []);
     if (ann.status === 'fulfilled') setAnnouncements(ann.value.data || []);
+    if (gr.status === 'fulfilled') setGrades((gr.value.data || []).slice(0, 3));
   };
 
   useEffect(() => { load().finally(() => setLoading(false)); }, []);
@@ -56,11 +67,11 @@ export default function FeedScreen() {
 
   const shortcuts = [
     { label: t('dashboard.quick_homework'), icon: BookOpen, bg: '#EFF6FF', iconColor: '#2563EB', tab: 'Homework' },
-    { label: t('dashboard.quick_assignments'), icon: ClipboardList, bg: '#F0FDF4', iconColor: '#16A34A', tab: 'Grades' },
-    { label: t('dashboard.quick_reports'), icon: FileText, bg: '#FAF5FF', iconColor: '#9333EA', tab: 'Grades' },
+    { label: t('dashboard.quick_assignments'), icon: ClipboardList, bg: '#F0FDF4', iconColor: '#16A34A', tab: 'Assignments' },
     { label: t('dashboard.quick_bus'), icon: MapPin, bg: '#FFFBEB', iconColor: '#D97706', tab: 'BusTracking' },
-    { label: t('dashboard.quick_alerts'), icon: Bell, bg: '#FFF1F2', iconColor: '#E11D48', tab: 'Me' },
-    { label: t('dashboard.quick_bookings'), icon: Calendar, bg: '#F0FDFA', iconColor: '#0D9488', tab: 'Me' },
+    { label: t('dashboard.quick_alerts'), icon: Bell, bg: '#FFF1F2', iconColor: '#E11D48', tab: 'Notifications' },
+    { label: t('dashboard.quick_reports'), icon: FileText, bg: '#FAF5FF', iconColor: '#9333EA', tab: 'Notifications' },
+    { label: t('dashboard.quick_bookings'), icon: Calendar, bg: '#F0FDFA', iconColor: '#0D9488', tab: 'Notifications' },
   ];
 
   return (
@@ -86,6 +97,28 @@ export default function FeedScreen() {
           </TouchableOpacity>
         ))}
       </View>
+
+      {/* Recent Grades */}
+      {grades.length > 0 && (
+        <>
+          <Text style={styles.sectionLabel}>{t('nav.grades', 'Grades')}</Text>
+          <View style={styles.gradesRow}>
+            {grades.map(g => {
+              const pct = g.grade != null && g.maxGrade ? Math.round((g.grade / g.maxGrade) * 100) : null;
+              const color = pct == null ? colors.textMuted : pct >= 80 ? colors.success : pct >= 60 ? colors.warning : colors.danger;
+              return (
+                <View key={g.id} style={styles.gradeCard}>
+                  <View style={[styles.gradeCircle, { borderColor: color }]}>
+                    <Text style={[styles.gradeScore, { color }]}>{g.grade ?? '—'}</Text>
+                  </View>
+                  <Text style={styles.gradeSubject} numberOfLines={1}>{g.subject || '—'}</Text>
+                  {g.students?.fullName && <Text style={styles.gradeStudent} numberOfLines={1}>{g.students.fullName}</Text>}
+                </View>
+              );
+            })}
+          </View>
+        </>
+      )}
 
       {/* Section label */}
       <Text style={styles.sectionLabel}>{t('dashboard.latest_activity')}</Text>
@@ -182,6 +215,12 @@ const styles = StyleSheet.create({
   subjectTag: { backgroundColor: colors.bg, borderRadius: radius.full, paddingHorizontal: 8, paddingVertical: 2 },
   subjectTagText: { fontSize: font.xs, color: colors.textSecondary },
   dueText: { fontSize: font.xs, color: colors.warning, fontWeight: '600' },
+  gradesRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
+  gradeCard: { flex: 1, backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.sm, alignItems: 'center', gap: 4, ...shadow.sm },
+  gradeCircle: { width: 48, height: 48, borderRadius: 24, borderWidth: 2.5, alignItems: 'center', justifyContent: 'center' },
+  gradeScore: { fontSize: font.md, fontWeight: '800' },
+  gradeSubject: { fontSize: font.xs, fontWeight: '600', color: colors.text, textAlign: 'center' },
+  gradeStudent: { fontSize: font.xs, color: colors.textMuted, textAlign: 'center' },
   emptyBox: { alignItems: 'center', marginTop: 60, gap: spacing.md },
   emptyText: { fontSize: font.md, color: colors.textMuted },
 });

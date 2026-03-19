@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
   StyleSheet, ActivityIndicator, Alert, KeyboardAvoidingView, Platform,
@@ -7,31 +7,20 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { authApi } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { colors, spacing, radius, font, shadow } from '../../theme';
-import type { School } from '../../types';
 
 export default function LoginScreen() {
-  const { setAuth } = useAuthStore();
+  const { setAuth, selectedSchool: storedSchool, setSelectedSchool } = useAuthStore();
   const insets = useSafeAreaInsets();
-  const [schools, setSchools] = useState<School[]>([]);
-  const [selectedSchool, setSelectedSchool] = useState<School | null>(null);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [loadingSchools, setLoadingSchools] = useState(true);
-
-  useEffect(() => {
-    authApi.getSchools()
-      .then(r => { const list = r.data || []; setSchools(list); if (list.length === 1) setSelectedSchool(list[0]); })
-      .catch(() => Alert.alert('Error', 'Could not load schools'))
-      .finally(() => setLoadingSchools(false));
-  }, []);
 
   const handleLogin = async () => {
-    if (!selectedSchool) { Alert.alert('', 'Please select a school'); return; }
+    if (!storedSchool) { Alert.alert('', 'No school selected'); return; }
     if (!username || !password) { Alert.alert('', 'Please enter your username and password'); return; }
     setLoading(true);
     try {
-      const res = await authApi.login(username, password, selectedSchool.slug);
+      const res = await authApi.login(username, password, storedSchool.slug);
       setAuth(res.data.token, res.data.user, res.data.school);
     } catch (err: any) {
       Alert.alert('Sign In Failed', err.response?.data?.error || 'Invalid username or password');
@@ -53,18 +42,15 @@ export default function LoginScreen() {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.label}>School</Text>
-          {loadingSchools ? (
-            <ActivityIndicator color={colors.primary} style={{ marginBottom: spacing.md }} />
-          ) : (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing.md }}>
-              {schools.map(s => (
-                <TouchableOpacity key={s.id} style={[styles.chip, selectedSchool?.id === s.id && styles.chipActive]} onPress={() => setSelectedSchool(s)}>
-                  <Text style={[styles.chipText, selectedSchool?.id === s.id && styles.chipTextActive]}>{s.name}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          )}
+          <View style={styles.schoolRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.label}>School</Text>
+              <Text style={styles.schoolName}>{storedSchool?.name}</Text>
+            </View>
+            <TouchableOpacity onPress={() => setSelectedSchool(null as any)} style={styles.changeBtn}>
+              <Text style={styles.changeBtnText}>Change</Text>
+            </TouchableOpacity>
+          </View>
 
           <Text style={styles.label}>Username</Text>
           <TextInput style={styles.input} value={username} onChangeText={setUsername} autoCapitalize="none" autoCorrect={false} placeholder="Enter your username" placeholderTextColor={colors.textMuted} returnKeyType="next" />
@@ -91,10 +77,10 @@ const styles = StyleSheet.create({
   brandSub: { fontSize: font.sm, color: colors.textSecondary, marginTop: 4 },
   card: { backgroundColor: colors.card, borderRadius: radius.xl, padding: spacing.lg, ...shadow.md },
   label: { fontSize: font.sm, fontWeight: '600', color: colors.text, marginBottom: 6 },
-  chip: { borderWidth: 1.5, borderColor: colors.border, borderRadius: radius.full, paddingHorizontal: 14, paddingVertical: 8, marginRight: spacing.sm, backgroundColor: colors.bg },
-  chipActive: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
-  chipText: { fontSize: font.sm, color: colors.textSecondary, fontWeight: '500' },
-  chipTextActive: { color: colors.primary, fontWeight: '700' },
+  schoolRow: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.md, gap: spacing.sm },
+  schoolName: { fontSize: font.md, fontWeight: '600', color: colors.text, marginTop: 2 },
+  changeBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: radius.sm, borderWidth: 1.5, borderColor: colors.primary },
+  changeBtnText: { fontSize: font.xs, fontWeight: '700', color: colors.primary },
   input: { borderWidth: 1.5, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: 13, fontSize: font.md, color: colors.text, marginBottom: spacing.md, backgroundColor: colors.bg },
   btn: { backgroundColor: colors.primary, borderRadius: radius.md, paddingVertical: 15, alignItems: 'center', marginTop: 4 },
   btnText: { color: colors.textInverse, fontSize: font.md, fontWeight: '700' },

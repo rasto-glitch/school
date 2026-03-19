@@ -355,20 +355,6 @@ export default function StudentsManagement() {
           </div>
         </div>
 
-        {/* Manage Classes */}
-        <Card className="max-w-xl">
-          <div className="flex items-center justify-between">
-            <h2 className="font-bold text-gray-900">Manage Classes</h2>
-            <button
-              onClick={() => navigate('/admin/classes')}
-              className="flex items-center gap-1.5 text-sm text-primary-600 hover:text-primary-700 font-medium transition-colors"
-            >
-              Go to Classes <ArrowRight className="w-4 h-4" />
-            </button>
-          </div>
-          <p className="text-sm text-gray-500 mt-1">Create, edit, and delete classes from the Classes page.</p>
-        </Card>
-
         {/* Edit Student */}
         <Card className="max-w-xl" id="edit-student-section" style={{ scrollMarginTop: '80px' } as React.CSSProperties}>
           <h2 className="font-bold text-gray-900 mb-4 text-center">Edit Student</h2>

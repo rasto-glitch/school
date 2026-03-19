@@ -4,7 +4,7 @@ import { useAuthStore } from '../../store/authStore';
 import {
   Home, BookOpen, ClipboardList, Megaphone, BarChart2,
   MapPin, Bell, User, Users, GraduationCap, Bus,
-  Calendar, Settings, LogOut, ChevronLeft, ChevronRight,
+  Calendar, Settings, UserCog, LogOut, ChevronLeft, ChevronRight,
   FileText, Star, Clock, X, ClipboardCheck
 } from 'lucide-react';
 import type { Dispatch, SetStateAction } from 'react';
@@ -48,7 +48,7 @@ const navItems: Record<Role, NavItem[]> = {
     { to: '/admin/appointments', icon: Calendar, label: 'Appointments' },
     { to: '/admin/announcements', icon: Megaphone, label: 'Announcements' },
     { to: '/admin/notifications', icon: Bell, label: 'Notifications' },
-    { to: '/admin/accounts', icon: Settings, label: 'Accounts' },
+    { to: '/admin/accounts', icon: UserCog, label: 'Accounts' },
     { to: '/admin/settings', icon: Settings, label: 'Settings' },
     { to: '/admin/profile', icon: User, label: 'Profile' },
   ],
@@ -62,6 +62,8 @@ const navItems: Record<Role, NavItem[]> = {
     { to: '/supervisor/dashboard', icon: Home, label: 'Dashboard' },
     { to: '/supervisor/absent-today', icon: Users, label: 'Absent Today' },
     { to: '/supervisor/attendance', icon: ClipboardCheck, label: 'Attendance' },
+    { to: '/supervisor/homework', icon: BookOpen, label: 'Homework' },
+    { to: '/supervisor/assignments', icon: ClipboardList, label: 'Assignments' },
     { to: '/supervisor/profile', icon: User, label: 'Profile' },
   ],
 };
