@@ -6,8 +6,8 @@ import { toCC } from '../utils/transform';
 import { notifyMany } from '../utils/notify';
 
 // Proximity threshold levels (in ascending urgency)
-type ProxThreshold = '5min' | '2min' | 'arriving';
-const THRESH_RANK: Record<ProxThreshold, number> = { '5min': 1, '2min': 2, 'arriving': 3 };
+type ProxThreshold = '10min' | '5min' | '2min' | 'arriving';
+const THRESH_RANK: Record<ProxThreshold, number> = { '10min': 1, '5min': 2, '2min': 3, 'arriving': 4 };
 
 // In-memory dedup: driverId → { studentId → last notified threshold }
 // Cleared on startDrive / stopDrive; lost on server restart (acceptable)
@@ -97,18 +97,22 @@ export async function updateLocation(req: AuthRequest, res: Response, io?: Socke
         let notifMsg = '';
         let threshold: ProxThreshold | null = null;
 
-        if (dist <= 0.2) {
+        if (dist <= 0.1) {
           threshold = 'arriving';
           notifTitle = 'Your Child Has Arrived';
           notifMsg = 'Your child has arrived.';
         } else if (dist <= 0.5) {
           threshold = '2min';
           notifTitle = 'Bus 2 Minutes Away';
-          notifMsg = 'Your kid is 2 minutes away.';
-        } else if (dist <= 1.0) {
+          notifMsg = 'Your child is 2 minutes away.';
+        } else if (dist <= 1.5) {
           threshold = '5min';
           notifTitle = 'Bus 5 Minutes Away';
-          notifMsg = 'Your kid is 5 minutes away.';
+          notifMsg = 'Your child is 5 minutes away.';
+        } else if (dist <= 2.5) {
+          threshold = '10min';
+          notifTitle = 'Bus 10 Minutes Away';
+          notifMsg = 'Your child is 10 minutes away.';
         }
 
         // Dedup: only notify if this threshold is more urgent than the last one sent

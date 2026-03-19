@@ -1,6 +1,8 @@
 interface PushStrings {
   bus_started_title: string;
   bus_started_body: string;
+  bus_10min_title: string;
+  bus_10min_body: string;
   bus_5min_title: string;
   bus_5min_body: string;
   bus_2min_title: string;
@@ -22,10 +24,12 @@ const T: Record<string, PushStrings> = {
   en: {
     bus_started_title: 'Bus Is On The Way',
     bus_started_body: "Your child's bus has started the route and is heading your way.",
+    bus_10min_title: 'Bus 10 Minutes Away',
+    bus_10min_body: 'Your child is 10 minutes away.',
     bus_5min_title: 'Bus 5 Minutes Away',
-    bus_5min_body: 'Your kid is 5 minutes away.',
+    bus_5min_body: 'Your child is 5 minutes away.',
     bus_2min_title: 'Bus 2 Minutes Away',
-    bus_2min_body: 'Your kid is 2 minutes away.',
+    bus_2min_body: 'Your child is 2 minutes away.',
     bus_arriving_title: 'Your Child Has Arrived',
     bus_arriving_body: 'Your child has arrived.',
     bus_set_location_title: 'Set Your Pickup Location',
@@ -41,10 +45,12 @@ const T: Record<string, PushStrings> = {
   ku: {
     bus_started_title: 'پاس لە ڕێگایە',
     bus_started_body: 'پاسی منداڵەکەت دەستی بە ڕێگاکەی کردووە و بەرەو ماڵەکەتەوەیە.',
-    bus_5min_title: 'پاس ٥ خولەک دووری',
-    bus_5min_body: 'منداڵەکەت ٥ خولەک دووری.',
-    bus_2min_title: 'پاس ٢ خولەک دووری',
-    bus_2min_body: 'منداڵەکەت ٢ خولەک دووری.',
+    bus_10min_title: 'پاس ١٠ خولەک دوورە',
+    bus_10min_body: 'منداڵەکەت ١٠ خولەک دوورە.',
+    bus_5min_title: 'پاس ٥ خولەک دوورە',
+    bus_5min_body: 'منداڵەکەت ٥ خولەک دوورە.',
+    bus_2min_title: 'پاس ٢ خولەک دوورە',
+    bus_2min_body: 'منداڵەکەت ٢ خولەک دوورە.',
     bus_arriving_title: 'منداڵەکەت گەیشت!',
     bus_arriving_body: 'منداڵەکەت گەیشتووەتەوە.',
     bus_set_location_title: 'شوێنی وەرگرتنت دیاری بکە',
@@ -60,6 +66,8 @@ const T: Record<string, PushStrings> = {
   ar: {
     bus_started_title: 'الحافلة في الطريق',
     bus_started_body: 'بدأت حافلة طفلك المسار وهي في طريقها إليك.',
+    bus_10min_title: 'الحافلة على بعد 10 دقائق',
+    bus_10min_body: 'طفلك على بعد 10 دقائق.',
     bus_5min_title: 'الحافلة على بعد 5 دقائق',
     bus_5min_body: 'طفلك على بعد 5 دقائق.',
     bus_2min_title: 'الحافلة على بعد دقيقتين',
@@ -79,8 +87,9 @@ const T: Record<string, PushStrings> = {
 };
 
 // Maps the English bus notification title to a translation key
-const BUS_TITLE_KEY: Record<string, 'bus_started' | 'bus_5min' | 'bus_2min' | 'bus_arriving' | 'bus_set_location'> = {
+const BUS_TITLE_KEY: Record<string, 'bus_started' | 'bus_10min' | 'bus_5min' | 'bus_2min' | 'bus_arriving' | 'bus_set_location'> = {
   'Bus Is On The Way': 'bus_started',
+  'Bus 10 Minutes Away': 'bus_10min',
   'Bus 5 Minutes Away': 'bus_5min',
   'Bus 2 Minutes Away': 'bus_2min',
   'Your Child Has Arrived': 'bus_arriving',
