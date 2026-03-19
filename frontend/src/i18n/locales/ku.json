@@ -100,7 +100,7 @@
     "driver_name": "ناو",
     "license": "مۆڵەت",
     "phone": "تەلەفۆن",
-    "arrives_at": "پاس دەگاتە",
+    "arrives_at": ":پاس دەگاتە لە",
     "eta_your_location": "بەپێی شوێنی ئێستات",
     "eta_home_location": "بەپێی ناونیشانی ماڵ"
   },

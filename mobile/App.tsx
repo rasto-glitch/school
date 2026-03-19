@@ -1,4 +1,5 @@
 import './src/i18n';
+import './src/tasks/locationTask'; // register background task before anything renders
 import { useEffect, useRef } from 'react';
 import { Alert } from 'react-native';
 import { StatusBar } from 'expo-status-bar';

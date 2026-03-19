@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   ActivityIndicator, Alert, Switch,
@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import { driverApi } from '../../services/api';
+import { LOCATION_TASK_NAME } from '../../tasks/locationTask';
 import { colors, spacing, radius, shadow, font } from '../../theme';
 import type { Student } from '../../types';
 
@@ -17,10 +18,13 @@ export default function StartDriveScreen() {
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
   const [isDriving, setIsDriving] = useState(false);
   const [loading, setLoading] = useState(false);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     driverApi.getStudents().then(r => setStudents(r.data || [])).catch(() => {});
+    // Restore driving state if app was restarted mid-drive
+    Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME)
+      .then(running => { if (running) setIsDriving(true); })
+      .catch(() => {});
   }, []);
 
   const toggleExclude = (id: string) => {
@@ -31,30 +35,43 @@ export default function StartDriveScreen() {
     });
   };
 
-  const sendLocation = async () => {
-    try {
-      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-      await driverApi.updateLocation({
-        latitude: loc.coords.latitude,
-        longitude: loc.coords.longitude,
-        speed: loc.coords.speed ?? 0,
-        isDriving: true,
-      });
-    } catch {}
-  };
-
   const startDrive = async () => {
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== 'granted') {
+    // Request foreground permission first
+    const { status: fg } = await Location.requestForegroundPermissionsAsync();
+    if (fg !== 'granted') {
       Alert.alert('Permission Required', 'Location permission is needed to track your drive.');
       return;
     }
+
+    // Request background permission — required for tracking when app is backgrounded
+    const { status: bg } = await Location.requestBackgroundPermissionsAsync();
+    if (bg !== 'granted') {
+      Alert.alert(
+        'Background Location',
+        'For continuous tracking when you lock your phone or switch apps, go to Settings → Apps → School Portal → Location and select "Allow all the time".',
+        [{ text: 'Continue anyway' }, { text: 'Open Settings', onPress: () => Location.requestBackgroundPermissionsAsync() }]
+      );
+    }
+
     setLoading(true);
     try {
       await driverApi.startDrive(Array.from(excluded));
+
+      // Start background location task
+      await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
+        accuracy: Location.Accuracy.High,
+        timeInterval: 20000,
+        distanceInterval: 0,
+        pausesUpdatesAutomatically: false,
+        showsBackgroundLocationIndicator: true,
+        foregroundService: {
+          notificationTitle: 'GPS Tracking Active',
+          notificationBody: 'Your location is being shared for the bus route.',
+          notificationColor: '#4F46E5',
+        },
+      });
+
       setIsDriving(true);
-      await sendLocation();
-      intervalRef.current = setInterval(sendLocation, 20000);
     } catch (err: any) {
       Alert.alert('Error', err.response?.data?.error || 'Could not start drive');
     } finally {
@@ -63,9 +80,12 @@ export default function StartDriveScreen() {
   };
 
   const stopDrive = async () => {
-    if (intervalRef.current) clearInterval(intervalRef.current);
     setLoading(true);
     try {
+      // Stop background location task
+      const running = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME);
+      if (running) await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
+
       await driverApi.stopDrive();
       setIsDriving(false);
     } catch (err: any) {

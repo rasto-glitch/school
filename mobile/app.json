@@ -6,7 +6,12 @@
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": false
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Your location is used for real-time bus route tracking so parents are notified when the bus is nearby.",
+        "NSLocationWhenInUseUsageDescription": "Your location is used for real-time bus route tracking so parents are notified when the bus is nearby.",
+        "UIBackgroundModes": ["location"]
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -18,8 +23,25 @@
         "googleMaps": {
           "apiKey": "AIzaSyBVk3f73EcNizizPWCnK6-j6TEDs6GuPhA"
         }
-      }
+      },
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION"
+      ]
     },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow School Portal to use your location for bus route tracking.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ]
+    ],
     "extra": {
       "eas": {
         "projectId": "41cd079b-7217-4df8-be77-3cce354e6f3f"
