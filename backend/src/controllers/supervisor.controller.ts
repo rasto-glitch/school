@@ -105,7 +105,7 @@ export async function getHomework(req: AuthRequest, res: Response): Promise<void
   const { schoolId } = req.user!;
   const { data, error } = await supabase
     .from('homework')
-    .select('id, title, description, subject, due_date, file_url, created_at, teachers(full_name), classes(name)')
+    .select('id, title, description, subject, due_date, created_at, teachers(full_name), classes(name)')
     .eq('school_id', schoolId)
     .order('created_at', { ascending: false });
   if (error) { res.status(500).json({ error: error.message }); return; }
@@ -125,7 +125,7 @@ export async function getAssignments(req: AuthRequest, res: Response): Promise<v
   const { schoolId } = req.user!;
   const { data, error } = await supabase
     .from('assignments')
-    .select('id, title, description, subject, due_date, file_url, created_at, teachers(full_name), classes(name)')
+    .select('id, title, description, subject, due_date, created_at, teachers(full_name), classes(name)')
     .eq('school_id', schoolId)
     .order('created_at', { ascending: false });
   if (error) { res.status(500).json({ error: error.message }); return; }
