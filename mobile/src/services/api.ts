@@ -51,6 +51,10 @@ export const parentApi = {
   markRead: (id: string) => api.patch(`/parent/notifications/${id}/read`),
   getPickupLocation: () => api.get('/parent/pickup-location'),
   updatePickupLocation: (latitude: number, longitude: number) => api.put('/parent/pickup-location', { latitude, longitude }),
+  getAppointments: () => api.get('/parent/appointments'),
+  createAppointment: (data: { reason: string; message?: string; requestedDate?: string; studentIds?: string[] }) => api.post('/parent/appointments', data),
+  markAllRead: () => api.patch('/parent/notifications/read-all'),
+  getUnreadCount: () => api.get('/parent/notifications/unread-count'),
 };
 
 // ---- DRIVER ----

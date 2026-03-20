@@ -1,13 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
-  View, Text, TouchableOpacity, ScrollView,
-  StyleSheet, ActivityIndicator, Alert,
+  View, Text, TouchableOpacity, FlatList,
+  StyleSheet, ActivityIndicator, Alert, TextInput,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { GraduationCap, ChevronRight } from 'lucide-react-native';
+import { GraduationCap, ChevronRight, Search } from 'lucide-react-native';
 import { authApi } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
-import { colors, spacing, radius, font, shadow } from '../../theme';
+import { spacing, radius, font, shadow } from '../../theme';
 import type { School } from '../../types';
 
 export default function SchoolPickerScreen() {
@@ -15,6 +15,7 @@ export default function SchoolPickerScreen() {
   const insets = useSafeAreaInsets();
   const [schools, setSchools] = useState<School[]>([]);
   const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState('');
 
   useEffect(() => {
     authApi.getSchools()
@@ -23,69 +24,118 @@ export default function SchoolPickerScreen() {
       .finally(() => setLoading(false));
   }, []);
 
+  const filtered = useMemo(() =>
+    query.trim() === '' ? schools : schools.filter(s => s.name.toLowerCase().includes(query.toLowerCase())),
+    [schools, query]
+  );
+
   return (
-    <View style={[styles.container, { paddingTop: insets.top + 40, paddingBottom: insets.bottom + 24 }]}>
-      <View style={styles.brand}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      {/* Colorful header */}
+      <View style={styles.header}>
         <View style={styles.logoBox}>
-          <GraduationCap size={32} color={colors.textInverse} />
+          <GraduationCap size={36} color="#fff" />
         </View>
         <Text style={styles.title}>School Portal</Text>
-        <Text style={styles.subtitle}>Select your school to continue</Text>
+        <Text style={styles.subtitle}>Find and select your school to get started</Text>
       </View>
 
-      {loading ? (
-        <ActivityIndicator color={colors.primary} size="large" style={{ marginTop: 40 }} />
-      ) : schools.length === 0 ? (
-        <View style={styles.emptyBox}>
-          <Text style={styles.emptyText}>No schools found.</Text>
+      {/* Card area */}
+      <View style={[styles.card, { paddingBottom: insets.bottom + 24 }]}>
+        <Text style={styles.cardTitle}>Select Your School</Text>
+
+        {/* Search */}
+        <View style={styles.searchBox}>
+          <Search size={16} color="#9CA3AF" />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search schools..."
+            placeholderTextColor="#9CA3AF"
+            value={query}
+            onChangeText={setQuery}
+            autoCorrect={false}
+          />
         </View>
-      ) : (
-        <ScrollView style={styles.list} showsVerticalScrollIndicator={false}>
-          {schools.map(s => (
-            <TouchableOpacity
-              key={s.id}
-              style={styles.schoolCard}
-              onPress={() => setSelectedSchool(s)}
-              activeOpacity={0.7}
-            >
-              <View style={styles.schoolIcon}>
-                <GraduationCap size={20} color={colors.primary} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.schoolName}>{s.name}</Text>
-              </View>
-              <ChevronRight size={18} color={colors.textMuted} />
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      )}
+
+        {loading ? (
+          <ActivityIndicator color="#4F46E5" size="large" style={{ marginTop: 40 }} />
+        ) : filtered.length === 0 ? (
+          <View style={styles.emptyBox}>
+            <Text style={styles.emptyText}>{query ? 'No schools match your search.' : 'No schools found.'}</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={filtered}
+            keyExtractor={s => s.id}
+            showsVerticalScrollIndicator={false}
+            renderItem={({ item: s }) => (
+              <TouchableOpacity
+                style={styles.schoolCard}
+                onPress={() => setSelectedSchool(s)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.schoolIcon}>
+                  <GraduationCap size={20} color="#4F46E5" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.schoolName}>{s.name}</Text>
+                </View>
+                <ChevronRight size={18} color="#9CA3AF" />
+              </TouchableOpacity>
+            )}
+          />
+        )}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bg, paddingHorizontal: spacing.lg },
-  brand: { alignItems: 'center', marginBottom: spacing.xl },
-  logoBox: {
-    width: 72, height: 72, borderRadius: 20,
-    backgroundColor: colors.primary,
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: spacing.md, ...shadow.md,
+  container: { flex: 1, backgroundColor: '#4F46E5' },
+  header: {
+    alignItems: 'center',
+    paddingTop: 40,
+    paddingBottom: 36,
+    paddingHorizontal: spacing.lg,
   },
-  title: { fontSize: font.xxxl, fontWeight: '800', color: colors.text },
-  subtitle: { fontSize: font.sm, color: colors.textSecondary, marginTop: 6, textAlign: 'center' },
-  list: { flex: 1 },
+  logoBox: {
+    width: 80, height: 80, borderRadius: 24,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: spacing.md,
+    borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)',
+  },
+  title: { fontSize: font.xxxl, fontWeight: '800', color: '#fff', textAlign: 'center' },
+  subtitle: { fontSize: font.sm, color: 'rgba(255,255,255,0.75)', marginTop: 8, textAlign: 'center' },
+  card: {
+    flex: 1,
+    backgroundColor: '#F2F2F7',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    padding: spacing.lg,
+    paddingTop: 24,
+  },
+  cardTitle: { fontSize: font.lg, fontWeight: '700', color: '#111827', marginBottom: spacing.md },
+  searchBox: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    backgroundColor: '#fff', borderRadius: radius.md,
+    paddingHorizontal: spacing.md, paddingVertical: 10,
+    marginBottom: spacing.md,
+    borderWidth: 1, borderColor: '#E5E7EB',
+    ...shadow.sm,
+  },
+  searchInput: { flex: 1, fontSize: font.md, color: '#111827' },
   schoolCard: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.md,
-    backgroundColor: colors.card, borderRadius: radius.lg,
+    backgroundColor: '#fff', borderRadius: radius.lg,
     padding: spacing.md, marginBottom: spacing.sm, ...shadow.sm,
   },
   schoolIcon: {
-    width: 40, height: 40, borderRadius: radius.sm,
-    backgroundColor: colors.primaryLight,
+    width: 42, height: 42, borderRadius: radius.sm,
+    backgroundColor: '#EEF2FF',
     alignItems: 'center', justifyContent: 'center',
   },
-  schoolName: { fontSize: font.md, fontWeight: '600', color: colors.text },
+  schoolName: { fontSize: font.md, fontWeight: '600', color: '#111827' },
   emptyBox: { alignItems: 'center', marginTop: 60 },
-  emptyText: { fontSize: font.md, color: colors.textMuted },
+  emptyText: { fontSize: font.md, color: '#9CA3AF' },
 });

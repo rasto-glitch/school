@@ -112,6 +112,8 @@ export function createRouter(io: SocketServer) {
   router.get('/parent/grades', authenticate, authorize('parent'), (req, res) => parent.getGrades(req as AuthRequest, res));
   router.get('/parent/bus-location', authenticate, authorize('parent'), (req, res) => parent.getBusLocation(req as AuthRequest, res));
   router.get('/parent/notifications', authenticate, authorize('parent'), (req, res) => parent.getNotifications(req as AuthRequest, res));
+  router.get('/parent/notifications/unread-count', authenticate, authorize('parent'), (req, res) => parent.getUnreadCount(req as AuthRequest, res));
+  router.patch('/parent/notifications/read-all', authenticate, authorize('parent'), (req, res) => parent.markAllNotificationsRead(req as AuthRequest, res));
   router.patch('/parent/notifications/:id/read', authenticate, authorize('parent'), (req, res) => parent.markNotificationRead(req as AuthRequest, res));
   router.get('/parent/appointments', authenticate, authorize('parent'), (req, res) => parent.getAppointments(req as AuthRequest, res));
   router.post('/parent/appointments', authenticate, authorize('parent'), (req, res) => parent.createAppointment(req as AuthRequest, res));

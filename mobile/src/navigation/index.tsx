@@ -1,12 +1,16 @@
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuthStore } from '../store/authStore';
+import { useColors } from '../store/themeStore';
 import SchoolPickerScreen from '../screens/auth/SchoolPickerScreen';
 import LoginScreen from '../screens/auth/LoginScreen';
 import ParentTabs from './ParentTabs';
 import DriverTabs from './DriverTabs';
 import SetPickupLocationScreen from '../screens/parent/SetPickupLocationScreen';
 import MeScreen from '../screens/parent/MeScreen';
+import SettingsScreen from '../screens/parent/SettingsScreen';
+import ReportsScreen from '../screens/parent/ReportsScreen';
+import AppointmentsScreen from '../screens/parent/AppointmentsScreen';
 
 export type RootStackParamList = {
   SchoolPicker: undefined;
@@ -15,17 +19,28 @@ export type RootStackParamList = {
   DriverTabs: undefined;
   SetPickupLocation: undefined;
   Me: undefined;
+  Settings: undefined;
+  Reports: undefined;
+  Appointments: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function Navigation() {
   const { user, isAuthenticated, selectedSchool } = useAuthStore();
+  const colors = useColors();
   const authed = isAuthenticated();
 
   return (
     <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Navigator
+        screenOptions={{
+          headerStyle: { backgroundColor: colors.card },
+          headerTitleStyle: { color: colors.text },
+          headerTintColor: colors.primary,
+          headerShown: false,
+        }}
+      >
         {!authed ? (
           !selectedSchool ? (
             <Stack.Screen name="SchoolPicker" component={SchoolPickerScreen} />
@@ -37,16 +52,26 @@ export default function Navigation() {
         ) : (
           <>
             <Stack.Screen name="ParentTabs" component={ParentTabs} />
-            <Stack.Screen name="SetPickupLocation" component={SetPickupLocationScreen} />
+            <Stack.Screen name="SetPickupLocation" component={SetPickupLocationScreen} options={{ headerShown: true, headerTitle: 'Set Pickup Location', headerBackTitle: 'Back' }} />
             <Stack.Screen
               name="Me"
               component={MeScreen}
-              options={{
-                headerShown: true,
-                headerTitle: 'My Profile',
-                headerBackTitle: 'Back',
-                presentation: 'card',
-              }}
+              options={{ headerShown: true, headerTitle: 'My Profile', headerBackTitle: 'Back', presentation: 'card' }}
+            />
+            <Stack.Screen
+              name="Settings"
+              component={SettingsScreen}
+              options={{ headerShown: true, headerTitle: 'Settings', headerBackTitle: 'Back', presentation: 'card' }}
+            />
+            <Stack.Screen
+              name="Reports"
+              component={ReportsScreen}
+              options={{ headerShown: true, headerTitle: 'Reports', headerBackTitle: 'Back' }}
+            />
+            <Stack.Screen
+              name="Appointments"
+              component={AppointmentsScreen}
+              options={{ headerShown: true, headerTitle: 'Appointments', headerBackTitle: 'Back' }}
             />
           </>
         )}

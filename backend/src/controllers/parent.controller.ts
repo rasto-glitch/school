@@ -196,6 +196,18 @@ export async function markNotificationRead(req: AuthRequest, res: Response): Pro
   res.json({ success: true });
 }
 
+export async function markAllNotificationsRead(req: AuthRequest, res: Response): Promise<void> {
+  const { userId, schoolId } = req.user!;
+  await supabase.from('notifications').update({ is_read: true }).eq('user_id', userId).eq('school_id', schoolId).eq('is_read', false);
+  res.json({ success: true });
+}
+
+export async function getUnreadCount(req: AuthRequest, res: Response): Promise<void> {
+  const { userId, schoolId } = req.user!;
+  const { count } = await supabase.from('notifications').select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('school_id', schoolId).eq('is_read', false);
+  res.json({ count: count ?? 0 });
+}
+
 export async function getAppointments(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId, userId } = req.user!;
   const { data: parent } = await supabase.from('parents').select('id').eq('user_id', userId).eq('school_id', schoolId).single();

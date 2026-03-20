@@ -1,15 +1,18 @@
+import { useEffect, useRef, useState } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { TouchableOpacity, View, Text, StyleSheet } from 'react-native';
-import { Home, BookOpen, ClipboardList, Bus, Bell, User } from 'lucide-react-native';
+import { Home, BookOpen, ClipboardList, Bus, Bell, User, Star } from 'lucide-react-native';
 import FeedScreen from '../screens/parent/FeedScreen';
 import HomeworkScreen from '../screens/parent/HomeworkScreen';
 import AssignmentsScreen from '../screens/parent/AssignmentsScreen';
 import BusTrackingScreen from '../screens/parent/BusTrackingScreen';
 import NotificationsScreen from '../screens/parent/NotificationsScreen';
+import GradesScreen from '../screens/parent/GradesScreen';
 import { colors, radius, font } from '../theme';
+import { parentApi } from '../services/api';
 
 const Tab = createBottomTabNavigator();
 
@@ -26,9 +29,39 @@ function ProfileButton() {
   );
 }
 
+function NotificationBadge({ count }: { count: number }) {
+  if (count === 0) return null;
+  return (
+    <View style={styles.badge}>
+      <Text style={styles.badgeText}>{count > 99 ? '99+' : count}</Text>
+    </View>
+  );
+}
+
 export default function ParentTabs() {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
+  const [unreadCount, setUnreadCount] = useState(0);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const fetchUnread = () => {
+    parentApi.getUnreadCount()
+      .then(r => setUnreadCount(r.data?.count ?? 0))
+      .catch(() => {});
+  };
+
+  useEffect(() => {
+    fetchUnread();
+    intervalRef.current = setInterval(fetchUnread, 30000);
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  }, []);
+
+  const handleNotificationsTabPress = () => {
+    if (unreadCount > 0) {
+      parentApi.markAllRead().catch(() => {});
+      setUnreadCount(0);
+    }
+  };
 
   return (
     <Tab.Navigator
@@ -79,6 +112,15 @@ export default function ParentTabs() {
         }}
       />
       <Tab.Screen
+        name="Grades"
+        component={GradesScreen}
+        options={{
+          headerTitle: t('nav.grades', 'Grades'),
+          tabBarLabel: t('nav.grades', 'Grades'),
+          tabBarIcon: ({ color }) => <Star size={22} color={color} />,
+        }}
+      />
+      <Tab.Screen
         name="BusTracking"
         component={BusTrackingScreen}
         options={{
@@ -90,10 +132,16 @@ export default function ParentTabs() {
       <Tab.Screen
         name="Notifications"
         component={NotificationsScreen}
+        listeners={{ tabPress: handleNotificationsTabPress }}
         options={{
           headerTitle: t('nav.notifications', 'Notifications'),
           tabBarLabel: t('nav.notifications', 'Notifications'),
-          tabBarIcon: ({ color }) => <Bell size={22} color={color} />,
+          tabBarIcon: ({ color }) => (
+            <View>
+              <Bell size={22} color={color} />
+              <NotificationBadge count={unreadCount} />
+            </View>
+          ),
         }}
       />
     </Tab.Navigator>
@@ -107,4 +155,12 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     marginRight: 12,
   },
+  badge: {
+    position: 'absolute', top: -4, right: -6,
+    minWidth: 16, height: 16, borderRadius: 8,
+    backgroundColor: colors.danger,
+    alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  badgeText: { fontSize: 9, fontWeight: '800', color: '#fff' },
 });

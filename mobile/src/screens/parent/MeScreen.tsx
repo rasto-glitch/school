@@ -1,189 +1,181 @@
-import { useState, useEffect } from 'react';
-import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert,
-} from 'react-native';
+import { useState, useEffect, useMemo } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { LogOut, Bell, Globe, User, CheckCircle, XCircle, AlertCircle } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import i18n, { LANGUAGE_KEY } from '../../i18n';
+import { User, Settings, GraduationCap, Bus } from 'lucide-react-native';
 import { useAuthStore } from '../../store/authStore';
-import { getPushStatus, retryPushRegistration, type PushStatus } from '../../hooks/usePushNotifications';
-import { authApi } from '../../services/api';
-import { colors, spacing, radius, shadow, font } from '../../theme';
-
-const LANGUAGES = [
-  { code: 'en', label: 'English' },
-  { code: 'ar', label: 'العربية' },
-  { code: 'ku', label: 'کوردی' },
-];
+import { useColors } from '../../store/themeStore';
+import { parentApi } from '../../services/api';
+import { spacing, radius, font, shadow } from '../../theme';
+import type { Student } from '../../types';
 
 export default function MeScreen() {
   const { t } = useTranslation();
-  const { user, school, logout } = useAuthStore();
+  const { user, school } = useAuthStore();
+  const colors = useColors();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
-  const [lang, setLang] = useState(i18n.language || 'en');
-  // Keep lang state in sync if i18n language changes (e.g. restored from AsyncStorage on startup)
+  const [children, setChildren] = useState<Student[]>([]);
+  const [loading, setLoading] = useState(true);
+
   useEffect(() => {
-    const handler = (lng: string) => setLang(lng);
-    i18n.on('languageChanged', handler);
-    return () => { i18n.off('languageChanged', handler); };
+    navigation.setOptions({
+      headerRight: () => (
+        <TouchableOpacity
+          onPress={() => navigation.navigate('Settings')}
+          style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center', marginRight: 12 }}
+        >
+          <Settings size={18} color={colors.primary} />
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation, colors]);
+
+  useEffect(() => {
+    parentApi.getChildren()
+      .then(r => setChildren(r.data || []))
+      .finally(() => setLoading(false));
   }, []);
-  const [pushStatus, setPushStatus] = useState<PushStatus>(getPushStatus());
-  const [retrying, setRetrying] = useState(false);
 
-  const changeLang = (code: string) => {
-    setLang(code);
-    i18n.changeLanguage(code);
-    AsyncStorage.setItem(LANGUAGE_KEY, code);
-    authApi.updateDeviceLanguage(code).catch(() => {});
-  };
-
-  const handleRetryPush = async () => {
-    setRetrying(true);
-    const result = await retryPushRegistration();
-    setPushStatus(result.status);
-    setRetrying(false);
-    if (result.status === 'registered') Alert.alert('✓ Notifications enabled', 'You will now receive push notifications.');
-    else if (result.status === 'denied') Alert.alert('Permission denied', 'Go to Settings → Apps → School Portal → Notifications and enable them.');
-    else Alert.alert('Registration failed', result.error ?? 'Unknown error');
-  };
-
-  const pushLabel: Record<PushStatus, string> = {
-    idle: 'Checking…',
-    registered: 'Enabled',
-    denied: 'Disabled — tap to fix',
-    error: 'Error — tap to retry',
-  };
-  const pushColor: Record<PushStatus, string> = {
-    idle: colors.textMuted,
-    registered: colors.success,
-    denied: colors.warning,
-    error: colors.danger,
-  };
-  const PushIcon = pushStatus === 'registered' ? CheckCircle : pushStatus === 'denied' ? XCircle : AlertCircle;
-
-  const handleLogout = () => {
-    Alert.alert(t('nav.logout'), 'Are you sure you want to sign out?', [
-      { text: t('common.cancel'), style: 'cancel' },
-      { text: t('nav.logout'), style: 'destructive', onPress: logout },
-    ]);
-  };
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   return (
     <ScrollView
       style={styles.container}
-      contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.md }]}
+      contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.md, paddingBottom: 40 }]}
     >
       {/* Profile card */}
       <View style={styles.profileCard}>
         <View style={styles.avatar}>
-          <User size={32} color={colors.primary} />
+          <User size={36} color={colors.primary} />
         </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.profileName}>{user?.firstName} {user?.lastName}</Text>
-          <Text style={styles.profileUsername}>@{user?.username}</Text>
-          {school && <Text style={styles.profileSchool}>{school.name}</Text>}
+        <Text style={styles.profileName}>{user?.firstName} {user?.lastName}</Text>
+        <Text style={styles.profileUsername}>@{user?.username}</Text>
+        {school && (
+          <View style={styles.schoolBadge}>
+            <GraduationCap size={13} color={colors.primary} />
+            <Text style={styles.schoolBadgeText}>{school.name}</Text>
+          </View>
+        )}
+      </View>
+
+      {/* Info card */}
+      <View style={styles.infoCard}>
+        <View style={styles.infoRow}>
+          <Text style={styles.infoLabel}>Full Name</Text>
+          <Text style={styles.infoValue}>{user?.firstName} {user?.lastName}</Text>
+        </View>
+        <View style={styles.divider} />
+        <View style={styles.infoRow}>
+          <Text style={styles.infoLabel}>Username</Text>
+          <Text style={styles.infoValue}>@{user?.username}</Text>
+        </View>
+        <View style={styles.divider} />
+        <View style={styles.infoRow}>
+          <Text style={styles.infoLabel}>Role</Text>
+          <Text style={styles.infoValue}>{t('nav.parent', 'Parent')}</Text>
+        </View>
+        <View style={styles.divider} />
+        <View style={styles.infoRow}>
+          <Text style={styles.infoLabel}>School</Text>
+          <Text style={styles.infoValue}>{school?.name ?? '—'}</Text>
         </View>
       </View>
 
-      {/* Language */}
-      <Text style={styles.sectionTitle}>{t('nav.profile')} & Settings</Text>
+      {/* Children */}
+      <Text style={styles.sectionTitle}>
+        {t('nav.children', 'Children')} {!loading && `(${children.length})`}
+      </Text>
 
-      <View style={styles.card}>
-        <View style={styles.cardRow}>
-          <View style={styles.iconBox}>
-            <Globe size={18} color={colors.primary} />
-          </View>
-          <Text style={styles.cardLabel}>Language</Text>
+      {loading ? (
+        <ActivityIndicator color={colors.primary} style={{ marginTop: 16 }} />
+      ) : children.length === 0 ? (
+        <View style={styles.emptyBox}>
+          <Text style={styles.emptyText}>No children linked to this account.</Text>
         </View>
-        <View style={styles.langRow}>
-          {LANGUAGES.map(l => (
-            <TouchableOpacity
-              key={l.code}
-              style={[styles.langBtn, lang === l.code && styles.langBtnActive]}
-              onPress={() => changeLang(l.code)}
-            >
-              <Text style={[styles.langBtnText, lang === l.code && styles.langBtnTextActive]}>
-                {l.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-
-      {/* Push notifications */}
-      <TouchableOpacity
-        style={styles.card}
-        onPress={pushStatus !== 'registered' ? handleRetryPush : undefined}
-        disabled={retrying}
-        activeOpacity={pushStatus !== 'registered' ? 0.7 : 1}
-      >
-        <View style={styles.cardRow}>
-          <View style={[styles.iconBox, { backgroundColor: pushColor[pushStatus] + '22' }]}>
-            <Bell size={18} color={pushColor[pushStatus]} />
+      ) : (
+        children.map(child => (
+          <View key={child.id} style={styles.childCard}>
+            <View style={styles.childAvatar}>
+              <GraduationCap size={20} color={colors.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.childName}>{child.fullName}</Text>
+              {(child as any).classes?.name && (
+                <Text style={styles.childClass}>{(child as any).classes.name}</Text>
+              )}
+            </View>
+            {(child as any).drivers && (
+              <View style={styles.driverBadge}>
+                <Bus size={12} color="#D97706" />
+                <Text style={styles.driverText}>{(child as any).drivers.fullName}</Text>
+              </View>
+            )}
           </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.cardLabel}>Push Notifications</Text>
-            <Text style={[styles.pushSub, { color: pushColor[pushStatus] }]}>
-              {retrying ? 'Registering…' : pushLabel[pushStatus]}
-            </Text>
-          </View>
-          <PushIcon size={18} color={pushColor[pushStatus]} />
-        </View>
-      </TouchableOpacity>
-
-      {/* Logout */}
-      <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
-        <LogOut size={18} color={colors.danger} />
-        <Text style={styles.logoutText}>{t('nav.logout')}</Text>
-      </TouchableOpacity>
+        ))
+      )}
     </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').useColors>) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: spacing.md, paddingBottom: 40 },
+  content: { paddingHorizontal: spacing.md },
   profileCard: {
-    backgroundColor: colors.card,
-    borderRadius: radius.lg,
-    padding: spacing.md,
-    flexDirection: 'row',
+    backgroundColor: colors.primary,
+    borderRadius: radius.xl,
+    padding: spacing.lg,
     alignItems: 'center',
-    gap: spacing.md,
-    marginBottom: spacing.lg,
-    ...shadow.sm,
+    marginBottom: spacing.md,
+    ...shadow.md,
   },
   avatar: {
-    width: 60, height: 60, borderRadius: 30,
+    width: 72, height: 72, borderRadius: 36,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: spacing.sm,
+    borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)',
+  },
+  profileName: { fontSize: font.xl, fontWeight: '800', color: '#fff' },
+  profileUsername: { fontSize: font.sm, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
+  schoolBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: radius.full, paddingHorizontal: 10, paddingVertical: 4,
+    marginTop: spacing.sm,
+  },
+  schoolBadgeText: { fontSize: font.xs, color: '#fff', fontWeight: '600' },
+  infoCard: {
+    backgroundColor: colors.card, borderRadius: radius.md,
+    padding: spacing.md, marginBottom: spacing.md, ...shadow.sm,
+  },
+  infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10 },
+  infoLabel: { fontSize: font.sm, color: colors.textMuted, fontWeight: '500' },
+  infoValue: { fontSize: font.sm, fontWeight: '600', color: colors.text },
+  divider: { height: 1, backgroundColor: colors.border },
+  sectionTitle: {
+    fontSize: font.xs, fontWeight: '700', color: colors.textMuted,
+    textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.sm,
+  },
+  childCard: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    backgroundColor: colors.card, borderRadius: radius.md,
+    padding: spacing.md, marginBottom: spacing.sm, ...shadow.sm,
+  },
+  childAvatar: {
+    width: 40, height: 40, borderRadius: 20,
     backgroundColor: colors.primaryLight,
     alignItems: 'center', justifyContent: 'center',
   },
-  profileName: { fontSize: font.lg, fontWeight: '700', color: colors.text },
-  profileUsername: { fontSize: font.sm, color: colors.textSecondary, marginTop: 2 },
-  profileSchool: { fontSize: font.xs, color: colors.textMuted, marginTop: 2 },
-  sectionTitle: { fontSize: font.xs, fontWeight: '700', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.sm },
-  card: { backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm, ...shadow.sm },
-  cardRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md },
-  iconBox: { width: 32, height: 32, borderRadius: radius.sm, backgroundColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center' },
-  cardLabel: { fontSize: font.md, fontWeight: '600', color: colors.text },
-  langRow: { flexDirection: 'row', gap: spacing.sm },
-  langBtn: {
-    flex: 1, paddingVertical: 10, borderRadius: radius.sm,
-    borderWidth: 1.5, borderColor: colors.border,
-    alignItems: 'center', backgroundColor: colors.bg,
+  childName: { fontSize: font.md, fontWeight: '600', color: colors.text },
+  childClass: { fontSize: font.xs, color: colors.textMuted, marginTop: 2 },
+  driverBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: '#FEF3C7', borderRadius: radius.full,
+    paddingHorizontal: 8, paddingVertical: 3,
   },
-  langBtnActive: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
-  langBtnText: { fontSize: font.sm, fontWeight: '600', color: colors.textSecondary },
-  langBtnTextActive: { color: colors.primary },
-  logoutBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: spacing.sm, backgroundColor: colors.dangerLight,
-    borderRadius: radius.md, padding: spacing.md, marginTop: spacing.md,
-  },
-  logoutText: { fontSize: font.md, fontWeight: '700', color: colors.danger },
-  pushSub: { fontSize: font.xs, fontWeight: '600', marginTop: 2 },
+  driverText: { fontSize: 11, color: '#92400E', fontWeight: '600' },
+  emptyBox: { alignItems: 'center', paddingVertical: 24 },
+  emptyText: { fontSize: font.sm, color: colors.textMuted },
 });

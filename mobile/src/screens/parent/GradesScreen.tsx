@@ -34,7 +34,7 @@ export default function GradesScreen() {
 
   const onRefresh = () => { setRefreshing(true); load().finally(() => setRefreshing(false)); };
 
-  const total = (g: Grade) => ((g.dailyGrade + g.quizGrade + g.monthlyExamGrade + g.termExamGrade) / 4).toFixed(1);
+  const total = (g: Grade) => ((g.dailyGrade || 0) + (g.quizGrade || 0) + (g.monthlyExamGrade || 0) + (g.termExamGrade || 0)).toFixed(1);
   const avg = () => grades.length ? (grades.reduce((a, g) => a + parseFloat(total(g)), 0) / grades.length).toFixed(1) : '—';
 
   const scoreColor = (v: number) => v >= 80 ? colors.success : v >= 60 ? colors.warning : colors.danger;

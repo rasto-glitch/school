@@ -10,6 +10,7 @@ import { Megaphone, BookOpen, FileText, ClipboardList, MapPin, Bell, Calendar, S
 import { useAuthStore } from '../../store/authStore';
 import { parentApi } from '../../services/api';
 import { colors, spacing, radius, shadow, font } from '../../theme';
+import { useColors } from '../../store/themeStore';
 import type { Homework, Announcement } from '../../types';
 
 interface Grade {
@@ -36,6 +37,7 @@ export default function FeedScreen() {
   const { user } = useAuthStore();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
+  const colors = useColors();
   const [homework, setHomework] = useState<Homework[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [grades, setGrades] = useState<Grade[]>([]);
@@ -70,8 +72,8 @@ export default function FeedScreen() {
     { label: t('dashboard.quick_assignments'), icon: ClipboardList, bg: '#F0FDF4', iconColor: '#16A34A', tab: 'Assignments' },
     { label: t('dashboard.quick_bus'), icon: MapPin, bg: '#FFFBEB', iconColor: '#D97706', tab: 'BusTracking' },
     { label: t('dashboard.quick_alerts'), icon: Bell, bg: '#FFF1F2', iconColor: '#E11D48', tab: 'Notifications' },
-    { label: t('dashboard.quick_reports'), icon: FileText, bg: '#FAF5FF', iconColor: '#9333EA', tab: 'Notifications' },
-    { label: t('dashboard.quick_bookings'), icon: Calendar, bg: '#F0FDFA', iconColor: '#0D9488', tab: 'Notifications' },
+    { label: t('dashboard.quick_reports', 'Reports'), icon: FileText, bg: '#FAF5FF', iconColor: '#9333EA', tab: 'Reports' },
+    { label: t('dashboard.quick_bookings', 'Bookings'), icon: Calendar, bg: '#F0FDFA', iconColor: '#0D9488', tab: 'Appointments' },
   ];
 
   return (
@@ -101,7 +103,11 @@ export default function FeedScreen() {
       {/* Recent Grades */}
       {grades.length > 0 && (
         <>
-          <Text style={styles.sectionLabel}>{t('nav.grades', 'Grades')}</Text>
+          <TouchableOpacity onPress={() => navigation.navigate('Grades')} activeOpacity={0.8} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm }}>
+            <Text style={[styles.sectionLabel, { marginBottom: 0 }]}>{t('nav.grades', 'Grades')}</Text>
+            <Text style={{ fontSize: font.xs, color: colors.primary, fontWeight: '600' }}>See all →</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => navigation.navigate('Grades')} activeOpacity={0.8}>
           <View style={styles.gradesRow}>
             {grades.map(g => {
               const pct = g.grade != null && g.maxGrade ? Math.round((g.grade / g.maxGrade) * 100) : null;
@@ -117,6 +123,7 @@ export default function FeedScreen() {
               );
             })}
           </View>
+          </TouchableOpacity>
         </>
       )}
 
