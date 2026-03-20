@@ -10,13 +10,15 @@
     },
     "preview": {
       "distribution": "internal",
+      "channel": "preview",
       "env": {
         "EXPO_PUBLIC_API_URL": "https://school-production-3ccc.up.railway.app/api",
         "EXPO_PUBLIC_SOCKET_URL": "https://school-production-3ccc.up.railway.app"
       }
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "channel": "production"
     }
   },
   "submit": {
