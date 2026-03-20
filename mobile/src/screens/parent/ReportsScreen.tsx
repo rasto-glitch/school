@@ -8,11 +8,15 @@ import { parentApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
 import { spacing, radius, font, shadow } from '../../theme';
 
-interface Report {
+export interface Report {
   id: string;
-  title?: string;
-  content?: string;
-  subject?: string;
+  subject: string;
+  attendanceNotes?: string;
+  behaviorNotes?: string;
+  teacherNotes?: string;
+  quizMarks?: number;
+  examMarks?: number;
+  reportDate?: string;
   createdAt: string;
   students?: { fullName: string };
   teachers?: { fullName: string };
@@ -44,40 +48,45 @@ export default function ReportsScreen() {
       ) : reports.length === 0 ? (
         <View style={styles.empty}>
           <FileText size={40} color={colors.textMuted} />
-          <Text style={styles.emptyText}>{t('reports.no_reports', 'No reports yet')}</Text>
+          <Text style={styles.emptyText}>{t('reports.no_reports')}</Text>
         </View>
       ) : (
-        reports.map(r => (
-          <TouchableOpacity
-            key={r.id}
-            style={styles.card}
-            onPress={() => navigation.navigate('ReportDetail', { report: r })}
-            activeOpacity={0.8}
-          >
-            <View style={styles.cardTop}>
-              <View style={styles.iconBox}>
-                <FileText size={18} color="#9333EA" />
+        reports.map(r => {
+          const preview = r.teacherNotes || r.behaviorNotes || r.attendanceNotes;
+          const dateStr = r.reportDate
+            ? new Date(r.reportDate).toLocaleDateString()
+            : new Date(r.createdAt).toLocaleDateString();
+          return (
+            <TouchableOpacity
+              key={r.id}
+              style={styles.card}
+              onPress={() => navigation.navigate('ReportDetail', { report: r })}
+              activeOpacity={0.8}
+            >
+              <View style={styles.cardTop}>
+                <View style={styles.iconBox}>
+                  <FileText size={18} color="#9333EA" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.title}>{r.subject}</Text>
+                  {r.students?.fullName && <Text style={styles.student}>{r.students.fullName}</Text>}
+                </View>
+                <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                  <Text style={styles.date}>{dateStr}</Text>
+                  <ChevronRight size={16} color={colors.textMuted} />
+                </View>
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.title}>{r.title || 'Report'}</Text>
-                {r.students?.fullName && <Text style={styles.student}>{r.students.fullName}</Text>}
-              </View>
-              <View style={{ alignItems: 'flex-end', gap: 4 }}>
-                <Text style={styles.date}>{new Date(r.createdAt).toLocaleDateString()}</Text>
-                <ChevronRight size={16} color={colors.textMuted} />
-              </View>
-            </View>
 
-            {r.content && (
-              <Text style={styles.preview} numberOfLines={2}>{r.content}</Text>
-            )}
+              {preview && (
+                <Text style={styles.preview} numberOfLines={2}>{preview}</Text>
+              )}
 
-            <View style={styles.footer}>
-              {r.subject && <View style={styles.tag}><Text style={styles.tagText}>{r.subject}</Text></View>}
-              {r.teachers?.fullName && <Text style={styles.teacher}>By {r.teachers.fullName}</Text>}
-            </View>
-          </TouchableOpacity>
-        ))
+              {r.teachers?.fullName && (
+                <Text style={styles.teacher}>{t('reports.by_teacher', { name: r.teachers.fullName })}</Text>
+              )}
+            </TouchableOpacity>
+          );
+        })
       )}
     </ScrollView>
   );
@@ -94,9 +103,6 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   title: { fontSize: font.md, fontWeight: '700', color: colors.text },
   student: { fontSize: font.xs, color: colors.textMuted, marginTop: 2 },
   date: { fontSize: font.xs, color: colors.textMuted },
-  preview: { fontSize: font.sm, color: colors.textSecondary, lineHeight: 20, marginBottom: spacing.sm },
-  footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  tag: { backgroundColor: '#F3E8FF', borderRadius: radius.full, paddingHorizontal: 8, paddingVertical: 2 },
-  tagText: { fontSize: font.xs, color: '#7C3AED', fontWeight: '600' },
+  preview: { fontSize: font.sm, color: colors.textSecondary, lineHeight: 20, marginBottom: spacing.xs },
   teacher: { fontSize: font.xs, color: colors.textMuted },
 });

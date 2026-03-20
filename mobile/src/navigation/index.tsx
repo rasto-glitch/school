@@ -23,7 +23,7 @@ export type RootStackParamList = {
   Me: undefined;
   Settings: undefined;
   Reports: undefined;
-  ReportDetail: { report: { id: string; title?: string; content?: string; subject?: string; createdAt: string; students?: { fullName: string }; teachers?: { fullName: string } } };
+  ReportDetail: { report: { id: string; subject: string; attendanceNotes?: string; behaviorNotes?: string; teacherNotes?: string; quizMarks?: number; examMarks?: number; reportDate?: string; createdAt: string; students?: { fullName: string }; teachers?: { fullName: string } } };
   Appointments: undefined;
   Grades: undefined;
 };

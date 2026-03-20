@@ -4,18 +4,29 @@ import {
   StyleSheet, ActivityIndicator, Alert, TextInput,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GraduationCap, ChevronRight, Search } from 'lucide-react-native';
 import { authApi } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { spacing, radius, font, shadow } from '../../theme';
+import i18n, { LANGUAGE_KEY } from '../../i18n';
 import type { School } from '../../types';
 
+const LANGUAGES = [
+  { code: 'en', label: 'EN' },
+  { code: 'ku', label: 'KU' },
+  { code: 'ar', label: 'AR' },
+];
+
 export default function SchoolPickerScreen() {
+  const { t } = useTranslation();
   const { setSelectedSchool } = useAuthStore();
   const insets = useSafeAreaInsets();
   const [schools, setSchools] = useState<School[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
+  const [activeLang, setActiveLang] = useState(i18n.language);
 
   useEffect(() => {
     authApi.getSchools()
@@ -24,6 +35,12 @@ export default function SchoolPickerScreen() {
       .finally(() => setLoading(false));
   }, []);
 
+  const selectLanguage = async (code: string) => {
+    setActiveLang(code);
+    await i18n.changeLanguage(code);
+    await AsyncStorage.setItem(LANGUAGE_KEY, code);
+  };
+
   const filtered = useMemo(() =>
     query.trim() === '' ? schools : schools.filter(s => s.name.toLowerCase().includes(query.toLowerCase())),
     [schools, query]
@@ -31,25 +48,41 @@ export default function SchoolPickerScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      {/* Colorful header */}
+      {/* Header */}
       <View style={styles.header}>
+        {/* Language selector */}
+        <View style={styles.langRow}>
+          {LANGUAGES.map(lang => (
+            <TouchableOpacity
+              key={lang.code}
+              style={[styles.langBtn, activeLang === lang.code && styles.langBtnActive]}
+              onPress={() => selectLanguage(lang.code)}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.langText, activeLang === lang.code && styles.langTextActive]}>
+                {lang.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
         <View style={styles.logoBox}>
           <GraduationCap size={36} color="#fff" />
         </View>
-        <Text style={styles.title}>School Portal</Text>
-        <Text style={styles.subtitle}>Find and select your school to get started</Text>
+        <Text style={styles.title}>{t('schoolpicker.title')}</Text>
+        <Text style={styles.subtitle}>{t('schoolpicker.subtitle')}</Text>
       </View>
 
       {/* Card area */}
       <View style={[styles.card, { paddingBottom: insets.bottom + 24 }]}>
-        <Text style={styles.cardTitle}>Select Your School</Text>
+        <Text style={styles.cardTitle}>{t('schoolpicker.card_title')}</Text>
 
         {/* Search */}
         <View style={styles.searchBox}>
           <Search size={16} color="#9CA3AF" />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search schools..."
+            placeholder={t('schoolpicker.search')}
             placeholderTextColor="#9CA3AF"
             value={query}
             onChangeText={setQuery}
@@ -61,7 +94,9 @@ export default function SchoolPickerScreen() {
           <ActivityIndicator color="#4F46E5" size="large" style={{ marginTop: 40 }} />
         ) : filtered.length === 0 ? (
           <View style={styles.emptyBox}>
-            <Text style={styles.emptyText}>{query ? 'No schools match your search.' : 'No schools found.'}</Text>
+            <Text style={styles.emptyText}>
+              {query ? t('schoolpicker.no_match') : t('schoolpicker.no_schools')}
+            </Text>
           </View>
         ) : (
           <FlatList
@@ -94,9 +129,34 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#4F46E5' },
   header: {
     alignItems: 'center',
-    paddingTop: 40,
+    paddingTop: 20,
     paddingBottom: 36,
     paddingHorizontal: spacing.lg,
+  },
+  langRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    alignSelf: 'flex-end',
+    marginBottom: spacing.md,
+  },
+  langBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: radius.full,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.5)',
+  },
+  langBtnActive: {
+    backgroundColor: '#fff',
+    borderColor: '#fff',
+  },
+  langText: {
+    fontSize: font.sm,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.8)',
+  },
+  langTextActive: {
+    color: '#4F46E5',
   },
   logoBox: {
     width: 80, height: 80, borderRadius: 24,

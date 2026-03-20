@@ -82,7 +82,22 @@
   "reports": {
     "title": "Reports",
     "subtitle": "Teacher reports for your child",
-    "no_reports": "No reports yet."
+    "no_reports": "No reports yet.",
+    "attendance_notes": "Attendance Notes",
+    "behavior_notes": "Behavior Notes",
+    "teacher_notes": "Teacher's Notes",
+    "quiz_marks": "Quiz Marks",
+    "exam_marks": "Exam Marks",
+    "report_date": "Report Date",
+    "by_teacher": "By {{name}}"
+  },
+  "schoolpicker": {
+    "title": "School Portal",
+    "subtitle": "Find and select your school to get started",
+    "card_title": "Select Your School",
+    "search": "Search schools...",
+    "no_match": "No schools match your search.",
+    "no_schools": "No schools found."
   },
   "bus": {
     "title": "Live Bus Tracking",
