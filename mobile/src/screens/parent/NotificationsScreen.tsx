@@ -1,11 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { parentApi } from '../../services/api';
+import { useColors } from '../../store/themeStore';
+import { spacing, radius, shadow, font } from '../../theme';
 import type { Notification } from '../../types';
 
 export default function NotificationsScreen() {
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [items, setItems] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -21,14 +27,17 @@ export default function NotificationsScreen() {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.md }]}
+    >
       <View style={styles.header}>
         <Text style={styles.title}>{t('notifications.title')}</Text>
         <Text style={styles.subtitle}>{t('notifications.subtitle')}</Text>
       </View>
 
       {loading ? (
-        <ActivityIndicator color="#4F46E5" style={{ marginTop: 40 }} />
+        <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
       ) : items.length === 0 ? (
         <Text style={styles.empty}>{t('notifications.no_notifications')}</Text>
       ) : (
@@ -52,19 +61,19 @@ export default function NotificationsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F3F4F6' },
-  content: { padding: 20, paddingBottom: 40 },
-  header: { marginBottom: 20 },
-  title: { fontSize: 22, fontWeight: '700', color: '#111827' },
-  subtitle: { fontSize: 13, color: '#6B7280', marginTop: 2 },
-  empty: { textAlign: 'center', color: '#9CA3AF', marginTop: 40, fontSize: 14 },
-  card: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 12, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 8, elevation: 2 },
-  cardUnread: { borderLeftWidth: 3, borderLeftColor: '#4F46E5' },
-  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#4F46E5', marginBottom: 6 },
-  cardTitle: { fontSize: 15, fontWeight: '700', color: '#111827', marginBottom: 4 },
-  cardMessage: { fontSize: 13, color: '#374151', lineHeight: 18 },
+const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.bg },
+  content: { padding: spacing.md, paddingBottom: 40 },
+  header: { marginBottom: spacing.lg },
+  title: { fontSize: font.xxl, fontWeight: '700', color: colors.text },
+  subtitle: { fontSize: font.sm, color: colors.textMuted, marginTop: 2 },
+  empty: { textAlign: 'center', color: colors.textMuted, marginTop: 40, fontSize: font.md },
+  card: { backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm, ...shadow.sm },
+  cardUnread: { borderLeftWidth: 3, borderLeftColor: colors.primary },
+  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.primary, marginBottom: 6 },
+  cardTitle: { fontSize: font.md, fontWeight: '700', color: colors.text, marginBottom: 4 },
+  cardMessage: { fontSize: font.sm, color: colors.textSecondary, lineHeight: 18 },
   footer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 },
-  cardDate: { fontSize: 11, color: '#9CA3AF' },
-  markRead: { fontSize: 12, color: '#4F46E5', fontWeight: '600' },
+  cardDate: { fontSize: font.xs, color: colors.textMuted },
+  markRead: { fontSize: font.sm, color: colors.primary, fontWeight: '600' },
 });

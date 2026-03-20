@@ -1,15 +1,18 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { View, Text, ScrollView, StyleSheet, ActivityIndicator, RefreshControl } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BookOpen, Calendar } from 'lucide-react-native';
 import { parentApi } from '../../services/api';
-import { colors, spacing, radius, shadow, font } from '../../theme';
+import { useColors } from '../../store/themeStore';
+import { spacing, radius, shadow, font } from '../../theme';
 import type { Homework } from '../../types';
 
 export default function HomeworkScreen() {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [homework, setHomework] = useState<Homework[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -75,7 +78,7 @@ export default function HomeworkScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   content: { padding: spacing.md, paddingBottom: 40 },
   header: { marginBottom: spacing.lg },
@@ -95,6 +98,6 @@ const styles = StyleSheet.create({
   dueRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6 },
   due: { fontSize: font.xs, color: colors.textMuted },
   overdue: { color: colors.danger, fontWeight: '600' },
-  overdueBadge: { backgroundColor: '#FEE2E2', borderRadius: radius.full, paddingHorizontal: 7, paddingVertical: 2 },
+  overdueBadge: { backgroundColor: colors.dangerLight, borderRadius: radius.full, paddingHorizontal: 7, paddingVertical: 2 },
   overdueBadgeText: { fontSize: font.xs, color: colors.danger, fontWeight: '700' },
 });

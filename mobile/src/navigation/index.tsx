@@ -12,6 +12,7 @@ import SettingsScreen from '../screens/parent/SettingsScreen';
 import ReportsScreen from '../screens/parent/ReportsScreen';
 import AppointmentsScreen from '../screens/parent/AppointmentsScreen';
 import GradesScreen from '../screens/parent/GradesScreen';
+import ReportDetailScreen from '../screens/parent/ReportDetailScreen';
 
 export type RootStackParamList = {
   SchoolPicker: undefined;
@@ -22,6 +23,7 @@ export type RootStackParamList = {
   Me: undefined;
   Settings: undefined;
   Reports: undefined;
+  ReportDetail: { report: { id: string; title?: string; content?: string; subject?: string; createdAt: string; students?: { fullName: string }; teachers?: { fullName: string } } };
   Appointments: undefined;
   Grades: undefined;
 };
@@ -69,6 +71,11 @@ export default function Navigation() {
               name="Reports"
               component={ReportsScreen}
               options={{ headerShown: true, headerTitle: 'Reports', headerBackTitle: 'Back' }}
+            />
+            <Stack.Screen
+              name="ReportDetail"
+              component={ReportDetailScreen}
+              options={{ headerShown: true, headerTitle: 'Report', headerBackTitle: 'Back' }}
             />
             <Stack.Screen
               name="Appointments"

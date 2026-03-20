@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, ActivityIndicator,
   RefreshControl, TouchableOpacity,
@@ -6,10 +6,10 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { Megaphone, BookOpen, FileText, ClipboardList, MapPin, Bell, Calendar, Star } from 'lucide-react-native';
+import { Megaphone, BookOpen, FileText, ClipboardList, MapPin, Bell, Calendar } from 'lucide-react-native';
 import { useAuthStore } from '../../store/authStore';
 import { parentApi } from '../../services/api';
-import { colors, spacing, radius, shadow, font } from '../../theme';
+import { spacing, radius, shadow, font } from '../../theme';
 import { useColors } from '../../store/themeStore';
 import type { Homework, Announcement } from '../../types';
 
@@ -38,6 +38,7 @@ export default function FeedScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [homework, setHomework] = useState<Homework[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [grades, setGrades] = useState<Grade[]>([]);
@@ -197,7 +198,7 @@ export default function FeedScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   content: { padding: spacing.md, paddingBottom: 40 },
   header: { marginBottom: spacing.md },
