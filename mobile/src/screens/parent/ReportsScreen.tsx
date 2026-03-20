@@ -1,8 +1,8 @@
 import { useEffect, useState, useMemo } from 'react';
-import { View, Text, ScrollView, StyleSheet, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, ActivityIndicator, RefreshControl, TouchableOpacity } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { FileText } from 'lucide-react-native';
+import { FileText, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { parentApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
 import { spacing, radius, font, shadow } from '../../theme';
@@ -24,6 +24,7 @@ export default function ReportsScreen() {
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
@@ -31,6 +32,8 @@ export default function ReportsScreen() {
 
   useEffect(() => { load().finally(() => setLoading(false)); }, []);
   const onRefresh = () => { setRefreshing(true); load().finally(() => setRefreshing(false)); };
+
+  const toggle = (id: string) => setExpandedId(prev => prev === id ? null : id);
 
   return (
     <ScrollView
@@ -46,25 +49,52 @@ export default function ReportsScreen() {
           <Text style={styles.emptyText}>{t('reports.no_reports', 'No reports yet')}</Text>
         </View>
       ) : (
-        reports.map(r => (
-          <View key={r.id} style={styles.card}>
-            <View style={styles.cardTop}>
-              <View style={styles.iconBox}>
-                <FileText size={18} color="#9333EA" />
+        reports.map(r => {
+          const expanded = expandedId === r.id;
+          return (
+            <TouchableOpacity key={r.id} style={styles.card} onPress={() => toggle(r.id)} activeOpacity={0.8}>
+              <View style={styles.cardTop}>
+                <View style={styles.iconBox}>
+                  <FileText size={18} color="#9333EA" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.title}>{r.title || 'Report'}</Text>
+                  {r.students?.fullName && <Text style={styles.student}>{r.students.fullName}</Text>}
+                </View>
+                <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                  <Text style={styles.date}>{new Date(r.createdAt).toLocaleDateString()}</Text>
+                  {expanded
+                    ? <ChevronUp size={16} color={colors.textMuted} />
+                    : <ChevronDown size={16} color={colors.textMuted} />}
+                </View>
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.title}>{r.title || 'Report'}</Text>
-                {r.students?.fullName && <Text style={styles.student}>{r.students.fullName}</Text>}
-              </View>
-              <Text style={styles.date}>{new Date(r.createdAt).toLocaleDateString()}</Text>
-            </View>
-            {r.content && <Text style={styles.reportContent}>{r.content}</Text>}
-            <View style={styles.footer}>
-              {r.subject && <View style={styles.tag}><Text style={styles.tagText}>{r.subject}</Text></View>}
-              {r.teachers?.fullName && <Text style={styles.teacher}>By {r.teachers.fullName}</Text>}
-            </View>
-          </View>
-        ))
+
+              {/* Preview line when collapsed */}
+              {!expanded && r.content && (
+                <Text style={styles.preview} numberOfLines={2}>{r.content}</Text>
+              )}
+
+              {/* Full content when expanded */}
+              {expanded && (
+                <View style={styles.expandedBody}>
+                  {r.content && <Text style={styles.reportContent}>{r.content}</Text>}
+                  <View style={styles.footer}>
+                    {r.subject && <View style={styles.tag}><Text style={styles.tagText}>{r.subject}</Text></View>}
+                    {r.teachers?.fullName && <Text style={styles.teacher}>By {r.teachers.fullName}</Text>}
+                  </View>
+                </View>
+              )}
+
+              {/* Footer always visible when collapsed */}
+              {!expanded && (
+                <View style={styles.footer}>
+                  {r.subject && <View style={styles.tag}><Text style={styles.tagText}>{r.subject}</Text></View>}
+                  {r.teachers?.fullName && <Text style={styles.teacher}>By {r.teachers.fullName}</Text>}
+                </View>
+              )}
+            </TouchableOpacity>
+          );
+        })
       )}
     </ScrollView>
   );
@@ -81,6 +111,8 @@ const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').u
   title: { fontSize: font.md, fontWeight: '700', color: colors.text },
   student: { fontSize: font.xs, color: colors.textMuted, marginTop: 2 },
   date: { fontSize: font.xs, color: colors.textMuted },
+  preview: { fontSize: font.sm, color: colors.textSecondary, lineHeight: 20, marginBottom: spacing.sm },
+  expandedBody: { marginBottom: spacing.sm },
   reportContent: { fontSize: font.sm, color: colors.textSecondary, lineHeight: 20, marginBottom: spacing.sm },
   footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   tag: { backgroundColor: '#F3E8FF', borderRadius: radius.full, paddingHorizontal: 8, paddingVertical: 2 },

@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback, Component } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Platform } from 'react-native';
+import { useEffect, useState, useCallback, Component, useMemo } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
@@ -9,7 +9,8 @@ import { RefreshCw, User, AlertCircle, Bus, MapPin, ChevronRight } from 'lucide-
 import { useNavigation } from '@react-navigation/native';
 import { parentApi } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
-import { colors, spacing, radius, shadow, font } from '../../theme';
+import { useColors } from '../../store/themeStore';
+import { spacing, radius, shadow, font } from '../../theme';
 import type { Student } from '../../types';
 
 const SOCKET_URL = process.env.EXPO_PUBLIC_SOCKET_URL || 'http://localhost:5000';
@@ -23,6 +24,13 @@ interface BusData {
     drivers?: { fullName: string; phoneNumber?: string; licenseNumber?: string; buses?: { busNumber: string } };
   };
   studentHome: { latitude: number; longitude: number };
+}
+
+interface DriverInfo {
+  fullName: string;
+  phoneNumber?: string;
+  licenseNumber?: string;
+  buses?: { busNumber: string };
 }
 
 function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -60,7 +68,9 @@ export default function BusTrackingScreen() {
   const { t } = useTranslation();
   const { token } = useAuthStore();
   const navigation = useNavigation<any>();
+  const colors = useColors();
   const [hasPickupLocation, setHasPickupLocation] = useState<boolean | null>(null);
+  const [staticDriverInfo, setStaticDriverInfo] = useState<DriverInfo | null>(null);
 
   useEffect(() => {
     parentApi.getPickupLocation().then(r => {
@@ -82,6 +92,14 @@ export default function BusTrackingScreen() {
       if (kids.length > 0) setSelectedChild(kids[0].id);
     });
   }, []);
+
+  // Fetch static driver info whenever selected child changes
+  useEffect(() => {
+    if (!selectedChild) return;
+    parentApi.getDriverInfo(selectedChild)
+      .then(r => setStaticDriverInfo(r.data))
+      .catch(() => setStaticDriverInfo(null));
+  }, [selectedChild]);
 
   // Get parent's location every 5 minutes
   useEffect(() => {
@@ -134,7 +152,7 @@ export default function BusTrackingScreen() {
   }, [busData?.location?.driverId, reset, token]);
 
   const isActive = !!busData?.location?.isDriving;
-  const driverInfo = busData?.location?.drivers;
+  const driverInfo: DriverInfo | null = busData?.location?.drivers || staticDriverInfo;
   const etaTarget = parentLocation
     ? { lat: parentLocation.latitude, lng: parentLocation.longitude }
     : busData?.studentHome ? { lat: busData.studentHome.latitude, lng: busData.studentHome.longitude } : null;
@@ -150,6 +168,7 @@ export default function BusTrackingScreen() {
   } : undefined;
 
   const insets = useSafeAreaInsets();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   return (
     <ScrollView
@@ -270,7 +289,7 @@ export default function BusTrackingScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').useColors>) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   content: { padding: spacing.md, paddingBottom: 40 },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing.md },

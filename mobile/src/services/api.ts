@@ -36,6 +36,10 @@ export const authApi = {
     api.post('/auth/device-token', { token, language }),
   updateDeviceLanguage: (language: string) =>
     api.put('/auth/device-language', { language }),
+  changePassword: (currentPassword: string, newPassword: string) =>
+    api.post('/auth/change-password', { currentPassword, newPassword }),
+  forgotPassword: (username: string, schoolSlug: string) =>
+    api.post('/auth/forgot-password', { username, schoolSlug }),
 };
 
 // ---- PARENT ----
@@ -55,6 +59,7 @@ export const parentApi = {
   createAppointment: (data: { reason: string; message?: string; requestedDate?: string; studentIds?: string[] }) => api.post('/parent/appointments', data),
   markAllRead: () => api.patch('/parent/notifications/read-all'),
   getUnreadCount: () => api.get('/parent/notifications/unread-count'),
+  getDriverInfo: (studentId?: string) => api.get('/parent/driver-info', { params: studentId ? { studentId } : {} }),
 };
 
 // ---- DRIVER ----

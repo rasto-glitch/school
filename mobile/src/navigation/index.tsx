@@ -11,6 +11,7 @@ import MeScreen from '../screens/parent/MeScreen';
 import SettingsScreen from '../screens/parent/SettingsScreen';
 import ReportsScreen from '../screens/parent/ReportsScreen';
 import AppointmentsScreen from '../screens/parent/AppointmentsScreen';
+import GradesScreen from '../screens/parent/GradesScreen';
 
 export type RootStackParamList = {
   SchoolPicker: undefined;
@@ -22,6 +23,7 @@ export type RootStackParamList = {
   Settings: undefined;
   Reports: undefined;
   Appointments: undefined;
+  Grades: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -72,6 +74,11 @@ export default function Navigation() {
               name="Appointments"
               component={AppointmentsScreen}
               options={{ headerShown: true, headerTitle: 'Appointments', headerBackTitle: 'Back' }}
+            />
+            <Stack.Screen
+              name="Grades"
+              component={GradesScreen}
+              options={{ headerShown: true, headerTitle: 'Grades', headerBackTitle: 'Back' }}
             />
           </>
         )}

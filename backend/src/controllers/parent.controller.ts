@@ -177,6 +177,21 @@ export async function getBusLocation(req: AuthRequest, res: Response): Promise<v
   }));
 }
 
+export async function getDriverInfo(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId, userId } = req.user!;
+  const { studentId } = req.query as Record<string, string>;
+  const { studentIds } = await getParentAndChildren(userId, schoolId);
+  const targetId = studentId || studentIds[0];
+  if (!targetId) { res.status(404).json({ error: 'No students found' }); return; }
+  const { data: student } = await supabase.from('students').select('driver_id').eq('id', targetId).eq('school_id', schoolId).single();
+  if (!student?.driver_id) { res.status(404).json({ error: 'No driver assigned' }); return; }
+  const { data: driver } = await supabase.from('drivers')
+    .select('full_name, phone_number, license_number, buses(bus_number)')
+    .eq('id', student.driver_id).single();
+  if (!driver) { res.status(404).json({ error: 'Driver not found' }); return; }
+  res.json(toCC(driver));
+}
+
 export async function getNotifications(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId, userId } = req.user!;
   const { data: user } = await supabase.from('users').select('id').eq('id', userId).single();

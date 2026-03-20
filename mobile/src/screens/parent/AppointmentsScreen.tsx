@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Calendar, Plus, X, Clock, CheckCircle, XCircle } from 'lucide-react-native';
+import { Calendar, Plus, X, Clock, CheckCircle, XCircle, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { parentApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
 import { spacing, radius, font, shadow } from '../../theme';
@@ -44,6 +44,7 @@ export default function AppointmentsScreen() {
   const [message, setMessage] = useState('');
   const [requestedDate, setRequestedDate] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
@@ -51,19 +52,31 @@ export default function AppointmentsScreen() {
   useEffect(() => { load().finally(() => setLoading(false)); }, []);
   const onRefresh = () => { setRefreshing(true); load().finally(() => setRefreshing(false)); };
 
+  const toggle = (id: string) => setExpandedId(prev => prev === id ? null : id);
+
   const handleSubmit = async () => {
-    if (!reason.trim()) { Alert.alert('Required', 'Please enter a reason for the appointment.'); return; }
+    if (!reason.trim()) {
+      Alert.alert(t('common.save'), t('appointments.reason'));
+      return;
+    }
     setSubmitting(true);
     try {
       await parentApi.createAppointment({ reason: reason.trim(), message: message.trim() || undefined, requestedDate: requestedDate.trim() || undefined });
       setReason(''); setMessage(''); setRequestedDate('');
       setShowModal(false);
       load();
+      Alert.alert('✓', t('appointments.toast_success'));
     } catch {
-      Alert.alert('Error', 'Could not submit appointment request. Please try again.');
+      Alert.alert('Error', t('appointments.toast_error'));
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const statusLabel: Record<string, string> = {
+    pending: t('appointments.status_pending'),
+    approved: t('appointments.status_approved'),
+    rejected: t('appointments.status_rejected'),
   };
 
   return (
@@ -77,69 +90,76 @@ export default function AppointmentsScreen() {
         ) : items.length === 0 ? (
           <View style={styles.empty}>
             <Calendar size={40} color={colors.textMuted} />
-            <Text style={styles.emptyText}>No appointments yet</Text>
-            <Text style={styles.emptySub}>Tap the + button to request a meeting with the school</Text>
+            <Text style={styles.emptyText}>{t('appointments.no_appointments')}</Text>
+            <Text style={styles.emptySub}>{t('appointments.subtitle')}</Text>
           </View>
         ) : (
           items.map(item => {
             const StatusIcon = STATUS_ICON[item.status] ?? Clock;
             const color = STATUS_COLOR[item.status] ?? colors.textMuted;
+            const expanded = expandedId === item.id;
             return (
-              <View key={item.id} style={styles.card}>
+              <TouchableOpacity key={item.id} style={styles.card} onPress={() => toggle(item.id)} activeOpacity={0.8}>
                 <View style={styles.cardTop}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.reason}>{item.reason}</Text>
                     {item.requestedDate && (
-                      <Text style={styles.date}>Requested: {new Date(item.requestedDate).toLocaleDateString()}</Text>
+                      <Text style={styles.date}>{t('appointments.requested')}: {new Date(item.requestedDate).toLocaleDateString()}</Text>
                     )}
                   </View>
-                  <View style={[styles.statusBadge, { backgroundColor: color + '20' }]}>
-                    <StatusIcon size={13} color={color} />
-                    <Text style={[styles.statusText, { color }]}>{item.status.charAt(0).toUpperCase() + item.status.slice(1)}</Text>
+                  <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                    <View style={[styles.statusBadge, { backgroundColor: color + '20' }]}>
+                      <StatusIcon size={13} color={color} />
+                      <Text style={[styles.statusText, { color }]}>{statusLabel[item.status] ?? item.status}</Text>
+                    </View>
+                    {expanded ? <ChevronUp size={14} color={colors.textMuted} /> : <ChevronDown size={14} color={colors.textMuted} />}
                   </View>
                 </View>
-                {item.message && <Text style={styles.message}>{item.message}</Text>}
-                {item.adminNote && (
-                  <View style={styles.noteBox}>
-                    <Text style={styles.noteLabel}>School response:</Text>
-                    <Text style={styles.noteText}>{item.adminNote}</Text>
+
+                {expanded && (
+                  <View style={styles.expandedBody}>
+                    {item.message && <Text style={styles.messageText}>{item.message}</Text>}
+                    {item.adminNote && (
+                      <View style={styles.noteBox}>
+                        <Text style={styles.noteLabel}>{t('appointments.school_response')}</Text>
+                        <Text style={styles.noteText}>{item.adminNote}</Text>
+                      </View>
+                    )}
+                    <Text style={styles.createdAt}>{new Date(item.createdAt).toLocaleDateString()}</Text>
                   </View>
                 )}
-                <Text style={styles.createdAt}>{new Date(item.createdAt).toLocaleDateString()}</Text>
-              </View>
+              </TouchableOpacity>
             );
           })
         )}
       </ScrollView>
 
-      {/* FAB */}
       <TouchableOpacity style={[styles.fab, { bottom: insets.bottom + 24 }]} onPress={() => setShowModal(true)}>
         <Plus size={24} color="#fff" />
       </TouchableOpacity>
 
-      {/* New Appointment Modal */}
       <Modal visible={showModal} animationType="slide" presentationStyle="pageSheet">
         <View style={[styles.modal, { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 24 }]}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Request Appointment</Text>
+            <Text style={styles.modalTitle}>{t('appointments.new_request')}</Text>
             <TouchableOpacity onPress={() => setShowModal(false)}>
               <X size={22} color={colors.textMuted} />
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.fieldLabel}>Reason *</Text>
+          <Text style={styles.fieldLabel}>{t('appointments.reason')} *</Text>
           <TextInput
             style={styles.input}
-            placeholder="e.g. Discuss academic progress"
+            placeholder={t('appointments.reason_placeholder')}
             placeholderTextColor={colors.textMuted}
             value={reason}
             onChangeText={setReason}
           />
 
-          <Text style={styles.fieldLabel}>Message (optional)</Text>
+          <Text style={styles.fieldLabel}>{t('appointments.message')}</Text>
           <TextInput
             style={[styles.input, styles.textarea]}
-            placeholder="Add more details..."
+            placeholder={t('appointments.message_placeholder')}
             placeholderTextColor={colors.textMuted}
             value={message}
             onChangeText={setMessage}
@@ -147,7 +167,7 @@ export default function AppointmentsScreen() {
             numberOfLines={4}
           />
 
-          <Text style={styles.fieldLabel}>Preferred Date (optional)</Text>
+          <Text style={styles.fieldLabel}>{t('appointments.preferred_date')}</Text>
           <TextInput
             style={styles.input}
             placeholder="e.g. 2026-04-15"
@@ -157,7 +177,7 @@ export default function AppointmentsScreen() {
           />
 
           <TouchableOpacity style={styles.submitBtn} onPress={handleSubmit} disabled={submitting}>
-            <Text style={styles.submitText}>{submitting ? 'Submitting…' : 'Submit Request'}</Text>
+            <Text style={styles.submitText}>{submitting ? t('common.loading') : t('appointments.submit')}</Text>
           </TouchableOpacity>
         </View>
       </Modal>
@@ -171,12 +191,13 @@ const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').u
   emptyText: { fontSize: font.md, fontWeight: '600', color: colors.textMuted },
   emptySub: { fontSize: font.sm, color: colors.textMuted, textAlign: 'center', paddingHorizontal: 32 },
   card: { backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm, ...shadow.sm },
-  cardTop: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, marginBottom: spacing.sm },
+  cardTop: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
   reason: { fontSize: font.md, fontWeight: '700', color: colors.text },
   date: { fontSize: font.xs, color: colors.textMuted, marginTop: 2 },
   statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: radius.full, paddingHorizontal: 8, paddingVertical: 4 },
   statusText: { fontSize: font.xs, fontWeight: '700' },
-  message: { fontSize: font.sm, color: colors.textSecondary, marginBottom: spacing.sm },
+  expandedBody: { marginTop: spacing.sm, paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border },
+  messageText: { fontSize: font.sm, color: colors.textSecondary, marginBottom: spacing.sm },
   noteBox: { backgroundColor: colors.bg, borderRadius: radius.sm, padding: spacing.sm, marginBottom: spacing.sm },
   noteLabel: { fontSize: font.xs, fontWeight: '700', color: colors.textMuted, marginBottom: 2 },
   noteText: { fontSize: font.sm, color: colors.text },

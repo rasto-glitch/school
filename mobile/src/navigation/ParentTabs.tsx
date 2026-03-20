@@ -4,24 +4,25 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { TouchableOpacity, View, Text, StyleSheet } from 'react-native';
-import { Home, BookOpen, ClipboardList, Bus, Bell, User, Star } from 'lucide-react-native';
+import { Home, BookOpen, ClipboardList, Bus, Bell, User } from 'lucide-react-native';
 import FeedScreen from '../screens/parent/FeedScreen';
 import HomeworkScreen from '../screens/parent/HomeworkScreen';
 import AssignmentsScreen from '../screens/parent/AssignmentsScreen';
 import BusTrackingScreen from '../screens/parent/BusTrackingScreen';
 import NotificationsScreen from '../screens/parent/NotificationsScreen';
-import GradesScreen from '../screens/parent/GradesScreen';
-import { colors, radius, font } from '../theme';
+import { useColors } from '../store/themeStore';
+import { radius, font } from '../theme';
 import { parentApi } from '../services/api';
 
 const Tab = createBottomTabNavigator();
 
 function ProfileButton() {
   const navigation = useNavigation<any>();
+  const colors = useColors();
   return (
     <TouchableOpacity
       onPress={() => navigation.navigate('Me')}
-      style={styles.profileBtn}
+      style={[styles.profileBtn, { backgroundColor: colors.primaryLight }]}
       activeOpacity={0.7}
     >
       <User size={20} color={colors.primary} />
@@ -41,6 +42,7 @@ function NotificationBadge({ count }: { count: number }) {
 export default function ParentTabs() {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
+  const colors = useColors();
   const [unreadCount, setUnreadCount] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -112,15 +114,6 @@ export default function ParentTabs() {
         }}
       />
       <Tab.Screen
-        name="Grades"
-        component={GradesScreen}
-        options={{
-          headerTitle: t('nav.grades', 'Grades'),
-          tabBarLabel: t('nav.grades', 'Grades'),
-          tabBarIcon: ({ color }) => <Star size={22} color={color} />,
-        }}
-      />
-      <Tab.Screen
         name="BusTracking"
         component={BusTrackingScreen}
         options={{
@@ -151,14 +144,13 @@ export default function ParentTabs() {
 const styles = StyleSheet.create({
   profileBtn: {
     width: 36, height: 36, borderRadius: 18,
-    backgroundColor: colors.primaryLight,
     alignItems: 'center', justifyContent: 'center',
     marginRight: 12,
   },
   badge: {
     position: 'absolute', top: -4, right: -6,
     minWidth: 16, height: 16, borderRadius: 8,
-    backgroundColor: colors.danger,
+    backgroundColor: '#EF4444',
     alignItems: 'center', justifyContent: 'center',
     paddingHorizontal: 3,
   },
