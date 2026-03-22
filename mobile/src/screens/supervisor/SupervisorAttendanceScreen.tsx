@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
-import { ChevronLeft, ChevronRight, CheckCircle, XCircle, Clock, Edit2, CalendarOff, Plus } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, CheckCircle, XCircle, Clock, Edit2, CalendarOff } from 'lucide-react-native';
 import { supervisorApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
 import { spacing, radius, font, shadow } from '../../theme';
@@ -247,30 +247,27 @@ export default function SupervisorAttendanceScreen() {
         </View>
       ) : (
         studentRows.map(({ student, record }) => {
-          const Icon = record ? (STATUS_ICON[record.status] ?? Clock) : Plus;
-          const color = record ? (STATUS_COLOR[record.status] ?? colors.textMuted) : colors.textMuted;
+          // No record = implicitly present
+          const displayStatus: AttendanceStatus = record?.status ?? 'present';
+          const Icon = STATUS_ICON[displayStatus] ?? CheckCircle;
+          const color = STATUS_COLOR[displayStatus];
           return (
             <View key={student.id} style={styles.recordCard}>
               <Icon size={18} color={color} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.recordName}>{student.fullName}</Text>
                 {record?.notes && <Text style={styles.recordNote}>{record.notes}</Text>}
-                {!record && <Text style={styles.unrecordedLabel}>Not recorded</Text>}
               </View>
-              {record ? (
-                <View style={[styles.statusBadge, { backgroundColor: color + '20' }]}>
-                  <Text style={[styles.statusBadgeText, { color }]}>
-                    {record.status.charAt(0).toUpperCase() + record.status.slice(1)}
-                  </Text>
-                </View>
-              ) : null}
+              <View style={[styles.statusBadge, { backgroundColor: color + '20' }]}>
+                <Text style={[styles.statusBadgeText, { color }]}>
+                  {displayStatus.charAt(0).toUpperCase() + displayStatus.slice(1)}
+                </Text>
+              </View>
               <TouchableOpacity
                 onPress={() => openModal(student, record)}
                 style={styles.editBtn}
               >
-                {record
-                  ? <Edit2 size={14} color={colors.primary} />
-                  : <Plus size={14} color={colors.primary} />}
+                <Edit2 size={14} color={colors.primary} />
               </TouchableOpacity>
             </View>
           );
@@ -365,7 +362,6 @@ const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').u
   recordCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.xs, ...shadow.sm },
   recordName: { fontSize: font.sm, fontWeight: '600', color: colors.text },
   recordNote: { fontSize: font.xs, color: colors.textMuted, marginTop: 1 },
-  unrecordedLabel: { fontSize: font.xs, color: colors.textMuted, marginTop: 1, fontStyle: 'italic' },
   statusBadge: { borderRadius: radius.full, paddingHorizontal: 8, paddingVertical: 3 },
   statusBadgeText: { fontSize: 11, fontWeight: '700' },
   editBtn: { padding: 6 },
