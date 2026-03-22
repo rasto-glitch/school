@@ -14,7 +14,7 @@ export async function getStudents(req: AuthRequest, res: Response): Promise<void
 
   let query = supabase
     .from('students')
-    .select('*, classes(id, name, next_class_id), parents(id, full_name, phone_number, user_id), drivers(id, full_name, buses(bus_number))', { count: 'exact' })
+    .select('*, classes(id, name, next_class_id), parents(id, full_name, phone_number, user_id, residence_type, block_number), drivers(id, full_name, buses(bus_number))', { count: 'exact' })
     .eq('school_id', schoolId)
     .eq('is_graduated', false)
     .range(offset, offset + parseInt(limit) - 1);

@@ -251,20 +251,30 @@ export async function getAppointments(req: AuthRequest, res: Response): Promise<
 
 export async function updatePickupLocation(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId, userId } = req.user!;
-  const { latitude, longitude } = req.body;
+  const { latitude, longitude, residenceType, blockNumber } = req.body;
   if (typeof latitude !== 'number' || typeof longitude !== 'number') {
     res.status(400).json({ error: 'latitude and longitude are required numbers' }); return;
   }
-  const { error } = await supabase.from('parents').update({ latitude, longitude }).eq('user_id', userId).eq('school_id', schoolId);
+  const update: Record<string, any> = { latitude, longitude };
+  if (residenceType !== undefined) update.residence_type = residenceType;
+  if (blockNumber !== undefined) update.block_number = blockNumber;
+  const { error } = await supabase.from('parents').update(update).eq('user_id', userId).eq('school_id', schoolId);
   if (error) { res.status(500).json({ error: error.message }); return; }
   res.json({ success: true });
 }
 
 export async function getPickupLocation(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId, userId } = req.user!;
-  const { data, error } = await supabase.from('parents').select('latitude, longitude').eq('user_id', userId).eq('school_id', schoolId).single();
+  const { data, error } = await supabase.from('parents')
+    .select('latitude, longitude, residence_type, block_number')
+    .eq('user_id', userId).eq('school_id', schoolId).single();
   if (error) { res.status(500).json({ error: error.message }); return; }
-  res.json({ latitude: data?.latitude ?? null, longitude: data?.longitude ?? null });
+  res.json({
+    latitude: data?.latitude ?? null,
+    longitude: data?.longitude ?? null,
+    residenceType: (data as any)?.residence_type ?? null,
+    blockNumber: (data as any)?.block_number ?? null,
+  });
 }
 
 export async function createAppointment(req: AuthRequest, res: Response): Promise<void> {

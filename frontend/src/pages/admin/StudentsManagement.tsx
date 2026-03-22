@@ -218,7 +218,15 @@ export default function StudentsManagement() {
                     </div>
                     <div>
                       <p className="text-sm font-medium text-gray-900">{s.fullName}</p>
-                      <p className="text-xs text-gray-500">{(s as any).classes?.name || 'No class'}</p>
+                      <p className="text-xs text-gray-500">
+                        {(s as any).classes?.name || 'No class'}
+                        {(s as any).parents?.residenceType && (
+                          <span className="ml-2 text-gray-400">
+                            · {(s as any).parents.residenceType === 'apartment' ? 'Apt' : 'House'}
+                            {(s as any).parents.blockNumber ? ` ${(s as any).parents.blockNumber}` : ''}
+                          </span>
+                        )}
+                      </p>
                     </div>
                   </button>
                 ))}

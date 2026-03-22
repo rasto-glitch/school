@@ -48,7 +48,7 @@ export async function getMyStudents(req: AuthRequest, res: Response): Promise<vo
   if (!driver) { res.status(404).json({ error: 'Driver not found' }); return; }
 
   let query = supabase.from('students')
-    .select('id, full_name, home_address, home_latitude, home_longitude, phone_number, parents(full_name, phone_number)')
+    .select('id, full_name, home_address, home_latitude, home_longitude, phone_number, parents(full_name, phone_number, residence_type, block_number)')
     .eq('driver_id', driver.id)
     .eq('school_id', schoolId)
     .eq('is_graduated', false);

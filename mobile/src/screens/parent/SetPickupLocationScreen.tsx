@@ -1,13 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, TextInput, ScrollView } from 'react-native';
 import MapView, { Marker, PROVIDER_DEFAULT, Region } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { useTranslation } from 'react-i18next';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { MapPin, Navigation, ChevronLeft } from 'lucide-react-native';
+import { MapPin, Navigation, ChevronLeft, Building2, Home } from 'lucide-react-native';
 import { parentApi } from '../../services/api';
 import { colors, spacing, radius, font, shadow } from '../../theme';
+
+type ResidenceType = 'apartment' | 'house';
 
 export default function SetPickupLocationScreen() {
   const { t } = useTranslation();
@@ -16,19 +18,22 @@ export default function SetPickupLocationScreen() {
 
   const [region, setRegion] = useState<Region | null>(null);
   const [pin, setPin] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [residenceType, setResidenceType] = useState<ResidenceType | null>(null);
+  const [blockNumber, setBlockNumber] = useState('');
   const [gettingLocation, setGettingLocation] = useState(false);
   const [saving, setSaving] = useState(false);
   const mapRef = useRef<MapView>(null);
 
-  // Load existing pickup location on mount
   useEffect(() => {
     parentApi.getPickupLocation().then(r => {
-      const { latitude, longitude } = r.data;
+      const { latitude, longitude, residenceType: rt, blockNumber: bn } = r.data;
       if (latitude && longitude) {
         const loc = { latitude, longitude };
         setPin(loc);
         setRegion({ ...loc, latitudeDelta: 0.01, longitudeDelta: 0.01 });
       }
+      if (rt) setResidenceType(rt as ResidenceType);
+      if (bn) setBlockNumber(bn);
     }).catch(() => {});
   }, []);
 
@@ -57,7 +62,12 @@ export default function SetPickupLocationScreen() {
     if (!pin) return;
     setSaving(true);
     try {
-      await parentApi.updatePickupLocation(pin.latitude, pin.longitude);
+      await parentApi.updatePickupLocation(
+        pin.latitude,
+        pin.longitude,
+        residenceType ?? undefined,
+        blockNumber.trim() || undefined,
+      );
       Alert.alert('', t('pickup.saved'), [{ text: 'OK', onPress: () => navigation.goBack() }]);
     } catch {
       Alert.alert(t('pickup.save_error'));
@@ -65,6 +75,11 @@ export default function SetPickupLocationScreen() {
       setSaving(false);
     }
   };
+
+  const residenceOptions: { type: ResidenceType; label: string; Icon: typeof Home }[] = [
+    { type: 'apartment', label: 'Apartment', Icon: Building2 },
+    { type: 'house', label: 'House', Icon: Home },
+  ];
 
   return (
     <View style={styles.container}>
@@ -97,14 +112,12 @@ export default function SetPickupLocationScreen() {
           )}
         </MapView>
 
-        {/* Drag hint */}
         {pin && (
           <View style={styles.hintBadge}>
             <Text style={styles.hintText}>{t('pickup.drag_hint')}</Text>
           </View>
         )}
 
-        {/* Use current location button */}
         <TouchableOpacity style={styles.gpsBtn} onPress={useCurrentLocation} disabled={gettingLocation}>
           {gettingLocation
             ? <ActivityIndicator size="small" color={colors.primary} />
@@ -113,7 +126,41 @@ export default function SetPickupLocationScreen() {
       </View>
 
       {/* Bottom panel */}
-      <View style={[styles.bottom, { paddingBottom: insets.bottom + spacing.md }]}>
+      <ScrollView style={styles.bottom} contentContainerStyle={{ paddingBottom: insets.bottom + spacing.md }}>
+        {/* Residence type */}
+        <Text style={styles.sectionLabel}>Residence Type</Text>
+        <View style={styles.residenceRow}>
+          {residenceOptions.map(({ type, label, Icon }) => {
+            const selected = residenceType === type;
+            return (
+              <TouchableOpacity
+                key={type}
+                style={[styles.residenceCard, selected && styles.residenceCardSelected]}
+                onPress={() => setResidenceType(type)}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.residenceIconBox, selected && styles.residenceIconBoxSelected]}>
+                  <Icon size={22} color={selected ? colors.primary : colors.textMuted} />
+                </View>
+                <Text style={[styles.residenceLabel, selected && styles.residenceLabelSelected]}>{label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {/* Block / Building number */}
+        <Text style={[styles.sectionLabel, { marginTop: spacing.md }]}>
+          {residenceType === 'apartment' ? 'Building Number' : 'Block Number'}
+        </Text>
+        <TextInput
+          style={styles.blockInput}
+          placeholder={residenceType === 'apartment' ? 'e.g. Building A or Building 3' : 'e.g. Block 1 or Block B'}
+          placeholderTextColor={colors.textMuted}
+          value={blockNumber}
+          onChangeText={setBlockNumber}
+        />
+
+        {/* Pin coords */}
         {!pin ? (
           <View style={styles.noPinRow}>
             <MapPin size={18} color={colors.textMuted} />
@@ -134,7 +181,7 @@ export default function SetPickupLocationScreen() {
             ? <ActivityIndicator size="small" color="#fff" />
             : <Text style={styles.saveBtnText}>{t('pickup.confirm')}</Text>}
         </TouchableOpacity>
-      </View>
+      </ScrollView>
     </View>
   );
 }
@@ -164,12 +211,42 @@ const styles = StyleSheet.create({
     ...shadow.md,
   },
   bottom: {
-    backgroundColor: colors.card, padding: spacing.md,
-    borderTopWidth: 1, borderTopColor: colors.border, gap: spacing.sm,
+    backgroundColor: colors.card,
+    borderTopWidth: 1, borderTopColor: colors.border,
+    padding: spacing.md,
+    maxHeight: 320,
   },
-  noPinRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  sectionLabel: {
+    fontSize: font.xs, fontWeight: '700', color: colors.textMuted,
+    textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.sm,
+  },
+  residenceRow: { flexDirection: 'row', gap: spacing.sm },
+  residenceCard: {
+    flex: 1, alignItems: 'center', gap: 6, paddingVertical: spacing.md,
+    borderRadius: radius.md, borderWidth: 2, borderColor: colors.border,
+    backgroundColor: colors.bg,
+  },
+  residenceCardSelected: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryLight,
+  },
+  residenceIconBox: {
+    width: 44, height: 44, borderRadius: radius.sm,
+    backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center',
+  },
+  residenceIconBoxSelected: { backgroundColor: 'rgba(79,70,229,0.12)' },
+  residenceLabel: { fontSize: font.sm, fontWeight: '600', color: colors.textMuted },
+  residenceLabelSelected: { color: colors.primary },
+  blockInput: {
+    backgroundColor: colors.bg, borderRadius: radius.md,
+    borderWidth: 1.5, borderColor: colors.border,
+    paddingHorizontal: spacing.md, paddingVertical: 10,
+    fontSize: font.sm, color: colors.text,
+    marginBottom: spacing.md,
+  },
+  noPinRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
   noPinText: { fontSize: font.sm, color: colors.textMuted },
-  coordText: { fontSize: font.sm, color: colors.textSecondary, fontVariant: ['tabular-nums'] },
+  coordText: { fontSize: font.sm, color: colors.textSecondary, fontVariant: ['tabular-nums'], marginBottom: spacing.sm },
   saveBtn: {
     backgroundColor: colors.primary, borderRadius: radius.md,
     paddingVertical: 14, alignItems: 'center',

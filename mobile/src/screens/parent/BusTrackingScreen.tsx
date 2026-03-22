@@ -70,11 +70,13 @@ export default function BusTrackingScreen() {
   const navigation = useNavigation<any>();
   const colors = useColors();
   const [hasPickupLocation, setHasPickupLocation] = useState<boolean | null>(null);
+  const [pickupResidence, setPickupResidence] = useState<{ type: string | null; block: string | null }>({ type: null, block: null });
   const [staticDriverInfo, setStaticDriverInfo] = useState<DriverInfo | null>(null);
 
   useEffect(() => {
     parentApi.getPickupLocation().then(r => {
       setHasPickupLocation(!!(r.data.latitude && r.data.longitude));
+      setPickupResidence({ type: r.data.residenceType ?? null, block: r.data.blockNumber ?? null });
     }).catch(() => setHasPickupLocation(false));
   }, []);
   const [children, setChildren] = useState<Student[]>([]);
@@ -241,12 +243,16 @@ export default function BusTrackingScreen() {
             <View style={styles.mapContainer}>
               <MapErrorBoundary>
                 <MapView style={styles.map} provider={PROVIDER_DEFAULT} region={mapRegion}>
-                  <Marker coordinate={{ latitude: busData.location.latitude, longitude: busData.location.longitude }} title="Bus" />
+                  <Marker coordinate={{ latitude: busData.location.latitude, longitude: busData.location.longitude }} title="Bus" anchor={{ x: 0.5, y: 0.5 }}>
+                    <View style={styles.busMarker}>
+                      <Bus size={18} color="#fff" />
+                    </View>
+                  </Marker>
                   {busData.studentHome?.latitude && (
                     <Marker coordinate={{ latitude: busData.studentHome.latitude, longitude: busData.studentHome.longitude }} title="Home" pinColor="green" />
                   )}
                   {parentLocation && (
-                    <Marker coordinate={parentLocation} title="Your Location" pinColor="orange" />
+                    <Marker coordinate={parentLocation} title="Your Location" pinColor="red" />
                   )}
                 </MapView>
               </MapErrorBoundary>
@@ -263,7 +269,11 @@ export default function BusTrackingScreen() {
         <View style={{ flex: 1 }}>
           <Text style={styles.pickupLabel}>{t('pickup.profile_row')}</Text>
           <Text style={[styles.pickupSub, { color: hasPickupLocation ? colors.success : colors.warning }]}>
-            {hasPickupLocation === null ? '...' : hasPickupLocation ? t('pickup.set') : t('pickup.not_set')}
+            {hasPickupLocation === null
+              ? '...'
+              : hasPickupLocation
+                ? [pickupResidence.type ? (pickupResidence.type === 'apartment' ? 'Apartment' : 'House') : null, pickupResidence.block || null].filter(Boolean).join(' · ') || t('pickup.set')
+                : t('pickup.not_set')}
           </Text>
         </View>
         <ChevronRight size={16} color={colors.textMuted} />
@@ -326,4 +336,10 @@ const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').u
   driverAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center' },
   driverName: { fontSize: font.md, fontWeight: '600', color: colors.text },
   driverMeta: { fontSize: font.sm, color: colors.textSecondary, marginTop: 2 },
+  busMarker: {
+    backgroundColor: colors.primary, borderRadius: 20, padding: 6,
+    borderWidth: 2, borderColor: '#fff',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 3,
+    elevation: 4,
+  },
 });

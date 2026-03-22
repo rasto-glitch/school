@@ -64,6 +64,12 @@ export default function DriverStudentsScreen() {
               <Text style={styles.name}>{s.fullName}</Text>
               {s.classes?.name && <Text style={styles.meta}>{s.classes.name}</Text>}
               {s.homeAddress && <Text style={styles.meta}>{s.homeAddress}</Text>}
+              {((s.parents as any)?.residenceType || (s.parents as any)?.blockNumber) && (
+                <Text style={styles.meta}>
+                  {(s.parents as any).residenceType === 'apartment' ? 'Apartment' : (s.parents as any).residenceType === 'house' ? 'House' : ''}
+                  {(s.parents as any).blockNumber ? ` · ${(s.parents as any).blockNumber}` : ''}
+                </Text>
+              )}
               {s.parents?.fullName && <Text style={styles.parent}>{s.parents.fullName}</Text>}
               {s.parents?.phoneNumber && <Text style={[styles.parent, { color: colors.primary }]}>{s.parents.phoneNumber}</Text>}
             </View>

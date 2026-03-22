@@ -77,6 +77,8 @@ CREATE TABLE IF NOT EXISTS parents (
   email TEXT,
   latitude DOUBLE PRECISION,
   longitude DOUBLE PRECISION,
+  residence_type TEXT CHECK (residence_type IN ('apartment', 'house')),
+  block_number TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

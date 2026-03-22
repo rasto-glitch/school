@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Calendar, Plus, X, Clock, CheckCircle, XCircle, ChevronDown, ChevronUp } from 'lucide-react-native';
+import { Calendar, Plus, X, Clock, CheckCircle, XCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { parentApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
 import { useBadgeStore } from '../../store/badgeStore';
@@ -44,6 +44,8 @@ export default function AppointmentsScreen() {
   const [reason, setReason] = useState('');
   const [message, setMessage] = useState('');
   const [requestedDate, setRequestedDate] = useState('');
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [calViewDate, setCalViewDate] = useState(() => { const d = new Date(); d.setDate(1); return d; });
   const [submitting, setSubmitting] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -68,8 +70,8 @@ export default function AppointmentsScreen() {
     }
     setSubmitting(true);
     try {
-      await parentApi.createAppointment({ reason: reason.trim(), message: message.trim() || undefined, requestedDate: requestedDate.trim() || undefined });
-      setReason(''); setMessage(''); setRequestedDate('');
+      await parentApi.createAppointment({ reason: reason.trim(), message: message.trim() || undefined, requestedDate: requestedDate || undefined });
+      setReason(''); setMessage(''); setRequestedDate(''); setShowCalendar(false);
       setShowModal(false);
       load();
       Alert.alert('✓', t('appointments.toast_success'));
@@ -175,13 +177,70 @@ export default function AppointmentsScreen() {
           />
 
           <Text style={styles.fieldLabel}>{t('appointments.preferred_date')}</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="e.g. 2026-04-15"
-            placeholderTextColor={colors.textMuted}
-            value={requestedDate}
-            onChangeText={setRequestedDate}
-          />
+          <TouchableOpacity style={styles.dateBtn} onPress={() => setShowCalendar(v => !v)} activeOpacity={0.7}>
+            <Calendar size={16} color={requestedDate ? colors.primary : colors.textMuted} />
+            <Text style={[styles.dateBtnText, requestedDate ? { color: colors.primary, fontWeight: '600' } : { color: colors.textMuted }]}>
+              {requestedDate
+                ? new Date(requestedDate + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', year: 'numeric', month: 'long', day: 'numeric' })
+                : 'Select a date'}
+            </Text>
+            {requestedDate ? (
+              <TouchableOpacity onPress={() => { setRequestedDate(''); setShowCalendar(false); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <X size={14} color={colors.textMuted} />
+              </TouchableOpacity>
+            ) : (
+              <ChevronDown size={14} color={colors.textMuted} />
+            )}
+          </TouchableOpacity>
+
+          {showCalendar && (() => {
+            const year = calViewDate.getFullYear();
+            const month = calViewDate.getMonth();
+            const firstDay = new Date(year, month, 1).getDay();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            const today = new Date(); today.setHours(0, 0, 0, 0);
+            const prevMonth = () => setCalViewDate(new Date(year, month - 1, 1));
+            const nextMonth = () => setCalViewDate(new Date(year, month + 1, 1));
+            const monthLabel = calViewDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+            const cells: (number | null)[] = [...Array(firstDay).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
+            while (cells.length % 7 !== 0) cells.push(null);
+            return (
+              <View style={styles.calendar}>
+                <View style={styles.calHeader}>
+                  <TouchableOpacity onPress={prevMonth} style={styles.calNav}><ChevronLeft size={16} color={colors.text} /></TouchableOpacity>
+                  <Text style={styles.calMonth}>{monthLabel}</Text>
+                  <TouchableOpacity onPress={nextMonth} style={styles.calNav}><ChevronRight size={16} color={colors.text} /></TouchableOpacity>
+                </View>
+                <View style={styles.calDayRow}>
+                  {['Su','Mo','Tu','We','Th','Fr','Sa'].map(d => (
+                    <Text key={d} style={styles.calDayLabel}>{d}</Text>
+                  ))}
+                </View>
+                {Array.from({ length: cells.length / 7 }, (_, row) => (
+                  <View key={row} style={styles.calWeekRow}>
+                    {cells.slice(row * 7, row * 7 + 7).map((day, col) => {
+                      if (!day) return <View key={col} style={styles.calCell} />;
+                      const thisDate = new Date(year, month, day);
+                      const isPast = thisDate < today;
+                      const iso = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                      const selected = requestedDate === iso;
+                      return (
+                        <TouchableOpacity
+                          key={col}
+                          style={[styles.calCell, selected && styles.calCellSelected, isPast && styles.calCellPast]}
+                          onPress={() => { if (!isPast) { setRequestedDate(iso); setShowCalendar(false); } }}
+                          disabled={isPast}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={[styles.calDayNum, selected && styles.calDayNumSelected, isPast && styles.calDayNumPast]}>{day}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                ))}
+              </View>
+            );
+          })()}
 
           <TouchableOpacity style={styles.submitBtn} onPress={handleSubmit} disabled={submitting}>
             <Text style={styles.submitText}>{submitting ? t('common.loading') : t('appointments.submit')}</Text>
@@ -231,4 +290,27 @@ const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').u
     padding: spacing.md, alignItems: 'center', marginTop: spacing.lg,
   },
   submitText: { fontSize: font.md, fontWeight: '700', color: '#fff' },
+  dateBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    backgroundColor: colors.card, borderRadius: radius.md,
+    padding: spacing.md, borderWidth: 1, borderColor: colors.border,
+  },
+  dateBtnText: { flex: 1, fontSize: font.md, color: colors.textMuted },
+  calendar: {
+    backgroundColor: colors.card, borderRadius: radius.md,
+    borderWidth: 1, borderColor: colors.border,
+    padding: spacing.sm, marginTop: spacing.xs,
+  },
+  calHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
+  calNav: { padding: 6 },
+  calMonth: { fontSize: font.sm, fontWeight: '700', color: colors.text },
+  calDayRow: { flexDirection: 'row', marginBottom: 4 },
+  calDayLabel: { flex: 1, textAlign: 'center', fontSize: 10, fontWeight: '700', color: colors.textMuted, textTransform: 'uppercase' },
+  calWeekRow: { flexDirection: 'row' },
+  calCell: { flex: 1, aspectRatio: 1, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm },
+  calCellSelected: { backgroundColor: colors.primary },
+  calCellPast: { opacity: 0.3 },
+  calDayNum: { fontSize: font.sm, color: colors.text },
+  calDayNumSelected: { color: '#fff', fontWeight: '700' },
+  calDayNumPast: { color: colors.textMuted },
 });
