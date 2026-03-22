@@ -1,11 +1,11 @@
 import { useEffect, useState, useCallback, Component, useMemo } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, TextInput } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { io as socketIO } from 'socket.io-client';
-import { RefreshCw, User, AlertCircle, Bus, MapPin, ChevronRight } from 'lucide-react-native';
+import { RefreshCw, User, AlertCircle, Bus, MapPin, ChevronRight, Building2, Home, Check } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { parentApi } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
@@ -69,16 +69,16 @@ export default function BusTrackingScreen() {
   const { token } = useAuthStore();
   const navigation = useNavigation<any>();
   const colors = useColors();
-  const [hasPickupLocation, setHasPickupLocation] = useState<boolean | null>(null);
-  const [pickupResidence, setPickupResidence] = useState<{ type: string | null; block: string | null }>({ type: null, block: null });
-  const [staticDriverInfo, setStaticDriverInfo] = useState<DriverInfo | null>(null);
 
-  useEffect(() => {
-    parentApi.getPickupLocation().then(r => {
-      setHasPickupLocation(!!(r.data.latitude && r.data.longitude));
-      setPickupResidence({ type: r.data.residenceType ?? null, block: r.data.blockNumber ?? null });
-    }).catch(() => setHasPickupLocation(false));
-  }, []);
+  // Pickup location + residence state
+  const [hasPickupLocation, setHasPickupLocation] = useState<boolean | null>(null);
+  const [pickupCoords, setPickupCoords] = useState<{ lat: number | null; lng: number | null }>({ lat: null, lng: null });
+  const [residenceType, setResidenceType] = useState<'apartment' | 'house' | null>(null);
+  const [blockNumber, setBlockNumber] = useState('');
+  const [residenceDirty, setResidenceDirty] = useState(false);
+  const [savingResidence, setSavingResidence] = useState(false);
+
+  const [staticDriverInfo, setStaticDriverInfo] = useState<DriverInfo | null>(null);
   const [children, setChildren] = useState<Student[]>([]);
   const [selectedChild, setSelectedChild] = useState('');
   const [busData, setBusData] = useState<BusData | null>(null);
@@ -88,6 +88,16 @@ export default function BusTrackingScreen() {
   const [busSpeed, setBusSpeed] = useState(0);
 
   useEffect(() => {
+    parentApi.getPickupLocation().then(r => {
+      const { latitude, longitude, residenceType: rt, blockNumber: bn } = r.data;
+      setHasPickupLocation(!!(latitude && longitude));
+      setPickupCoords({ lat: latitude ?? null, lng: longitude ?? null });
+      setResidenceType((rt as 'apartment' | 'house' | null) ?? null);
+      setBlockNumber(bn ?? '');
+    }).catch(() => setHasPickupLocation(false));
+  }, []);
+
+  useEffect(() => {
     parentApi.getChildren().then(r => {
       const kids = r.data || [];
       setChildren(kids);
@@ -95,7 +105,6 @@ export default function BusTrackingScreen() {
     });
   }, []);
 
-  // Fetch static driver info whenever selected child changes
   useEffect(() => {
     if (!selectedChild) return;
     parentApi.getDriverInfo(selectedChild)
@@ -103,7 +112,6 @@ export default function BusTrackingScreen() {
       .catch(() => setStaticDriverInfo(null));
   }, [selectedChild]);
 
-  // Get parent's location every 5 minutes
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
     (async () => {
@@ -136,7 +144,6 @@ export default function BusTrackingScreen() {
 
   useEffect(() => { reset(); fetchBus(); const iv = setInterval(fetchBus, 30000); return () => clearInterval(iv); }, [fetchBus, reset]);
 
-  // Socket
   useEffect(() => {
     const driverId = busData?.location?.driverId;
     if (!driverId) return;
@@ -152,6 +159,23 @@ export default function BusTrackingScreen() {
     });
     return () => { socket.disconnect(); };
   }, [busData?.location?.driverId, reset, token]);
+
+  const handleSaveResidence = async () => {
+    setSavingResidence(true);
+    try {
+      await parentApi.updatePickupLocation(
+        pickupCoords.lat ?? 0,
+        pickupCoords.lng ?? 0,
+        residenceType ?? undefined,
+        blockNumber.trim() || undefined,
+      );
+      setResidenceDirty(false);
+    } catch {
+      Alert.alert('Error', 'Could not save residence info. Please try again.');
+    } finally {
+      setSavingResidence(false);
+    }
+  };
 
   const isActive = !!busData?.location?.isDriving;
   const driverInfo: DriverInfo | null = busData?.location?.drivers || staticDriverInfo;
@@ -199,6 +223,29 @@ export default function BusTrackingScreen() {
             </TouchableOpacity>
           ))}
         </ScrollView>
+      )}
+
+      {/* Driver info — always visible when available */}
+      {driverInfo && (
+        <View style={styles.driverCard}>
+          <Text style={styles.sectionLabel}>{t('bus.driver_info')}</Text>
+          <View style={styles.driverRow}>
+            <View style={styles.driverAvatar}>
+              <User size={18} color={colors.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.driverName}>{driverInfo.fullName}</Text>
+              {driverInfo.licenseNumber && <Text style={styles.driverMeta}>{t('bus.license')}: {driverInfo.licenseNumber}</Text>}
+              {driverInfo.phoneNumber && <Text style={[styles.driverMeta, { color: colors.primary }]}>{driverInfo.phoneNumber}</Text>}
+            </View>
+            {driverInfo.buses?.busNumber && (
+              <View style={styles.busBadge}>
+                <Bus size={12} color={colors.primary} />
+                <Text style={styles.busBadgeText}>#{driverInfo.buses.busNumber}</Text>
+              </View>
+            )}
+          </View>
+        </View>
       )}
 
       {/* Absent */}
@@ -261,7 +308,7 @@ export default function BusTrackingScreen() {
         </>
       )}
 
-      {/* Pickup location */}
+      {/* Pickup location (GPS pin) */}
       <TouchableOpacity style={styles.pickupRow} onPress={() => navigation.navigate('SetPickupLocation')} activeOpacity={0.7}>
         <View style={[styles.pickupIcon, { backgroundColor: hasPickupLocation ? colors.success + '22' : colors.warning + '22' }]}>
           <MapPin size={16} color={hasPickupLocation ? colors.success : colors.warning} />
@@ -269,32 +316,54 @@ export default function BusTrackingScreen() {
         <View style={{ flex: 1 }}>
           <Text style={styles.pickupLabel}>{t('pickup.profile_row')}</Text>
           <Text style={[styles.pickupSub, { color: hasPickupLocation ? colors.success : colors.warning }]}>
-            {hasPickupLocation === null
-              ? '...'
-              : hasPickupLocation
-                ? [pickupResidence.type ? (pickupResidence.type === 'apartment' ? 'Apartment' : 'House') : null, pickupResidence.block || null].filter(Boolean).join(' · ') || t('pickup.set')
-                : t('pickup.not_set')}
+            {hasPickupLocation === null ? '...' : hasPickupLocation ? t('pickup.set') : t('pickup.not_set')}
           </Text>
         </View>
         <ChevronRight size={16} color={colors.textMuted} />
       </TouchableOpacity>
 
-      {/* Driver info */}
-      {driverInfo && (
-        <View style={styles.driverCard}>
-          <Text style={styles.sectionLabel}>{t('bus.driver_info')}</Text>
-          <View style={styles.driverRow}>
-            <View style={styles.driverAvatar}>
-              <User size={18} color={colors.primary} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.driverName}>{driverInfo.fullName}</Text>
-              {driverInfo.licenseNumber && <Text style={styles.driverMeta}>{t('bus.license')}: {driverInfo.licenseNumber}</Text>}
-              {driverInfo.phoneNumber && <Text style={[styles.driverMeta, { color: colors.primary }]}>{driverInfo.phoneNumber}</Text>}
-            </View>
-          </View>
+      {/* Residence info — inline */}
+      <View style={styles.residenceCard}>
+        <Text style={styles.sectionLabel}>Residence Type</Text>
+        <View style={styles.residenceRow}>
+          {([
+            { type: 'apartment' as const, label: 'Apartment', Icon: Building2 },
+            { type: 'house' as const, label: 'House', Icon: Home },
+          ]).map(({ type, label, Icon }) => {
+            const selected = residenceType === type;
+            return (
+              <TouchableOpacity
+                key={type}
+                style={[styles.residenceOption, selected && styles.residenceOptionSelected]}
+                onPress={() => { setResidenceType(type); setResidenceDirty(true); }}
+                activeOpacity={0.7}
+              >
+                <Icon size={20} color={selected ? colors.primary : colors.textMuted} />
+                <Text style={[styles.residenceOptionLabel, selected && { color: colors.primary }]}>{label}</Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
-      )}
+
+        <Text style={[styles.sectionLabel, { marginTop: spacing.md }]}>
+          {residenceType === 'apartment' ? 'Building Number' : 'Block Number'}
+        </Text>
+        <TextInput
+          style={styles.blockInput}
+          placeholder={residenceType === 'apartment' ? 'e.g. Building A or Building 3' : 'e.g. Block 1 or Block B'}
+          placeholderTextColor={colors.textMuted}
+          value={blockNumber}
+          onChangeText={v => { setBlockNumber(v); setResidenceDirty(true); }}
+        />
+
+        {residenceDirty && (
+          <TouchableOpacity style={styles.saveResidenceBtn} onPress={handleSaveResidence} disabled={savingResidence} activeOpacity={0.8}>
+            {savingResidence
+              ? <ActivityIndicator size="small" color="#fff" />
+              : <><Check size={15} color="#fff" /><Text style={styles.saveResidenceBtnText}>Save</Text></>}
+          </TouchableOpacity>
+        )}
+      </View>
     </ScrollView>
   );
 }
@@ -310,6 +379,14 @@ const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').u
   chipActive: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
   chipText: { fontSize: font.sm, color: colors.textSecondary, fontWeight: '500' },
   chipTextActive: { color: colors.primary, fontWeight: '700' },
+  driverCard: { backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm, ...shadow.sm },
+  sectionLabel: { fontSize: font.xs, fontWeight: '700', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.sm },
+  driverRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  driverAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center' },
+  driverName: { fontSize: font.md, fontWeight: '600', color: colors.text },
+  driverMeta: { fontSize: font.sm, color: colors.textSecondary, marginTop: 2 },
+  busBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.primaryLight, borderRadius: radius.full, paddingHorizontal: 8, paddingVertical: 4 },
+  busBadgeText: { fontSize: font.xs, fontWeight: '700', color: colors.primary },
   absentCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.warningLight, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm, borderWidth: 1, borderColor: '#FDE68A' },
   absentText: { color: '#92400E', fontSize: font.sm, flex: 1 },
   inactiveCard: { backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.xl, alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm, borderWidth: 1, borderColor: colors.border },
@@ -330,12 +407,27 @@ const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').u
   pickupIcon: { width: 32, height: 32, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
   pickupLabel: { fontSize: font.sm, fontWeight: '600', color: colors.text },
   pickupSub: { fontSize: font.xs, fontWeight: '600', marginTop: 1 },
-  driverCard: { backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, ...shadow.sm },
-  sectionLabel: { fontSize: font.xs, fontWeight: '700', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.sm },
-  driverRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  driverAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center' },
-  driverName: { fontSize: font.md, fontWeight: '600', color: colors.text },
-  driverMeta: { fontSize: font.sm, color: colors.textSecondary, marginTop: 2 },
+  residenceCard: { backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm, ...shadow.sm },
+  residenceRow: { flexDirection: 'row', gap: spacing.sm },
+  residenceOption: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
+    paddingVertical: 12, borderRadius: radius.md, borderWidth: 2, borderColor: colors.border,
+  },
+  residenceOptionSelected: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
+  residenceOptionLabel: { fontSize: font.sm, fontWeight: '600', color: colors.textMuted },
+  blockInput: {
+    backgroundColor: colors.bg, borderRadius: radius.md,
+    borderWidth: 1.5, borderColor: colors.border,
+    paddingHorizontal: spacing.md, paddingVertical: 10,
+    fontSize: font.sm, color: colors.text,
+    marginBottom: spacing.sm,
+  },
+  saveResidenceBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    backgroundColor: colors.primary, borderRadius: radius.md,
+    paddingVertical: 10, marginTop: spacing.xs,
+  },
+  saveResidenceBtnText: { fontSize: font.sm, fontWeight: '700', color: '#fff' },
   busMarker: {
     backgroundColor: colors.primary, borderRadius: 20, padding: 6,
     borderWidth: 2, borderColor: '#fff',
