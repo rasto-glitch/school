@@ -16,6 +16,10 @@ import NotificationsScreen from '../screens/parent/NotificationsScreen';
 import AppointmentsScreen from '../screens/parent/AppointmentsScreen';
 import GradesScreen from '../screens/parent/GradesScreen';
 import ReportDetailScreen from '../screens/parent/ReportDetailScreen';
+import HomeworkDetailScreen from '../screens/parent/HomeworkDetailScreen';
+import AssignmentDetailScreen from '../screens/parent/AssignmentDetailScreen';
+import AnnouncementDetailScreen from '../screens/parent/AnnouncementDetailScreen';
+import type { Homework, Announcement } from '../types';
 
 export type RootStackParamList = {
   SchoolPicker: undefined;
@@ -32,6 +36,9 @@ export type RootStackParamList = {
   ReportDetail: { report: { id: string; subject: string; attendanceNotes?: string; behaviorNotes?: string; teacherNotes?: string; quizMarks?: number; examMarks?: number; reportDate?: string; createdAt: string; students?: { fullName: string }; teachers?: { fullName: string } } };
   Appointments: undefined;
   Grades: undefined;
+  HomeworkDetail: { homework: Homework };
+  AssignmentDetail: { assignment: { id: string; title: string; description?: string; subject?: string; dueDate?: string; submissionStatus?: string; grade?: number | null; createdAt: string; classes?: { name: string }; students?: { fullName: string } } };
+  AnnouncementDetail: { announcement: Announcement };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -108,6 +115,21 @@ export default function Navigation() {
               name="Grades"
               component={GradesScreen}
               options={{ headerShown: true, headerTitle: 'Grades', headerBackTitle: 'Back' }}
+            />
+            <Stack.Screen
+              name="HomeworkDetail"
+              component={HomeworkDetailScreen}
+              options={{ headerShown: true, headerTitle: 'Homework', headerBackTitle: 'Back' }}
+            />
+            <Stack.Screen
+              name="AssignmentDetail"
+              component={AssignmentDetailScreen}
+              options={{ headerShown: true, headerTitle: 'Assignment', headerBackTitle: 'Back' }}
+            />
+            <Stack.Screen
+              name="AnnouncementDetail"
+              component={AnnouncementDetailScreen}
+              options={{ headerShown: true, headerTitle: 'Announcement', headerBackTitle: 'Back' }}
             />
           </>
         )}

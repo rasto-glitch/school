@@ -1,11 +1,14 @@
 import { useEffect, useState, useMemo } from 'react';
-import { View, Text, ScrollView, StyleSheet, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, ActivityIndicator, RefreshControl, TouchableOpacity } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ClipboardList, Calendar } from 'lucide-react-native';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { ClipboardList, Calendar, ChevronRight } from 'lucide-react-native';
 import { parentApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
 import { spacing, radius, shadow, font } from '../../theme';
+import type { RootStackParamList } from '../../navigation';
 
 interface Assignment {
   id: string;
@@ -13,8 +16,11 @@ interface Assignment {
   description?: string;
   subject?: string;
   dueDate?: string;
+  submissionStatus?: string;
+  grade?: number | null;
   createdAt: string;
   classes?: { name: string };
+  students?: { fullName: string };
 }
 
 export default function AssignmentsScreen() {
@@ -22,6 +28,7 @@ export default function AssignmentsScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -54,7 +61,12 @@ export default function AssignmentsScreen() {
         assignments.map(item => {
           const overdue = item.dueDate ? new Date(item.dueDate) < new Date() : false;
           return (
-            <View key={item.id} style={styles.card}>
+            <TouchableOpacity
+              key={item.id}
+              style={styles.card}
+              activeOpacity={0.7}
+              onPress={() => navigation.navigate('AssignmentDetail', { assignment: item })}
+            >
               <View style={styles.cardRow}>
                 <View style={styles.iconBox}>
                   <ClipboardList size={18} color="#16A34A" />
@@ -78,8 +90,9 @@ export default function AssignmentsScreen() {
                     </View>
                   )}
                 </View>
+                <ChevronRight size={16} color={colors.textMuted} style={{ alignSelf: 'center' }} />
               </View>
-            </View>
+            </TouchableOpacity>
           );
         })
       )}

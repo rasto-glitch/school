@@ -1,18 +1,22 @@
 import { useEffect, useState, useMemo } from 'react';
-import { View, Text, ScrollView, StyleSheet, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, ActivityIndicator, RefreshControl, TouchableOpacity } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BookOpen, Calendar } from 'lucide-react-native';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { BookOpen, Calendar, ChevronRight } from 'lucide-react-native';
 import { parentApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
 import { spacing, radius, shadow, font } from '../../theme';
 import type { Homework } from '../../types';
+import type { RootStackParamList } from '../../navigation';
 
 export default function HomeworkScreen() {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [homework, setHomework] = useState<Homework[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -45,7 +49,12 @@ export default function HomeworkScreen() {
         homework.map(item => {
           const overdue = item.dueDate ? new Date(item.dueDate) < new Date() : false;
           return (
-            <View key={item.id} style={styles.card}>
+            <TouchableOpacity
+              key={item.id}
+              style={styles.card}
+              activeOpacity={0.7}
+              onPress={() => navigation.navigate('HomeworkDetail', { homework: item })}
+            >
               <View style={styles.cardRow}>
                 <View style={styles.iconBox}>
                   <BookOpen size={18} color={colors.primary} />
@@ -69,8 +78,9 @@ export default function HomeworkScreen() {
                     </View>
                   )}
                 </View>
+                <ChevronRight size={16} color={colors.textMuted} style={{ alignSelf: 'center' }} />
               </View>
-            </View>
+            </TouchableOpacity>
           );
         })
       )}

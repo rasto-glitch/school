@@ -1,53 +1,123 @@
-import { useEffect, useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, ActivityIndicator } from 'react-native';
+import { useEffect, useState, useMemo } from 'react';
+import { View, Text, ScrollView, StyleSheet, ActivityIndicator, RefreshControl, TouchableOpacity } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Megaphone, ChevronRight } from 'lucide-react-native';
 import { parentApi } from '../../services/api';
+import { useColors } from '../../store/themeStore';
+import { spacing, radius, shadow, font } from '../../theme';
 import type { Announcement } from '../../types';
+import type { RootStackParamList } from '../../navigation';
 
 export default function AnnouncementsScreen() {
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [items, setItems] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    parentApi.getAnnouncements()
-      .then(r => setItems(r.data || []))
-      .finally(() => setLoading(false));
-  }, []);
+  const load = () => parentApi.getAnnouncements().then(r => setItems(r.data || []));
+
+  useEffect(() => { load().finally(() => setLoading(false)); }, []);
+
+  const onRefresh = () => { setRefreshing(true); load().finally(() => setRefreshing(false)); };
+
+  const latest = items[0];
+  const rest = items.slice(1);
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.md }]}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+    >
       <View style={styles.header}>
         <Text style={styles.title}>{t('announcements.title')}</Text>
         <Text style={styles.subtitle}>{t('announcements.subtitle')}</Text>
       </View>
 
       {loading ? (
-        <ActivityIndicator color="#4F46E5" style={{ marginTop: 40 }} />
+        <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
       ) : items.length === 0 ? (
-        <Text style={styles.empty}>{t('announcements.no_announcements')}</Text>
+        <View style={styles.emptyBox}>
+          <Megaphone size={40} color={colors.textMuted} />
+          <Text style={styles.emptyText}>{t('announcements.no_announcements')}</Text>
+        </View>
       ) : (
-        items.map(item => (
-          <View key={item.id} style={styles.card}>
-            <Text style={styles.cardTitle}>{item.title}</Text>
-            <Text style={styles.cardContent}>{item.content}</Text>
-            <Text style={styles.cardDate}>{new Date(item.createdAt).toLocaleDateString()}</Text>
-          </View>
-        ))
+        <>
+          {/* Latest — hero card */}
+          {latest && (
+            <TouchableOpacity
+              style={styles.heroCard}
+              activeOpacity={0.85}
+              onPress={() => navigation.navigate('AnnouncementDetail', { announcement: latest })}
+            >
+              <View style={styles.heroTopRow}>
+                <Megaphone size={16} color="rgba(255,255,255,0.8)" />
+                <Text style={styles.heroLabel}>Latest Announcement</Text>
+              </View>
+              <Text style={styles.heroTitle}>{latest.title}</Text>
+              <Text style={styles.heroContent} numberOfLines={3}>{latest.content}</Text>
+              <Text style={styles.heroDate}>{new Date(latest.createdAt).toLocaleDateString()}</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Older announcements */}
+          {rest.length > 0 && (
+            <>
+              <Text style={styles.sectionTitle}>Previous Announcements</Text>
+              {rest.map(item => (
+                <TouchableOpacity
+                  key={item.id}
+                  style={styles.card}
+                  activeOpacity={0.7}
+                  onPress={() => navigation.navigate('AnnouncementDetail', { announcement: item })}
+                >
+                  <View style={styles.cardRow}>
+                    <View style={styles.iconBox}>
+                      <Megaphone size={16} color="#9333EA" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.cardTitle}>{item.title}</Text>
+                      <Text style={styles.cardContent} numberOfLines={2}>{item.content}</Text>
+                      <Text style={styles.cardDate}>{new Date(item.createdAt).toLocaleDateString()}</Text>
+                    </View>
+                    <ChevronRight size={16} color={colors.textMuted} style={{ alignSelf: 'center' }} />
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </>
+          )}
+        </>
       )}
     </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F3F4F6' },
-  content: { padding: 20, paddingBottom: 40 },
-  header: { marginBottom: 20 },
-  title: { fontSize: 22, fontWeight: '700', color: '#111827' },
-  subtitle: { fontSize: 13, color: '#6B7280', marginTop: 2 },
-  empty: { textAlign: 'center', color: '#9CA3AF', marginTop: 40, fontSize: 14 },
-  card: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 12, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 8, elevation: 2 },
-  cardTitle: { fontSize: 15, fontWeight: '700', color: '#111827', marginBottom: 8 },
-  cardContent: { fontSize: 14, color: '#374151', lineHeight: 20 },
-  cardDate: { fontSize: 11, color: '#9CA3AF', marginTop: 10 },
+const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.bg },
+  content: { padding: spacing.md, paddingBottom: 40 },
+  header: { marginBottom: spacing.lg },
+  title: { fontSize: font.xxl, fontWeight: '700', color: colors.text },
+  subtitle: { fontSize: font.sm, color: colors.textMuted, marginTop: 2 },
+  emptyBox: { alignItems: 'center', marginTop: 60, gap: spacing.md },
+  emptyText: { fontSize: font.md, color: colors.textMuted },
+  heroCard: { backgroundColor: colors.primary, borderRadius: radius.lg, padding: spacing.lg, marginBottom: spacing.lg },
+  heroTopRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
+  heroLabel: { fontSize: font.sm, color: 'rgba(255,255,255,0.8)', fontWeight: '500' },
+  heroTitle: { fontSize: font.xl, fontWeight: '800', color: '#fff', marginBottom: spacing.sm },
+  heroContent: { fontSize: font.sm, color: 'rgba(255,255,255,0.85)', lineHeight: 20, marginBottom: spacing.sm },
+  heroDate: { fontSize: font.xs, color: 'rgba(255,255,255,0.6)' },
+  sectionTitle: { fontSize: font.sm, fontWeight: '700', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.sm },
+  card: { backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm, ...shadow.sm },
+  cardRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  iconBox: { width: 36, height: 36, borderRadius: radius.sm, backgroundColor: '#FAF5FF', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  cardTitle: { fontSize: font.md, fontWeight: '600', color: colors.text, marginBottom: 3 },
+  cardContent: { fontSize: font.sm, color: colors.textSecondary, lineHeight: 19 },
+  cardDate: { fontSize: font.xs, color: colors.textMuted, marginTop: 4 },
 });
