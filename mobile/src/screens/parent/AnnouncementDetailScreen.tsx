@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Linking } from 'react-native';
 import { useRoute } from '@react-navigation/native';
-import { Megaphone } from 'lucide-react-native';
+import { Megaphone, Paperclip } from 'lucide-react-native';
 import { useColors } from '../../store/themeStore';
 import { spacing, radius, font } from '../../theme';
 import type { Announcement } from '../../types';
@@ -37,6 +37,16 @@ export default function AnnouncementDetailScreen() {
       <View style={styles.contentCard}>
         <Text style={styles.contentText}>{announcement.content}</Text>
       </View>
+
+      {/* Attachment */}
+      {announcement.attachmentUrl && (
+        <View style={styles.attachCard}>
+          <TouchableOpacity style={styles.attachBtn} onPress={() => Linking.openURL(announcement.attachmentUrl!)}>
+            <Paperclip size={16} color={colors.primary} />
+            <Text style={styles.attachText}>Download Attachment</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </ScrollView>
   );
 }
@@ -54,8 +64,9 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   audienceBadgeText: { fontSize: font.xs, color: '#fff', fontWeight: '600' },
   heroTitle: { fontSize: font.xl, fontWeight: '800', color: '#fff', marginBottom: spacing.sm },
   heroDate: { fontSize: font.xs, color: 'rgba(255,255,255,0.6)' },
-  contentCard: {
-    backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md,
-  },
+  contentCard: { backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md },
   contentText: { fontSize: font.md, color: colors.text, lineHeight: 24 },
+  attachCard: { marginTop: spacing.md },
+  attachBtn: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.primaryLight, borderRadius: radius.md, padding: spacing.sm, alignSelf: 'flex-start' },
+  attachText: { fontSize: font.sm, fontWeight: '600', color: colors.primary },
 });

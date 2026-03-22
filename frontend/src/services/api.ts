@@ -82,7 +82,9 @@ export const teacherApi = {
       data instanceof FormData ? { headers: { 'Content-Type': 'multipart/form-data' } } : {}),
   deleteHomework: (id: string) => api.delete(`/teacher/homework/${id}`),
   getAssignments: (params?: Record<string, string>) => api.get('/teacher/assignments', { params }),
-  createAssignment: (data: object) => api.post('/teacher/assignments', data),
+  createAssignment: (data: FormData | object) =>
+    api.post('/teacher/assignments', data,
+      data instanceof FormData ? { headers: { 'Content-Type': 'multipart/form-data' } } : {}),
   deleteAssignment: (id: string) => api.delete(`/teacher/assignments/${id}`),
   createReport: (data: object) => api.post('/teacher/reports', data),
   getGrades: (studentId: string) => api.get('/teacher/grades', { params: { studentId } }),
@@ -139,7 +141,9 @@ export const adminApi = {
   respondToAppointment: (id: string, data: object) => api.put(`/admin/appointments/${id}`, data),
   sendNotification: (data: object) => api.post('/admin/notifications', data),
   getAnnouncements: () => api.get('/admin/announcements'),
-  createAnnouncement: (data: object) => api.post('/admin/announcements', data),
+  createAnnouncement: (data: FormData | object) =>
+    api.post('/admin/announcements', data,
+      data instanceof FormData ? { headers: { 'Content-Type': 'multipart/form-data' } } : {}),
   deleteAnnouncement: (id: string) => api.delete(`/admin/announcements/${id}`),
   getSettings: () => api.get('/admin/settings'),
   updateSettings: (data: object) => api.put('/admin/settings', data),

@@ -135,6 +135,21 @@ export async function createAssignment(req: AuthRequest, res: Response): Promise
   const { schoolId, userId } = req.user!;
   const { classId, studentId, title, description, dueDate, subject } = req.body;
 
+  let attachmentUrl: string | null = null;
+  const file = (req as any).file;
+  if (file) {
+    const ext = file.originalname.includes('.') ? '.' + file.originalname.split('.').pop() : '';
+    const storagePath = `${schoolId}/assignments/${Date.now()}${ext}`;
+    const bucket = process.env.SUPABASE_STORAGE_BUCKET || 'homework-attachments';
+    const { data: uploadData, error: uploadErr } = await supabase.storage
+      .from(bucket)
+      .upload(storagePath, file.buffer, { contentType: file.mimetype, upsert: false });
+    if (!uploadErr && uploadData) {
+      const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(uploadData.path);
+      attachmentUrl = urlData.publicUrl;
+    }
+  }
+
   const { data: teacher } = await supabase.from('teachers').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
   if (!teacher) { res.status(404).json({ error: 'Teacher not found' }); return; }
 
@@ -147,6 +162,7 @@ export async function createAssignment(req: AuthRequest, res: Response): Promise
     description,
     due_date: dueDate,
     subject,
+    attachment_url: attachmentUrl,
   }).select().single();
 
   if (error) { res.status(500).json({ error: error.message }); return; }

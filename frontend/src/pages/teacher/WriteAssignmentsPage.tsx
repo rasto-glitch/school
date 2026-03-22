@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'react-toastify';
-import { ClipboardList, Trash2 } from 'lucide-react';
+import { ClipboardList, Trash2, Paperclip, X } from 'lucide-react';
 import { teacherApi } from '../../services/api';
 import { useTeacherProfile } from '../../hooks/useTeacherProfile';
 import SubjectBadge from '../../components/common/SubjectBadge';
@@ -24,6 +24,8 @@ export default function WriteAssignmentsPage() {
   const { register, handleSubmit, reset, watch, setValue } = useForm<{
     classId: string; studentId: string; title: string; description: string; dueDate: string; subject: string;
   }>();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [attachedFile, setAttachedFile] = useState<File | null>(null);
 
   const watchedClass = watch('classId');
 
@@ -45,9 +47,18 @@ export default function WriteAssignmentsPage() {
   const onSubmit = async (data: any) => {
     setLoading(true);
     try {
-      await teacherApi.createAssignment(data);
+      let payload: FormData | object = data;
+      if (attachedFile) {
+        const fd = new FormData();
+        Object.entries(data).forEach(([k, v]) => { if (v != null && v !== '') fd.append(k, String(v)); });
+        fd.append('attachment', attachedFile);
+        payload = fd;
+      }
+      await teacherApi.createAssignment(payload);
       toast.success('Assignment posted!');
       reset();
+      setAttachedFile(null);
+      if (fileRef.current) fileRef.current.value = '';
       teacherApi.getAssignments().then(r => setAssignments(r.data || []));
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Failed to post assignment');
@@ -83,6 +94,24 @@ export default function WriteAssignmentsPage() {
               <textarea className="input-field min-h-[100px] resize-none" placeholder="Assignment description..." {...register('description')} />
             </div>
             <Input label="Due Date" type="date" {...register('dueDate')} />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Attachment (optional)</label>
+              <input ref={fileRef} type="file" className="hidden" onChange={e => setAttachedFile(e.target.files?.[0] || null)} />
+              {attachedFile ? (
+                <div className="flex items-center gap-2 p-2.5 bg-primary-50 border border-primary-200 rounded-xl text-sm">
+                  <Paperclip className="w-4 h-4 text-primary-600 flex-shrink-0" />
+                  <span className="flex-1 truncate text-primary-700 font-medium">{attachedFile.name}</span>
+                  <button type="button" onClick={() => { setAttachedFile(null); if (fileRef.current) fileRef.current.value = ''; }}>
+                    <X className="w-4 h-4 text-primary-400 hover:text-primary-600" />
+                  </button>
+                </div>
+              ) : (
+                <button type="button" onClick={() => fileRef.current?.click()}
+                  className="flex items-center gap-2 px-3 py-2 border border-dashed border-gray-300 rounded-xl text-sm text-gray-500 hover:border-primary-400 hover:text-primary-600 transition-colors w-full">
+                  <Paperclip className="w-4 h-4" /> Attach a file
+                </button>
+              )}
+            </div>
             <Button type="submit" loading={loading} fullWidth icon={<ClipboardList className="w-4 h-4" />}>Post Assignment</Button>
           </form>
         </Card>

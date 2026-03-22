@@ -746,7 +746,22 @@ export async function getAnnouncements(req: AuthRequest, res: Response): Promise
 
 export async function createAnnouncement(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId, userId } = req.user!;
-  const { title, content, targetAudience, imageUrl } = req.body;
+  const { title, content, targetAudience } = req.body;
+
+  let attachmentUrl: string | null = null;
+  const file = (req as any).file;
+  if (file) {
+    const ext = file.originalname.includes('.') ? '.' + file.originalname.split('.').pop() : '';
+    const storagePath = `${schoolId}/announcements/${Date.now()}${ext}`;
+    const bucket = process.env.SUPABASE_STORAGE_BUCKET || 'homework-attachments';
+    const { data: uploadData, error: uploadErr } = await supabase.storage
+      .from(bucket)
+      .upload(storagePath, file.buffer, { contentType: file.mimetype, upsert: false });
+    if (!uploadErr && uploadData) {
+      const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(uploadData.path);
+      attachmentUrl = urlData.publicUrl;
+    }
+  }
 
   const { data, error } = await supabase.from('announcements').insert({
     school_id: schoolId,
@@ -754,7 +769,7 @@ export async function createAnnouncement(req: AuthRequest, res: Response): Promi
     content,
     target_audience: targetAudience || 'all',
     created_by: userId,
-    image_url: imageUrl || null,
+    attachment_url: attachmentUrl,
   }).select().single();
 
   if (error) { res.status(500).json({ error: error.message }); return; }

@@ -94,19 +94,14 @@ export default function NotificationsScreen() {
           <View key={group.label}>
             <Text style={styles.dayLabel}>{group.label}</Text>
             {group.items.map(item => (
-              <View key={item.id} style={[styles.card, !item.isRead && styles.cardUnread]}>
+              <TouchableOpacity key={item.id} activeOpacity={0.75}
+                style={[styles.card, !item.isRead && styles.cardUnread]}
+                onPress={() => { if (!item.isRead) markRead(item.id); }}>
                 {!item.isRead && <View style={styles.dot} />}
                 <Text style={styles.cardTitle}>{item.title}</Text>
                 <Text style={styles.cardMessage}>{item.message}</Text>
-                <View style={styles.footer}>
-                  <Text style={styles.cardTime}>{formatTime(item.createdAt)}</Text>
-                  {!item.isRead && (
-                    <TouchableOpacity onPress={() => markRead(item.id)}>
-                      <Text style={styles.markRead}>{t('notifications.mark_read')}</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              </View>
+                <Text style={[styles.cardTime, { marginTop: 10 }]}>{formatTime(item.createdAt)}</Text>
+              </TouchableOpacity>
             ))}
           </View>
         ))
@@ -132,7 +127,5 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.primary, marginBottom: 6 },
   cardTitle: { fontSize: font.md, fontWeight: '700', color: colors.text, marginBottom: 4 },
   cardMessage: { fontSize: font.sm, color: colors.textSecondary, lineHeight: 18 },
-  footer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 },
   cardTime: { fontSize: font.xs, color: colors.textMuted },
-  markRead: { fontSize: font.sm, color: colors.primary, fontWeight: '600' },
 });

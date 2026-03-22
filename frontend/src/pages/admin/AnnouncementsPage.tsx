@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'react-toastify';
-import { Megaphone, Trash2 } from 'lucide-react';
+import { Megaphone, Trash2, Paperclip, X } from 'lucide-react';
 import { adminApi } from '../../services/api';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
@@ -20,8 +20,10 @@ export default function AnnouncementsPage() {
   const [submitting, setSubmitting] = useState(false);
 
   const { register, handleSubmit, reset } = useForm<{
-    title: string; content: string; targetAudience: string; imageUrl: string;
+    title: string; content: string; targetAudience: string;
   }>();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [attachedFile, setAttachedFile] = useState<File | null>(null);
 
   const load = () => {
     adminApi.getAnnouncements().then(r => setAnnouncements(r.data || [])).finally(() => setLoading(false));
@@ -31,9 +33,18 @@ export default function AnnouncementsPage() {
   const onSubmit = async (data: any) => {
     setSubmitting(true);
     try {
-      await adminApi.createAnnouncement(data);
+      let payload: FormData | object = data;
+      if (attachedFile) {
+        const fd = new FormData();
+        Object.entries(data).forEach(([k, v]) => { if (v != null && v !== '') fd.append(k, String(v)); });
+        fd.append('attachment', attachedFile);
+        payload = fd;
+      }
+      await adminApi.createAnnouncement(payload);
       toast.success('Announcement posted!');
       reset();
+      setAttachedFile(null);
+      if (fileRef.current) fileRef.current.value = '';
       load();
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Failed');
@@ -82,7 +93,24 @@ export default function AnnouncementsPage() {
               ]}
               {...register('targetAudience')}
             />
-            <Input label="Image URL (optional)" placeholder="https://..." {...register('imageUrl')} />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Attachment (optional)</label>
+              <input ref={fileRef} type="file" className="hidden" onChange={e => setAttachedFile(e.target.files?.[0] || null)} />
+              {attachedFile ? (
+                <div className="flex items-center gap-2 p-2.5 bg-primary-50 border border-primary-200 rounded-xl text-sm">
+                  <Paperclip className="w-4 h-4 text-primary-600 flex-shrink-0" />
+                  <span className="flex-1 truncate text-primary-700 font-medium">{attachedFile.name}</span>
+                  <button type="button" onClick={() => { setAttachedFile(null); if (fileRef.current) fileRef.current.value = ''; }}>
+                    <X className="w-4 h-4 text-primary-400 hover:text-primary-600" />
+                  </button>
+                </div>
+              ) : (
+                <button type="button" onClick={() => fileRef.current?.click()}
+                  className="flex items-center gap-2 px-3 py-2 border border-dashed border-gray-300 rounded-xl text-sm text-gray-500 hover:border-primary-400 hover:text-primary-600 transition-colors w-full">
+                  <Paperclip className="w-4 h-4" /> Attach a file
+                </button>
+              )}
+            </div>
             <Button type="submit" loading={submitting} fullWidth icon={<Megaphone className="w-4 h-4" />}>
               Post Announcement
             </Button>

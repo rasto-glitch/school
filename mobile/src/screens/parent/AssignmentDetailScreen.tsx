@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Linking } from 'react-native';
 import { useRoute } from '@react-navigation/native';
-import { ClipboardList, Calendar } from 'lucide-react-native';
+import { ClipboardList, Calendar, Paperclip } from 'lucide-react-native';
 import { useColors } from '../../store/themeStore';
 import { spacing, radius, shadow, font } from '../../theme';
 
@@ -13,6 +13,7 @@ interface Assignment {
   dueDate?: string;
   submissionStatus?: string;
   grade?: number | null;
+  attachmentUrl?: string;
   createdAt: string;
   classes?: { name: string };
   students?: { fullName: string };
@@ -90,6 +91,17 @@ export default function AssignmentDetailScreen() {
         </View>
       )}
 
+      {/* Attachment */}
+      {assignment.attachmentUrl && (
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Attachment</Text>
+          <TouchableOpacity style={styles.attachBtn} onPress={() => Linking.openURL(assignment.attachmentUrl!)}>
+            <Paperclip size={16} color={colors.primary} />
+            <Text style={styles.attachText}>Download Attachment</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* Student */}
       {assignment.students?.fullName && (
         <Text style={styles.student}>Student: {assignment.students.fullName}</Text>
@@ -132,6 +144,8 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   section: { backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm, ...shadow.sm },
   sectionLabel: { fontSize: font.xs, fontWeight: '700', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.xs },
   sectionValue: { fontSize: font.md, color: colors.text, lineHeight: 22 },
+  attachBtn: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.primaryLight, borderRadius: radius.md, padding: spacing.sm, alignSelf: 'flex-start' },
+  attachText: { fontSize: font.sm, fontWeight: '600', color: colors.primary },
   student: { fontSize: font.sm, color: colors.textMuted, marginTop: spacing.sm },
   posted: { fontSize: font.xs, color: colors.textMuted, textAlign: 'right', marginTop: spacing.xs },
 });

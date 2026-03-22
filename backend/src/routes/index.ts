@@ -75,7 +75,7 @@ export function createRouter(io: SocketServer) {
   router.post('/admin/notifications', authenticate, authorize('admin'), (req, res) => admin.sendNotification(req as AuthRequest, res));
 
   router.get('/admin/announcements', authenticate, authorize('admin', 'teacher', 'parent'), (req, res) => admin.getAnnouncements(req as AuthRequest, res));
-  router.post('/admin/announcements', authenticate, authorize('admin'), (req, res) => admin.createAnnouncement(req as AuthRequest, res));
+  router.post('/admin/announcements', authenticate, authorize('admin'), upload.single('attachment'), (req, res) => admin.createAnnouncement(req as AuthRequest, res));
   router.delete('/admin/announcements/:id', authenticate, authorize('admin'), (req, res) => admin.deleteAnnouncement(req as AuthRequest, res));
 
   router.get('/admin/settings', authenticate, authorize('admin'), (req, res) => admin.getSettings(req as AuthRequest, res));
@@ -90,7 +90,7 @@ export function createRouter(io: SocketServer) {
   router.post('/teacher/homework', authenticate, authorize('teacher'), upload.single('attachment'), (req, res) => teacher.createHomework(req as AuthRequest, res));
   router.delete('/teacher/homework/:id', authenticate, authorize('teacher'), (req, res) => teacher.deleteHomework(req as AuthRequest, res));
   router.get('/teacher/assignments', authenticate, authorize('teacher'), (req, res) => teacher.getAssignments(req as AuthRequest, res));
-  router.post('/teacher/assignments', authenticate, authorize('teacher'), (req, res) => teacher.createAssignment(req as AuthRequest, res));
+  router.post('/teacher/assignments', authenticate, authorize('teacher'), upload.single('attachment'), (req, res) => teacher.createAssignment(req as AuthRequest, res));
   router.delete('/teacher/assignments/:id', authenticate, authorize('teacher'), (req, res) => teacher.deleteAssignment(req as AuthRequest, res));
   router.post('/teacher/reports', authenticate, authorize('teacher'), (req, res) => teacher.createReport(req as AuthRequest, res));
   router.get('/teacher/grades', authenticate, authorize('teacher'), (req, res) => teacher.getGrades(req as AuthRequest, res));

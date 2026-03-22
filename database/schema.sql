@@ -178,6 +178,7 @@ CREATE TABLE IF NOT EXISTS assignments (
   submission_status TEXT DEFAULT 'pending' CHECK (submission_status IN ('pending','submitted','graded')),
   due_date DATE,
   subject TEXT,
+  attachment_url TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -227,6 +228,7 @@ CREATE TABLE IF NOT EXISTS announcements (
   title TEXT NOT NULL,
   content TEXT NOT NULL,
   image_url TEXT,
+  attachment_url TEXT,
   target_audience TEXT DEFAULT 'all' CHECK (target_audience IN ('all','parents','teachers','students')),
   created_by UUID REFERENCES users(id),
   created_at TIMESTAMPTZ DEFAULT NOW()

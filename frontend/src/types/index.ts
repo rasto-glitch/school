@@ -85,6 +85,7 @@ export interface Assignment {
   submissionStatus: 'pending' | 'submitted' | 'graded';
   dueDate?: string;
   subject?: string;
+  attachmentUrl?: string;
   createdAt: string;
   students?: { fullName: string };
   classes?: { name: string };
@@ -121,6 +122,7 @@ export interface Announcement {
   title: string;
   content: string;
   targetAudience: string;
+  attachmentUrl?: string;
   createdAt: string;
 }
 

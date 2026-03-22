@@ -150,7 +150,8 @@ export default function FeedScreen() {
           if (item.type === 'announcement') {
             const ann = item.data;
             return (
-              <View key={`a${i}`} style={styles.card}>
+              <TouchableOpacity key={`a${i}`} style={styles.card} activeOpacity={0.7}
+                onPress={() => navigation.navigate('AnnouncementDetail', { announcement: ann })}>
                 <View style={styles.cardRow}>
                   <View style={[styles.iconBox, { backgroundColor: '#FAF5FF' }]}>
                     <Megaphone size={16} color="#9333EA" />
@@ -166,12 +167,13 @@ export default function FeedScreen() {
                     <Text style={styles.cardDesc} numberOfLines={2}>{ann.content}</Text>
                   </View>
                 </View>
-              </View>
+              </TouchableOpacity>
             );
           }
           const hw = item.data as Homework;
           return (
-            <View key={`h${i}`} style={styles.card}>
+            <TouchableOpacity key={`h${i}`} style={styles.card} activeOpacity={0.7}
+              onPress={() => navigation.navigate('HomeworkDetail', { homework: hw })}>
               <View style={styles.cardRow}>
                 <View style={[styles.iconBox, { backgroundColor: '#EFF6FF' }]}>
                   <BookOpen size={16} color="#2563EB" />
@@ -197,7 +199,7 @@ export default function FeedScreen() {
                   </View>
                 </View>
               </View>
-            </View>
+            </TouchableOpacity>
           );
         })
       )}

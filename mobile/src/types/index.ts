@@ -79,6 +79,7 @@ export interface Announcement {
   title: string;
   content: string;
   targetAudience: string;
+  attachmentUrl?: string;
   createdAt: string;
 }
 
