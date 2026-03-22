@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'react-toastify';
-import { UserPlus, Search, Trash2, KeyRound, Clock, CheckCircle2, X } from 'lucide-react';
+import { UserPlus, Search, Trash2, KeyRound, Clock, CheckCircle2, X, Pencil, Shield } from 'lucide-react';
 import { adminApi } from '../../services/api';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
@@ -10,6 +10,17 @@ import Select from '../../components/common/Select';
 import Button from '../../components/common/Button';
 import Modal from '../../components/common/Modal';
 
+const ROLE_COLORS: Record<string, string> = {
+  admin:      'bg-purple-100 text-purple-700',
+  teacher:    'bg-blue-100 text-blue-700',
+  driver:     'bg-orange-100 text-orange-700',
+  supervisor: 'bg-teal-100 text-teal-700',
+  parent:     'bg-green-100 text-green-700',
+};
+
+const ROLE_FILTERS = ['all', 'parent', 'teacher', 'driver', 'supervisor', 'admin'] as const;
+type RoleFilter = typeof ROLE_FILTERS[number];
+
 export default function AccountsPage() {
   const [loading, setLoading] = useState(false);
   const { register, handleSubmit, reset } = useForm<{
@@ -17,25 +28,42 @@ export default function AccountsPage() {
     username: string; password: string; role: string;
   }>();
 
+  // All accounts
+  const [accounts, setAccounts] = useState<any[]>([]);
+  const [accountSearch, setAccountSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState<RoleFilter>('all');
+
+  // Parents list (for delete and reset-password)
   const [parents, setParents] = useState<any[]>([]);
-  const [parentSearch, setParentSearch] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  // Reset requests
-  const [resetRequests, setResetRequests] = useState<any[]>([]);
-  const [resetModalParent, setResetModalParent] = useState<any | null>(null);
+  // Reset password modal
+  const [resetModalUser, setResetModalUser] = useState<any | null>(null);
   const [newPassword, setNewPassword] = useState('');
   const [resetting, setResetting] = useState(false);
 
-  const loadParents = () => {
-    adminApi.getParents().then(r => setParents(r.data || []));
-  };
+  // Reset requests
+  const [resetRequests, setResetRequests] = useState<any[]>([]);
 
+  // Edit account modal
+  const [editUser, setEditUser] = useState<any | null>(null);
+  const [editForm, setEditForm] = useState({
+    firstName: '', lastName: '', email: '', phone: '', username: '', isActive: true,
+  });
+  const [saving, setSaving] = useState(false);
+
+  const loadAccounts = () => {
+    adminApi.getAccounts().then(r => setAccounts(r.data || [])).catch(() => {});
+  };
+  const loadParents = () => {
+    adminApi.getParents().then(r => setParents(r.data || [])).catch(() => {});
+  };
   const loadResetRequests = () => {
     adminApi.getResetRequests().then(r => setResetRequests(r.data || [])).catch(() => {});
   };
 
   useEffect(() => {
+    loadAccounts();
     loadParents();
     loadResetRequests();
   }, []);
@@ -46,6 +74,7 @@ export default function AccountsPage() {
       await adminApi.createAccount(data);
       toast.success(`Account created for ${data.firstName} ${data.lastName}`);
       reset();
+      loadAccounts();
       loadParents();
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Failed to create account');
@@ -60,6 +89,7 @@ export default function AccountsPage() {
     try {
       await adminApi.deleteParent(parent.id);
       toast.success(`Parent account "${parent.fullName}" deleted`);
+      loadAccounts();
       loadParents();
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Failed to delete parent');
@@ -68,8 +98,8 @@ export default function AccountsPage() {
     }
   };
 
-  const openResetModal = (parent: any) => {
-    setResetModalParent(parent);
+  const openResetModal = (user: any) => {
+    setResetModalUser(user);
     setNewPassword('');
   };
 
@@ -78,15 +108,16 @@ export default function AccountsPage() {
       toast.error('Password must be at least 6 characters');
       return;
     }
-    if (!resetModalParent?.userId) {
-      toast.error('Could not find user account for this parent');
+    const userId = resetModalUser?.userId ?? resetModalUser?.id;
+    if (!userId) {
+      toast.error('Could not find user account');
       return;
     }
     setResetting(true);
     try {
-      await adminApi.resetUserPassword(resetModalParent.userId, newPassword);
-      toast.success(`Password reset for ${resetModalParent.fullName}`);
-      setResetModalParent(null);
+      await adminApi.resetUserPassword(userId, newPassword);
+      toast.success(`Password reset for ${resetModalUser.fullName ?? resetModalUser.firstName}`);
+      setResetModalUser(null);
       loadResetRequests();
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Failed to reset password');
@@ -95,18 +126,51 @@ export default function AccountsPage() {
     }
   };
 
-  const filteredParents = parentSearch.trim()
-    ? parents.filter(p => {
-        const name = (p.fullName || '').toLowerCase();
-        const username = (p.users?.username || '').toLowerCase();
-        const q = parentSearch.toLowerCase();
-        return name.includes(q) || username.includes(q);
-      })
-    : parents;
+  const openEditModal = (acc: any) => {
+    setEditUser(acc);
+    setEditForm({
+      firstName: acc.firstName ?? '',
+      lastName: acc.lastName ?? '',
+      email: acc.email ?? '',
+      phone: acc.phone ?? '',
+      username: acc.username ?? '',
+      isActive: acc.isActive !== false,
+    });
+  };
+
+  const onSaveEdit = async () => {
+    if (!editUser) return;
+    setSaving(true);
+    try {
+      await adminApi.updateAccount(editUser.id, editForm);
+      toast.success('Account updated');
+      setEditUser(null);
+      loadAccounts();
+      loadParents();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to update account');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Filtered accounts list
+  const filteredAccounts = accounts.filter(acc => {
+    if (roleFilter !== 'all' && acc.role !== roleFilter) return false;
+    if (accountSearch.trim()) {
+      const q = accountSearch.toLowerCase();
+      const name = `${acc.firstName ?? ''} ${acc.lastName ?? ''}`.toLowerCase();
+      return name.includes(q) || (acc.username ?? '').toLowerCase().includes(q) || (acc.email ?? '').toLowerCase().includes(q);
+    }
+    return true;
+  });
+
+  const displayName = (acc: any) =>
+    acc.firstName ? `${acc.firstName} ${acc.lastName ?? ''}`.trim() : acc.username;
 
   return (
-    <PageLayout title="Accounts Management" subtitle="Create user accounts and manage parent accounts">
-      <div className="space-y-8 max-w-2xl">
+    <PageLayout title="Accounts Management" subtitle="Create and manage all user accounts">
+      <div className="space-y-8 max-w-3xl">
         {/* Password Reset Requests */}
         {resetRequests.length > 0 && (
           <Card>
@@ -129,13 +193,11 @@ export default function AccountsPage() {
                   </div>
                   <button
                     onClick={() => {
-                      // Find matching parent to get userId
-                      const parent = parents.find(p => p.users?.username === req.username);
-                      if (parent) {
-                        openResetModal(parent);
+                      const acc = accounts.find(a => a.username === req.username);
+                      if (acc) {
+                        openResetModal(acc);
                       } else {
-                        // Fallback: open modal with minimal info
-                        openResetModal({ fullName: req.fullName || req.username, userId: req.userId, users: { username: req.username } });
+                        openResetModal({ firstName: req.fullName || req.username, id: req.userId, username: req.username });
                       }
                     }}
                     className="flex items-center gap-1.5 text-xs bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-lg font-medium transition-colors"
@@ -149,6 +211,7 @@ export default function AccountsPage() {
           </Card>
         )}
 
+        {/* Create Account */}
         <Card>
           <div className="flex items-center gap-2 mb-4">
             <UserPlus className="w-5 h-5 text-primary-600" />
@@ -179,74 +242,109 @@ export default function AccountsPage() {
           </form>
         </Card>
 
-        {/* Parent Accounts */}
+        {/* All Accounts */}
         <Card>
-          <h2 className="font-semibold text-gray-900 mb-4">Parent Accounts</h2>
-          <div className="mb-3">
-            <Input
-              placeholder="Search by name or username..."
-              icon={<Search className="w-4 h-4" />}
-              value={parentSearch}
-              onChange={e => setParentSearch(e.target.value)}
-            />
+          <div className="flex items-center gap-2 mb-4">
+            <Shield className="w-5 h-5 text-gray-500" />
+            <h2 className="font-semibold text-gray-900">All Accounts</h2>
+            <span className="ml-auto text-xs text-gray-400">{filteredAccounts.length} shown</span>
           </div>
 
-          {filteredParents.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-4">
-              {parentSearch ? 'No parents match your search.' : 'No parent accounts found.'}
-            </p>
+          {/* Search + role filters */}
+          <div className="space-y-3 mb-4">
+            <Input
+              placeholder="Search by name, username, or email..."
+              icon={<Search className="w-4 h-4" />}
+              value={accountSearch}
+              onChange={e => setAccountSearch(e.target.value)}
+            />
+            <div className="flex flex-wrap gap-2">
+              {ROLE_FILTERS.map(r => (
+                <button
+                  key={r}
+                  onClick={() => setRoleFilter(r)}
+                  className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors capitalize ${
+                    roleFilter === r
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {filteredAccounts.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-6">No accounts found.</p>
           ) : (
             <div className="divide-y divide-gray-100 border border-gray-200 rounded-xl overflow-hidden">
-              {filteredParents.map(p => {
-                const children: any[] = p.students || [];
+              {filteredAccounts.map(acc => {
+                const isParent = acc.role === 'parent';
+                const parent = isParent ? parents.find(p => p.users?.username === acc.username || p.userId === acc.id) : null;
+                const name = displayName(acc);
                 return (
-                  <div key={p.id} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50">
-                    <div className="w-9 h-9 bg-primary-100 rounded-full flex items-center justify-center flex-shrink-0">
-                      <span className="text-primary-700 font-bold text-sm">{(p.fullName || '?')[0]}</span>
+                  <div key={acc.id} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50">
+                    <div className="w-9 h-9 bg-gray-100 rounded-full flex items-center justify-center flex-shrink-0">
+                      <span className="text-gray-600 font-bold text-sm">{name[0]?.toUpperCase() ?? '?'}</span>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-gray-900 truncate">{p.fullName || '(No name)'}</p>
-                      <p className="text-xs text-gray-500">@{p.users?.username || '—'}</p>
-                      {children.length > 0 && (
-                        <p className="text-xs text-gray-400 truncate">
-                          {children.map((c: any) => c.fullName).join(', ')}
-                        </p>
-                      )}
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-semibold text-gray-900 truncate">{name}</p>
+                        {!acc.isActive && (
+                          <span className="text-xs bg-gray-200 text-gray-500 px-1.5 py-0.5 rounded-full">inactive</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full capitalize ${ROLE_COLORS[acc.role] ?? 'bg-gray-100 text-gray-600'}`}>
+                          {acc.role}
+                        </span>
+                        <p className="text-xs text-gray-500">@{acc.username}</p>
+                        {acc.email && <p className="text-xs text-gray-400 truncate hidden sm:block">{acc.email}</p>}
+                      </div>
                     </div>
                     <button
-                      onClick={() => openResetModal(p)}
-                      className="text-primary-500 hover:text-primary-700 transition-colors p-1.5 rounded-lg hover:bg-primary-50"
+                      onClick={() => openEditModal(acc)}
+                      className="text-gray-400 hover:text-primary-600 transition-colors p-1.5 rounded-lg hover:bg-primary-50"
+                      title="Edit account"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => openResetModal(acc)}
+                      className="text-gray-400 hover:text-amber-600 transition-colors p-1.5 rounded-lg hover:bg-amber-50"
                       title="Reset password"
                     >
                       <KeyRound className="w-4 h-4" />
                     </button>
-                    <button
-                      onClick={() => onDeleteParent(p)}
-                      disabled={deletingId === p.id}
-                      className="text-red-400 hover:text-red-600 disabled:opacity-40 transition-colors p-1.5 rounded-lg hover:bg-red-50"
-                      title="Delete parent account"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {isParent && parent && (
+                      <button
+                        onClick={() => onDeleteParent(parent)}
+                        disabled={deletingId === parent.id}
+                        className="text-red-400 hover:text-red-600 disabled:opacity-40 transition-colors p-1.5 rounded-lg hover:bg-red-50"
+                        title="Delete parent account"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 );
               })}
             </div>
           )}
-          <p className="text-xs text-gray-400 mt-2">Deleting a parent removes their login. Their children remain in the system, unlinked.</p>
         </Card>
       </div>
 
       {/* Reset Password Modal */}
-      {resetModalParent && (
+      {resetModalUser && (
         <Modal
           isOpen={true}
-          onClose={() => setResetModalParent(null)}
-          title={`Reset Password — ${resetModalParent.fullName}`}
+          onClose={() => setResetModalUser(null)}
+          title={`Reset Password — ${displayName(resetModalUser)}`}
         >
           <div className="space-y-4">
             <p className="text-sm text-gray-500">
-              Set a new password for <span className="font-medium text-gray-700">@{resetModalParent.users?.username}</span>.
+              Set a new password for <span className="font-medium text-gray-700">@{resetModalUser.username}</span>.
               Make sure to inform them of their new password.
             </p>
             <div>
@@ -261,21 +359,89 @@ export default function AccountsPage() {
               />
             </div>
             <div className="flex gap-3 pt-1">
-              <Button
-                variant="outline"
-                fullWidth
-                onClick={() => setResetModalParent(null)}
-                icon={<X className="w-4 h-4" />}
-              >
+              <Button variant="outline" fullWidth onClick={() => setResetModalUser(null)} icon={<X className="w-4 h-4" />}>
                 Cancel
               </Button>
-              <Button
-                fullWidth
-                loading={resetting}
-                onClick={onResetPassword}
-                icon={<CheckCircle2 className="w-4 h-4" />}
-              >
+              <Button fullWidth loading={resetting} onClick={onResetPassword} icon={<CheckCircle2 className="w-4 h-4" />}>
                 Set Password
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Edit Account Modal */}
+      {editUser && (
+        <Modal
+          isOpen={true}
+          onClose={() => setEditUser(null)}
+          title={`Edit Account — ${displayName(editUser)}`}
+        >
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
+                <input
+                  type="text"
+                  value={editForm.firstName}
+                  onChange={e => setEditForm(f => ({ ...f, firstName: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
+                <input
+                  type="text"
+                  value={editForm.lastName}
+                  onChange={e => setEditForm(f => ({ ...f, lastName: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
+              <input
+                type="text"
+                value={editForm.username}
+                onChange={e => setEditForm(f => ({ ...f, username: e.target.value }))}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+              <input
+                type="email"
+                value={editForm.email}
+                onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+              <input
+                type="text"
+                value={editForm.phone}
+                onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+            <div className="flex items-center gap-3 py-1">
+              <label className="text-sm font-medium text-gray-700">Active</label>
+              <button
+                type="button"
+                onClick={() => setEditForm(f => ({ ...f, isActive: !f.isActive }))}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${editForm.isActive ? 'bg-primary-600' : 'bg-gray-300'}`}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${editForm.isActive ? 'translate-x-6' : 'translate-x-1'}`} />
+              </button>
+              <span className="text-sm text-gray-500">{editForm.isActive ? 'Active' : 'Inactive'}</span>
+            </div>
+            <div className="flex gap-3 pt-1">
+              <Button variant="outline" fullWidth onClick={() => setEditUser(null)} icon={<X className="w-4 h-4" />}>
+                Cancel
+              </Button>
+              <Button fullWidth loading={saving} onClick={onSaveEdit} icon={<CheckCircle2 className="w-4 h-4" />}>
+                Save Changes
               </Button>
             </div>
           </div>

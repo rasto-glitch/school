@@ -129,6 +129,8 @@ export const adminApi = {
   updateSubject: (id: string, data: object) => api.put(`/admin/subjects/${id}`, data),
   deleteSubject: (id: string) => api.delete(`/admin/subjects/${id}`),
   createAccount: (data: object) => api.post('/admin/accounts', data),
+  getAccounts: () => api.get('/admin/accounts'),
+  updateAccount: (userId: string, data: object) => api.put(`/admin/accounts/${userId}`, data),
   getResetRequests: () => api.get('/admin/reset-requests'),
   resetUserPassword: (userId: string, newPassword: string) =>
     api.post(`/admin/users/${userId}/reset-password`, { newPassword }),

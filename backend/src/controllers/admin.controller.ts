@@ -1079,6 +1079,57 @@ export async function updateSettings(req: AuthRequest, res: Response): Promise<v
   res.json(toCC(data));
 }
 
+// ---- ALL ACCOUNTS ----
+export async function getAccounts(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { data, error } = await supabase
+    .from('users')
+    .select('id, first_name, last_name, username, email, phone, role, is_active, created_at')
+    .eq('school_id', schoolId)
+    .order('role')
+    .order('first_name');
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json(toCC(data));
+}
+
+export async function updateAccount(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { userId } = req.params;
+  const { firstName, lastName, email, phone, username, isActive } = req.body;
+
+  if (username) {
+    const { data: existing } = await supabase
+      .from('users').select('id').eq('school_id', schoolId).eq('username', username).neq('id', userId).single();
+    if (existing) { res.status(409).json({ error: `Username "${username}" is already taken.` }); return; }
+  }
+
+  const updateFields: Record<string, unknown> = {};
+  if (firstName !== undefined) updateFields.first_name = firstName;
+  if (lastName !== undefined) updateFields.last_name = lastName;
+  if (email !== undefined) updateFields.email = email || null;
+  if (phone !== undefined) updateFields.phone = phone || null;
+  if (username !== undefined) updateFields.username = username;
+  if (isActive !== undefined) updateFields.is_active = isActive;
+
+  const { data: user, error } = await supabase
+    .from('users').update(updateFields).eq('id', userId).eq('school_id', schoolId).select().single();
+  if (error) {
+    res.status(error.message.includes('unique') ? 409 : 500).json({ error: error.message }); return;
+  }
+
+  // Sync full_name in the role-specific profile table
+  if (firstName !== undefined || lastName !== undefined) {
+    const fn = (firstName ?? user.first_name ?? '').trim();
+    const ln = (lastName ?? user.last_name ?? '').trim();
+    const fullName = `${fn} ${ln}`.trim();
+    if (user.role === 'teacher') await supabase.from('teachers').update({ full_name: fullName }).eq('user_id', userId).eq('school_id', schoolId);
+    else if (user.role === 'driver') await supabase.from('drivers').update({ full_name: fullName }).eq('user_id', userId).eq('school_id', schoolId);
+    else if (user.role === 'parent') await supabase.from('parents').update({ full_name: fullName }).eq('user_id', userId).eq('school_id', schoolId);
+  }
+
+  res.json(toCC(user));
+}
+
 export async function getParents(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
   const { data, error } = await supabase

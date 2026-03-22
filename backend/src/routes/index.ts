@@ -63,6 +63,8 @@ export function createRouter(io: SocketServer) {
   router.delete('/admin/subjects/:id', authenticate, authorize('admin'), (req, res) => admin.deleteSubject(req as AuthRequest, res));
 
   router.post('/admin/accounts', authenticate, authorize('admin'), (req, res) => admin.createAccount(req as AuthRequest, res));
+  router.get('/admin/accounts', authenticate, authorize('admin'), (req, res) => admin.getAccounts(req as AuthRequest, res));
+  router.put('/admin/accounts/:userId', authenticate, authorize('admin'), (req, res) => admin.updateAccount(req as AuthRequest, res));
   router.get('/admin/reset-requests', authenticate, authorize('admin'), (req, res) => admin.getResetRequests(req as AuthRequest, res));
   router.post('/admin/users/:userId/reset-password', authenticate, authorize('admin'), (req, res) => admin.resetUserPassword(req as AuthRequest, res));
 
