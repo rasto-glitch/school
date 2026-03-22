@@ -1,0 +1,67 @@
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { useTranslation } from 'react-i18next';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Home, CalendarCheck, BookOpen, User } from 'lucide-react-native';
+import { useColors } from '../store/themeStore';
+import SupervisorDashboardScreen from '../screens/supervisor/SupervisorDashboardScreen';
+import SupervisorAttendanceScreen from '../screens/supervisor/SupervisorAttendanceScreen';
+import SupervisorContentScreen from '../screens/supervisor/SupervisorContentScreen';
+import SupervisorMeScreen from '../screens/supervisor/SupervisorMeScreen';
+
+const Tab = createBottomTabNavigator();
+
+const ICON_SIZE = 22;
+
+export default function SupervisorTabs() {
+  const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
+  const colors = useColors();
+
+  return (
+    <Tab.Navigator
+      screenOptions={{
+        headerShown: false,
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.textMuted,
+        tabBarStyle: {
+          backgroundColor: colors.card,
+          borderTopColor: colors.border,
+          borderTopWidth: 1,
+          height: 60 + insets.bottom,
+          paddingBottom: insets.bottom + 6,
+          paddingTop: 6,
+        },
+        tabBarLabelStyle: { fontSize: 11, fontWeight: '500' },
+      }}
+    >
+      <Tab.Screen
+        name="SupervisorDashboard"
+        component={SupervisorDashboardScreen}
+        options={{ tabBarLabel: t('nav.dashboard', 'Dashboard'), tabBarIcon: ({ color }) => <Home size={ICON_SIZE} color={color} /> }}
+      />
+      <Tab.Screen
+        name="SupervisorAttendance"
+        component={SupervisorAttendanceScreen}
+        options={{ tabBarLabel: t('nav.attendance', 'Attendance'), tabBarIcon: ({ color }) => <CalendarCheck size={ICON_SIZE} color={color} /> }}
+      />
+      <Tab.Screen
+        name="SupervisorContent"
+        component={SupervisorContentScreen}
+        options={{ tabBarLabel: t('nav.content', 'Content'), tabBarIcon: ({ color }) => <BookOpen size={ICON_SIZE} color={color} /> }}
+      />
+      <Tab.Screen
+        name="SupervisorMe"
+        component={SupervisorMeScreen}
+        options={{
+          tabBarLabel: t('nav.me', 'Me'),
+          tabBarIcon: ({ color }) => <User size={ICON_SIZE} color={color} />,
+          headerShown: true,
+          headerTitle: t('nav.me', 'Me'),
+          headerStyle: { backgroundColor: colors.card },
+          headerTitleStyle: { color: colors.text },
+          headerTintColor: colors.primary,
+        }}
+      />
+    </Tab.Navigator>
+  );
+}

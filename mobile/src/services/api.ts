@@ -64,6 +64,20 @@ export const parentApi = {
   getDriverInfo: (studentId?: string) => api.get('/parent/driver-info', { params: studentId ? { studentId } : {} }),
 };
 
+// ---- SUPERVISOR ----
+export const supervisorApi = {
+  getClasses: () => api.get('/supervisor/classes'),
+  getStudentsByClass: (classId: string) => api.get(`/supervisor/classes/${classId}/students`),
+  getAbsentToday: () => api.get('/supervisor/absent-today'),
+  getAttendance: (classId: string, date: string) => api.get('/supervisor/attendance', { params: { classId, date } }),
+  getAttendanceSummary: (date?: string) => api.get('/supervisor/attendance-summary', { params: date ? { date } : {} }),
+  updateAttendance: (id: string, status: string, notes?: string) => api.patch(`/supervisor/attendance/${id}`, { status, notes }),
+  getHomework: () => api.get('/supervisor/homework'),
+  deleteHomework: (id: string) => api.delete(`/supervisor/homework/${id}`),
+  getAssignments: () => api.get('/supervisor/assignments'),
+  deleteAssignment: (id: string) => api.delete(`/supervisor/assignments/${id}`),
+};
+
 // ---- DRIVER ----
 export const driverApi = {
   getProfile: () => api.get('/driver/me'),

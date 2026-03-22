@@ -7,6 +7,8 @@ import LoginScreen from '../screens/auth/LoginScreen';
 import ParentTabs from './ParentTabs';
 import DriverTabs from './DriverTabs';
 import DriverSettingsScreen from '../screens/driver/DriverSettingsScreen';
+import SupervisorTabs from './SupervisorTabs';
+import SupervisorSettingsScreen from '../screens/supervisor/SupervisorSettingsScreen';
 import SetPickupLocationScreen from '../screens/parent/SetPickupLocationScreen';
 import SettingsScreen from '../screens/parent/SettingsScreen';
 import ReportsScreen from '../screens/parent/ReportsScreen';
@@ -21,6 +23,8 @@ export type RootStackParamList = {
   ParentTabs: undefined;
   DriverTabs: undefined;
   DriverSettings: undefined;
+  SupervisorTabs: undefined;
+  SupervisorSettings: undefined;
   SetPickupLocation: undefined;
   Settings: undefined;
   Reports: undefined;
@@ -59,6 +63,15 @@ export default function Navigation() {
             <Stack.Screen
               name="DriverSettings"
               component={DriverSettingsScreen}
+              options={{ headerShown: true, headerTitle: 'Settings', headerBackTitle: 'Back', presentation: 'card' }}
+            />
+          </>
+        ) : user?.role === 'supervisor' ? (
+          <>
+            <Stack.Screen name="SupervisorTabs" component={SupervisorTabs} />
+            <Stack.Screen
+              name="SupervisorSettings"
+              component={SupervisorSettingsScreen}
               options={{ headerShown: true, headerTitle: 'Settings', headerBackTitle: 'Back', presentation: 'card' }}
             />
           </>
