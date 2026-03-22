@@ -1130,6 +1130,37 @@ export async function updateAccount(req: AuthRequest, res: Response): Promise<vo
   res.json(toCC(user));
 }
 
+export async function deleteAccount(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { userId } = req.params;
+
+  const { data: user, error: findErr } = await supabase
+    .from('users').select('id, role').eq('id', userId).eq('school_id', schoolId).single();
+  if (findErr || !user) { res.status(404).json({ error: 'Account not found' }); return; }
+
+  if (user.role === 'teacher') {
+    const { data: teacher } = await supabase.from('teachers').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
+    if (teacher) {
+      await supabase.from('homework').update({ teacher_id: null } as any).eq('teacher_id', teacher.id).eq('school_id', schoolId);
+      await supabase.from('assignments').update({ teacher_id: null } as any).eq('teacher_id', teacher.id).eq('school_id', schoolId);
+      await supabase.from('grades').update({ teacher_id: null } as any).eq('teacher_id', teacher.id).eq('school_id', schoolId);
+      await supabase.from('reports').update({ teacher_id: null } as any).eq('teacher_id', teacher.id).eq('school_id', schoolId);
+      await supabase.from('weekly_summaries').delete().eq('teacher_id', teacher.id).eq('school_id', schoolId);
+      await supabase.from('subjects').update({ teacher_id: null }).eq('teacher_id', teacher.id).eq('school_id', schoolId);
+      await supabase.from('teachers').delete().eq('id', teacher.id).eq('school_id', schoolId);
+    }
+  } else if (user.role === 'supervisor') {
+    // Supervisors have no dedicated profile table — nothing extra to clean up
+  } else {
+    res.status(400).json({ error: `Use the dedicated delete endpoint for role "${user.role}"` }); return;
+  }
+
+  const { error: delErr } = await supabase.from('users').delete().eq('id', userId);
+  if (delErr) { res.status(500).json({ error: delErr.message }); return; }
+
+  res.json({ message: 'Account deleted' });
+}
+
 export async function getParents(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
   const { data, error } = await supabase

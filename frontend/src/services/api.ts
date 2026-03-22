@@ -131,6 +131,7 @@ export const adminApi = {
   createAccount: (data: object) => api.post('/admin/accounts', data),
   getAccounts: () => api.get('/admin/accounts'),
   updateAccount: (userId: string, data: object) => api.put(`/admin/accounts/${userId}`, data),
+  deleteAccount: (userId: string) => api.delete(`/admin/accounts/${userId}`),
   getResetRequests: () => api.get('/admin/reset-requests'),
   resetUserPassword: (userId: string, newPassword: string) =>
     api.post(`/admin/users/${userId}/reset-password`, { newPassword }),

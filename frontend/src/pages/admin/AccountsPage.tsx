@@ -98,6 +98,21 @@ export default function AccountsPage() {
     }
   };
 
+  const onDeleteAccount = async (acc: any) => {
+    const name = displayName(acc);
+    if (!confirm(`Delete account "${name}"?\n\nThis will permanently remove their login. This cannot be undone.`)) return;
+    setDeletingId(acc.id);
+    try {
+      await adminApi.deleteAccount(acc.id);
+      toast.success(`Account "${name}" deleted`);
+      loadAccounts();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to delete account');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   const openResetModal = (user: any) => {
     setResetModalUser(user);
     setNewPassword('');
@@ -317,7 +332,7 @@ export default function AccountsPage() {
                     >
                       <KeyRound className="w-4 h-4" />
                     </button>
-                    {isParent && parent && (
+                    {isParent && parent ? (
                       <button
                         onClick={() => onDeleteParent(parent)}
                         disabled={deletingId === parent.id}
@@ -326,7 +341,16 @@ export default function AccountsPage() {
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
-                    )}
+                    ) : (acc.role === 'teacher' || acc.role === 'supervisor') ? (
+                      <button
+                        onClick={() => onDeleteAccount(acc)}
+                        disabled={deletingId === acc.id}
+                        className="text-red-400 hover:text-red-600 disabled:opacity-40 transition-colors p-1.5 rounded-lg hover:bg-red-50"
+                        title={`Delete ${acc.role} account`}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    ) : null}
                   </div>
                 );
               })}
