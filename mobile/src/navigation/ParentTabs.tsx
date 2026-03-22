@@ -11,7 +11,8 @@ import AssignmentsScreen from '../screens/parent/AssignmentsScreen';
 import BusTrackingScreen from '../screens/parent/BusTrackingScreen';
 import NotificationsScreen from '../screens/parent/NotificationsScreen';
 import { useColors } from '../store/themeStore';
-import { radius, font } from '../theme';
+import { useBadgeStore } from '../store/badgeStore';
+import { font } from '../theme';
 import { parentApi } from '../services/api';
 
 const Tab = createBottomTabNavigator();
@@ -46,7 +47,7 @@ export default function ParentTabs() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [homeworkCount, setHomeworkCount] = useState(0);
   const [assignmentCount, setAssignmentCount] = useState(0);
-  const [reportCount, setReportCount] = useState(0);
+  const { reportCount, setReportCount } = useBadgeStore();
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchCounts = useCallback(() => {
@@ -60,7 +61,7 @@ export default function ParentTabs() {
         setReportCount(r.data?.report ?? 0);
       })
       .catch(() => {});
-  }, []);
+  }, [setReportCount]);
 
   useEffect(() => {
     fetchCounts();
@@ -89,14 +90,6 @@ export default function ParentTabs() {
     }
   };
 
-  // Reports are accessed from the Feed tab — clear the badge when Feed is pressed
-  const handleFeedPress = () => {
-    if (reportCount > 0) {
-      parentApi.markTypeRead('report').catch(() => {});
-      setReportCount(0);
-    }
-  };
-
   return (
     <Tab.Navigator
       screenOptions={{
@@ -121,7 +114,6 @@ export default function ParentTabs() {
       <Tab.Screen
         name="Feed"
         component={FeedScreen}
-        listeners={{ tabPress: handleFeedPress }}
         options={{
           headerTitle: t('dashboard.title'),
           tabBarLabel: t('dashboard.title'),

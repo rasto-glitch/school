@@ -6,6 +6,7 @@ import { useNavigation } from '@react-navigation/native';
 import { FileText, ChevronRight } from 'lucide-react-native';
 import { parentApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
+import { useBadgeStore } from '../../store/badgeStore';
 import { spacing, radius, font, shadow } from '../../theme';
 
 export interface Report {
@@ -32,9 +33,15 @@ export default function ReportsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  const clearReport = useBadgeStore(s => s.clearReport);
+
   const load = () => parentApi.getReports().then(r => setReports(r.data || []));
 
-  useEffect(() => { load().finally(() => setLoading(false)); }, []);
+  useEffect(() => {
+    clearReport();
+    parentApi.markTypeRead('report').catch(() => {});
+    load().finally(() => setLoading(false));
+  }, []);
   const onRefresh = () => { setRefreshing(true); load().finally(() => setRefreshing(false)); };
 
   return (
