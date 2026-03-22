@@ -41,13 +41,16 @@ export default function AnnouncementsPage() {
         <div className="space-y-6">
           {/* Hero - latest */}
           {latest && (
-            <div className="bg-gradient-to-r from-primary-600 to-secondary-500 rounded-2xl p-6 text-white">
+            <div
+              className="bg-gradient-to-r from-primary-600 to-secondary-500 rounded-2xl p-6 text-white cursor-pointer hover:opacity-95 transition-opacity"
+              onClick={() => navigate(`/parent/announcements/${latest.id}`)}
+            >
               <div className="flex items-center gap-2 mb-3">
                 <Megaphone className="w-5 h-5" />
                 <span className="text-sm font-medium opacity-90">Latest Announcement</span>
               </div>
               <h2 className="text-xl font-bold mb-2">{latest.title}</h2>
-              <p className="opacity-90 text-sm leading-relaxed">{latest.content}</p>
+              <p className="opacity-90 text-sm leading-relaxed line-clamp-3">{latest.content}</p>
               <p className="text-xs opacity-70 mt-3">{format(parseISO(latest.createdAt), 'MMMM d, yyyy')}</p>
             </div>
           )}
