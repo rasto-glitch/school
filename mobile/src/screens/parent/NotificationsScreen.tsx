@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { parentApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
+import { useBadgeStore } from '../../store/badgeStore';
 import { spacing, radius, shadow, font } from '../../theme';
 import type { Notification } from '../../types';
 
@@ -57,7 +58,11 @@ export default function NotificationsScreen() {
   const [items, setItems] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const setUnreadCount = useBadgeStore(s => s.setUnreadCount);
+
   useEffect(() => {
+    parentApi.markAllRead().catch(() => {});
+    setUnreadCount(0);
     parentApi.getNotifications()
       .then(r => setItems(r.data || []))
       .finally(() => setLoading(false));

@@ -8,9 +8,9 @@ import ParentTabs from './ParentTabs';
 import DriverTabs from './DriverTabs';
 import DriverSettingsScreen from '../screens/driver/DriverSettingsScreen';
 import SetPickupLocationScreen from '../screens/parent/SetPickupLocationScreen';
-import MeScreen from '../screens/parent/MeScreen';
 import SettingsScreen from '../screens/parent/SettingsScreen';
 import ReportsScreen from '../screens/parent/ReportsScreen';
+import NotificationsScreen from '../screens/parent/NotificationsScreen';
 import AppointmentsScreen from '../screens/parent/AppointmentsScreen';
 import GradesScreen from '../screens/parent/GradesScreen';
 import ReportDetailScreen from '../screens/parent/ReportDetailScreen';
@@ -22,9 +22,9 @@ export type RootStackParamList = {
   DriverTabs: undefined;
   DriverSettings: undefined;
   SetPickupLocation: undefined;
-  Me: undefined;
   Settings: undefined;
   Reports: undefined;
+  Notifications: undefined;
   ReportDetail: { report: { id: string; subject: string; attendanceNotes?: string; behaviorNotes?: string; teacherNotes?: string; quizMarks?: number; examMarks?: number; reportDate?: string; createdAt: string; students?: { fullName: string }; teachers?: { fullName: string } } };
   Appointments: undefined;
   Grades: undefined;
@@ -67,9 +67,9 @@ export default function Navigation() {
             <Stack.Screen name="ParentTabs" component={ParentTabs} />
             <Stack.Screen name="SetPickupLocation" component={SetPickupLocationScreen} options={{ headerShown: true, headerTitle: 'Set Pickup Location', headerBackTitle: 'Back' }} />
             <Stack.Screen
-              name="Me"
-              component={MeScreen}
-              options={{ headerShown: true, headerTitle: 'My Profile', headerBackTitle: 'Back', presentation: 'card' }}
+              name="Notifications"
+              component={NotificationsScreen}
+              options={{ headerShown: true, headerTitle: 'Notifications', headerBackTitle: 'Back' }}
             />
             <Stack.Screen
               name="Settings"

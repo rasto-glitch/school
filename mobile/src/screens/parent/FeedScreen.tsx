@@ -11,6 +11,7 @@ import { useAuthStore } from '../../store/authStore';
 import { parentApi } from '../../services/api';
 import { spacing, radius, shadow, font } from '../../theme';
 import { useColors } from '../../store/themeStore';
+import { useBadgeStore } from '../../store/badgeStore';
 import type { Homework, Announcement } from '../../types';
 
 interface Grade {
@@ -39,6 +40,7 @@ export default function FeedScreen() {
   const navigation = useNavigation<any>();
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const { reportCount, bookingCount } = useBadgeStore();
   const [homework, setHomework] = useState<Homework[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [grades, setGrades] = useState<Grade[]>([]);
@@ -69,12 +71,12 @@ export default function FeedScreen() {
   ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const shortcuts = [
-    { label: t('dashboard.quick_homework'), icon: BookOpen, bg: '#EFF6FF', iconColor: '#2563EB', tab: 'Homework' },
-    { label: t('dashboard.quick_assignments'), icon: ClipboardList, bg: '#F0FDF4', iconColor: '#16A34A', tab: 'Assignments' },
-    { label: t('dashboard.quick_bus'), icon: MapPin, bg: '#FFFBEB', iconColor: '#D97706', tab: 'BusTracking' },
-    { label: t('dashboard.quick_alerts'), icon: Bell, bg: '#FFF1F2', iconColor: '#E11D48', tab: 'Notifications' },
-    { label: t('dashboard.quick_reports', 'Reports'), icon: FileText, bg: '#FAF5FF', iconColor: '#9333EA', tab: 'Reports' },
-    { label: t('dashboard.quick_bookings', 'Bookings'), icon: Calendar, bg: '#F0FDFA', iconColor: '#0D9488', tab: 'Appointments' },
+    { label: t('dashboard.quick_homework'), icon: BookOpen, bg: '#EFF6FF', iconColor: '#2563EB', tab: 'Homework', count: 0 },
+    { label: t('dashboard.quick_assignments'), icon: ClipboardList, bg: '#F0FDF4', iconColor: '#16A34A', tab: 'Assignments', count: 0 },
+    { label: t('dashboard.quick_bus'), icon: MapPin, bg: '#FFFBEB', iconColor: '#D97706', tab: 'BusTracking', count: 0 },
+    { label: t('dashboard.quick_alerts'), icon: Bell, bg: '#FFF1F2', iconColor: '#E11D48', tab: 'Notifications', count: 0 },
+    { label: t('dashboard.quick_reports', 'Reports'), icon: FileText, bg: '#FAF5FF', iconColor: '#9333EA', tab: 'Reports', count: reportCount },
+    { label: t('dashboard.quick_bookings', 'Bookings'), icon: Calendar, bg: '#F0FDFA', iconColor: '#0D9488', tab: 'Appointments', count: bookingCount },
   ];
 
   return (
@@ -91,10 +93,15 @@ export default function FeedScreen() {
 
       {/* Quick links grid */}
       <View style={styles.grid}>
-        {shortcuts.map(({ label, icon: Icon, bg, iconColor, tab }) => (
+        {shortcuts.map(({ label, icon: Icon, bg, iconColor, tab, count }) => (
           <TouchableOpacity key={label} style={styles.shortcut} onPress={() => navigation.navigate(tab)} activeOpacity={0.7}>
             <View style={[styles.shortcutIcon, { backgroundColor: bg }]}>
               <Icon size={16} color={iconColor} />
+              {count > 0 && (
+                <View style={styles.shortcutBadge}>
+                  <Text style={styles.shortcutBadgeText}>{count > 99 ? '99+' : count}</Text>
+                </View>
+              )}
             </View>
             <Text style={styles.shortcutLabel} numberOfLines={1}>{label}</Text>
           </TouchableOpacity>
@@ -208,6 +215,8 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   shortcut: { width: '30.5%', backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.sm, alignItems: 'center', gap: 6, ...shadow.sm },
   shortcutIcon: { width: 36, height: 36, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
   shortcutLabel: { fontSize: font.xs, fontWeight: '600', color: colors.text, textAlign: 'center' },
+  shortcutBadge: { position: 'absolute', top: -5, right: -5, minWidth: 16, height: 16, borderRadius: 8, backgroundColor: '#EF4444', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
+  shortcutBadgeText: { fontSize: 9, fontWeight: '800', color: '#fff' },
   sectionLabel: { fontSize: font.xs, fontWeight: '700', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.sm },
   card: { backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm, ...shadow.sm },
   cardRow: { flexDirection: 'row', gap: spacing.sm },

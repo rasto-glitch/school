@@ -704,7 +704,7 @@ export async function respondToAppointment(req: AuthRequest, res: Response): Pro
       message: approved
         ? `Your appointment has been approved${scheduledDate ? ` on ${scheduledDate}` : ''}.${responseMessage ? ' ' + responseMessage : ''}`
         : `Your appointment request has been ${status}.${responseMessage ? ' ' + responseMessage : ''}`,
-      type: 'general',
+      type: 'appointment',
     }).catch(() => {});
   }
 

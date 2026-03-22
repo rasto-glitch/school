@@ -4,32 +4,18 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { TouchableOpacity, View, Text, StyleSheet } from 'react-native';
-import { Home, BookOpen, ClipboardList, Bus, Bell, User } from 'lucide-react-native';
+import { Home, BookOpen, ClipboardList, Bus, Bell, User, Settings } from 'lucide-react-native';
 import FeedScreen from '../screens/parent/FeedScreen';
 import HomeworkScreen from '../screens/parent/HomeworkScreen';
 import AssignmentsScreen from '../screens/parent/AssignmentsScreen';
 import BusTrackingScreen from '../screens/parent/BusTrackingScreen';
-import NotificationsScreen from '../screens/parent/NotificationsScreen';
+import MeScreen from '../screens/parent/MeScreen';
 import { useColors } from '../store/themeStore';
 import { useBadgeStore } from '../store/badgeStore';
 import { font } from '../theme';
 import { parentApi } from '../services/api';
 
 const Tab = createBottomTabNavigator();
-
-function ProfileButton() {
-  const navigation = useNavigation<any>();
-  const colors = useColors();
-  return (
-    <TouchableOpacity
-      onPress={() => navigation.navigate('Me')}
-      style={[styles.profileBtn, { backgroundColor: colors.primaryLight }]}
-      activeOpacity={0.7}
-    >
-      <User size={20} color={colors.primary} />
-    </TouchableOpacity>
-  );
-}
 
 function TabBadge({ count }: { count: number }) {
   if (count === 0) return null;
@@ -44,10 +30,10 @@ export default function ParentTabs() {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const colors = useColors();
-  const [unreadCount, setUnreadCount] = useState(0);
+  const navigation = useNavigation<any>();
   const [homeworkCount, setHomeworkCount] = useState(0);
   const [assignmentCount, setAssignmentCount] = useState(0);
-  const { reportCount, setReportCount } = useBadgeStore();
+  const { unreadCount, setUnreadCount, setReportCount, setBookingCount } = useBadgeStore();
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchCounts = useCallback(() => {
@@ -59,22 +45,16 @@ export default function ParentTabs() {
         setHomeworkCount(r.data?.homework ?? 0);
         setAssignmentCount(r.data?.assignment ?? 0);
         setReportCount(r.data?.report ?? 0);
+        setBookingCount(r.data?.booking ?? 0);
       })
       .catch(() => {});
-  }, [setReportCount]);
+  }, [setUnreadCount, setReportCount, setBookingCount]);
 
   useEffect(() => {
     fetchCounts();
     intervalRef.current = setInterval(fetchCounts, 30000);
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [fetchCounts]);
-
-  const handleNotificationsPress = () => {
-    if (unreadCount > 0) {
-      parentApi.markAllRead().catch(() => {});
-      setUnreadCount(0);
-    }
-  };
 
   const handleHomeworkPress = () => {
     if (homeworkCount > 0) {
@@ -90,6 +70,33 @@ export default function ParentTabs() {
     }
   };
 
+  // Notification bell — shown in header for all tabs except Me
+  const NotificationBell = () => (
+    <TouchableOpacity
+      onPress={() => navigation.navigate('Notifications')}
+      style={[styles.headerBtn, { backgroundColor: colors.primaryLight }]}
+      activeOpacity={0.7}
+    >
+      <Bell size={18} color={colors.primary} />
+      {unreadCount > 0 && (
+        <View style={styles.bellBadge}>
+          <Text style={styles.bellBadgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+
+  // Settings button — shown in header only on Me tab
+  const SettingsButton = () => (
+    <TouchableOpacity
+      onPress={() => navigation.navigate('Settings')}
+      style={[styles.headerBtn, { backgroundColor: colors.primaryLight }]}
+      activeOpacity={0.7}
+    >
+      <Settings size={18} color={colors.primary} />
+    </TouchableOpacity>
+  );
+
   return (
     <Tab.Navigator
       screenOptions={{
@@ -97,7 +104,7 @@ export default function ParentTabs() {
         headerStyle: { backgroundColor: colors.card },
         headerTitleStyle: { fontSize: font.lg, fontWeight: '700', color: colors.text },
         headerShadowVisible: false,
-        headerRight: () => <ProfileButton />,
+        headerRight: () => <NotificationBell />,
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textMuted,
         tabBarStyle: {
@@ -117,12 +124,7 @@ export default function ParentTabs() {
         options={{
           headerTitle: t('dashboard.title'),
           tabBarLabel: t('dashboard.title'),
-          tabBarIcon: ({ color }) => (
-            <View>
-              <Home size={22} color={color} />
-              <TabBadge count={reportCount} />
-            </View>
-          ),
+          tabBarIcon: ({ color }) => <Home size={22} color={color} />,
         }}
       />
       <Tab.Screen
@@ -165,18 +167,13 @@ export default function ParentTabs() {
         }}
       />
       <Tab.Screen
-        name="Notifications"
-        component={NotificationsScreen}
-        listeners={{ tabPress: handleNotificationsPress }}
+        name="Me"
+        component={MeScreen}
         options={{
-          headerTitle: t('nav.notifications', 'Notifications'),
-          tabBarLabel: t('nav.notifications', 'Notifications'),
-          tabBarIcon: ({ color }) => (
-            <View>
-              <Bell size={22} color={color} />
-              <TabBadge count={unreadCount} />
-            </View>
-          ),
+          headerTitle: t('nav.me', 'Me'),
+          tabBarLabel: t('nav.me', 'Me'),
+          tabBarIcon: ({ color }) => <User size={22} color={color} />,
+          headerRight: () => <SettingsButton />,
         }}
       />
     </Tab.Navigator>
@@ -184,11 +181,19 @@ export default function ParentTabs() {
 }
 
 const styles = StyleSheet.create({
-  profileBtn: {
+  headerBtn: {
     width: 36, height: 36, borderRadius: 18,
     alignItems: 'center', justifyContent: 'center',
     marginRight: 12,
   },
+  bellBadge: {
+    position: 'absolute', top: -2, right: -2,
+    minWidth: 14, height: 14, borderRadius: 7,
+    backgroundColor: '#EF4444',
+    alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 2,
+  },
+  bellBadgeText: { fontSize: 8, fontWeight: '800', color: '#fff' },
   badge: {
     position: 'absolute', top: -4, right: -6,
     minWidth: 16, height: 16, borderRadius: 8,

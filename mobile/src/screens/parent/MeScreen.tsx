@@ -1,9 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, ActivityIndicator } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
-import { User, Settings, GraduationCap, Bus } from 'lucide-react-native';
+import { User, GraduationCap, Bus } from 'lucide-react-native';
 import { useAuthStore } from '../../store/authStore';
 import { useColors } from '../../store/themeStore';
 import { parentApi } from '../../services/api';
@@ -15,22 +14,9 @@ export default function MeScreen() {
   const { user, school } = useAuthStore();
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const navigation = useNavigation<any>();
   const [children, setChildren] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    navigation.setOptions({
-      headerRight: () => (
-        <TouchableOpacity
-          onPress={() => navigation.navigate('Settings')}
-          style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center', marginRight: 12 }}
-        >
-          <Settings size={18} color={colors.primary} />
-        </TouchableOpacity>
-      ),
-    });
-  }, [navigation, colors]);
 
   useEffect(() => {
     parentApi.getChildren()

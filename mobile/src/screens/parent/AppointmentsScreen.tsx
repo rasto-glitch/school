@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Calendar, Plus, X, Clock, CheckCircle, XCircle, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { parentApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
+import { useBadgeStore } from '../../store/badgeStore';
 import { spacing, radius, font, shadow } from '../../theme';
 
 interface Appointment {
@@ -48,8 +49,14 @@ export default function AppointmentsScreen() {
 
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
+  const clearBooking = useBadgeStore(s => s.clearBooking);
+
   const load = () => parentApi.getAppointments().then(r => setItems(r.data || []));
-  useEffect(() => { load().finally(() => setLoading(false)); }, []);
+  useEffect(() => {
+    clearBooking();
+    parentApi.markTypeRead('appointment').catch(() => {});
+    load().finally(() => setLoading(false));
+  }, []);
   const onRefresh = () => { setRefreshing(true); load().finally(() => setRefreshing(false)); };
 
   const toggle = (id: string) => setExpandedId(prev => prev === id ? null : id);

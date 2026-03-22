@@ -226,14 +226,14 @@ export async function getUnreadCount(req: AuthRequest, res: Response): Promise<v
 export async function getContentUnreadCounts(req: AuthRequest, res: Response): Promise<void> {
   const { userId, schoolId } = req.user!;
   const q = (type: string) => supabase.from('notifications').select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('school_id', schoolId).eq('is_read', false).eq('notification_type', type);
-  const [hw, as_, rp] = await Promise.all([q('homework'), q('assignment'), q('report')]);
-  res.json({ homework: hw.count ?? 0, assignment: as_.count ?? 0, report: rp.count ?? 0 });
+  const [hw, as_, rp, bk] = await Promise.all([q('homework'), q('assignment'), q('report'), q('appointment')]);
+  res.json({ homework: hw.count ?? 0, assignment: as_.count ?? 0, report: rp.count ?? 0, booking: bk.count ?? 0 });
 }
 
 export async function markTypeRead(req: AuthRequest, res: Response): Promise<void> {
   const { userId, schoolId } = req.user!;
   const type = req.params.type as string;
-  if (!['homework', 'assignment', 'report'].includes(type)) { res.status(400).json({ error: 'Invalid type' }); return; }
+  if (!['homework', 'assignment', 'report', 'appointment'].includes(type)) { res.status(400).json({ error: 'Invalid type' }); return; }
   await supabase.from('notifications').update({ is_read: true }).eq('user_id', userId).eq('school_id', schoolId).eq('notification_type', type).eq('is_read', false);
   res.json({ success: true });
 }

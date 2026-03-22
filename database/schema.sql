@@ -240,7 +240,7 @@ CREATE TABLE IF NOT EXISTS notifications (
   title TEXT NOT NULL,
   message TEXT NOT NULL,
   is_read BOOLEAN DEFAULT FALSE,
-  notification_type TEXT DEFAULT 'general' CHECK (notification_type IN ('homework','assignment','announcement','bus','grade','general','system')),
+  notification_type TEXT DEFAULT 'general' CHECK (notification_type IN ('homework','assignment','announcement','bus','grade','general','system','report','appointment')),
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
