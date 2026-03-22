@@ -809,6 +809,20 @@ export async function getLinkPreview(req: AuthRequest, res: Response): Promise<v
     return;
   }
 
+  // Instagram — blocks scraping, return branded fallback immediately
+  if (/instagram\.com/.test(url)) {
+    const label = /\/reel\//.test(url) ? 'Instagram Reel' : /\/p\//.test(url) ? 'Instagram Post' : 'Instagram';
+    res.json({ type: 'instagram', url, title: label, description: 'Tap to view on Instagram', image: '', siteName: 'Instagram' });
+    return;
+  }
+
+  // Facebook — blocks scraping, return branded fallback immediately
+  if (/facebook\.com|fb\.com/.test(url)) {
+    const label = /\/watch|\/videos/.test(url) ? 'Facebook Video' : /\/posts|\/photos/.test(url) ? 'Facebook Post' : 'Facebook';
+    res.json({ type: 'facebook', url, title: label, description: 'Tap to view on Facebook', image: '', siteName: 'Facebook' });
+    return;
+  }
+
   try {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 5000);

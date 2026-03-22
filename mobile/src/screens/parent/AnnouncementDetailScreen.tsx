@@ -8,7 +8,7 @@ import { spacing, radius, font } from '../../theme';
 import type { Announcement } from '../../types';
 
 interface LinkPreview {
-  type: 'youtube' | 'link';
+  type: 'youtube' | 'instagram' | 'facebook' | 'link';
   videoId?: string;
   url: string;
   title: string;
@@ -66,7 +66,25 @@ export default function AnnouncementDetailScreen() {
       {announcement.linkUrl && (
         <View style={styles.linkCard}>
           <Text style={styles.sectionLabel}>Link</Text>
-          {preview?.type === 'youtube' && preview.videoId ? (
+          {preview?.type === 'instagram' ? (
+            <TouchableOpacity style={styles.igCard} activeOpacity={0.85} onPress={() => Linking.openURL(announcement.linkUrl!)}>
+              <Text style={styles.socialEmoji}>📸</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.socialTitle}>{preview.title}</Text>
+                <Text style={styles.socialSub}>{preview.description}</Text>
+              </View>
+              <ExternalLink size={16} color="#fff" />
+            </TouchableOpacity>
+          ) : preview?.type === 'facebook' ? (
+            <TouchableOpacity style={styles.fbCard} activeOpacity={0.85} onPress={() => Linking.openURL(announcement.linkUrl!)}>
+              <Text style={styles.socialEmoji}>👥</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.socialTitle}>{preview.title}</Text>
+                <Text style={styles.socialSub}>{preview.description}</Text>
+              </View>
+              <ExternalLink size={16} color="#fff" />
+            </TouchableOpacity>
+          ) : preview?.type === 'youtube' && preview.videoId ? (
             <TouchableOpacity style={styles.youtubeThumbnail} onPress={() => Linking.openURL(announcement.linkUrl!)}>
               <Image source={{ uri: `https://img.youtube.com/vi/${preview.videoId}/mqdefault.jpg` }} style={styles.youtubeImg} resizeMode="cover" />
               <View style={styles.playOverlay}>
@@ -179,4 +197,9 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   pdfCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.primaryLight, borderRadius: radius.md, padding: spacing.md },
   pdfLabel: { fontSize: font.sm, fontWeight: '700', color: colors.text },
   pdfSub: { fontSize: font.xs, color: colors.textMuted, marginTop: 2 },
+  igCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderRadius: radius.md, padding: spacing.md, backgroundColor: '#DD2A7B' },
+  fbCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderRadius: radius.md, padding: spacing.md, backgroundColor: '#1877F2' },
+  socialEmoji: { fontSize: 24 },
+  socialTitle: { fontSize: font.sm, fontWeight: '700', color: '#fff' },
+  socialSub: { fontSize: font.xs, color: 'rgba(255,255,255,0.8)', marginTop: 2 },
 });

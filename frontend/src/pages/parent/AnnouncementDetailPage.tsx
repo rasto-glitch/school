@@ -10,7 +10,7 @@ import type { Announcement } from '../../types';
 import { format, parseISO } from 'date-fns';
 
 interface LinkPreview {
-  type: 'youtube' | 'link';
+  type: 'youtube' | 'instagram' | 'facebook' | 'link';
   videoId?: string;
   url: string;
   title: string;
@@ -56,7 +56,29 @@ export default function AnnouncementDetailPage() {
         {announcement.linkUrl && (
           <div className="p-4 bg-white rounded-2xl border border-gray-200 space-y-3">
             <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Link</h2>
-            {preview?.type === 'youtube' ? (
+            {preview?.type === 'instagram' ? (
+              <a href={announcement.linkUrl} target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-3 p-4 rounded-xl hover:opacity-90 transition-opacity"
+                style={{ background: 'linear-gradient(135deg, #F58529, #DD2A7B, #8134AF)' }}>
+                <span className="text-2xl">📸</span>
+                <div className="min-w-0">
+                  <p className="text-white font-bold text-sm">{preview.title}</p>
+                  <p className="text-white/80 text-xs">{preview.description}</p>
+                </div>
+                <ExternalLink className="w-4 h-4 text-white ml-auto flex-shrink-0" />
+              </a>
+            ) : preview?.type === 'facebook' ? (
+              <a href={announcement.linkUrl} target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-3 p-4 rounded-xl hover:opacity-90 transition-opacity"
+                style={{ backgroundColor: '#1877F2' }}>
+                <span className="text-2xl">👥</span>
+                <div className="min-w-0">
+                  <p className="text-white font-bold text-sm">{preview.title}</p>
+                  <p className="text-white/80 text-xs">{preview.description}</p>
+                </div>
+                <ExternalLink className="w-4 h-4 text-white ml-auto flex-shrink-0" />
+              </a>
+            ) : preview?.type === 'youtube' ? (
               <div className="space-y-2">
                 <iframe
                   src={`https://www.youtube.com/embed/${preview.videoId}`}
