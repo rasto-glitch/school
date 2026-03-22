@@ -69,6 +69,9 @@ export const parentApi = {
   markRead: (id: string) => api.patch(`/parent/notifications/${id}/read`),
   createAppointment: (data: object) => api.post('/parent/appointments', data),
   getAppointments: () => api.get('/parent/appointments'),
+  getHomeworkById: (id: string) => api.get(`/parent/homework/${id}`),
+  getAssignmentById: (id: string) => api.get(`/parent/assignments/${id}`),
+  getAnnouncementById: (id: string) => api.get(`/parent/announcements/${id}`),
 };
 
 // ---- TEACHER ----

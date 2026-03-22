@@ -109,8 +109,11 @@ export function createRouter(io: SocketServer) {
   // ---- PARENT ----
   router.get('/parent/children', authenticate, authorize('parent'), (req, res) => parent.getChildren(req as AuthRequest, res));
   router.get('/parent/homework', authenticate, authorize('parent'), (req, res) => parent.getHomework(req as AuthRequest, res));
+  router.get('/parent/homework/:id', authenticate, authorize('parent'), (req, res) => parent.getHomeworkById(req as AuthRequest, res));
   router.get('/parent/assignments', authenticate, authorize('parent'), (req, res) => parent.getAssignments(req as AuthRequest, res));
+  router.get('/parent/assignments/:id', authenticate, authorize('parent'), (req, res) => parent.getAssignmentById(req as AuthRequest, res));
   router.get('/parent/announcements', authenticate, authorize('parent'), (req, res) => parent.getAnnouncements(req as AuthRequest, res));
+  router.get('/parent/announcements/:id', authenticate, authorize('parent'), (req, res) => parent.getAnnouncementById(req as AuthRequest, res));
   router.get('/parent/reports', authenticate, authorize('parent'), (req, res) => parent.getReport(req as AuthRequest, res));
   router.get('/parent/grades', authenticate, authorize('parent'), (req, res) => parent.getGrades(req as AuthRequest, res));
   router.get('/parent/bus-location', authenticate, authorize('parent'), (req, res) => parent.getBusLocation(req as AuthRequest, res));

@@ -746,7 +746,7 @@ export async function getAnnouncements(req: AuthRequest, res: Response): Promise
 
 export async function createAnnouncement(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId, userId } = req.user!;
-  const { title, content, targetAudience } = req.body;
+  const { title, content, targetAudience, imageUrl } = req.body;
 
   let attachmentUrl: string | null = null;
   const file = (req as any).file;
@@ -770,6 +770,7 @@ export async function createAnnouncement(req: AuthRequest, res: Response): Promi
     target_audience: targetAudience || 'all',
     created_by: userId,
     attachment_url: attachmentUrl,
+    image_url: imageUrl || null,
   }).select().single();
 
   if (error) { res.status(500).json({ error: error.message }); return; }
@@ -781,7 +782,7 @@ export async function createAnnouncement(req: AuthRequest, res: Response): Promi
     : supabase.from('users').select('id').eq('school_id', schoolId).eq('role', audience).eq('is_active', true);
   const { data: targets } = await roleFilter;
   if (targets && targets.length > 0) {
-    notifyMany(targets.map((u: any) => ({ schoolId, userId: u.id, title, message: content, type: 'announcement' }))).catch(() => {});
+    notifyMany(targets.map((u: any) => ({ schoolId, userId: u.id, title, message: content, type: 'announcement', relatedId: data.id }))).catch(() => {});
   }
 
   res.status(201).json(toCC(data));

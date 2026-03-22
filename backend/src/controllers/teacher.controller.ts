@@ -95,7 +95,7 @@ export async function createHomework(req: AuthRequest, res: Response): Promise<v
         const uids: string[] = Array.isArray(s.parents)
           ? s.parents.map((p: any) => p.user_id)
           : s.parents?.user_id ? [s.parents.user_id] : [];
-        return uids.map(uid => ({ schoolId, userId: uid, title: 'New Homework', message: `${title}${subject ? ` (${subject})` : ''}${dueDate ? ` — due ${dueDate}` : ''}`, type: 'homework' }));
+        return uids.map(uid => ({ schoolId, userId: uid, title: 'New Homework', message: `${title}${subject ? ` (${subject})` : ''}${dueDate ? ` — due ${dueDate}` : ''}`, type: 'homework', relatedId: data.id }));
       });
       notifyMany(payloads).catch(() => {});
     }
@@ -176,7 +176,7 @@ export async function createAssignment(req: AuthRequest, res: Response): Promise
   if (assignedStudents) {
     const payloads = (assignedStudents as any[]).flatMap((s: any) => {
       const uids: string[] = Array.isArray(s.parents) ? s.parents.map((p: any) => p.user_id) : s.parents?.user_id ? [s.parents.user_id] : [];
-      return uids.map(uid => ({ schoolId, userId: uid, title: 'New Assignment', message: `${title}${subject ? ` (${subject})` : ''}${dueDate ? ` — due ${dueDate}` : ''}`, type: 'assignment' }));
+      return uids.map(uid => ({ schoolId, userId: uid, title: 'New Assignment', message: `${title}${subject ? ` (${subject})` : ''}${dueDate ? ` — due ${dueDate}` : ''}`, type: 'assignment', relatedId: data.id }));
     });
     notifyMany(payloads).catch(() => {});
   }

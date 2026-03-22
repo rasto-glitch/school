@@ -62,6 +62,9 @@ export const parentApi = {
   getContentUnreadCounts: () => api.get('/parent/notifications/content-counts'),
   markTypeRead: (type: string) => api.patch(`/parent/notifications/read-type/${type}`),
   getDriverInfo: (studentId?: string) => api.get('/parent/driver-info', { params: studentId ? { studentId } : {} }),
+  getHomeworkById: (id: string) => api.get(`/parent/homework/${id}`),
+  getAssignmentById: (id: string) => api.get(`/parent/assignments/${id}`),
+  getAnnouncementById: (id: string) => api.get(`/parent/announcements/${id}`),
 };
 
 // ---- SUPERVISOR ----

@@ -2,11 +2,14 @@ import { useEffect, useState, useMemo } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { parentApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
 import { useBadgeStore } from '../../store/badgeStore';
 import { spacing, radius, shadow, font } from '../../theme';
 import type { Notification } from '../../types';
+import type { RootStackParamList } from '../../navigation';
 
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -55,6 +58,7 @@ export default function NotificationsScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [items, setItems] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -71,6 +75,27 @@ export default function NotificationsScreen() {
   const markRead = async (id: string) => {
     await parentApi.markRead(id);
     setItems(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
+  };
+
+  const handlePress = async (item: Notification) => {
+    if (!item.isRead) markRead(item.id);
+    if (!item.relatedId) return;
+    try {
+      if (item.notificationType === 'homework') {
+        const res = await parentApi.getHomeworkById(item.relatedId);
+        navigation.navigate('HomeworkDetail', { homework: res.data });
+      } else if (item.notificationType === 'assignment') {
+        const res = await parentApi.getAssignmentById(item.relatedId);
+        navigation.navigate('AssignmentDetail', { assignment: res.data });
+      } else if (item.notificationType === 'announcement') {
+        const res = await parentApi.getAnnouncementById(item.relatedId);
+        navigation.navigate('AnnouncementDetail', { announcement: res.data });
+      } else if (item.notificationType === 'report') {
+        // Reports don't have a detail screen yet — no-op
+      }
+    } catch {
+      // If fetch fails, do nothing
+    }
   };
 
   const groups = useMemo(() => groupByDay(items), [items]);
@@ -96,7 +121,7 @@ export default function NotificationsScreen() {
             {group.items.map(item => (
               <TouchableOpacity key={item.id} activeOpacity={0.75}
                 style={[styles.card, !item.isRead && styles.cardUnread]}
-                onPress={() => { if (!item.isRead) markRead(item.id); }}>
+                onPress={() => handlePress(item)}>
                 {!item.isRead && <View style={styles.dot} />}
                 <Text style={styles.cardTitle}>{item.title}</Text>
                 <Text style={styles.cardMessage}>{item.message}</Text>

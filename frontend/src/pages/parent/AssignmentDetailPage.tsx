@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ClipboardList, Calendar, ArrowLeft } from 'lucide-react';
+import { ClipboardList, Calendar, ArrowLeft, Paperclip } from 'lucide-react';
 import { parentApi } from '../../services/api';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
@@ -21,10 +21,8 @@ export default function AssignmentDetailPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    parentApi.getAssignments().then(r => {
-      const a = (r.data || []).find((a: Assignment) => a.id === id);
-      setAssignment(a || null);
-    }).finally(() => setLoading(false));
+    if (!id) return;
+    parentApi.getAssignmentById(id).then(r => setAssignment(r.data || null)).finally(() => setLoading(false));
   }, [id]);
 
   if (loading) return <PageLayout title="Assignment"><LoadingSpinner /></PageLayout>;
@@ -67,6 +65,21 @@ export default function AssignmentDetailPage() {
             <div className="mb-4">
               <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Description</h2>
               <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">{assignment.description}</p>
+            </div>
+          )}
+
+          {assignment.attachmentUrl && (
+            <div className="mb-4">
+              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Attachment</h2>
+              <a
+                href={assignment.attachmentUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary-50 text-primary-700 rounded-xl hover:bg-primary-100 transition-colors font-medium text-sm"
+              >
+                <Paperclip className="w-4 h-4" />
+                Download Attachment
+              </a>
             </div>
           )}
 

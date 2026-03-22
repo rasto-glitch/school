@@ -17,10 +17,8 @@ export default function HomeworkDetailPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    parentApi.getHomework().then(r => {
-      const hw = (r.data || []).find((h: Homework) => h.id === id);
-      setHomework(hw || null);
-    }).finally(() => setLoading(false));
+    if (!id) return;
+    parentApi.getHomeworkById(id).then(r => setHomework(r.data || null)).finally(() => setLoading(false));
   }, [id]);
 
   if (loading) return <PageLayout title="Homework"><LoadingSpinner /></PageLayout>;

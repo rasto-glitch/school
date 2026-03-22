@@ -14,6 +14,7 @@ interface NotifyPayload {
   title: string;
   message: string;
   type?: string;
+  relatedId?: string;
 }
 
 /**
@@ -21,7 +22,7 @@ interface NotifyPayload {
  * and sends an Expo push notification if the user has a registered device token.
  */
 export async function notify(payload: NotifyPayload): Promise<void> {
-  const { schoolId, userId, title, message, type = 'general' } = payload;
+  const { schoolId, userId, title, message, type = 'general', relatedId } = payload;
 
   // 1. Save to DB
   await supabase.from('notifications').insert({
@@ -30,6 +31,7 @@ export async function notify(payload: NotifyPayload): Promise<void> {
     title,
     message,
     notification_type: type,
+    related_id: relatedId ?? null,
   });
 
   // 2. Real-time socket event
@@ -75,6 +77,7 @@ export async function notifyMany(payloads: NotifyPayload[]): Promise<void> {
       title: p.title,
       message: p.message,
       notification_type: p.type ?? 'general',
+      related_id: p.relatedId ?? null,
     }))
   );
 

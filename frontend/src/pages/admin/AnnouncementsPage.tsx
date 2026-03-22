@@ -20,7 +20,7 @@ export default function AnnouncementsPage() {
   const [submitting, setSubmitting] = useState(false);
 
   const { register, handleSubmit, reset } = useForm<{
-    title: string; content: string; targetAudience: string;
+    title: string; content: string; targetAudience: string; imageUrl: string;
   }>();
   const fileRef = useRef<HTMLInputElement>(null);
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
@@ -93,6 +93,7 @@ export default function AnnouncementsPage() {
               ]}
               {...register('targetAudience')}
             />
+            <Input label="Image URL (optional)" placeholder="https://..." {...register('imageUrl')} />
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Attachment (optional)</label>
               <input ref={fileRef} type="file" className="hidden" onChange={e => setAttachedFile(e.target.files?.[0] || null)} />

@@ -102,6 +102,30 @@ export async function getAnnouncements(req: AuthRequest, res: Response): Promise
   res.json(toCC(data));
 }
 
+export async function getHomeworkById(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { id } = req.params;
+  const { data, error } = await supabase.from('homework').select('*, classes(name)').eq('id', id).eq('school_id', schoolId).single();
+  if (error || !data) { res.status(404).json({ error: 'Not found' }); return; }
+  res.json(toCC(data));
+}
+
+export async function getAssignmentById(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { id } = req.params;
+  const { data, error } = await supabase.from('assignments').select('*, students(full_name), classes(name)').eq('id', id).eq('school_id', schoolId).single();
+  if (error || !data) { res.status(404).json({ error: 'Not found' }); return; }
+  res.json(toCC(data));
+}
+
+export async function getAnnouncementById(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { id } = req.params;
+  const { data, error } = await supabase.from('announcements').select('*').eq('id', id).eq('school_id', schoolId).single();
+  if (error || !data) { res.status(404).json({ error: 'Not found' }); return; }
+  res.json(toCC(data));
+}
+
 export async function getReport(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId, userId } = req.user!;
   const { studentId, subject } = req.query as Record<string, string>;
