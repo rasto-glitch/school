@@ -15,9 +15,17 @@ const app = express();
 const httpServer = http.createServer(app);
 
 // Socket.io setup
+const allowedOrigins = [
+  process.env.FRONTEND_URL || 'http://localhost:5173',
+];
+
 const io = new SocketServer(httpServer, {
   cors: {
-    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    // Allow the web frontend + React Native (which sends no Origin header)
+    origin: (origin, cb) => {
+      if (!origin || allowedOrigins.includes(origin)) cb(null, true);
+      else cb(new Error('Not allowed by CORS'));
+    },
     methods: ['GET', 'POST'],
   },
 });
@@ -25,7 +33,10 @@ const io = new SocketServer(httpServer, {
 // Middleware
 app.use(helmet());
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: (origin, cb) => {
+    if (!origin || allowedOrigins.includes(origin)) cb(null, true);
+    else cb(new Error('Not allowed by CORS'));
+  },
   credentials: true,
 }));
 app.use(express.json({ limit: '10mb' }));

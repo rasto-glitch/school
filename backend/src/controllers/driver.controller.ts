@@ -28,6 +28,18 @@ function distanceMiles(lat1: number, lon1: number, lat2: number, lon2: number): 
   return R * c;
 }
 
+export async function getMyProfile(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId, userId } = req.user!;
+  const { data, error } = await supabase
+    .from('drivers')
+    .select('full_name, phone_number, license_number, buses(bus_number)')
+    .eq('user_id', userId)
+    .eq('school_id', schoolId)
+    .single();
+  if (error || !data) { res.status(404).json({ error: 'Driver not found' }); return; }
+  res.json(toCC(data));
+}
+
 export async function getMyStudents(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId, userId } = req.user!;
   const { search } = req.query as Record<string, string>;
@@ -55,8 +67,8 @@ export async function updateLocation(req: AuthRequest, res: Response, io?: Socke
   const { data: driver } = await supabase.from('drivers').select('id, bus_id, excluded_student_ids').eq('user_id', userId).eq('school_id', schoolId).single();
   if (!driver) { res.status(404).json({ error: 'Driver not found' }); return; }
 
-  // Save location
-  const { error } = await supabase.from('bus_locations').insert({
+  // Save location (non-fatal — a write failure must not block proximity notifications)
+  await supabase.from('bus_locations').insert({
     school_id: schoolId,
     driver_id: driver.id,
     bus_id: driver.bus_id,
@@ -66,8 +78,6 @@ export async function updateLocation(req: AuthRequest, res: Response, io?: Socke
     heading: heading || 0,
     is_driving: isDriving !== false,
   });
-
-  if (error) { res.status(500).json({ error: error.message }); return; }
 
   // Check proximity and send notifications
   if (isDriving) {

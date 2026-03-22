@@ -1,14 +1,18 @@
+import { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Navigation, Users } from 'lucide-react-native';
 import { useAuthStore } from '../../store/authStore';
-import { colors, spacing, radius, shadow, font } from '../../theme';
+import { useColors } from '../../store/themeStore';
+import { spacing, radius, shadow, font } from '../../theme';
 
 export default function DriverDashboardScreen() {
   const { t } = useTranslation();
   const { user } = useAuthStore();
   const insets = useSafeAreaInsets();
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top + spacing.md }]}>
@@ -40,7 +44,7 @@ export default function DriverDashboardScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').useColors>) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg, padding: spacing.md },
   header: { marginBottom: spacing.lg },
   greeting: { fontSize: font.sm, color: colors.textMuted, marginBottom: 2 },

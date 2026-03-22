@@ -1,15 +1,18 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { View, Text, ScrollView, TextInput, StyleSheet, ActivityIndicator } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Search, Users } from 'lucide-react-native';
 import { driverApi } from '../../services/api';
-import { colors, spacing, radius, shadow, font } from '../../theme';
+import { useColors } from '../../store/themeStore';
+import { spacing, radius, shadow, font } from '../../theme';
 import type { Student } from '../../types';
 
 export default function DriverStudentsScreen() {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [students, setStudents] = useState<Student[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -71,7 +74,7 @@ export default function DriverStudentsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').useColors>) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   content: { padding: spacing.md, paddingBottom: 40 },
   title: { fontSize: font.xxl, fontWeight: '700', color: colors.text },

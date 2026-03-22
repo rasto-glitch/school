@@ -114,7 +114,9 @@ export function createRouter(io: SocketServer) {
   router.get('/parent/driver-info', authenticate, authorize('parent'), (req, res) => parent.getDriverInfo(req as AuthRequest, res));
   router.get('/parent/notifications', authenticate, authorize('parent'), (req, res) => parent.getNotifications(req as AuthRequest, res));
   router.get('/parent/notifications/unread-count', authenticate, authorize('parent'), (req, res) => parent.getUnreadCount(req as AuthRequest, res));
+  router.get('/parent/notifications/content-counts', authenticate, authorize('parent'), (req, res) => parent.getContentUnreadCounts(req as AuthRequest, res));
   router.patch('/parent/notifications/read-all', authenticate, authorize('parent'), (req, res) => parent.markAllNotificationsRead(req as AuthRequest, res));
+  router.patch('/parent/notifications/read-type/:type', authenticate, authorize('parent'), (req, res) => parent.markTypeRead(req as AuthRequest, res));
   router.patch('/parent/notifications/:id/read', authenticate, authorize('parent'), (req, res) => parent.markNotificationRead(req as AuthRequest, res));
   router.get('/parent/appointments', authenticate, authorize('parent'), (req, res) => parent.getAppointments(req as AuthRequest, res));
   router.post('/parent/appointments', authenticate, authorize('parent'), (req, res) => parent.createAppointment(req as AuthRequest, res));
@@ -134,6 +136,7 @@ export function createRouter(io: SocketServer) {
   router.delete('/supervisor/assignments/:id', authenticate, authorize('supervisor'), (req, res) => supervisor.deleteAssignment(req as AuthRequest, res));
 
   // ---- DRIVER ----
+  router.get('/driver/me', authenticate, authorize('driver'), (req, res) => driver.getMyProfile(req as AuthRequest, res));
   router.get('/driver/students', authenticate, authorize('driver'), (req, res) => driver.getMyStudents(req as AuthRequest, res));
   router.post('/driver/location', authenticate, authorize('driver'), (req: Request, res: Response) => driver.updateLocation(req as AuthRequest, res, io));
   router.post('/driver/start', authenticate, authorize('driver'), (req, res) => driver.startDrive(req as AuthRequest, res));

@@ -8,7 +8,7 @@ const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5000/api';
 
 async function getToken(): Promise<string | null> {
   try {
-    const raw = await AsyncStorage.getItem('school-auth');
+    const raw = await AsyncStorage.getItem('school-auth-mobile');
     if (!raw) return null;
     return JSON.parse(raw)?.state?.token ?? null;
   } catch {

@@ -59,11 +59,14 @@ export const parentApi = {
   createAppointment: (data: { reason: string; message?: string; requestedDate?: string; studentIds?: string[] }) => api.post('/parent/appointments', data),
   markAllRead: () => api.patch('/parent/notifications/read-all'),
   getUnreadCount: () => api.get('/parent/notifications/unread-count'),
+  getContentUnreadCounts: () => api.get('/parent/notifications/content-counts'),
+  markTypeRead: (type: string) => api.patch(`/parent/notifications/read-type/${type}`),
   getDriverInfo: (studentId?: string) => api.get('/parent/driver-info', { params: studentId ? { studentId } : {} }),
 };
 
 // ---- DRIVER ----
 export const driverApi = {
+  getProfile: () => api.get('/driver/me'),
   getStudents: (search?: string) => api.get('/driver/students', { params: { search } }),
   updateLocation: (data: object) => api.post('/driver/location', data),
   startDrive: (excludedStudentIds: string[]) => api.post('/driver/start', { excludedStudentIds }),

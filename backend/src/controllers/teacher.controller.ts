@@ -211,7 +211,7 @@ export async function createReport(req: AuthRequest, res: Response): Promise<voi
     const uids: string[] = Array.isArray((student as any).parents)
       ? (student as any).parents.map((p: any) => p.user_id)
       : (student as any).parents?.user_id ? [(student as any).parents.user_id] : [];
-    uids.forEach(uid => notify({ schoolId, userId: uid, title: 'New Report', message: `A report has been submitted for ${(student as any).full_name}${subject ? ` in ${subject}` : ''}.`, type: 'general' }).catch(() => {}));
+    uids.forEach(uid => notify({ schoolId, userId: uid, title: 'New Report', message: `A report has been submitted for ${(student as any).full_name}${subject ? ` in ${subject}` : ''}.`, type: 'report' }).catch(() => {}));
   }
 
   res.status(201).json(toCC(data));

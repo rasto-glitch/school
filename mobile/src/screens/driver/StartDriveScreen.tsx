@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   ActivityIndicator, Alert, Switch,
@@ -8,12 +8,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import { driverApi } from '../../services/api';
 import { LOCATION_TASK_NAME } from '../../tasks/locationTask';
-import { colors, spacing, radius, shadow, font } from '../../theme';
+import { useColors } from '../../store/themeStore';
+import { spacing, radius, shadow, font } from '../../theme';
 import type { Student } from '../../types';
 
 export default function StartDriveScreen() {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [students, setStudents] = useState<Student[]>([]);
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
   const [isDriving, setIsDriving] = useState(false);
@@ -153,7 +156,7 @@ export default function StartDriveScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').useColors>) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   content: { padding: spacing.md, paddingBottom: 40 },
   title: { fontSize: font.xxl, fontWeight: '700', color: colors.text },

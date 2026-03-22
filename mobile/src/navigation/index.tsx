@@ -6,6 +6,7 @@ import SchoolPickerScreen from '../screens/auth/SchoolPickerScreen';
 import LoginScreen from '../screens/auth/LoginScreen';
 import ParentTabs from './ParentTabs';
 import DriverTabs from './DriverTabs';
+import DriverSettingsScreen from '../screens/driver/DriverSettingsScreen';
 import SetPickupLocationScreen from '../screens/parent/SetPickupLocationScreen';
 import MeScreen from '../screens/parent/MeScreen';
 import SettingsScreen from '../screens/parent/SettingsScreen';
@@ -19,6 +20,7 @@ export type RootStackParamList = {
   Login: undefined;
   ParentTabs: undefined;
   DriverTabs: undefined;
+  DriverSettings: undefined;
   SetPickupLocation: undefined;
   Me: undefined;
   Settings: undefined;
@@ -52,7 +54,14 @@ export default function Navigation() {
             <Stack.Screen name="Login" component={LoginScreen} />
           )
         ) : user?.role === 'driver' ? (
-          <Stack.Screen name="DriverTabs" component={DriverTabs} />
+          <>
+            <Stack.Screen name="DriverTabs" component={DriverTabs} />
+            <Stack.Screen
+              name="DriverSettings"
+              component={DriverSettingsScreen}
+              options={{ headerShown: true, headerTitle: 'Settings', headerBackTitle: 'Back', presentation: 'card' }}
+            />
+          </>
         ) : (
           <>
             <Stack.Screen name="ParentTabs" component={ParentTabs} />

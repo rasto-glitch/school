@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -30,7 +30,7 @@ function ProfileButton() {
   );
 }
 
-function NotificationBadge({ count }: { count: number }) {
+function TabBadge({ count }: { count: number }) {
   if (count === 0) return null;
   return (
     <View style={styles.badge}>
@@ -44,24 +44,56 @@ export default function ParentTabs() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const [unreadCount, setUnreadCount] = useState(0);
+  const [homeworkCount, setHomeworkCount] = useState(0);
+  const [assignmentCount, setAssignmentCount] = useState(0);
+  const [reportCount, setReportCount] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const fetchUnread = () => {
+  const fetchCounts = useCallback(() => {
     parentApi.getUnreadCount()
       .then(r => setUnreadCount(r.data?.count ?? 0))
       .catch(() => {});
-  };
-
-  useEffect(() => {
-    fetchUnread();
-    intervalRef.current = setInterval(fetchUnread, 30000);
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+    parentApi.getContentUnreadCounts()
+      .then(r => {
+        setHomeworkCount(r.data?.homework ?? 0);
+        setAssignmentCount(r.data?.assignment ?? 0);
+        setReportCount(r.data?.report ?? 0);
+      })
+      .catch(() => {});
   }, []);
 
-  const handleNotificationsTabPress = () => {
+  useEffect(() => {
+    fetchCounts();
+    intervalRef.current = setInterval(fetchCounts, 30000);
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  }, [fetchCounts]);
+
+  const handleNotificationsPress = () => {
     if (unreadCount > 0) {
       parentApi.markAllRead().catch(() => {});
       setUnreadCount(0);
+    }
+  };
+
+  const handleHomeworkPress = () => {
+    if (homeworkCount > 0) {
+      parentApi.markTypeRead('homework').catch(() => {});
+      setHomeworkCount(0);
+    }
+  };
+
+  const handleAssignmentPress = () => {
+    if (assignmentCount > 0) {
+      parentApi.markTypeRead('assignment').catch(() => {});
+      setAssignmentCount(0);
+    }
+  };
+
+  // Reports are accessed from the Feed tab — clear the badge when Feed is pressed
+  const handleFeedPress = () => {
+    if (reportCount > 0) {
+      parentApi.markTypeRead('report').catch(() => {});
+      setReportCount(0);
     }
   };
 
@@ -89,28 +121,46 @@ export default function ParentTabs() {
       <Tab.Screen
         name="Feed"
         component={FeedScreen}
+        listeners={{ tabPress: handleFeedPress }}
         options={{
           headerTitle: t('dashboard.title'),
           tabBarLabel: t('dashboard.title'),
-          tabBarIcon: ({ color }) => <Home size={22} color={color} />,
+          tabBarIcon: ({ color }) => (
+            <View>
+              <Home size={22} color={color} />
+              <TabBadge count={reportCount} />
+            </View>
+          ),
         }}
       />
       <Tab.Screen
         name="Homework"
         component={HomeworkScreen}
+        listeners={{ tabPress: handleHomeworkPress }}
         options={{
           headerTitle: t('nav.homework'),
           tabBarLabel: t('nav.homework'),
-          tabBarIcon: ({ color }) => <BookOpen size={22} color={color} />,
+          tabBarIcon: ({ color }) => (
+            <View>
+              <BookOpen size={22} color={color} />
+              <TabBadge count={homeworkCount} />
+            </View>
+          ),
         }}
       />
       <Tab.Screen
         name="Assignments"
         component={AssignmentsScreen}
+        listeners={{ tabPress: handleAssignmentPress }}
         options={{
           headerTitle: t('nav.assignments', 'Assignments'),
           tabBarLabel: t('nav.assignments', 'Assignments'),
-          tabBarIcon: ({ color }) => <ClipboardList size={22} color={color} />,
+          tabBarIcon: ({ color }) => (
+            <View>
+              <ClipboardList size={22} color={color} />
+              <TabBadge count={assignmentCount} />
+            </View>
+          ),
         }}
       />
       <Tab.Screen
@@ -125,14 +175,14 @@ export default function ParentTabs() {
       <Tab.Screen
         name="Notifications"
         component={NotificationsScreen}
-        listeners={{ tabPress: handleNotificationsTabPress }}
+        listeners={{ tabPress: handleNotificationsPress }}
         options={{
           headerTitle: t('nav.notifications', 'Notifications'),
           tabBarLabel: t('nav.notifications', 'Notifications'),
           tabBarIcon: ({ color }) => (
             <View>
               <Bell size={22} color={color} />
-              <NotificationBadge count={unreadCount} />
+              <TabBadge count={unreadCount} />
             </View>
           ),
         }}
