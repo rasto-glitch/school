@@ -20,7 +20,7 @@ export default function AnnouncementsPage() {
   const [submitting, setSubmitting] = useState(false);
 
   const { register, handleSubmit, reset } = useForm<{
-    title: string; content: string; targetAudience: string; imageUrl: string;
+    title: string; content: string; targetAudience: string; linkUrl: string;
   }>();
   const fileRef = useRef<HTMLInputElement>(null);
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
@@ -93,7 +93,7 @@ export default function AnnouncementsPage() {
               ]}
               {...register('targetAudience')}
             />
-            <Input label="Image URL (optional)" placeholder="https://..." {...register('imageUrl')} />
+            <Input label="Link (optional)" placeholder="https://youtube.com/watch?v=... or any URL" {...register('linkUrl')} />
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Attachment (optional)</label>
               <input ref={fileRef} type="file" className="hidden" onChange={e => setAttachedFile(e.target.files?.[0] || null)} />
@@ -127,8 +127,11 @@ export default function AnnouncementsPage() {
             <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
               {announcements.map(ann => (
                 <Card key={ann.id}>
-                  {(ann as any).imageUrl && (
-                    <img src={(ann as any).imageUrl} alt="" className="w-full h-32 object-cover rounded-xl mb-3" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                  {(ann as any).linkUrl && (
+                    <div className="flex items-center gap-1.5 text-xs text-primary-600 bg-primary-50 rounded-lg px-2.5 py-1 mb-3 w-fit">
+                      <span>🔗</span>
+                      <span className="truncate max-w-[200px]">{(ann as any).linkUrl}</span>
+                    </div>
                   )}
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">

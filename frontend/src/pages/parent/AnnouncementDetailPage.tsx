@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Megaphone, ArrowLeft, Paperclip } from 'lucide-react';
+import { Megaphone, ArrowLeft, Paperclip, ExternalLink } from 'lucide-react';
 import { parentApi } from '../../services/api';
 import PageLayout from '../../components/layout/PageLayout';
 import Badge from '../../components/common/Badge';
@@ -9,16 +9,32 @@ import Button from '../../components/common/Button';
 import type { Announcement } from '../../types';
 import { format, parseISO } from 'date-fns';
 
+interface LinkPreview {
+  type: 'youtube' | 'link';
+  videoId?: string;
+  url: string;
+  title: string;
+  description: string;
+  image: string;
+  siteName: string;
+}
+
 export default function AnnouncementDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [announcement, setAnnouncement] = useState<Announcement | null>(null);
   const [loading, setLoading] = useState(true);
+  const [preview, setPreview] = useState<LinkPreview | null>(null);
 
   useEffect(() => {
     if (!id) return;
     parentApi.getAnnouncementById(id).then(r => setAnnouncement(r.data || null)).finally(() => setLoading(false));
   }, [id]);
+
+  useEffect(() => {
+    if (!announcement?.linkUrl) return;
+    parentApi.getLinkPreview(announcement.linkUrl).then(r => setPreview(r.data)).catch(() => {});
+  }, [announcement?.linkUrl]);
 
   if (loading) return <PageLayout title="Announcement"><LoadingSpinner /></PageLayout>;
   if (!announcement) return <PageLayout title="Announcement"><p className="text-gray-500">Announcement not found.</p></PageLayout>;
@@ -37,6 +53,47 @@ export default function AnnouncementDetailPage() {
           <p className="text-white/90 leading-relaxed whitespace-pre-wrap">{announcement.content}</p>
           <p className="text-white/60 text-xs mt-4">{format(parseISO(announcement.createdAt), 'MMMM d, yyyy · h:mm a')}</p>
         </div>
+        {announcement.linkUrl && (
+          <div className="p-4 bg-white rounded-2xl border border-gray-200 space-y-3">
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Link</h2>
+            {preview?.type === 'youtube' ? (
+              <div className="space-y-2">
+                <iframe
+                  src={`https://www.youtube.com/embed/${preview.videoId}`}
+                  className="w-full rounded-xl border border-gray-200"
+                  style={{ aspectRatio: '16/9' }}
+                  allowFullScreen
+                  title={preview.title}
+                />
+                <a href={announcement.linkUrl} target="_blank" rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 text-sm text-primary-600 hover:underline">
+                  <ExternalLink className="w-3.5 h-3.5" /> Watch on YouTube
+                </a>
+              </div>
+            ) : preview && (preview.title || preview.image) ? (
+              <a href={announcement.linkUrl} target="_blank" rel="noopener noreferrer"
+                className="flex gap-3 p-3 rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors group">
+                {preview.image && (
+                  <img src={preview.image} alt="" className="w-20 h-20 object-cover rounded-lg flex-shrink-0" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                )}
+                <div className="min-w-0 flex-1">
+                  {preview.siteName && <p className="text-xs text-gray-400 mb-0.5">{preview.siteName}</p>}
+                  {preview.title && <p className="font-semibold text-gray-900 text-sm leading-snug line-clamp-2">{preview.title}</p>}
+                  {preview.description && <p className="text-xs text-gray-500 mt-1 line-clamp-2">{preview.description}</p>}
+                  <span className="inline-flex items-center gap-1 text-xs text-primary-600 mt-1.5 group-hover:underline">
+                    <ExternalLink className="w-3 h-3" /> Open link
+                  </span>
+                </div>
+              </a>
+            ) : (
+              <a href={announcement.linkUrl} target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary-50 text-primary-700 rounded-xl hover:bg-primary-100 transition-colors font-medium text-sm">
+                <ExternalLink className="w-4 h-4" /> Open Link
+              </a>
+            )}
+          </div>
+        )}
+
         {announcement.attachmentUrl && (() => {
           const ext = announcement.attachmentUrl!.split('?')[0].split('.').pop()?.toLowerCase() ?? '';
           const isImage = ['jpg','jpeg','png','gif','webp'].includes(ext);

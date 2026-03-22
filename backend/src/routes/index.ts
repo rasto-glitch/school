@@ -75,6 +75,7 @@ export function createRouter(io: SocketServer) {
   router.post('/admin/notifications', authenticate, authorize('admin'), (req, res) => admin.sendNotification(req as AuthRequest, res));
 
   router.get('/admin/announcements', authenticate, authorize('admin', 'teacher', 'parent'), (req, res) => admin.getAnnouncements(req as AuthRequest, res));
+  router.get('/link-preview', authenticate, (req, res) => admin.getLinkPreview(req as AuthRequest, res));
   router.post('/admin/announcements', authenticate, authorize('admin'), upload.single('attachment'), (req, res) => admin.createAnnouncement(req as AuthRequest, res));
   router.delete('/admin/announcements/:id', authenticate, authorize('admin'), (req, res) => admin.deleteAnnouncement(req as AuthRequest, res));
 

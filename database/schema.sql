@@ -228,6 +228,7 @@ CREATE TABLE IF NOT EXISTS announcements (
   title TEXT NOT NULL,
   content TEXT NOT NULL,
   image_url TEXT,
+  link_url TEXT,
   attachment_url TEXT,
   target_audience TEXT DEFAULT 'all' CHECK (target_audience IN ('all','parents','teachers','students')),
   created_by UUID REFERENCES users(id),

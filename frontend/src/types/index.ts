@@ -123,6 +123,7 @@ export interface Announcement {
   content: string;
   targetAudience: string;
   attachmentUrl?: string;
+  linkUrl?: string;
   createdAt: string;
 }
 

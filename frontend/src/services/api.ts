@@ -72,6 +72,7 @@ export const parentApi = {
   getHomeworkById: (id: string) => api.get(`/parent/homework/${id}`),
   getAssignmentById: (id: string) => api.get(`/parent/assignments/${id}`),
   getAnnouncementById: (id: string) => api.get(`/parent/announcements/${id}`),
+  getLinkPreview: (url: string) => api.get('/link-preview', { params: { url } }),
 };
 
 // ---- TEACHER ----

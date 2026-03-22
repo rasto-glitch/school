@@ -124,7 +124,7 @@ export default function NotificationsScreen() {
                 onPress={() => handlePress(item)}>
                 {!item.isRead && <View style={styles.dot} />}
                 <Text style={styles.cardTitle}>{item.title}</Text>
-                <Text style={styles.cardMessage}>{item.message}</Text>
+                <Text style={styles.cardMessage} numberOfLines={2}>{item.message}</Text>
                 <Text style={[styles.cardTime, { marginTop: 10 }]}>{formatTime(item.createdAt)}</Text>
               </TouchableOpacity>
             ))}

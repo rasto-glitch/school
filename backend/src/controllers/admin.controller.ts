@@ -746,7 +746,7 @@ export async function getAnnouncements(req: AuthRequest, res: Response): Promise
 
 export async function createAnnouncement(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId, userId } = req.user!;
-  const { title, content, targetAudience, imageUrl } = req.body;
+  const { title, content, targetAudience, linkUrl } = req.body;
 
   let attachmentUrl: string | null = null;
   const file = (req as any).file;
@@ -770,7 +770,7 @@ export async function createAnnouncement(req: AuthRequest, res: Response): Promi
     target_audience: targetAudience || 'all',
     created_by: userId,
     attachment_url: attachmentUrl,
-    image_url: imageUrl || null,
+    link_url: linkUrl || null,
   }).select().single();
 
   if (error) { res.status(500).json({ error: error.message }); return; }
@@ -782,7 +782,8 @@ export async function createAnnouncement(req: AuthRequest, res: Response): Promi
     : supabase.from('users').select('id').eq('school_id', schoolId).eq('role', audience).eq('is_active', true);
   const { data: targets } = await roleFilter;
   if (targets && targets.length > 0) {
-    notifyMany(targets.map((u: any) => ({ schoolId, userId: u.id, title, message: content, type: 'announcement', relatedId: data.id }))).catch(() => {});
+    const preview = content.length > 80 ? content.substring(0, 80) + '…' : content;
+    notifyMany(targets.map((u: any) => ({ schoolId, userId: u.id, title, message: preview, type: 'announcement', relatedId: data.id }))).catch(() => {});
   }
 
   res.status(201).json(toCC(data));
@@ -794,6 +795,45 @@ export async function deleteAnnouncement(req: AuthRequest, res: Response): Promi
   const { error } = await supabase.from('announcements').delete().eq('id', id).eq('school_id', schoolId);
   if (error) { res.status(500).json({ error: error.message }); return; }
   res.json({ message: 'Deleted' });
+}
+
+// ---- LINK PREVIEW ----
+export async function getLinkPreview(req: AuthRequest, res: Response): Promise<void> {
+  const { url } = req.query as { url: string };
+  if (!url) { res.status(400).json({ error: 'url required' }); return; }
+
+  // YouTube special case — no fetch needed
+  const ytMatch = url.match(/(?:youtube\.com\/watch\?.*?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+  if (ytMatch) {
+    res.json({ type: 'youtube', videoId: ytMatch[1], url, title: 'YouTube Video', description: '', image: `https://img.youtube.com/vi/${ytMatch[1]}/mqdefault.jpg`, siteName: 'YouTube' });
+    return;
+  }
+
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 5000);
+    const response = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SchoolApp/1.0)' }, signal: ctrl.signal });
+    clearTimeout(timer);
+    const html = await response.text();
+
+    const getMeta = (attr: string, val: string) => {
+      const r1 = html.match(new RegExp(`<meta[^>]+${attr}=["']${val}["'][^>]+content=["']([^"'<>]+)["']`, 'i'));
+      const r2 = html.match(new RegExp(`<meta[^>]+content=["']([^"'<>]+)["'][^>]+${attr}=["']${val}["']`, 'i'));
+      return (r1 || r2)?.[1]?.trim() ?? '';
+    };
+
+    const title = getMeta('property', 'og:title') || getMeta('name', 'twitter:title') || html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1]?.trim() || '';
+    const description = getMeta('property', 'og:description') || getMeta('name', 'twitter:description') || getMeta('name', 'description') || '';
+    const image = getMeta('property', 'og:image') || getMeta('name', 'twitter:image') || '';
+    let siteName = getMeta('property', 'og:site_name') || '';
+    if (!siteName) { try { siteName = new URL(url).hostname.replace(/^www\./, ''); } catch {} }
+
+    res.json({ type: 'link', url, title, description: description.substring(0, 200), image, siteName });
+  } catch {
+    let siteName = '';
+    try { siteName = new URL(url).hostname.replace(/^www\./, ''); } catch {}
+    res.json({ type: 'link', url, title: '', description: '', image: '', siteName });
+  }
 }
 
 // ---- STUDENT BRIEF ----
