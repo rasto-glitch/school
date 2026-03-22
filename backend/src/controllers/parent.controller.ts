@@ -225,12 +225,8 @@ export async function getUnreadCount(req: AuthRequest, res: Response): Promise<v
 
 export async function getContentUnreadCounts(req: AuthRequest, res: Response): Promise<void> {
   const { userId, schoolId } = req.user!;
-  const base = supabase.from('notifications').select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('school_id', schoolId).eq('is_read', false);
-  const [hw, as_, rp] = await Promise.all([
-    base.eq('notification_type', 'homework'),
-    base.eq('notification_type', 'assignment'),
-    base.eq('notification_type', 'report'),
-  ]);
+  const q = (type: string) => supabase.from('notifications').select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('school_id', schoolId).eq('is_read', false).eq('notification_type', type);
+  const [hw, as_, rp] = await Promise.all([q('homework'), q('assignment'), q('report')]);
   res.json({ homework: hw.count ?? 0, assignment: as_.count ?? 0, report: rp.count ?? 0 });
 }
 
