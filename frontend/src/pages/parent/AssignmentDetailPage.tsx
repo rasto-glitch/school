@@ -68,20 +68,38 @@ export default function AssignmentDetailPage() {
             </div>
           )}
 
-          {assignment.attachmentUrl && (
-            <div className="mb-4">
-              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Attachment</h2>
-              <a
-                href={assignment.attachmentUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary-50 text-primary-700 rounded-xl hover:bg-primary-100 transition-colors font-medium text-sm"
-              >
-                <Paperclip className="w-4 h-4" />
-                Download Attachment
-              </a>
-            </div>
-          )}
+          {assignment.attachmentUrl && (() => {
+            const ext = assignment.attachmentUrl!.split('?')[0].split('.').pop()?.toLowerCase() ?? '';
+            const isImage = ['jpg','jpeg','png','gif','webp'].includes(ext);
+            const isPdf = ext === 'pdf';
+            return (
+              <div className="mb-4">
+                <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Attachment</h2>
+                {isImage ? (
+                  <div className="space-y-2">
+                    <img src={assignment.attachmentUrl} alt="Attachment" className="w-full max-h-72 object-contain rounded-xl border border-gray-200 bg-gray-50" />
+                    <a href={assignment.attachmentUrl} download target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-primary-50 text-primary-700 rounded-xl hover:bg-primary-100 transition-colors font-medium text-sm">
+                      <Paperclip className="w-4 h-4" /> Download
+                    </a>
+                  </div>
+                ) : isPdf ? (
+                  <div className="space-y-2">
+                    <iframe src={assignment.attachmentUrl} className="w-full h-96 rounded-xl border border-gray-200" title="PDF Preview" />
+                    <a href={assignment.attachmentUrl} download target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-primary-50 text-primary-700 rounded-xl hover:bg-primary-100 transition-colors font-medium text-sm">
+                      <Paperclip className="w-4 h-4" /> Download PDF
+                    </a>
+                  </div>
+                ) : (
+                  <a href={assignment.attachmentUrl} download target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary-50 text-primary-700 rounded-xl hover:bg-primary-100 transition-colors font-medium text-sm">
+                    <Paperclip className="w-4 h-4" /> Download Attachment
+                  </a>
+                )}
+              </div>
+            );
+          })()}
 
           {(assignment as any).students?.fullName && (
             <p className="text-xs text-gray-400">Student: {(assignment as any).students.fullName}</p>

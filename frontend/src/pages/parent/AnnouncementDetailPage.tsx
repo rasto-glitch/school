@@ -37,20 +37,38 @@ export default function AnnouncementDetailPage() {
           <p className="text-white/90 leading-relaxed whitespace-pre-wrap">{announcement.content}</p>
           <p className="text-white/60 text-xs mt-4">{format(parseISO(announcement.createdAt), 'MMMM d, yyyy · h:mm a')}</p>
         </div>
-        {announcement.attachmentUrl && (
-          <div className="p-4 bg-white rounded-2xl border border-gray-200">
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Attachment</h2>
-            <a
-              href={announcement.attachmentUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary-50 text-primary-700 rounded-xl hover:bg-primary-100 transition-colors font-medium text-sm"
-            >
-              <Paperclip className="w-4 h-4" />
-              Download Attachment
-            </a>
-          </div>
-        )}
+        {announcement.attachmentUrl && (() => {
+          const ext = announcement.attachmentUrl!.split('?')[0].split('.').pop()?.toLowerCase() ?? '';
+          const isImage = ['jpg','jpeg','png','gif','webp'].includes(ext);
+          const isPdf = ext === 'pdf';
+          return (
+            <div className="p-4 bg-white rounded-2xl border border-gray-200 space-y-2">
+              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Attachment</h2>
+              {isImage ? (
+                <>
+                  <img src={announcement.attachmentUrl} alt="Attachment" className="w-full max-h-72 object-contain rounded-xl border border-gray-200 bg-gray-50" />
+                  <a href={announcement.attachmentUrl} download target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-primary-50 text-primary-700 rounded-xl hover:bg-primary-100 transition-colors font-medium text-sm">
+                    <Paperclip className="w-4 h-4" /> Download
+                  </a>
+                </>
+              ) : isPdf ? (
+                <>
+                  <iframe src={announcement.attachmentUrl} className="w-full h-96 rounded-xl border border-gray-200" title="PDF Preview" />
+                  <a href={announcement.attachmentUrl} download target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-primary-50 text-primary-700 rounded-xl hover:bg-primary-100 transition-colors font-medium text-sm">
+                    <Paperclip className="w-4 h-4" /> Download PDF
+                  </a>
+                </>
+              ) : (
+                <a href={announcement.attachmentUrl} download target="_blank" rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary-50 text-primary-700 rounded-xl hover:bg-primary-100 transition-colors font-medium text-sm">
+                  <Paperclip className="w-4 h-4" /> Download Attachment
+                </a>
+              )}
+            </div>
+          );
+        })()}
       </div>
     </PageLayout>
   );

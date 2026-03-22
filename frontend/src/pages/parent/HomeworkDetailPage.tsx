@@ -59,20 +59,38 @@ export default function HomeworkDetailPage() {
             </div>
           )}
 
-          {homework.attachmentUrl && (
-            <div>
-              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Attachment</h2>
-              <a
-                href={homework.attachmentUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary-50 text-primary-700 rounded-xl hover:bg-primary-100 transition-colors font-medium text-sm"
-              >
-                <Paperclip className="w-4 h-4" />
-                Download Attachment
-              </a>
-            </div>
-          )}
+          {homework.attachmentUrl && (() => {
+            const ext = homework.attachmentUrl.split('?')[0].split('.').pop()?.toLowerCase() ?? '';
+            const isImage = ['jpg','jpeg','png','gif','webp'].includes(ext);
+            const isPdf = ext === 'pdf';
+            return (
+              <div>
+                <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Attachment</h2>
+                {isImage ? (
+                  <div className="space-y-2">
+                    <img src={homework.attachmentUrl} alt="Attachment" className="w-full max-h-72 object-contain rounded-xl border border-gray-200 bg-gray-50" />
+                    <a href={homework.attachmentUrl} download target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-primary-50 text-primary-700 rounded-xl hover:bg-primary-100 transition-colors font-medium text-sm">
+                      <Paperclip className="w-4 h-4" /> Download
+                    </a>
+                  </div>
+                ) : isPdf ? (
+                  <div className="space-y-2">
+                    <iframe src={homework.attachmentUrl} className="w-full h-96 rounded-xl border border-gray-200" title="PDF Preview" />
+                    <a href={homework.attachmentUrl} download target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-primary-50 text-primary-700 rounded-xl hover:bg-primary-100 transition-colors font-medium text-sm">
+                      <Paperclip className="w-4 h-4" /> Download PDF
+                    </a>
+                  </div>
+                ) : (
+                  <a href={homework.attachmentUrl} download target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary-50 text-primary-700 rounded-xl hover:bg-primary-100 transition-colors font-medium text-sm">
+                    <Paperclip className="w-4 h-4" /> Download Attachment
+                  </a>
+                )}
+              </div>
+            );
+          })()}
 
           <p className="text-xs text-gray-400 mt-4">Posted {format(parseISO(homework.createdAt), 'MMM d, yyyy')}</p>
         </Card>

@@ -1,7 +1,14 @@
 import { useMemo } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Linking } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Linking, Image } from 'react-native';
 import { useRoute } from '@react-navigation/native';
-import { Megaphone, Paperclip } from 'lucide-react-native';
+import { Megaphone, Paperclip, FileText, Download } from 'lucide-react-native';
+
+function getAttachmentType(url: string): 'image' | 'pdf' | 'other' {
+  const ext = url.split('?')[0].split('.').pop()?.toLowerCase() ?? '';
+  if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) return 'image';
+  if (ext === 'pdf') return 'pdf';
+  return 'other';
+}
 import { useColors } from '../../store/themeStore';
 import { spacing, radius, font } from '../../theme';
 import type { Announcement } from '../../types';
@@ -39,14 +46,39 @@ export default function AnnouncementDetailScreen() {
       </View>
 
       {/* Attachment */}
-      {announcement.attachmentUrl && (
-        <View style={styles.attachCard}>
-          <TouchableOpacity style={styles.attachBtn} onPress={() => Linking.openURL(announcement.attachmentUrl!)}>
-            <Paperclip size={16} color={colors.primary} />
-            <Text style={styles.attachText}>Download Attachment</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+      {announcement.attachmentUrl && (() => {
+        const type = getAttachmentType(announcement.attachmentUrl!);
+        return (
+          <View style={styles.attachCard}>
+            {type === 'image' ? (
+              <>
+                <Image source={{ uri: announcement.attachmentUrl }} style={styles.attachImage} resizeMode="contain" />
+                <TouchableOpacity style={[styles.attachBtn, { marginTop: spacing.sm }]} onPress={() => Linking.openURL(announcement.attachmentUrl!)}>
+                  <Download size={15} color={colors.primary} />
+                  <Text style={styles.attachText}>Download</Text>
+                </TouchableOpacity>
+              </>
+            ) : type === 'pdf' ? (
+              <View style={styles.pdfCard}>
+                <FileText size={32} color={colors.primary} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.pdfLabel}>PDF Document</Text>
+                  <Text style={styles.pdfSub}>Tap to open in viewer</Text>
+                </View>
+                <TouchableOpacity style={styles.attachBtn} onPress={() => Linking.openURL(announcement.attachmentUrl!)}>
+                  <Download size={15} color={colors.primary} />
+                  <Text style={styles.attachText}>Open</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity style={styles.attachBtn} onPress={() => Linking.openURL(announcement.attachmentUrl!)}>
+                <Paperclip size={16} color={colors.primary} />
+                <Text style={styles.attachText}>Download Attachment</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        );
+      })()}
     </ScrollView>
   );
 }
@@ -69,4 +101,8 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   attachCard: { marginTop: spacing.md },
   attachBtn: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.primaryLight, borderRadius: radius.md, padding: spacing.sm, alignSelf: 'flex-start' },
   attachText: { fontSize: font.sm, fontWeight: '600', color: colors.primary },
+  attachImage: { width: '100%', height: 220, borderRadius: radius.md, backgroundColor: colors.border },
+  pdfCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.primaryLight, borderRadius: radius.md, padding: spacing.md },
+  pdfLabel: { fontSize: font.sm, fontWeight: '700', color: colors.text },
+  pdfSub: { fontSize: font.xs, color: colors.textMuted, marginTop: 2 },
 });
