@@ -1,28 +1,45 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, ActivityIndicator,
-  TouchableOpacity, Alert, Modal,
+  TouchableOpacity, Alert, Modal, TextInput,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, ChevronRight, CheckCircle, XCircle, Clock, Edit2 } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
+import { ChevronLeft, ChevronRight, CheckCircle, XCircle, Clock, Edit2, CalendarOff, Plus } from 'lucide-react-native';
 import { supervisorApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
 import { spacing, radius, font, shadow } from '../../theme';
 
 interface ClassItem { id: string; name: string; gradeLevel?: string }
+
+interface StudentItem { id: string; fullName: string }
+
 interface AttendanceRecord {
   id: string;
-  status: 'present' | 'absent' | 'late';
+  status: 'present' | 'absent' | 'late' | 'excused';
   notes?: string;
   students?: { id: string; fullName: string };
   teachers?: { fullName: string };
 }
 
-const STATUS_COLOR = { present: '#10B981', absent: '#EF4444', late: '#F59E0B' };
-const STATUS_ICON = { present: CheckCircle, absent: XCircle, late: Clock };
+type AttendanceStatus = 'present' | 'absent' | 'late' | 'excused';
+
+const STATUS_COLOR: Record<AttendanceStatus, string> = {
+  present: '#10B981',
+  absent: '#EF4444',
+  late: '#F59E0B',
+  excused: '#8B5CF6',
+};
+const STATUS_ICON: Record<AttendanceStatus, any> = {
+  present: CheckCircle,
+  absent: XCircle,
+  late: Clock,
+  excused: CalendarOff,
+};
 
 export default function SupervisorAttendanceScreen() {
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
@@ -31,12 +48,16 @@ export default function SupervisorAttendanceScreen() {
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [calViewDate, setCalViewDate] = useState(() => { const d = new Date(); d.setDate(1); return d; });
   const [showCal, setShowCal] = useState(false);
+
+  const [allStudents, setAllStudents] = useState<StudentItem[]>([]);
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // Override modal
-  const [overrideRecord, setOverrideRecord] = useState<AttendanceRecord | null>(null);
-  const [newStatus, setNewStatus] = useState<'present' | 'absent' | 'late'>('present');
+  // Modal state — works for both create and update
+  const [modalStudent, setModalStudent] = useState<StudentItem | null>(null);
+  const [modalRecord, setModalRecord] = useState<AttendanceRecord | null>(null); // null = create mode
+  const [newStatus, setNewStatus] = useState<AttendanceStatus>('absent');
+  const [newNotes, setNewNotes] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -47,6 +68,15 @@ export default function SupervisorAttendanceScreen() {
     }).catch(() => {});
   }, []);
 
+  // Fetch students when class changes
+  useEffect(() => {
+    if (!selectedClass) return;
+    supervisorApi.getStudentsByClass(selectedClass.id)
+      .then(r => setAllStudents(r.data || []))
+      .catch(() => setAllStudents([]));
+  }, [selectedClass]);
+
+  // Fetch attendance records when class+date changes
   const fetchAttendance = useCallback(() => {
     if (!selectedClass) return;
     setLoading(true);
@@ -58,28 +88,40 @@ export default function SupervisorAttendanceScreen() {
 
   useEffect(() => { fetchAttendance(); }, [fetchAttendance]);
 
-  const handleOverride = async () => {
-    if (!overrideRecord) return;
+  const openModal = (student: StudentItem, record?: AttendanceRecord) => {
+    setModalStudent(student);
+    setModalRecord(record ?? null);
+    setNewStatus(record?.status ?? 'absent');
+    setNewNotes(record?.notes ?? '');
+  };
+
+  const handleSave = async () => {
+    if (!modalStudent || !selectedClass) return;
+    if (newStatus === 'excused' && !newNotes.trim()) {
+      Alert.alert('Reason required', 'Please enter the reason for excused absence.');
+      return;
+    }
     setSaving(true);
     try {
-      await supervisorApi.updateAttendance(overrideRecord.id, newStatus);
-      setOverrideRecord(null);
+      if (modalRecord) {
+        await supervisorApi.updateAttendance(modalRecord.id, newStatus, newNotes.trim() || undefined);
+      } else {
+        await supervisorApi.createAttendance(modalStudent.id, selectedClass.id, selectedDate, newStatus, newNotes.trim() || undefined);
+      }
+      setModalStudent(null);
+      setModalRecord(null);
       fetchAttendance();
     } catch {
-      Alert.alert('Error', 'Could not update attendance record.');
+      Alert.alert('Error', 'Could not save attendance record.');
     } finally {
       setSaving(false);
     }
   };
 
-  const openOverride = (r: AttendanceRecord) => {
-    setNewStatus(r.status);
-    setOverrideRecord(r);
-  };
-
   const present = records.filter(r => r.status === 'present').length;
   const absent = records.filter(r => r.status === 'absent').length;
   const late = records.filter(r => r.status === 'late').length;
+  const excused = records.filter(r => r.status === 'excused').length;
 
   // Calendar helpers
   const year = calViewDate.getFullYear();
@@ -89,15 +131,22 @@ export default function SupervisorAttendanceScreen() {
   const calCells: (number | null)[] = [...Array(firstDay).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
   while (calCells.length % 7 !== 0) calCells.push(null);
   const calMonthLabel = calViewDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
-
   const displayDate = new Date(selectedDate + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
+
+  // Merge students with their records
+  const studentRows = allStudents.map(s => ({
+    student: s,
+    record: records.find(r => r.students?.id === s.id),
+  }));
+
+  const recordedCount = studentRows.filter(r => r.record).length;
 
   return (
     <ScrollView
       style={styles.container}
       contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.md }]}
     >
-      <Text style={styles.title}>Attendance</Text>
+      <Text style={styles.title}>{t('nav.attendance', 'Attendance')}</Text>
 
       {/* Class selector */}
       <Text style={styles.sectionLabel}>Class</Text>
@@ -146,12 +195,12 @@ export default function SupervisorAttendanceScreen() {
                 return (
                   <TouchableOpacity
                     key={col}
-                    style={[styles.calCell, selected && styles.calCellSelected, future && styles.calCellPast]}
+                    style={[styles.calCell, selected && styles.calCellSelected, future && styles.calCellFuture]}
                     onPress={() => { if (!future) { setSelectedDate(iso); setShowCal(false); } }}
                     disabled={future}
                     activeOpacity={0.7}
                   >
-                    <Text style={[styles.calDayNum, selected && styles.calDayNumSelected, future && styles.calDayNumPast]}>{day}</Text>
+                    <Text style={[styles.calDayNum, selected && styles.calDayNumSelected, future && styles.calDayNumFuture]}>{day}</Text>
                   </TouchableOpacity>
                 );
               })}
@@ -169,52 +218,76 @@ export default function SupervisorAttendanceScreen() {
           <View style={[styles.statPill, { backgroundColor: colors.dangerLight }]}>
             <Text style={[styles.statText, { color: colors.danger }]}>{absent} absent</Text>
           </View>
-          <View style={[styles.statPill, { backgroundColor: colors.warningLight }]}>
-            <Text style={[styles.statText, { color: colors.warning }]}>{late} late</Text>
-          </View>
+          {late > 0 && (
+            <View style={[styles.statPill, { backgroundColor: colors.warningLight }]}>
+              <Text style={[styles.statText, { color: colors.warning }]}>{late} late</Text>
+            </View>
+          )}
+          {excused > 0 && (
+            <View style={[styles.statPill, { backgroundColor: '#F3E8FF' }]}>
+              <Text style={[styles.statText, { color: '#8B5CF6' }]}>{excused} excused</Text>
+            </View>
+          )}
         </View>
       )}
 
       {/* Records */}
-      <Text style={[styles.sectionLabel, { marginTop: spacing.md }]}>Records</Text>
+      <View style={styles.recordsHeader}>
+        <Text style={styles.sectionLabel}>Students</Text>
+        {allStudents.length > 0 && (
+          <Text style={styles.recordedCount}>{recordedCount}/{allStudents.length} recorded</Text>
+        )}
+      </View>
+
       {loading ? (
         <ActivityIndicator color={colors.primary} style={{ marginTop: 24 }} />
-      ) : records.length === 0 ? (
+      ) : allStudents.length === 0 ? (
         <View style={styles.emptyCard}>
-          <Text style={styles.emptyText}>No attendance records for this class and date.</Text>
+          <Text style={styles.emptyText}>No students in this class.</Text>
         </View>
       ) : (
-        records.map(r => {
-          const Icon = STATUS_ICON[r.status] ?? Clock;
-          const color = STATUS_COLOR[r.status] ?? colors.textMuted;
+        studentRows.map(({ student, record }) => {
+          const Icon = record ? (STATUS_ICON[record.status] ?? Clock) : Plus;
+          const color = record ? (STATUS_COLOR[record.status] ?? colors.textMuted) : colors.textMuted;
           return (
-            <View key={r.id} style={styles.recordCard}>
+            <View key={student.id} style={styles.recordCard}>
               <Icon size={18} color={color} />
               <View style={{ flex: 1 }}>
-                <Text style={styles.recordName}>{r.students?.fullName ?? '—'}</Text>
-                {r.notes && <Text style={styles.recordNote}>{r.notes}</Text>}
+                <Text style={styles.recordName}>{student.fullName}</Text>
+                {record?.notes && <Text style={styles.recordNote}>{record.notes}</Text>}
+                {!record && <Text style={styles.unrecordedLabel}>Not recorded</Text>}
               </View>
-              <View style={[styles.statusBadge, { backgroundColor: color + '20' }]}>
-                <Text style={[styles.statusBadgeText, { color }]}>
-                  {r.status.charAt(0).toUpperCase() + r.status.slice(1)}
-                </Text>
-              </View>
-              <TouchableOpacity onPress={() => openOverride(r)} style={styles.editBtn}>
-                <Edit2 size={14} color={colors.primary} />
+              {record ? (
+                <View style={[styles.statusBadge, { backgroundColor: color + '20' }]}>
+                  <Text style={[styles.statusBadgeText, { color }]}>
+                    {record.status.charAt(0).toUpperCase() + record.status.slice(1)}
+                  </Text>
+                </View>
+              ) : null}
+              <TouchableOpacity
+                onPress={() => openModal(student, record)}
+                style={styles.editBtn}
+              >
+                {record
+                  ? <Edit2 size={14} color={colors.primary} />
+                  : <Plus size={14} color={colors.primary} />}
               </TouchableOpacity>
             </View>
           );
         })
       )}
 
-      {/* Override Modal */}
-      <Modal visible={!!overrideRecord} animationType="slide" presentationStyle="pageSheet" transparent>
+      {/* Attendance Modal */}
+      <Modal visible={!!modalStudent} animationType="slide" presentationStyle="pageSheet" transparent>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalBox, { backgroundColor: colors.card, paddingBottom: insets.bottom + spacing.md }]}>
-            <Text style={styles.modalTitle}>Override Attendance</Text>
-            <Text style={styles.modalSubtitle}>{overrideRecord?.students?.fullName}</Text>
+            <Text style={styles.modalTitle}>
+              {modalRecord ? 'Override Attendance' : 'Mark Attendance'}
+            </Text>
+            <Text style={styles.modalSubtitle}>{modalStudent?.fullName}</Text>
+
             <View style={styles.statusRow}>
-              {(['present', 'absent', 'late'] as const).map(s => {
+              {(['present', 'absent', 'late', 'excused'] as AttendanceStatus[]).map(s => {
                 const col = STATUS_COLOR[s];
                 const selected = newStatus === s;
                 return (
@@ -231,10 +304,24 @@ export default function SupervisorAttendanceScreen() {
                 );
               })}
             </View>
-            <TouchableOpacity style={styles.saveBtn} onPress={handleOverride} disabled={saving}>
+
+            <Text style={styles.notesLabel}>
+              {newStatus === 'excused' ? 'Reason (required)' : 'Notes (optional)'}
+            </Text>
+            <TextInput
+              style={[styles.notesInput, newStatus === 'excused' && styles.notesInputRequired]}
+              placeholder={newStatus === 'excused' ? 'e.g. Sick, Family emergency...' : 'Additional notes...'}
+              placeholderTextColor={colors.textMuted}
+              value={newNotes}
+              onChangeText={setNewNotes}
+              multiline
+              numberOfLines={3}
+            />
+
+            <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={saving}>
               {saving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.saveBtnText}>Save</Text>}
             </TouchableOpacity>
-            <TouchableOpacity style={styles.cancelBtn} onPress={() => setOverrideRecord(null)}>
+            <TouchableOpacity style={styles.cancelBtn} onPress={() => setModalStudent(null)}>
               <Text style={styles.cancelBtnText}>Cancel</Text>
             </TouchableOpacity>
           </View>
@@ -264,28 +351,34 @@ const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').u
   calWeekRow: { flexDirection: 'row' },
   calCell: { flex: 1, aspectRatio: 1, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm },
   calCellSelected: { backgroundColor: colors.primary },
-  calCellPast: { opacity: 0.3 },
+  calCellFuture: { opacity: 0.3 },
   calDayNum: { fontSize: font.sm, color: colors.text },
   calDayNumSelected: { color: '#fff', fontWeight: '700' },
-  calDayNumPast: { color: colors.textMuted },
-  statsRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm },
+  calDayNumFuture: { color: colors.textMuted },
+  statsRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm, flexWrap: 'wrap' },
   statPill: { borderRadius: radius.full, paddingHorizontal: 12, paddingVertical: 5 },
   statText: { fontSize: font.xs, fontWeight: '700' },
+  recordsHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.md },
+  recordedCount: { fontSize: font.xs, color: colors.textMuted, fontWeight: '600', marginBottom: spacing.sm },
   emptyCard: { backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.lg, alignItems: 'center', ...shadow.sm },
   emptyText: { fontSize: font.sm, color: colors.textMuted, textAlign: 'center' },
   recordCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.xs, ...shadow.sm },
   recordName: { fontSize: font.sm, fontWeight: '600', color: colors.text },
   recordNote: { fontSize: font.xs, color: colors.textMuted, marginTop: 1 },
+  unrecordedLabel: { fontSize: font.xs, color: colors.textMuted, marginTop: 1, fontStyle: 'italic' },
   statusBadge: { borderRadius: radius.full, paddingHorizontal: 8, paddingVertical: 3 },
   statusBadgeText: { fontSize: 11, fontWeight: '700' },
   editBtn: { padding: 6 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   modalBox: { borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, padding: spacing.lg },
   modalTitle: { fontSize: font.lg, fontWeight: '800', color: colors.text, marginBottom: 4 },
-  modalSubtitle: { fontSize: font.sm, color: colors.textMuted, marginBottom: spacing.lg },
-  statusRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.lg },
-  statusOption: { flex: 1, paddingVertical: 12, borderRadius: radius.md, borderWidth: 2, alignItems: 'center' },
+  modalSubtitle: { fontSize: font.sm, color: colors.textMuted, marginBottom: spacing.md },
+  statusRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.md },
+  statusOption: { flex: 1, minWidth: '40%', paddingVertical: 12, borderRadius: radius.md, borderWidth: 2, alignItems: 'center' },
   statusOptionText: { fontSize: font.sm, fontWeight: '700' },
+  notesLabel: { fontSize: font.xs, fontWeight: '700', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.xs },
+  notesInput: { backgroundColor: colors.bg, borderRadius: radius.md, padding: spacing.md, fontSize: font.sm, color: colors.text, borderWidth: 1, borderColor: colors.border, minHeight: 72, textAlignVertical: 'top', marginBottom: spacing.md },
+  notesInputRequired: { borderColor: '#8B5CF6' },
   saveBtn: { backgroundColor: colors.primary, borderRadius: radius.md, padding: spacing.md, alignItems: 'center', marginBottom: spacing.sm },
   saveBtnText: { fontSize: font.md, fontWeight: '700', color: '#fff' },
   cancelBtn: { padding: spacing.sm, alignItems: 'center' },

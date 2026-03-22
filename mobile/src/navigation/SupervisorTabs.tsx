@@ -1,11 +1,12 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Home, CalendarCheck, BookOpen, User } from 'lucide-react-native';
+import { Home, CalendarCheck, BookOpen, Users, User } from 'lucide-react-native';
 import { useColors } from '../store/themeStore';
 import SupervisorDashboardScreen from '../screens/supervisor/SupervisorDashboardScreen';
 import SupervisorAttendanceScreen from '../screens/supervisor/SupervisorAttendanceScreen';
 import SupervisorContentScreen from '../screens/supervisor/SupervisorContentScreen';
+import SupervisorStudentsScreen from '../screens/supervisor/SupervisorStudentsScreen';
 import SupervisorMeScreen from '../screens/supervisor/SupervisorMeScreen';
 
 const Tab = createBottomTabNavigator();
@@ -48,6 +49,11 @@ export default function SupervisorTabs() {
         name="SupervisorContent"
         component={SupervisorContentScreen}
         options={{ tabBarLabel: t('nav.content', 'Content'), tabBarIcon: ({ color }) => <BookOpen size={ICON_SIZE} color={color} /> }}
+      />
+      <Tab.Screen
+        name="SupervisorStudents"
+        component={SupervisorStudentsScreen}
+        options={{ tabBarLabel: t('nav.students', 'Students'), tabBarIcon: ({ color }) => <Users size={ICON_SIZE} color={color} /> }}
       />
       <Tab.Screen
         name="SupervisorMe"

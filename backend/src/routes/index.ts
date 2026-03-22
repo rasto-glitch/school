@@ -129,6 +129,8 @@ export function createRouter(io: SocketServer) {
   router.get('/supervisor/absent-today', authenticate, authorize('supervisor'), (req, res) => supervisor.getAbsentToday(req as AuthRequest, res));
   router.get('/supervisor/attendance', authenticate, authorize('supervisor'), (req, res) => supervisor.getAttendanceByClass(req as AuthRequest, res));
   router.get('/supervisor/attendance-summary', authenticate, authorize('supervisor'), (req, res) => supervisor.getAttendanceSummary(req as AuthRequest, res));
+  router.get('/supervisor/students', authenticate, authorize('supervisor'), (req, res) => supervisor.getAllStudents(req as AuthRequest, res));
+  router.post('/supervisor/attendance', authenticate, authorize('supervisor'), (req, res) => supervisor.createAttendanceRecord(req as AuthRequest, res));
   router.patch('/supervisor/attendance/:id', authenticate, authorize('supervisor'), (req, res) => supervisor.updateAttendanceRecord(req as AuthRequest, res));
   router.get('/supervisor/homework', authenticate, authorize('supervisor'), (req, res) => supervisor.getHomework(req as AuthRequest, res));
   router.delete('/supervisor/homework/:id', authenticate, authorize('supervisor'), (req, res) => supervisor.deleteHomework(req as AuthRequest, res));

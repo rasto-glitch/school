@@ -30,6 +30,19 @@ export async function getStudentsByClass(req: AuthRequest, res: Response): Promi
   res.json(toCC(data));
 }
 
+// ---- ALL STUDENTS (with parent info, grouped by class) ----
+export async function getAllStudents(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { data, error } = await supabase
+    .from('students')
+    .select('id, full_name, classes(id, name, grade_level), parents(full_name, phone_number, residence_type, block_number, latitude, longitude)')
+    .eq('school_id', schoolId)
+    .eq('is_graduated', false)
+    .order('full_name');
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json(toCC(data));
+}
+
 // ---- ABSENT TODAY (across all classes) ----
 export async function getAbsentToday(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
@@ -40,7 +53,7 @@ export async function getAbsentToday(req: AuthRequest, res: Response): Promise<v
     .select('*, students(id, full_name, profile_picture, class_id, classes(name), parents(full_name, phone_number, user_id)), teachers(full_name)')
     .eq('school_id', schoolId)
     .eq('date', today)
-    .in('status', ['absent', 'late'])
+    .in('status', ['absent', 'late', 'excused'])
     .order('created_at', { ascending: false });
   if (error) { res.status(500).json({ error: error.message }); return; }
   res.json(toCC(data));
@@ -93,6 +106,7 @@ export async function getAttendanceSummary(req: AuthRequest, res: Response): Pro
       present: classRecords.filter((r: any) => r.status === 'present').length,
       absent: classRecords.filter((r: any) => r.status === 'absent').length,
       late: classRecords.filter((r: any) => r.status === 'late').length,
+      excused: classRecords.filter((r: any) => r.status === 'excused').length,
       total: classRecords.length,
     };
   });
@@ -140,14 +154,43 @@ export async function deleteAssignment(req: AuthRequest, res: Response): Promise
   res.json({ success: true });
 }
 
+// ---- CREATE ATTENDANCE (supervisor marks a student with no existing record) ----
+export async function createAttendanceRecord(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { studentId, classId, date, status, notes } = req.body;
+
+  if (!studentId || !classId || !date || !status) {
+    res.status(400).json({ error: 'studentId, classId, date, and status are required' }); return;
+  }
+  if (!['present', 'absent', 'late', 'excused'].includes(status)) {
+    res.status(400).json({ error: 'Valid status (present, absent, late, excused) is required' }); return;
+  }
+
+  const { data, error } = await supabase
+    .from('attendance')
+    .insert({
+      school_id: schoolId,
+      student_id: studentId,
+      class_id: classId,
+      date,
+      status,
+      notes: notes || null,
+      teacher_id: null,
+    })
+    .select()
+    .single();
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json(toCC(data));
+}
+
 // ---- OVERRIDE ATTENDANCE (supervisor can correct a record) ----
 export async function updateAttendanceRecord(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
   const { id } = req.params;
   const { status, notes } = req.body;
 
-  if (!status || !['present', 'absent', 'late'].includes(status)) {
-    res.status(400).json({ error: 'Valid status (present, absent, late) is required' }); return;
+  if (!status || !['present', 'absent', 'late', 'excused'].includes(status)) {
+    res.status(400).json({ error: 'Valid status (present, absent, late, excused) is required' }); return;
   }
 
   const { data, error } = await supabase

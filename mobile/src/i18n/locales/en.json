@@ -12,6 +12,9 @@
     "profile": "Profile",
     "start_drive": "Start Drive",
     "students": "Students",
+    "attendance": "Attendance",
+    "content": "Content",
+    "me": "Me",
     "logout": "Logout"
   },
   "common": {

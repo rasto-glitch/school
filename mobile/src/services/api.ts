@@ -68,9 +68,12 @@ export const parentApi = {
 export const supervisorApi = {
   getClasses: () => api.get('/supervisor/classes'),
   getStudentsByClass: (classId: string) => api.get(`/supervisor/classes/${classId}/students`),
+  getAllStudents: () => api.get('/supervisor/students'),
   getAbsentToday: () => api.get('/supervisor/absent-today'),
   getAttendance: (classId: string, date: string) => api.get('/supervisor/attendance', { params: { classId, date } }),
   getAttendanceSummary: (date?: string) => api.get('/supervisor/attendance-summary', { params: date ? { date } : {} }),
+  createAttendance: (studentId: string, classId: string, date: string, status: string, notes?: string) =>
+    api.post('/supervisor/attendance', { studentId, classId, date, status, notes }),
   updateAttendance: (id: string, status: string, notes?: string) => api.patch(`/supervisor/attendance/${id}`, { status, notes }),
   getHomework: () => api.get('/supervisor/homework'),
   deleteHomework: (id: string) => api.delete(`/supervisor/homework/${id}`),

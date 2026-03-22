@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
-import { View, Text, ScrollView, StyleSheet, ActivityIndicator, RefreshControl, TouchableOpacity } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, ActivityIndicator, RefreshControl } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AlertCircle, Users, CheckCircle, Clock } from 'lucide-react-native';
 import { supervisorApi } from '../../services/api';
@@ -8,7 +8,7 @@ import { spacing, radius, font, shadow } from '../../theme';
 
 interface AbsentRecord {
   id: string;
-  status: 'absent' | 'late';
+  status: 'absent' | 'late' | 'excused';
   notes?: string;
   students?: { id: string; fullName: string; classes?: { name: string } };
   teachers?: { fullName: string };
@@ -91,7 +91,7 @@ export default function SupervisorDashboardScreen() {
           ) : (
             absentList.map(r => (
               <View key={r.id} style={styles.absentCard}>
-                <View style={[styles.statusDot, { backgroundColor: r.status === 'absent' ? colors.danger : colors.warning }]} />
+                <View style={[styles.statusDot, { backgroundColor: r.status === 'absent' ? colors.danger : r.status === 'excused' ? '#8B5CF6' : colors.warning }]} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.studentName}>{r.students?.fullName ?? '—'}</Text>
                   <Text style={styles.studentMeta}>
@@ -100,9 +100,9 @@ export default function SupervisorDashboardScreen() {
                   </Text>
                   {r.notes && <Text style={styles.noteText}>{r.notes}</Text>}
                 </View>
-                <View style={[styles.statusBadge, { backgroundColor: r.status === 'absent' ? colors.danger + '20' : colors.warning + '20' }]}>
-                  <Text style={[styles.statusBadgeText, { color: r.status === 'absent' ? colors.danger : colors.warning }]}>
-                    {r.status === 'absent' ? 'Absent' : 'Late'}
+                <View style={[styles.statusBadge, { backgroundColor: r.status === 'absent' ? colors.danger + '20' : r.status === 'excused' ? '#8B5CF620' : colors.warning + '20' }]}>
+                  <Text style={[styles.statusBadgeText, { color: r.status === 'absent' ? colors.danger : r.status === 'excused' ? '#8B5CF6' : colors.warning }]}>
+                    {r.status === 'absent' ? 'Absent' : r.status === 'excused' ? 'Excused' : 'Late'}
                   </Text>
                 </View>
               </View>

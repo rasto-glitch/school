@@ -318,7 +318,7 @@ CREATE TABLE IF NOT EXISTS attendance (
   class_id UUID NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
   teacher_id UUID REFERENCES teachers(id) ON DELETE SET NULL,
   date DATE NOT NULL,
-  status TEXT NOT NULL CHECK (status IN ('present','absent','late')),
+  status TEXT NOT NULL CHECK (status IN ('present','absent','late','excused')),
   notes TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(student_id, class_id, date)
