@@ -85,7 +85,9 @@ export const supervisorApi = {
 export const driverApi = {
   getProfile: () => api.get('/driver/me'),
   getStudents: (search?: string) => api.get('/driver/students', { params: { search } }),
+  getTodayAttendance: () => api.get('/driver/today-attendance'),
   updateLocation: (data: object) => api.post('/driver/location', data),
-  startDrive: (excludedStudentIds: string[]) => api.post('/driver/start', { excludedStudentIds }),
+  startDrive: (studentRides: { studentId: string; rodeBus: boolean; exclusionReason?: string; schoolAttendanceStatus?: string }[]) =>
+    api.post('/driver/start', { studentRides }),
   stopDrive: () => api.post('/driver/stop'),
 };

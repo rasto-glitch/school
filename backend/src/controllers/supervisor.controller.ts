@@ -114,6 +114,23 @@ export async function getAttendanceSummary(req: AuthRequest, res: Response): Pro
   res.json(toCC(summary));
 }
 
+// ---- BUS RIDE RECORDS (discrepancy report) ----
+export async function getBusRideRecords(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { date } = req.query as Record<string, string>;
+  const targetDate = date || new Date().toISOString().split('T')[0];
+
+  const { data, error } = await supabase
+    .from('bus_ride_records')
+    .select('id, date, rode_bus, exclusion_reason, school_attendance_status, students(id, full_name, classes(name)), drivers(full_name)')
+    .eq('school_id', schoolId)
+    .eq('date', targetDate)
+    .order('created_at');
+
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json(toCC(data || []));
+}
+
 // ---- HOMEWORK (all school homework, read + delete) ----
 export async function getHomework(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;

@@ -155,12 +155,69 @@ export async function updateLocation(req: AuthRequest, res: Response, io?: Socke
   res.json({ success: true });
 }
 
-export async function startDrive(req: AuthRequest, res: Response): Promise<void> {
+// ---- TODAY'S SCHOOL ATTENDANCE FOR DRIVER'S STUDENTS ----
+export async function getTodayAttendance(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId, userId } = req.user!;
-  const { excludedStudentIds = [] } = req.body;
+  const today = new Date().toISOString().split('T')[0];
 
   const { data: driver } = await supabase.from('drivers').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
   if (!driver) { res.status(404).json({ error: 'Driver not found' }); return; }
+
+  const { data: students } = await supabase
+    .from('students').select('id')
+    .eq('driver_id', driver.id).eq('school_id', schoolId).eq('is_graduated', false);
+
+  const studentIds = (students || []).map((s: any) => s.id);
+  if (studentIds.length === 0) { res.json([]); return; }
+
+  const { data, error } = await supabase
+    .from('attendance')
+    .select('student_id, status, notes')
+    .eq('school_id', schoolId)
+    .eq('date', today)
+    .in('student_id', studentIds)
+    .in('status', ['absent', 'excused']);
+
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json(toCC(data || []));
+}
+
+export async function startDrive(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId, userId } = req.user!;
+
+  // studentRides: { studentId, rodeBus, exclusionReason?, schoolAttendanceStatus? }[]
+  const { studentRides = [] } = req.body as {
+    studentRides: {
+      studentId: string;
+      rodeBus: boolean;
+      exclusionReason?: 'school_absent' | 'went_home_with_parents';
+      schoolAttendanceStatus?: string;
+    }[];
+  };
+
+  const { data: driver } = await supabase.from('drivers').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
+  if (!driver) { res.status(404).json({ error: 'Driver not found' }); return; }
+
+  const today = new Date().toISOString().split('T')[0];
+
+  // Save per-student bus ride records (upsert — safe to re-start a drive)
+  if (studentRides.length > 0) {
+    await supabase.from('bus_ride_records').upsert(
+      studentRides.map(r => ({
+        school_id: schoolId,
+        driver_id: driver.id,
+        student_id: r.studentId,
+        date: today,
+        rode_bus: r.rodeBus,
+        exclusion_reason: r.rodeBus ? null : (r.exclusionReason ?? null),
+        school_attendance_status: r.schoolAttendanceStatus ?? null,
+      })),
+      { onConflict: 'student_id,date' }
+    );
+  }
+
+  // Derive excluded IDs for proximity-alert filtering (existing logic unchanged)
+  const excludedStudentIds = studentRides.filter(r => !r.rodeBus).map(r => r.studentId);
 
   // Persist excluded students so the backend can filter them throughout the drive
   const { error } = await supabase.from('drivers').update({ excluded_student_ids: excludedStudentIds }).eq('id', driver.id);

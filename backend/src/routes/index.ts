@@ -132,6 +132,7 @@ export function createRouter(io: SocketServer) {
   router.get('/supervisor/students', authenticate, authorize('supervisor'), (req, res) => supervisor.getAllStudents(req as AuthRequest, res));
   router.post('/supervisor/attendance', authenticate, authorize('supervisor'), (req, res) => supervisor.createAttendanceRecord(req as AuthRequest, res));
   router.patch('/supervisor/attendance/:id', authenticate, authorize('supervisor'), (req, res) => supervisor.updateAttendanceRecord(req as AuthRequest, res));
+  router.get('/supervisor/bus-rides', authenticate, authorize('supervisor', 'admin'), (req, res) => supervisor.getBusRideRecords(req as AuthRequest, res));
   router.get('/supervisor/homework', authenticate, authorize('supervisor'), (req, res) => supervisor.getHomework(req as AuthRequest, res));
   router.delete('/supervisor/homework/:id', authenticate, authorize('supervisor'), (req, res) => supervisor.deleteHomework(req as AuthRequest, res));
   router.get('/supervisor/assignments', authenticate, authorize('supervisor'), (req, res) => supervisor.getAssignments(req as AuthRequest, res));
@@ -140,6 +141,7 @@ export function createRouter(io: SocketServer) {
   // ---- DRIVER ----
   router.get('/driver/me', authenticate, authorize('driver'), (req, res) => driver.getMyProfile(req as AuthRequest, res));
   router.get('/driver/students', authenticate, authorize('driver'), (req, res) => driver.getMyStudents(req as AuthRequest, res));
+  router.get('/driver/today-attendance', authenticate, authorize('driver'), (req, res) => driver.getTodayAttendance(req as AuthRequest, res));
   router.post('/driver/location', authenticate, authorize('driver'), (req: Request, res: Response) => driver.updateLocation(req as AuthRequest, res, io));
   router.post('/driver/start', authenticate, authorize('driver'), (req, res) => driver.startDrive(req as AuthRequest, res));
   router.post('/driver/stop', authenticate, authorize('driver'), (req: Request, res: Response) => driver.stopDrive(req as AuthRequest, res, io));

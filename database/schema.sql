@@ -372,6 +372,28 @@ CREATE INDEX IF NOT EXISTS idx_attendance_school_date ON attendance(school_id, d
 CREATE INDEX IF NOT EXISTS idx_grades_student_subject ON grades(student_id, subject, grading_period);
 
 -- ============================================================
+-- BUS RIDE RECORDS
+-- Tracks per-student per-day bus ride outcomes and cross-references
+-- school attendance for discrepancy reporting.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS bus_ride_records (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  driver_id UUID NOT NULL REFERENCES drivers(id) ON DELETE CASCADE,
+  student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  date DATE NOT NULL,
+  rode_bus BOOLEAN NOT NULL DEFAULT TRUE,
+  -- Why the student didn't ride (only set when rode_bus = false)
+  exclusion_reason TEXT CHECK (exclusion_reason IN ('school_absent', 'went_home_with_parents')),
+  -- Snapshot of school attendance at time of drive start (for discrepancy queries)
+  school_attendance_status TEXT CHECK (school_attendance_status IN ('present', 'absent', 'late', 'excused')),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(student_id, date)
+);
+CREATE INDEX IF NOT EXISTS idx_bus_ride_records_school_date ON bus_ride_records(school_id, date DESC);
+CREATE INDEX IF NOT EXISTS idx_bus_ride_records_student ON bus_ride_records(student_id, date DESC);
+
+-- ============================================================
 -- DEMO SCHOOL SEED
 -- ============================================================
 INSERT INTO schools (id, name, slug, primary_color, secondary_color, is_active)
