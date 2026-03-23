@@ -6,13 +6,13 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { Megaphone, BookOpen, FileText, ClipboardList, MapPin, Bell, Calendar } from 'lucide-react-native';
+import { Megaphone, FileText, FileBadge, Calendar } from 'lucide-react-native';
 import { useAuthStore } from '../../store/authStore';
 import { parentApi } from '../../services/api';
 import { spacing, radius, shadow, font } from '../../theme';
 import { useColors } from '../../store/themeStore';
 import { useBadgeStore } from '../../store/badgeStore';
-import type { Homework, Announcement } from '../../types';
+import type { Announcement } from '../../types';
 
 interface Grade {
   id: string;
@@ -22,9 +22,7 @@ interface Grade {
   students?: { fullName: string };
 }
 
-type FeedItem =
-  | { type: 'announcement'; date: string; data: Announcement }
-  | { type: 'homework'; date: string; data: Homework };
+type FeedItem = { type: 'announcement'; date: string; data: Announcement };
 
 function timeLabel(dateStr: string): string {
   const diffDays = Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000);
@@ -41,19 +39,16 @@ export default function FeedScreen() {
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { reportCount, bookingCount } = useBadgeStore();
-  const [homework, setHomework] = useState<Homework[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [grades, setGrades] = useState<Grade[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = async () => {
-    const [hw, ann, gr] = await Promise.allSettled([
-      parentApi.getHomework(),
+    const [ann, gr] = await Promise.allSettled([
       parentApi.getAnnouncements(),
       parentApi.getGrades(),
     ]);
-    if (hw.status === 'fulfilled') setHomework(hw.value.data || []);
     if (ann.status === 'fulfilled') setAnnouncements(ann.value.data || []);
     if (gr.status === 'fulfilled') setGrades((gr.value.data || []).slice(0, 3));
   };
@@ -65,17 +60,11 @@ export default function FeedScreen() {
     load().finally(() => setRefreshing(false));
   };
 
-  const feedItems: FeedItem[] = [
-    ...announcements.map(a => ({ type: 'announcement' as const, date: a.createdAt, data: a })),
-    ...homework.map(h => ({ type: 'homework' as const, date: h.createdAt, data: h })),
-  ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const feedItems: FeedItem[] = announcements.map(a => ({ type: 'announcement' as const, date: a.createdAt, data: a }));
 
   const shortcuts = [
-    { label: t('dashboard.quick_homework'), icon: BookOpen, bg: '#EFF6FF', iconColor: '#2563EB', tab: 'Homework', count: 0 },
-    { label: t('dashboard.quick_assignments'), icon: ClipboardList, bg: '#F0FDF4', iconColor: '#16A34A', tab: 'Assignments', count: 0 },
-    { label: t('dashboard.quick_bus'), icon: MapPin, bg: '#FFFBEB', iconColor: '#D97706', tab: 'BusTracking', count: 0 },
-    { label: t('dashboard.quick_alerts'), icon: Bell, bg: '#FFF1F2', iconColor: '#E11D48', tab: 'Notifications', count: 0 },
     { label: t('dashboard.quick_reports', 'Reports'), icon: FileText, bg: '#FAF5FF', iconColor: '#9333EA', tab: 'Reports', count: reportCount },
+    { label: t('dashboard.quick_grades', 'Grades'), icon: FileBadge, bg: '#EEF2FF', iconColor: '#4F46E5', tab: 'Grades', count: 0 },
     { label: t('dashboard.quick_bookings', 'Bookings'), icon: Calendar, bg: '#F0FDFA', iconColor: '#0D9488', tab: 'Appointments', count: bookingCount },
   ];
 
@@ -147,56 +136,23 @@ export default function FeedScreen() {
         </View>
       ) : (
         feedItems.map((item, i) => {
-          if (item.type === 'announcement') {
-            const ann = item.data;
-            return (
-              <TouchableOpacity key={`a${i}`} style={styles.card} activeOpacity={0.7}
-                onPress={() => navigation.navigate('AnnouncementDetail', { announcement: ann })}>
-                <View style={styles.cardRow}>
-                  <View style={[styles.iconBox, { backgroundColor: '#FAF5FF' }]}>
-                    <Megaphone size={16} color="#9333EA" />
-                  </View>
-                  <View style={styles.cardBody}>
-                    <View style={styles.metaRow}>
-                      <View style={[styles.badge, { backgroundColor: '#F3E8FF' }]}>
-                        <Text style={[styles.badgeText, { color: '#7C3AED' }]}>{t('dashboard.badge_announcement')}</Text>
-                      </View>
-                      <Text style={styles.timeText}>{timeLabel(ann.createdAt)}</Text>
-                    </View>
-                    <Text style={styles.cardTitle}>{ann.title}</Text>
-                    <Text style={styles.cardDesc} numberOfLines={2}>{ann.content}</Text>
-                  </View>
-                </View>
-              </TouchableOpacity>
-            );
-          }
-          const hw = item.data as Homework;
+          const ann = item.data;
           return (
-            <TouchableOpacity key={`h${i}`} style={styles.card} activeOpacity={0.7}
-              onPress={() => navigation.navigate('HomeworkDetail', { homework: hw })}>
+            <TouchableOpacity key={`a${i}`} style={styles.card} activeOpacity={0.7}
+              onPress={() => navigation.navigate('AnnouncementDetail', { announcement: ann })}>
               <View style={styles.cardRow}>
-                <View style={[styles.iconBox, { backgroundColor: '#EFF6FF' }]}>
-                  <BookOpen size={16} color="#2563EB" />
+                <View style={[styles.iconBox, { backgroundColor: '#FAF5FF' }]}>
+                  <Megaphone size={16} color="#9333EA" />
                 </View>
                 <View style={styles.cardBody}>
                   <View style={styles.metaRow}>
-                    <View style={[styles.badge, { backgroundColor: '#DBEAFE' }]}>
-                      <Text style={[styles.badgeText, { color: '#1D4ED8' }]}>{t('dashboard.badge_homework')}</Text>
+                    <View style={[styles.badge, { backgroundColor: '#F3E8FF' }]}>
+                      <Text style={[styles.badgeText, { color: '#7C3AED' }]}>{t('dashboard.badge_announcement')}</Text>
                     </View>
-                    <Text style={styles.timeText}>{timeLabel(hw.createdAt)}</Text>
+                    <Text style={styles.timeText}>{timeLabel(ann.createdAt)}</Text>
                   </View>
-                  <Text style={styles.cardTitle}>{hw.title}</Text>
-                  {hw.description && <Text style={styles.cardDesc} numberOfLines={2}>{hw.description}</Text>}
-                  <View style={styles.tagsRow}>
-                    {hw.subject && (
-                      <View style={styles.subjectTag}>
-                        <Text style={styles.subjectTagText}>{hw.subject}</Text>
-                      </View>
-                    )}
-                    {hw.dueDate && (
-                      <Text style={styles.dueText}>{t('homework.due', { date: new Date(hw.dueDate).toLocaleDateString() })}</Text>
-                    )}
-                  </View>
+                  <Text style={styles.cardTitle}>{ann.title}</Text>
+                  <Text style={styles.cardDesc} numberOfLines={2}>{ann.content}</Text>
                 </View>
               </View>
             </TouchableOpacity>
@@ -230,10 +186,6 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   timeText: { fontSize: font.xs, color: colors.textMuted },
   cardTitle: { fontSize: font.sm, fontWeight: '600', color: colors.text, marginBottom: 3 },
   cardDesc: { fontSize: font.sm, color: colors.textSecondary, lineHeight: 18 },
-  tagsRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: 5 },
-  subjectTag: { backgroundColor: colors.bg, borderRadius: radius.full, paddingHorizontal: 8, paddingVertical: 2 },
-  subjectTagText: { fontSize: font.xs, color: colors.textSecondary },
-  dueText: { fontSize: font.xs, color: colors.warning, fontWeight: '600' },
   gradesRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
   gradeCard: { flex: 1, backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.sm, alignItems: 'center', gap: 4, ...shadow.sm },
   gradeCircle: { width: 48, height: 48, borderRadius: 24, borderWidth: 2.5, alignItems: 'center', justifyContent: 'center' },
