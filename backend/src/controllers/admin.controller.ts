@@ -735,10 +735,12 @@ export async function sendNotification(req: AuthRequest, res: Response): Promise
 // ---- ANNOUNCEMENTS ----
 export async function getAnnouncements(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
+  const cutoff = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
   const { data, error } = await supabase
     .from('announcements')
     .select('*')
     .eq('school_id', schoolId)
+    .gte('created_at', cutoff)
     .order('created_at', { ascending: false });
   if (error) { res.status(500).json({ error: error.message }); return; }
   res.json(toCC(data));

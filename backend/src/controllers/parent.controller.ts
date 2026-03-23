@@ -93,10 +93,12 @@ export async function getAssignments(req: AuthRequest, res: Response): Promise<v
 
 export async function getAnnouncements(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
+  const cutoff = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
   const { data, error } = await supabase.from('announcements')
     .select('*')
     .eq('school_id', schoolId)
     .in('target_audience', ['all', 'parents'])
+    .gte('created_at', cutoff)
     .order('created_at', { ascending: false });
   if (error) { res.status(500).json({ error: error.message }); return; }
   res.json(toCC(data));
@@ -229,8 +231,10 @@ export async function getNotifications(req: AuthRequest, res: Response): Promise
   const { data: user } = await supabase.from('users').select('id').eq('id', userId).single();
   if (!user) { res.json([]); return; }
 
+  const cutoff = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
   const { data, error } = await supabase.from('notifications')
     .select('*').eq('school_id', schoolId).eq('user_id', userId)
+    .gte('created_at', cutoff)
     .order('created_at', { ascending: false });
   if (error) { res.status(500).json({ error: error.message }); return; }
   res.json(toCC(data));
@@ -245,19 +249,22 @@ export async function markNotificationRead(req: AuthRequest, res: Response): Pro
 
 export async function markAllNotificationsRead(req: AuthRequest, res: Response): Promise<void> {
   const { userId, schoolId } = req.user!;
-  await supabase.from('notifications').update({ is_read: true }).eq('user_id', userId).eq('school_id', schoolId).eq('is_read', false);
+  const cutoff = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
+  await supabase.from('notifications').update({ is_read: true }).eq('user_id', userId).eq('school_id', schoolId).eq('is_read', false).gte('created_at', cutoff);
   res.json({ success: true });
 }
 
 export async function getUnreadCount(req: AuthRequest, res: Response): Promise<void> {
   const { userId, schoolId } = req.user!;
-  const { count } = await supabase.from('notifications').select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('school_id', schoolId).eq('is_read', false);
+  const cutoff = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
+  const { count } = await supabase.from('notifications').select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('school_id', schoolId).eq('is_read', false).gte('created_at', cutoff);
   res.json({ count: count ?? 0 });
 }
 
 export async function getContentUnreadCounts(req: AuthRequest, res: Response): Promise<void> {
   const { userId, schoolId } = req.user!;
-  const q = (type: string) => supabase.from('notifications').select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('school_id', schoolId).eq('is_read', false).eq('notification_type', type);
+  const cutoff = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
+  const q = (type: string) => supabase.from('notifications').select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('school_id', schoolId).eq('is_read', false).eq('notification_type', type).gte('created_at', cutoff);
   const [hw, as_, rp, bk] = await Promise.all([q('homework'), q('assignment'), q('report'), q('appointment')]);
   res.json({ homework: hw.count ?? 0, assignment: as_.count ?? 0, report: rp.count ?? 0, booking: bk.count ?? 0 });
 }
