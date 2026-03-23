@@ -61,6 +61,7 @@ export default function NotificationsScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [items, setItems] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showPrevious, setShowPrevious] = useState(false);
 
   const setUnreadCount = useBadgeStore(s => s.setUnreadCount);
 
@@ -100,6 +101,10 @@ export default function NotificationsScreen() {
   };
 
   const groups = useMemo(() => groupByDay(items), [items]);
+  const recentGroups = useMemo(() => groups.filter(g => g.label === 'Today' || g.label === 'Yesterday'), [groups]);
+  const olderGroups = useMemo(() => groups.filter(g => g.label !== 'Today' && g.label !== 'Yesterday'), [groups]);
+  const showingSplit = recentGroups.length > 0 && olderGroups.length > 0;
+  const displayedGroups = showPrevious || !showingSplit ? groups : recentGroups;
 
   return (
     <ScrollView
@@ -116,21 +121,28 @@ export default function NotificationsScreen() {
       ) : items.length === 0 ? (
         <Text style={styles.empty}>{t('notifications.no_notifications')}</Text>
       ) : (
-        groups.map(group => (
-          <View key={group.label}>
-            <Text style={styles.dayLabel}>{group.label}</Text>
-            {group.items.map(item => (
-              <TouchableOpacity key={item.id} activeOpacity={0.75}
-                style={[styles.card, !item.isRead && styles.cardUnread]}
-                onPress={() => handlePress(item)}>
-                {!item.isRead && <View style={styles.dot} />}
-                <Text style={styles.cardTitle}>{item.title}</Text>
-                <Text style={styles.cardMessage} numberOfLines={2}>{item.message}</Text>
-                <Text style={[styles.cardTime, { marginTop: 10 }]}>{formatTime(item.createdAt)}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        ))
+        <>
+          {displayedGroups.map(group => (
+            <View key={group.label}>
+              <Text style={styles.dayLabel}>{group.label}</Text>
+              {group.items.map(item => (
+                <TouchableOpacity key={item.id} activeOpacity={0.75}
+                  style={[styles.card, !item.isRead && styles.cardUnread]}
+                  onPress={() => handlePress(item)}>
+                  {!item.isRead && <View style={styles.dot} />}
+                  <Text style={styles.cardTitle}>{item.title}</Text>
+                  <Text style={styles.cardMessage} numberOfLines={2}>{item.message}</Text>
+                  <Text style={[styles.cardTime, { marginTop: 10 }]}>{formatTime(item.createdAt)}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          ))}
+          {showingSplit && !showPrevious && (
+            <TouchableOpacity style={styles.prevButton} activeOpacity={0.7} onPress={() => setShowPrevious(true)}>
+              <Text style={styles.prevButtonText}>See previous notifications</Text>
+            </TouchableOpacity>
+          )}
+        </>
       )}
     </ScrollView>
   );
@@ -154,4 +166,11 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   cardTitle: { fontSize: font.md, fontWeight: '700', color: colors.text, marginBottom: 4 },
   cardMessage: { fontSize: font.sm, color: colors.textSecondary, lineHeight: 18 },
   cardTime: { fontSize: font.xs, color: colors.textMuted },
+  prevButton: {
+    borderWidth: 1, borderColor: colors.primary + '40',
+    borderRadius: radius.md, paddingVertical: spacing.md,
+    alignItems: 'center', marginTop: spacing.sm,
+    backgroundColor: colors.card,
+  },
+  prevButtonText: { fontSize: font.sm, color: colors.primary, fontWeight: '600' },
 });

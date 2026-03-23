@@ -38,6 +38,7 @@ export default function NotificationsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
+  const [showPrevious, setShowPrevious] = useState(false);
 
   useEffect(() => {
     setError(false);
@@ -69,6 +70,14 @@ export default function NotificationsPage() {
   const groups = groupByDate(notifications, t);
   const unreadCount = notifications.filter(n => !n.isRead).length;
 
+  const todayStr = t('common.today');
+  const yesterdayStr = t('common.yesterday');
+  const allEntries = Object.entries(groups);
+  const recentEntries = allEntries.filter(([d]) => d === todayStr || d === yesterdayStr);
+  const olderEntries = allEntries.filter(([d]) => d !== todayStr && d !== yesterdayStr);
+  const showingSplit = recentEntries.length > 0 && olderEntries.length > 0;
+  const displayedEntries = showPrevious || !showingSplit ? allEntries : recentEntries;
+
   return (
     <PageLayout title={t('notifications.title')} subtitle={unreadCount > 0 ? `${unreadCount} unread` : 'All caught up!'}>
       {loading ? <NotificationListSkeleton /> : error ? (
@@ -77,7 +86,7 @@ export default function NotificationsPage() {
         <EmptyState title={t('notifications.no_notifications')} icon={<Bell className="w-8 h-8 text-gray-400" />} />
       ) : (
         <div className="space-y-6">
-          {Object.entries(groups).map(([date, items]) => (
+          {displayedEntries.map(([date, items]) => (
             <div key={date}>
               <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">{date}</h2>
               <div className="space-y-2">
@@ -91,7 +100,7 @@ export default function NotificationsPage() {
                         <div className="flex items-start justify-between gap-2">
                           <p className={`text-sm ${!n.isRead ? 'font-semibold text-gray-900' : 'font-medium text-gray-700'}`}>{n.title}</p>
                           {!n.isRead && (
-                            <button onClick={() => markRead(n.id)} className="p-1 hover:bg-white rounded-lg flex-shrink-0" title="Mark as read">
+                            <button onClick={(e) => { e.stopPropagation(); markRead(n.id); }} className="p-1 hover:bg-white rounded-lg flex-shrink-0" title="Mark as read">
                               <Check className="w-3 h-3 text-primary-600" />
                             </button>
                           )}
@@ -105,6 +114,14 @@ export default function NotificationsPage() {
               </div>
             </div>
           ))}
+          {showingSplit && !showPrevious && (
+            <button
+              onClick={() => setShowPrevious(true)}
+              className="w-full py-3 text-sm font-medium text-primary-600 border border-primary-200 rounded-xl hover:bg-primary-50 transition-colors"
+            >
+              See previous notifications
+            </button>
+          )}
         </div>
       )}
     </PageLayout>
