@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
-import { Calendar, FileText, Megaphone, Award } from 'lucide-react';
+import { Calendar, FileText, Megaphone, FileBadge } from 'lucide-react';
 import { parentApi } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import PageLayout from '../../components/layout/PageLayout';
@@ -64,7 +64,7 @@ export default function ParentDashboard() {
         <div className="grid grid-cols-3 gap-2">
           {[
             { to: '/parent/reports', icon: FileText, label: t('dashboard.quick_reports'), color: 'text-purple-600 bg-purple-50' },
-            { to: '/parent/grades', icon: Award, label: t('dashboard.quick_grades') || 'Grades', color: 'text-indigo-600 bg-indigo-50' },
+            { to: '/parent/grades', icon: FileBadge, label: t('dashboard.quick_grades') || 'Grades', color: 'text-indigo-600 bg-indigo-50' },
             { to: '/parent/appointments', icon: Calendar, label: t('dashboard.quick_bookings'), color: 'text-teal-600 bg-teal-50' },
           ].map(({ to, icon: Icon, label, color }) => (
             <Link key={to} to={to}>
