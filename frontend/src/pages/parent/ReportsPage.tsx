@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { BarChart2 } from 'lucide-react';
 import { parentApi } from '../../services/api';
 import PageLayout from '../../components/layout/PageLayout';
@@ -13,6 +14,7 @@ import { format, parseISO } from 'date-fns';
 
 export default function ReportsPage() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [reports, setReports] = useState<Report[]>([]);
   const [children, setChildren] = useState<Student[]>([]);
   const [selectedChild, setSelectedChild] = useState('');
@@ -56,7 +58,7 @@ export default function ReportsPage() {
         ) : (
           <div className="grid gap-4">
             {reports.map((r) => (
-              <Card key={r.id}>
+              <Card key={r.id} hover onClick={() => navigate(`/parent/reports/${r.id}`)}>
                 <div className="flex items-center justify-between mb-3">
                   <div>
                     <h3 className="font-semibold text-gray-900">{r.subject}</h3>

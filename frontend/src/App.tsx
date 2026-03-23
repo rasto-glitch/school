@@ -17,6 +17,7 @@ import AssignmentDetailPage from './pages/parent/AssignmentDetailPage';
 import ParentAnnouncementsPage from './pages/parent/AnnouncementsPage';
 import AnnouncementDetailPage from './pages/parent/AnnouncementDetailPage';
 import ReportsPage from './pages/parent/ReportsPage';
+import ReportDetailPage from './pages/parent/ReportDetailPage';
 import BusTrackingPage from './pages/parent/BusTrackingPage';
 import NotificationsPage from './pages/parent/NotificationsPage';
 import ProfilePage from './pages/parent/ProfilePage';
@@ -116,6 +117,7 @@ export default function App() {
         <Route path="/parent/announcements" element={<ProtectedRoute allowedRoles={['parent']}><ParentAnnouncementsPage /></ProtectedRoute>} />
         <Route path="/parent/announcements/:id" element={<ProtectedRoute allowedRoles={['parent']}><AnnouncementDetailPage /></ProtectedRoute>} />
         <Route path="/parent/reports" element={<ProtectedRoute allowedRoles={['parent']}><ReportsPage /></ProtectedRoute>} />
+        <Route path="/parent/reports/:id" element={<ProtectedRoute allowedRoles={['parent']}><ReportDetailPage /></ProtectedRoute>} />
         <Route path="/parent/bus" element={<ProtectedRoute allowedRoles={['parent']}><BusTrackingPage /></ProtectedRoute>} />
         <Route path="/parent/notifications" element={<ProtectedRoute allowedRoles={['parent']}><NotificationsPage /></ProtectedRoute>} />
         <Route path="/parent/appointments" element={<ProtectedRoute allowedRoles={['parent']}><ParentAppointmentsPage /></ProtectedRoute>} />

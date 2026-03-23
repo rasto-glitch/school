@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { Bell, Check } from 'lucide-react';
 import { parentApi } from '../../services/api';
 import PageLayout from '../../components/layout/PageLayout';
@@ -32,6 +33,7 @@ const typeColors: Record<string, string> = {
 
 export default function NotificationsPage() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -50,6 +52,20 @@ export default function NotificationsPage() {
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
   };
 
+  const handlePress = async (n: Notification) => {
+    if (!n.isRead) markRead(n.id);
+    if (!n.relatedId) return;
+    if (n.notificationType === 'homework') {
+      navigate(`/parent/homework/${n.relatedId}`);
+    } else if (n.notificationType === 'assignment') {
+      navigate(`/parent/assignments/${n.relatedId}`);
+    } else if (n.notificationType === 'announcement') {
+      navigate(`/parent/announcements/${n.relatedId}`);
+    } else if (n.notificationType === 'report') {
+      navigate(`/parent/reports/${n.relatedId}`);
+    }
+  };
+
   const groups = groupByDate(notifications, t);
   const unreadCount = notifications.filter(n => !n.isRead).length;
 
@@ -66,7 +82,7 @@ export default function NotificationsPage() {
               <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">{date}</h2>
               <div className="space-y-2">
                 {items.map((n) => (
-                  <Card key={n.id} className={`${!n.isRead ? 'border-primary-200 bg-primary-50/30' : ''}`}>
+                  <Card key={n.id} hover onClick={() => handlePress(n)} className={`${!n.isRead ? 'border-primary-200 bg-primary-50/30' : ''}`}>
                     <div className="flex items-start gap-3">
                       <div className={`p-2 rounded-lg flex-shrink-0 ${typeColors[n.notificationType] || typeColors.general}`}>
                         <Bell className="w-4 h-4" />

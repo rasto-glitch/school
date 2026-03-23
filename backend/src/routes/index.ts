@@ -74,7 +74,7 @@ export function createRouter(io: SocketServer) {
 
   router.post('/admin/notifications', authenticate, authorize('admin'), (req, res) => admin.sendNotification(req as AuthRequest, res));
 
-  router.get('/admin/announcements', authenticate, authorize('admin', 'teacher', 'parent'), (req, res) => admin.getAnnouncements(req as AuthRequest, res));
+  router.get('/admin/announcements', authenticate, authorize('admin', 'teacher', 'parent', 'supervisor'), (req, res) => admin.getAnnouncements(req as AuthRequest, res));
   router.get('/link-preview', authenticate, (req, res) => admin.getLinkPreview(req as AuthRequest, res));
   router.post('/admin/announcements', authenticate, authorize('admin'), upload.single('attachment'), (req, res) => admin.createAnnouncement(req as AuthRequest, res));
   router.delete('/admin/announcements/:id', authenticate, authorize('admin'), (req, res) => admin.deleteAnnouncement(req as AuthRequest, res));
@@ -116,6 +116,7 @@ export function createRouter(io: SocketServer) {
   router.get('/parent/announcements', authenticate, authorize('parent'), (req, res) => parent.getAnnouncements(req as AuthRequest, res));
   router.get('/parent/announcements/:id', authenticate, authorize('parent'), (req, res) => parent.getAnnouncementById(req as AuthRequest, res));
   router.get('/parent/reports', authenticate, authorize('parent'), (req, res) => parent.getReport(req as AuthRequest, res));
+  router.get('/parent/reports/:id', authenticate, authorize('parent'), (req, res) => parent.getReportById(req as AuthRequest, res));
   router.get('/parent/grades', authenticate, authorize('parent'), (req, res) => parent.getGrades(req as AuthRequest, res));
   router.get('/parent/bus-location', authenticate, authorize('parent'), (req, res) => parent.getBusLocation(req as AuthRequest, res));
   router.get('/parent/driver-info', authenticate, authorize('parent'), (req, res) => parent.getDriverInfo(req as AuthRequest, res));

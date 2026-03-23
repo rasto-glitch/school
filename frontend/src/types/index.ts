@@ -133,6 +133,7 @@ export interface Notification {
   message: string;
   isRead: boolean;
   notificationType: string;
+  relatedId?: string;
   createdAt: string;
 }
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Bell, Check } from 'lucide-react';
+import { Bell, Check, CheckCheck } from 'lucide-react';
 import api from '../../services/api';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
@@ -35,11 +35,23 @@ export default function TeacherNotificationsPage() {
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
   };
 
+  const markAllRead = async () => {
+    await api.patch('/parent/notifications/read-all');
+    setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+  };
+
   const groups = groupByDate(notifications);
   const unreadCount = notifications.filter(n => !n.isRead).length;
 
   return (
     <PageLayout title="Notifications" subtitle={unreadCount > 0 ? `${unreadCount} unread` : 'All caught up!'}>
+      {unreadCount > 0 && (
+        <div className="flex justify-end mb-4">
+          <button onClick={markAllRead} className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-primary-600 hover:bg-primary-50 rounded-lg transition-colors">
+            <CheckCheck className="w-4 h-4" /> Mark all read
+          </button>
+        </div>
+      )}
       {loading ? <LoadingSpinner /> : notifications.length === 0 ? (
         <EmptyState title="No notifications" icon={<Bell className="w-8 h-8 text-gray-400" />} />
       ) : (

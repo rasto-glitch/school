@@ -91,7 +91,8 @@ export default function NotificationsScreen() {
         const res = await parentApi.getAnnouncementById(item.relatedId);
         navigation.navigate('AnnouncementDetail', { announcement: res.data });
       } else if (item.notificationType === 'report') {
-        // Reports don't have a detail screen yet — no-op
+        const res = await parentApi.getReportById(item.relatedId);
+        navigation.navigate('ReportDetail', { report: res.data });
       }
     } catch {
       // If fetch fails, do nothing
