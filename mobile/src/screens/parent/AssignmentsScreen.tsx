@@ -1,12 +1,13 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useCallback } from 'react';
 import { View, Text, ScrollView, StyleSheet, ActivityIndicator, RefreshControl, TouchableOpacity } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { ClipboardList, Calendar, ChevronRight } from 'lucide-react-native';
 import { parentApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
+import { useBadgeStore } from '../../store/badgeStore';
 import { spacing, radius, shadow, font } from '../../theme';
 import type { RootStackParamList } from '../../navigation';
 
@@ -32,10 +33,23 @@ export default function AssignmentsScreen() {
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const initialized = useRef(false);
+  const setUnreadCount = useBadgeStore(s => s.setUnreadCount);
 
   const load = () => parentApi.getAssignments().then(r => setAssignments(r.data || []));
 
-  useEffect(() => { load().finally(() => setLoading(false)); }, []);
+  useFocusEffect(
+    useCallback(() => {
+      if (!initialized.current) {
+        initialized.current = true;
+        load().finally(() => setLoading(false));
+      } else {
+        load();
+      }
+      parentApi.markTypeRead('assignment').catch(() => {});
+      parentApi.getUnreadCount().then(r => setUnreadCount(r.data?.count ?? 0)).catch(() => {});
+    }, [])
+  );
 
   const onRefresh = () => { setRefreshing(true); load().finally(() => setRefreshing(false)); };
 

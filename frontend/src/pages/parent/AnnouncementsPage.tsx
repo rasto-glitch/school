@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Megaphone } from 'lucide-react';
-import { adminApi } from '../../services/api';
+import { adminApi, parentApi } from '../../services/api';
+import { useNotificationStore } from '../../store/notificationStore';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
 import EmptyState from '../../components/common/EmptyState';
@@ -13,6 +14,7 @@ import { format, parseISO } from 'date-fns';
 
 export default function AnnouncementsPage() {
   const { t } = useTranslation();
+  const setUnreadCount = useNotificationStore(s => s.setUnreadCount);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -26,6 +28,9 @@ export default function AnnouncementsPage() {
       .then(r => setAnnouncements(r.data || []))
       .catch(() => setError(true))
       .finally(() => setLoading(false));
+    parentApi.markTypeRead('announcement')
+      .then(() => parentApi.getUnreadCount().then(r => setUnreadCount(r.data?.count ?? 0)))
+      .catch(() => {});
   }, [retryKey]);
 
   const latest = announcements[0];

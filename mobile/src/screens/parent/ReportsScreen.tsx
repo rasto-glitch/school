@@ -1,8 +1,8 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useCallback } from 'react';
 import { View, Text, ScrollView, StyleSheet, ActivityIndicator, RefreshControl, TouchableOpacity } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { FileText, ChevronRight } from 'lucide-react-native';
 import { parentApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
@@ -34,14 +34,25 @@ export default function ReportsScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const clearReport = useBadgeStore(s => s.clearReport);
+  const setUnreadCount = useBadgeStore(s => s.setUnreadCount);
+  const initialized = useRef(false);
 
   const load = () => parentApi.getReports().then(r => setReports(r.data || []));
 
-  useEffect(() => {
-    clearReport();
-    parentApi.markTypeRead('report').catch(() => {});
-    load().finally(() => setLoading(false));
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      if (!initialized.current) {
+        initialized.current = true;
+        load().finally(() => setLoading(false));
+      } else {
+        load();
+      }
+      clearReport();
+      parentApi.markTypeRead('report').catch(() => {});
+      parentApi.getUnreadCount().then(r => setUnreadCount(r.data?.count ?? 0)).catch(() => {});
+    }, [])
+  );
+
   const onRefresh = () => { setRefreshing(true); load().finally(() => setRefreshing(false)); };
 
   return (

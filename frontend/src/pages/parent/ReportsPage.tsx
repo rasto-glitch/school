@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { BarChart2 } from 'lucide-react';
 import { parentApi } from '../../services/api';
+import { useNotificationStore } from '../../store/notificationStore';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
 import Select from '../../components/common/Select';
@@ -15,6 +16,7 @@ import { format, parseISO } from 'date-fns';
 export default function ReportsPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const setUnreadCount = useNotificationStore(s => s.setUnreadCount);
   const [reports, setReports] = useState<Report[]>([]);
   const [children, setChildren] = useState<Student[]>([]);
   const [selectedChild, setSelectedChild] = useState('');
@@ -37,6 +39,9 @@ export default function ReportsPage() {
       .then(r => setReports(r.data || []))
       .catch(() => setError(true))
       .finally(() => setLoading(false));
+    parentApi.markTypeRead('report')
+      .then(() => parentApi.getUnreadCount().then(r => setUnreadCount(r.data?.count ?? 0)))
+      .catch(() => {});
   }, [selectedChild, selectedSubject, retryKey]);
 
   return (

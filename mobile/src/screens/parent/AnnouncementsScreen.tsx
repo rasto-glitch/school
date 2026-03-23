@@ -1,9 +1,10 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useCallback } from 'react';
 import { View, Text, ScrollView, StyleSheet, ActivityIndicator, RefreshControl, TouchableOpacity } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useBadgeStore } from '../../store/badgeStore';
 import { Megaphone, ChevronRight } from 'lucide-react-native';
 import { parentApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
@@ -20,10 +21,23 @@ export default function AnnouncementsScreen() {
   const [items, setItems] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const initialized = useRef(false);
+  const setUnreadCount = useBadgeStore(s => s.setUnreadCount);
 
   const load = () => parentApi.getAnnouncements().then(r => setItems(r.data || []));
 
-  useEffect(() => { load().finally(() => setLoading(false)); }, []);
+  useFocusEffect(
+    useCallback(() => {
+      if (!initialized.current) {
+        initialized.current = true;
+        load().finally(() => setLoading(false));
+      } else {
+        load();
+      }
+      parentApi.markTypeRead('announcement').catch(() => {});
+      parentApi.getUnreadCount().then(r => setUnreadCount(r.data?.count ?? 0)).catch(() => {});
+    }, [])
+  );
 
   const onRefresh = () => { setRefreshing(true); load().finally(() => setRefreshing(false)); };
 
