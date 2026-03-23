@@ -1,6 +1,9 @@
+import { useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../../store/authStore';
+import { useNotificationStore } from '../../store/notificationStore';
+import { parentApi } from '../../services/api';
 import {
   Home, BookOpen, ClipboardList, Megaphone, BarChart2,
   MapPin, Bell, User, Users, GraduationCap, Bus,
@@ -78,6 +81,13 @@ interface SidebarProps {
 export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobileOpen }: SidebarProps) {
   const { user, school, logout } = useAuthStore();
   const { t, i18n } = useTranslation();
+  const { unreadCount, setUnreadCount } = useNotificationStore();
+
+  useEffect(() => {
+    if (user?.role === 'parent') {
+      parentApi.getUnreadCount().then(r => setUnreadCount(r.data?.count ?? 0)).catch(() => {});
+    }
+  }, [user?.role]);
   const isRTL = ['ar', 'ku'].includes(i18n.language);
   const showLangSwitcher = user?.role === 'parent' || user?.role === 'driver';
   const items = user ? navItems[user.role] : [];
@@ -128,21 +138,34 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
 
       {/* Nav links */}
       <nav className="flex-1 overflow-y-auto py-2">
-        {items.map(({ to, icon: Icon, label }) => (
-          <NavLink
-            key={to}
-            to={to}
-            onClick={() => setMobileOpen(false)}
-            className={({ isActive }) => `
-              flex items-center gap-3 px-4 py-2.5 mx-2 rounded-xl transition-colors duration-150
-              ${isActive ? 'bg-primary-50 text-primary-700 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}
-            `}
-            title={collapsed ? label : undefined}
-          >
-            <Icon className="w-5 h-5 flex-shrink-0" />
-            {!collapsed && <span className="text-sm">{t(`nav.${label.toLowerCase().replace(/ /g, '_')}`, label)}</span>}
-          </NavLink>
-        ))}
+        {items.map(({ to, icon: Icon, label }) => {
+          const showBadge = to === '/parent/notifications' && user?.role === 'parent' && unreadCount > 0;
+          return (
+            <NavLink
+              key={to}
+              to={to}
+              onClick={() => setMobileOpen(false)}
+              className={({ isActive }) => `
+                flex items-center gap-3 px-4 py-2.5 mx-2 rounded-xl transition-colors duration-150
+                ${isActive ? 'bg-primary-50 text-primary-700 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}
+              `}
+              title={collapsed ? label : undefined}
+            >
+              <div className="relative flex-shrink-0">
+                <Icon className="w-5 h-5" />
+                {showBadge && collapsed && (
+                  <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full" />
+                )}
+              </div>
+              {!collapsed && <span className="text-sm">{t(`nav.${label.toLowerCase().replace(/ /g, '_')}`, label)}</span>}
+              {!collapsed && showBadge && (
+                <span className="ml-auto bg-red-500 text-white text-xs font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
+            </NavLink>
+          );
+        })}
       </nav>
 
       {/* User + Logout */}

@@ -74,6 +74,8 @@ export const parentApi = {
   getAnnouncementById: (id: string) => api.get(`/parent/announcements/${id}`),
   getReportById: (id: string) => api.get(`/parent/reports/${id}`),
   getLinkPreview: (url: string) => api.get('/link-preview', { params: { url } }),
+  getUnreadCount: () => api.get('/parent/notifications/unread-count'),
+  markTypeRead: (type: string) => api.patch(`/parent/notifications/read-type/${type}`),
 };
 
 // ---- TEACHER ----

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ClipboardList, Calendar } from 'lucide-react';
 import { parentApi } from '../../services/api';
+import { useNotificationStore } from '../../store/notificationStore';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
 import Select from '../../components/common/Select';
@@ -22,6 +23,7 @@ const statusColors: Record<string, 'gray' | 'yellow' | 'green'> = {
 export default function AssignmentsPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const setUnreadCount = useNotificationStore(s => s.setUnreadCount);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [children, setChildren] = useState<Student[]>([]);
   const [selectedChild, setSelectedChild] = useState('');
@@ -44,6 +46,9 @@ export default function AssignmentsPage() {
       .then(r => setAssignments(r.data || []))
       .catch(() => setError(true))
       .finally(() => setLoading(false));
+    parentApi.markTypeRead('assignment')
+      .then(() => parentApi.getUnreadCount().then(r => setUnreadCount(r.data?.count ?? 0)))
+      .catch(() => {});
   }, [selectedChild, selectedSubject, retryKey]);
 
   return (

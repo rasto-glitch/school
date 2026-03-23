@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { BookOpen, Paperclip, Calendar } from 'lucide-react';
 import { parentApi } from '../../services/api';
+import { useNotificationStore } from '../../store/notificationStore';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
 import Select from '../../components/common/Select';
@@ -16,6 +17,7 @@ import { format, isPast, parseISO } from 'date-fns';
 export default function HomeworkPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const setUnreadCount = useNotificationStore(s => s.setUnreadCount);
   const [homework, setHomework] = useState<Homework[]>([]);
   const [children, setChildren] = useState<Student[]>([]);
   const [selectedChild, setSelectedChild] = useState('');
@@ -40,6 +42,9 @@ export default function HomeworkPage() {
       .then(r => setHomework(r.data || []))
       .catch(() => setError(true))
       .finally(() => setLoading(false));
+    parentApi.markTypeRead('homework')
+      .then(() => parentApi.getUnreadCount().then(r => setUnreadCount(r.data?.count ?? 0)))
+      .catch(() => {});
   }, [selectedChild, selectedSubject, retryKey]);
 
   const isOverdue = (dueDate?: string) => dueDate ? isPast(parseISO(dueDate)) : false;
