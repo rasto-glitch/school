@@ -198,6 +198,15 @@ export async function bulkUploadStudents(req: AuthRequest, res: Response): Promi
     return `${base}${n}`;
   };
 
+  // Normalise residence type → 'apartment' | 'house' | null
+  const normaliseResidence = (v?: string): 'apartment' | 'house' | null => {
+    if (!v || !v.trim()) return null;
+    const lv = v.toLowerCase().trim();
+    if (lv === 'apartment' || lv === 'apt' || lv === 'flat') return 'apartment';
+    if (lv === 'house' || lv === 'villa' || lv === 'compound') return 'house';
+    return null;
+  };
+
   // Hash the default parent password once
   const rounds = parseInt(process.env.BCRYPT_ROUNDS || '10');
   const defaultParentPasswordHash = await bcrypt.hash('Parent@123', rounds);
@@ -226,14 +235,6 @@ export async function bulkUploadStudents(req: AuthRequest, res: Response): Promi
       continue;
     }
 
-    // Normalise residence type → 'apartment' | 'house' | null
-    const normaliseResidence = (v?: string): 'apartment' | 'house' | null => {
-      if (!v) return null;
-      const lv = v.toLowerCase().trim();
-      if (lv === 'apartment' || lv === 'apt' || lv === 'flat') return 'apartment';
-      if (lv === 'house' || lv === 'villa') return 'house';
-      return null;
-    };
     const normResidence = normaliseResidence(residenceType);
     // Phone to use for parent: dedicated parentPhone column takes priority, then student phone
     const resolvedParentPhone = (parentPhone || phoneNumber || '').trim() || null;
@@ -339,8 +340,12 @@ export async function bulkUploadStudents(req: AuthRequest, res: Response): Promi
 
     // ---- Validate / normalise date of birth ----
     let dob: string | null = null;
-    if (dateOfBirth) {
-      const parsed = new Date(dateOfBirth);
+    if (dateOfBirth && dateOfBirth.trim()) {
+      let dobStr = dateOfBirth.trim();
+      // Convert DD/MM/YYYY → YYYY-MM-DD (XLSX date cells already output yyyy-mm-dd via dateNF)
+      const ddmm = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(dobStr);
+      if (ddmm) dobStr = `${ddmm[3]}-${ddmm[2].padStart(2, '0')}-${ddmm[1].padStart(2, '0')}`;
+      const parsed = new Date(dobStr);
       if (!isNaN(parsed.getTime())) dob = parsed.toISOString().split('T')[0];
     }
 

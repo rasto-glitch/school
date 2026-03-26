@@ -12,6 +12,7 @@ import { setIo } from './utils/notify';
 dotenv.config();
 
 const app = express();
+app.set('trust proxy', 1); // Trust Railway's reverse proxy for accurate IP in rate limiting
 const httpServer = http.createServer(app);
 
 // Socket.io setup
