@@ -401,6 +401,26 @@ CREATE INDEX IF NOT EXISTS idx_bus_ride_records_school_date ON bus_ride_records(
 CREATE INDEX IF NOT EXISTS idx_bus_ride_records_student ON bus_ride_records(student_id, date DESC);
 
 -- ============================================================
+-- ARCHIVED STUDENTS
+-- ============================================================
+CREATE TABLE IF NOT EXISTS archived_students (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  original_student_id UUID,
+  full_name TEXT NOT NULL,
+  date_of_birth DATE,
+  enrollment_date DATE,
+  departure_date DATE NOT NULL,
+  reason TEXT NOT NULL CHECK (reason IN ('transferred', 'withdrew')),
+  parent_full_name TEXT,
+  parent_phone TEXT,
+  classes_attended JSONB DEFAULT '[]',
+  grades JSONB DEFAULT '[]',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_archived_students_school ON archived_students(school_id, created_at DESC);
+
+-- ============================================================
 -- DEMO SCHOOL SEED
 -- ============================================================
 INSERT INTO schools (id, name, slug, primary_color, secondary_color, is_active)
