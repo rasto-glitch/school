@@ -108,6 +108,7 @@ io.use((socket, next) => {
     const payload = jwt.verify(token, process.env.JWT_SECRET!) as any;
     socket.data.schoolId = payload.schoolId;
     socket.data.userId = payload.userId;
+    socket.data.role = payload.role;
     next();
   } catch {
     next(new Error('Invalid token'));
@@ -120,6 +121,11 @@ io.on('connection', (socket) => {
 
   // Auto-join personal notification room (scoped by school)
   socket.join(`school:${schoolId}:user:${userId}`);
+
+  // Admins join a school-wide room for real-time appointment alerts
+  if (socket.data.role === 'admin') {
+    socket.join(`school:${schoolId}:admins`);
+  }
 
   // Parent joins a room to watch a specific driver (scoped by school, UUID-validated to prevent room spam)
   const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

@@ -154,6 +154,7 @@ export const adminApi = {
   getResetRequests: () => api.get('/admin/reset-requests'),
   resetUserPassword: (userId: string, newPassword: string) =>
     api.post(`/admin/users/${userId}/reset-password`, { newPassword }),
+  getPendingAppointmentCount: () => api.get('/admin/appointments/pending-count'),
   getAppointments: () => api.get('/admin/appointments'),
   respondToAppointment: (id: string, data: object) => api.put(`/admin/appointments/${id}`, data),
   sendNotification: (data: object) => api.post('/admin/notifications', data),

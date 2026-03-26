@@ -1,9 +1,10 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { io as socketIO } from 'socket.io-client';
 import { useAuthStore } from '../../store/authStore';
 import { useNotificationStore } from '../../store/notificationStore';
-import { parentApi } from '../../services/api';
+import { parentApi, adminApi } from '../../services/api';
 import {
   Home, BookOpen, ClipboardList, Megaphone, BarChart2,
   MapPin, Bell, User, Users, GraduationCap, Bus,
@@ -79,15 +80,38 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobileOpen }: SidebarProps) {
-  const { user, school, logout } = useAuthStore();
+  const { user, school, logout, token } = useAuthStore();
   const { t, i18n } = useTranslation();
-  const { unreadCount, setUnreadCount } = useNotificationStore();
+  const { unreadCount, setUnreadCount, pendingAppointmentCount, setPendingAppointmentCount, incrementPendingAppointmentCount } = useNotificationStore();
+  const socketRef = useRef<ReturnType<typeof socketIO> | null>(null);
 
   useEffect(() => {
     if (user?.role === 'parent') {
       parentApi.getUnreadCount().then(r => setUnreadCount(r.data?.count ?? 0)).catch(() => {});
     }
   }, [user?.role]);
+
+  useEffect(() => {
+    if (user?.role !== 'admin' || !token) return;
+
+    adminApi.getPendingAppointmentCount()
+      .then(r => setPendingAppointmentCount(r.data?.count ?? 0))
+      .catch(() => {});
+
+    const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+    const socketUrl = apiBase.replace(/\/api$/, '');
+    const socket = socketIO(socketUrl, { auth: { token } });
+    socketRef.current = socket;
+
+    socket.on('new_appointment', () => {
+      incrementPendingAppointmentCount();
+    });
+
+    return () => {
+      socket.disconnect();
+      socketRef.current = null;
+    };
+  }, [user?.role, token]);
   const isRTL = ['ar', 'ku'].includes(i18n.language);
   const showLangSwitcher = user?.role === 'parent' || user?.role === 'driver';
   const items = user ? navItems[user.role] : [];
@@ -139,12 +163,18 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
       {/* Nav links */}
       <nav className="flex-1 overflow-y-auto py-2">
         {items.map(({ to, icon: Icon, label }) => {
-          const showBadge = to === '/parent/notifications' && user?.role === 'parent' && unreadCount > 0;
+          const showNotifBadge = to === '/parent/notifications' && user?.role === 'parent' && unreadCount > 0;
+          const showApptBadge = to === '/admin/appointments' && user?.role === 'admin' && pendingAppointmentCount > 0;
+          const showBadge = showNotifBadge || showApptBadge;
+          const badgeCount = showNotifBadge ? unreadCount : pendingAppointmentCount;
           return (
             <NavLink
               key={to}
               to={to}
-              onClick={() => setMobileOpen(false)}
+              onClick={() => {
+                setMobileOpen(false);
+                if (showApptBadge) setPendingAppointmentCount(0);
+              }}
               className={({ isActive }) => `
                 flex items-center gap-3 px-4 py-2.5 mx-2 rounded-xl transition-colors duration-150
                 ${isActive ? 'bg-primary-50 text-primary-700 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}
@@ -160,7 +190,7 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
               {!collapsed && <span className="text-sm">{t(`nav.${label.toLowerCase().replace(/ /g, '_')}`, label)}</span>}
               {!collapsed && showBadge && (
                 <span className="ml-auto bg-red-500 text-white text-xs font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
-                  {unreadCount > 99 ? '99+' : unreadCount}
+                  {badgeCount > 99 ? '99+' : badgeCount}
                 </span>
               )}
             </NavLink>

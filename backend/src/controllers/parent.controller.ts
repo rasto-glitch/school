@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { supabase } from '../config/supabase';
 import type { AuthRequest } from '../middleware/auth';
 import { toCC } from '../utils/transform';
+import { emitToAdmins } from '../utils/notify';
 
 async function getParentAndChildren(userId: string, schoolId: string) {
   const { data: parent } = await supabase.from('parents').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
@@ -333,5 +334,8 @@ export async function createAppointment(req: AuthRequest, res: Response): Promis
   }).select().single();
 
   if (error) { res.status(500).json({ error: error.message }); return; }
+
+  emitToAdmins(schoolId, 'new_appointment', { appointmentId: data.id });
+
   res.status(201).json(toCC(data));
 }

@@ -967,6 +967,17 @@ export async function createAccount(req: AuthRequest, res: Response): Promise<vo
 }
 
 // ---- APPOINTMENTS ----
+export async function getPendingAppointmentCount(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { count, error } = await supabase
+    .from('appointments')
+    .select('*', { count: 'exact', head: true })
+    .eq('school_id', schoolId)
+    .eq('status', 'pending');
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json({ count: count ?? 0 });
+}
+
 export async function getAppointments(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
   const { data, error } = await supabase

@@ -73,6 +73,7 @@ export function createRouter(io: SocketServer) {
   router.get('/admin/reset-requests', authenticate, authorize('admin'), (req, res) => admin.getResetRequests(req as AuthRequest, res));
   router.post('/admin/users/:userId/reset-password', authenticate, authorize('admin'), (req, res) => admin.resetUserPassword(req as AuthRequest, res));
 
+  router.get('/admin/appointments/pending-count', authenticate, authorize('admin'), (req, res) => admin.getPendingAppointmentCount(req as AuthRequest, res));
   router.get('/admin/appointments', authenticate, authorize('admin'), (req, res) => admin.getAppointments(req as AuthRequest, res));
   router.put('/admin/appointments/:id', authenticate, authorize('admin'), (req, res) => admin.respondToAppointment(req as AuthRequest, res));
 

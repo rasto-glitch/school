@@ -8,6 +8,10 @@ export function setIo(io: SocketServer) {
   _io = io;
 }
 
+export function emitToAdmins(schoolId: string, event: string, data: unknown): void {
+  if (_io) _io.to(`school:${schoolId}:admins`).emit(event, data);
+}
+
 interface NotifyPayload {
   schoolId: string;
   userId: string;
