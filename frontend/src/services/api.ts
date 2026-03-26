@@ -118,6 +118,7 @@ export const adminApi = {
   getStudentBrief: (id: string) => api.get(`/admin/students/${id}/brief`),
   getGraduatedStudents: (search?: string) => api.get('/admin/students/graduated', { params: search ? { search } : {} }),
   getParents: () => api.get('/admin/parents'),
+  updateParent: (id: string, data: object) => api.patch(`/admin/parents/${id}`, data),
   deleteParent: (id: string) => api.delete(`/admin/parents/${id}`),
   getClasses: () => api.get('/admin/classes'),
   createClass: (data: object) => api.post('/admin/classes', data),

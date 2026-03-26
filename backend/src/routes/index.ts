@@ -38,6 +38,7 @@ export function createRouter(io: SocketServer) {
   router.get('/admin/students/:id/brief', authenticate, authorize('admin'), (req, res) => admin.getStudentBrief(req as AuthRequest, res));
 
   router.get('/admin/parents', authenticate, authorize('admin'), (req, res) => admin.getParents(req as AuthRequest, res));
+  router.patch('/admin/parents/:id', authenticate, authorize('admin'), (req, res) => admin.updateParent(req as AuthRequest, res));
   router.delete('/admin/parents/:id', authenticate, authorize('admin'), (req, res) => admin.deleteParent(req as AuthRequest, res));
 
   router.get('/admin/classes', authenticate, authorize('admin', 'teacher'), (req, res) => admin.getClasses(req as AuthRequest, res));

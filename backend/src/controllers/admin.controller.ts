@@ -134,6 +134,17 @@ export async function bulkUploadStudents(req: AuthRequest, res: Response): Promi
     'grade/class': 'grade',
     'address': 'homeAddress',
     'home address': 'homeAddress',
+    'parent phone': 'parentPhone',
+    'parent phone number': 'parentPhone',
+    'father phone': 'parentPhone',
+    'father phone number': 'parentPhone',
+    'residence type': 'residenceType',
+    'house type': 'residenceType',
+    'block number': 'blockNumber',
+    'building number': 'blockNumber',
+    'apartment number': 'blockNumber',
+    'block': 'blockNumber',
+    'building': 'blockNumber',
   };
 
   // Strip "grade " prefix → e.g. "Grade 9" → "9", "9" → "9"
@@ -160,13 +171,18 @@ export async function bulkUploadStudents(req: AuthRequest, res: Response): Promi
   }
 
   // ---- Parent lookup maps ----
-  // Key: "fathername grandfathername" (lowercase) → parent_id
-  // Siblings share the same key → same parent account
+  // Primary key: name-only (siblings share this)
+  // Phone discriminator: if two rows share the same name but have different non-empty phones → different families
   const { data: existingParents } = await supabase
     .from('parents').select('id, full_name, phone_number').eq('school_id', schoolId);
-  const parentCache = new Map<string, string>();
+  // name → { id, phone } (first entry per name)
+  const parentByName = new Map<string, { id: string; phone: string | null }>();
+  // `name|phone` → id (for exact phone-keyed lookup)
+  const parentByNamePhone = new Map<string, string>();
   for (const p of (existingParents || [])) {
-    parentCache.set(p.full_name.toLowerCase().trim(), p.id);
+    const nk = (p.full_name || '').toLowerCase().trim();
+    if (!parentByName.has(nk)) parentByName.set(nk, { id: p.id, phone: p.phone_number || null });
+    if (p.phone_number) parentByNamePhone.set(`${nk}|${p.phone_number}`, p.id);
   }
 
   // Track taken parent usernames to ensure uniqueness
@@ -203,16 +219,29 @@ export async function bulkUploadStudents(req: AuthRequest, res: Response): Promi
       if (field) mapped[field] = String(val).trim();
     }
 
-    const { fullName, phoneNumber, emergencyContact, dateOfBirth, grade, homeAddress } = mapped;
+    const { fullName, phoneNumber, emergencyContact, dateOfBirth, grade, homeAddress, parentPhone, residenceType, blockNumber } = mapped;
 
     if (!fullName) {
       errors.push(`Row ${rowNum}: missing "Full Name" — skipped`);
       continue;
     }
 
+    // Normalise residence type → 'apartment' | 'house' | null
+    const normaliseResidence = (v?: string): 'apartment' | 'house' | null => {
+      if (!v) return null;
+      const lv = v.toLowerCase().trim();
+      if (lv === 'apartment' || lv === 'apt' || lv === 'flat') return 'apartment';
+      if (lv === 'house' || lv === 'villa') return 'house';
+      return null;
+    };
+    const normResidence = normaliseResidence(residenceType);
+    // Phone to use for parent: dedicated parentPhone column takes priority, then student phone
+    const resolvedParentPhone = (parentPhone || phoneNumber || '').trim() || null;
+
     // ---- Resolve or create parent ----
     // Name structure: [FirstName] [FatherName] [GrandfatherName ...]
-    // Parent = FatherName + GrandfatherName
+    // Parent = FatherName + GrandfatherName (+ GreatGrandfather if 4+ parts)
+    // Phone discriminator: same name + different non-empty phone → different family
     let parentId: string | null = null;
     const nameParts = fullName.trim().split(/\s+/);
     if (nameParts.length >= 3) {
@@ -221,11 +250,28 @@ export async function bulkUploadStudents(req: AuthRequest, res: Response): Promi
       const parentFullName  = `${fatherName} ${grandfatherName}`;
       const parentKey       = parentFullName.toLowerCase();
 
-      if (parentCache.has(parentKey)) {
-        // Existing parent or already-created sibling → reuse
-        parentId = parentCache.get(parentKey)!;
-      } else {
-        // Create user account for parent
+      // Try exact name+phone match first
+      const phoneKey = resolvedParentPhone ? `${parentKey}|${resolvedParentPhone}` : null;
+      if (phoneKey && parentByNamePhone.has(phoneKey)) {
+        parentId = parentByNamePhone.get(phoneKey)!;
+      } else if (parentByName.has(parentKey)) {
+        const cached = parentByName.get(parentKey)!;
+        // Phone conflict: both non-empty and different → different family
+        const hasConflict = resolvedParentPhone && cached.phone && cached.phone !== resolvedParentPhone;
+        if (!hasConflict) {
+          parentId = cached.id;
+          // Update residence on existing parent if provided
+          if (normResidence || blockNumber) {
+            const upd: Record<string, unknown> = {};
+            if (normResidence) upd.residence_type = normResidence;
+            if (blockNumber) upd.block_number = blockNumber;
+            await supabase.from('parents').update(upd).eq('id', parentId).eq('school_id', schoolId);
+          }
+        }
+      }
+
+      if (!parentId) {
+        // Create new parent account
         const username = generateParentUsername(fatherName, grandfatherName);
         const { data: newUser, error: userErr } = await supabase.from('users').insert({
           school_id: schoolId,
@@ -244,13 +290,16 @@ export async function bulkUploadStudents(req: AuthRequest, res: Response): Promi
             school_id: schoolId,
             user_id: newUser.id,
             full_name: parentFullName,
-            phone_number: phoneNumber || null,
+            phone_number: resolvedParentPhone,
+            residence_type: normResidence,
+            block_number: blockNumber || null,
           }).select('id').single();
 
           if (parentErr) {
             errors.push(`Row ${rowNum}: could not create parent record for "${parentFullName}" — ${parentErr.message}`);
           } else {
-            parentCache.set(parentKey, newParent.id);
+            parentByName.set(parentKey, { id: newParent.id, phone: resolvedParentPhone });
+            if (resolvedParentPhone) parentByNamePhone.set(`${parentKey}|${resolvedParentPhone}`, newParent.id);
             parentId = newParent.id;
             parentAccountsCreated++;
           }
@@ -1260,4 +1309,17 @@ export async function deleteParent(req: AuthRequest, res: Response): Promise<voi
   const { error } = await supabase.from('users').delete().eq('id', parent.user_id);
   if (error) { res.status(500).json({ error: error.message }); return; }
   res.json({ message: 'Parent account deleted' });
+}
+
+export async function updateParent(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { id } = req.params;
+  const { residenceType, blockNumber } = req.body;
+  const update: Record<string, unknown> = {};
+  if (residenceType !== undefined) update.residence_type = residenceType || null;
+  if (blockNumber !== undefined) update.block_number = blockNumber || null;
+  if (Object.keys(update).length === 0) { res.status(400).json({ error: 'Nothing to update' }); return; }
+  const { error } = await supabase.from('parents').update(update).eq('id', id).eq('school_id', schoolId);
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json({ success: true });
 }

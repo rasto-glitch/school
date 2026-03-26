@@ -30,8 +30,8 @@ export default function StudentsManagement() {
   const [editStudentId, setEditStudentId] = useState('');
   const [assignCurrentClassId, setAssignCurrentClassId] = useState('');
 
-  const addForm = useForm<{ fullName: string; parentId: string; phoneNumber: string; emergencyContact: string; homeAddress: string; classId: string; dateOfBirth: string }>();
-  const editForm = useForm<{ fullName: string; parentId: string; phoneNumber: string; emergencyContact: string; homeAddress: string; classId: string; dateOfBirth: string }>();
+  const addForm = useForm<{ fullName: string; parentId: string; phoneNumber: string; emergencyContact: string; homeAddress: string; classId: string; dateOfBirth: string; residenceType: string; blockNumber: string }>();
+  const editForm = useForm<{ fullName: string; parentId: string; phoneNumber: string; emergencyContact: string; homeAddress: string; classId: string; dateOfBirth: string; residenceType: string; blockNumber: string }>();
 
   const debouncedSearch = useDebounce(search, 400);
 
@@ -58,6 +58,8 @@ export default function StudentsManagement() {
     editForm.setValue('homeAddress', s.homeAddress || '');
     editForm.setValue('classId', s.classId || '');
     editForm.setValue('parentId', s.parentId || '');
+    editForm.setValue('residenceType', (s as any).parents?.residenceType || '');
+    editForm.setValue('blockNumber', (s as any).parents?.blockNumber || '');
   }, [editStudentId, students]);
 
   const filteredByRemoveClass = removeClassId ? students.filter(s => s.classId === removeClassId) : students;
@@ -67,6 +69,9 @@ export default function StudentsManagement() {
     setAddSubmitting(true);
     try {
       await adminApi.createStudent({ fullName: data.fullName, parentId: data.parentId || undefined, phoneNumber: data.phoneNumber, emergencyContact: data.emergencyContact, homeAddress: data.homeAddress, classId: data.classId || undefined, dateOfBirth: data.dateOfBirth || undefined });
+      if (data.parentId && (data.residenceType || data.blockNumber)) {
+        await adminApi.updateParent(data.parentId, { residenceType: data.residenceType || null, blockNumber: data.blockNumber || null }).catch(() => {});
+      }
       toast.success('Student added!');
       addForm.reset();
       load();
@@ -80,6 +85,9 @@ export default function StudentsManagement() {
     setEditSubmitting(true);
     try {
       await adminApi.updateStudent(editStudentId, { fullName: data.fullName, parentId: data.parentId || undefined, phoneNumber: data.phoneNumber, emergencyContact: data.emergencyContact, homeAddress: data.homeAddress, classId: data.classId || undefined, dateOfBirth: data.dateOfBirth || undefined });
+      if (data.parentId && (data.residenceType !== undefined || data.blockNumber !== undefined)) {
+        await adminApi.updateParent(data.parentId, { residenceType: data.residenceType || null, blockNumber: data.blockNumber || null }).catch(() => {});
+      }
       toast.success('Student updated!');
       load();
     } catch (err: any) {
@@ -245,6 +253,12 @@ export default function StudentsManagement() {
               <Input placeholder="Primary Phone Number" {...addForm.register('phoneNumber')} />
               <Input placeholder="Emergency Contact" {...addForm.register('emergencyContact')} />
               <Input placeholder="Address" {...addForm.register('homeAddress')} />
+              <Select
+                options={[{ value: 'house', label: 'House / Villa' }, { value: 'apartment', label: 'Apartment' }]}
+                placeholder="Residence Type (optional)"
+                {...addForm.register('residenceType')}
+              />
+              <Input placeholder="Block / Building Number (optional)" {...addForm.register('blockNumber')} />
               <Input label="Date of Birth" type="date" {...addForm.register('dateOfBirth')} />
               <Select options={classes.map(c => ({ value: c.id, label: c.name }))} placeholder="Select Class" {...addForm.register('classId')} />
               <Button type="submit" loading={addSubmitting} fullWidth>Send</Button>
@@ -326,8 +340,8 @@ export default function StudentsManagement() {
 
             <Card>
               <h2 className="font-bold text-gray-900 mb-3 text-center">Upload Students</h2>
-              <p className="text-xs text-gray-500 mb-1">Excel columns: <span className="font-medium text-gray-700">Full Name, Primary Phone Number, Emergency Contact, Date of Birth, Grade, Address</span></p>
-              <p className="text-xs text-gray-400 mb-3">Address is optional. New grades/classes will be created automatically.</p>
+              <p className="text-xs text-gray-500 mb-1">Excel columns: <span className="font-medium text-gray-700">Full Name, Primary Phone Number, Parent Phone, Emergency Contact, Date of Birth, Grade, Address, Residence Type, Block Number</span></p>
+              <p className="text-xs text-gray-400 mb-3">Optional: Parent Phone, Address, Residence Type (house/apartment), Block Number. New classes created automatically.</p>
               <label className="flex items-center gap-2 cursor-pointer border-2 border-dashed border-gray-300 rounded-xl p-3 hover:border-primary-400 transition-colors">
                 <Paperclip className="w-4 h-4 text-gray-400" />
                 <span className="text-sm text-gray-500 truncate">{uploadFile ? uploadFile.name : 'Choose .xlsx or .xls file'}</span>
@@ -373,6 +387,12 @@ export default function StudentsManagement() {
                 <Input placeholder="Primary Phone Number" {...editForm.register('phoneNumber')} />
                 <Input placeholder="Emergency Contact" {...editForm.register('emergencyContact')} />
                 <Input placeholder="Address" {...editForm.register('homeAddress')} />
+                <Select
+                  options={[{ value: 'house', label: 'House / Villa' }, { value: 'apartment', label: 'Apartment' }]}
+                  placeholder="Residence Type (optional)"
+                  {...editForm.register('residenceType')}
+                />
+                <Input placeholder="Block / Building Number (optional)" {...editForm.register('blockNumber')} />
                 <Input label="Date of Birth" type="date" {...editForm.register('dateOfBirth')} />
                 <Select options={classes.map(c => ({ value: c.id, label: c.name }))} placeholder="Select Class" {...editForm.register('classId')} />
                 <Button type="submit" loading={editSubmitting} fullWidth>Send</Button>
