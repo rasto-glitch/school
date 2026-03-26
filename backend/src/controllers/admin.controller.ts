@@ -477,6 +477,142 @@ export async function bulkUploadStudents(req: AuthRequest, res: Response): Promi
   res.json({ created, skipped: skipped.length, total: rows.length, autoCreatedClasses, parentAccountsCreated, errors });
 }
 
+// ---- ARCHIVE STUDENTS ----
+
+// Derive academic year from a date string: Sept-Dec = year/year+1, Jan-Aug = (year-1)/year
+function toAcademicYear(dateStr: string): string {
+  const d = new Date(dateStr);
+  const y = d.getFullYear();
+  return d.getMonth() >= 8 ? `${y}-${y + 1}` : `${y - 1}-${y}`;
+}
+
+export async function archiveStudent(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { id } = req.params;
+  const { reason, departureDate } = req.body;
+
+  if (!reason || !['transferred', 'withdrew'].includes(reason)) {
+    res.status(400).json({ error: 'reason must be "transferred" or "withdrew"' });
+    return;
+  }
+
+  // Fetch student + parent in one query
+  const { data: student, error: studentErr } = await supabase
+    .from('students')
+    .select('*, parents(full_name, phone_number)')
+    .eq('id', id)
+    .eq('school_id', schoolId)
+    .single();
+
+  if (studentErr || !student) {
+    res.status(404).json({ error: 'Student not found' });
+    return;
+  }
+
+  // Fetch grades + class name
+  const { data: grades } = await supabase
+    .from('grades')
+    .select('academic_year, grading_period, subject, daily_grade, quiz_grade, monthly_exam_grade, term_exam_grade, classes(name)')
+    .eq('student_id', id)
+    .eq('school_id', schoolId)
+    .order('academic_year');
+
+  // Fetch attendance records with class name (to build classes-attended-per-year)
+  const { data: attendanceRows } = await supabase
+    .from('attendance')
+    .select('date, classes(name)')
+    .eq('student_id', id)
+    .eq('school_id', schoolId);
+
+  // Build classes attended: { academicYear → Set<className> }
+  const classYearMap = new Map<string, Set<string>>();
+  for (const row of (attendanceRows || [])) {
+    const className = (row as any).classes?.name;
+    if (!className) continue;
+    const yr = toAcademicYear(row.date);
+    if (!classYearMap.has(yr)) classYearMap.set(yr, new Set());
+    classYearMap.get(yr)!.add(className);
+  }
+  const classesAttended = Array.from(classYearMap.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .flatMap(([year, names]) => Array.from(names).map((className) => ({ year, className })));
+
+  // Build grades snapshot
+  const gradesSnapshot = (grades || []).map((g) => ({
+    academicYear: g.academic_year,
+    gradingPeriod: g.grading_period,
+    subject: g.subject,
+    className: (g as any).classes?.name ?? null,
+    dailyGrade: g.daily_grade,
+    quizGrade: g.quiz_grade,
+    monthlyExamGrade: g.monthly_exam_grade,
+    termExamGrade: g.term_exam_grade,
+  }));
+
+  // Insert archive record
+  const { error: archiveErr } = await supabase.from('archived_students').insert({
+    school_id: schoolId,
+    original_student_id: id,
+    full_name: student.full_name,
+    date_of_birth: student.date_of_birth ?? null,
+    enrollment_date: student.created_at ? student.created_at.split('T')[0] : null,
+    departure_date: departureDate || new Date().toISOString().split('T')[0],
+    reason,
+    parent_full_name: (student as any).parents?.full_name ?? null,
+    parent_phone: (student as any).parents?.phone_number ?? null,
+    classes_attended: classesAttended,
+    grades: gradesSnapshot,
+  });
+
+  if (archiveErr) {
+    res.status(500).json({ error: archiveErr.message });
+    return;
+  }
+
+  // Delete student — cascades attendance, reports, grades, bus records, etc.
+  const { error: deleteErr } = await supabase
+    .from('students').delete().eq('id', id).eq('school_id', schoolId);
+
+  if (deleteErr) {
+    res.status(500).json({ error: deleteErr.message });
+    return;
+  }
+
+  res.json({ message: 'Student archived successfully' });
+}
+
+export async function getArchivedStudents(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { search } = req.query as Record<string, string>;
+
+  let query = supabase
+    .from('archived_students')
+    .select('id, full_name, date_of_birth, enrollment_date, departure_date, reason, parent_full_name, parent_phone, created_at')
+    .eq('school_id', schoolId)
+    .order('created_at', { ascending: false });
+
+  if (search) query = query.ilike('full_name', `%${search}%`);
+
+  const { data, error } = await query;
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json(toCC(data));
+}
+
+export async function getArchivedStudent(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { id } = req.params;
+
+  const { data, error } = await supabase
+    .from('archived_students')
+    .select('*')
+    .eq('id', id)
+    .eq('school_id', schoolId)
+    .single();
+
+  if (error || !data) { res.status(404).json({ error: 'Archived record not found' }); return; }
+  res.json(toCC(data));
+}
+
 // ---- CLASSES ----
 export async function getClasses(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;

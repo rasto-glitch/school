@@ -10,12 +10,13 @@ import Input from '../../components/common/Input';
 import Select from '../../components/common/Select';
 import Button from '../../components/common/Button';
 import GraduatedStudentsTab from './GraduatedStudentsTab';
+import ArchivedStudentsTab from './ArchivedStudentsTab';
 import type { Student, Class } from '../../types';
 
 interface Parent { id: string; fullName: string; phoneNumber?: string; }
 
 export default function StudentsManagement() {
-  const [activeTab, setActiveTab] = useState<'active' | 'graduated'>('active');
+  const [activeTab, setActiveTab] = useState<'active' | 'graduated' | 'archived'>('active');
   const [students, setStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
   const [parents, setParents] = useState<Parent[]>([]);
@@ -123,6 +124,29 @@ export default function StudentsManagement() {
   const [bulkNewClassId, setBulkNewClassId] = useState('');
   const [bulkGraduated, setBulkGraduated] = useState(false);
 
+  const [archiveStudentId, setArchiveStudentId] = useState('');
+  const [archiveReason, setArchiveReason] = useState('');
+  const [archiveDepartureDate, setArchiveDepartureDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [archiveSubmitting, setArchiveSubmitting] = useState(false);
+
+  const onArchive = async () => {
+    if (!archiveStudentId) { toast.error('Select a student to archive'); return; }
+    if (!archiveReason) { toast.error('Select a reason'); return; }
+    const student = students.find(s => s.id === archiveStudentId);
+    if (!confirm(`Archive "${student?.fullName}"? Their grades and parent info will be saved, and they will be removed from active students.`)) return;
+    setArchiveSubmitting(true);
+    try {
+      await adminApi.archiveStudent(archiveStudentId, { reason: archiveReason, departureDate: archiveDepartureDate });
+      toast.success(`${student?.fullName} has been archived`);
+      setArchiveStudentId('');
+      setArchiveReason('');
+      setArchiveDepartureDate(new Date().toISOString().split('T')[0]);
+      load();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to archive student');
+    } finally { setArchiveSubmitting(false); }
+  };
+
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadLoading, setUploadLoading] = useState(false);
   const [uploadResult, setUploadResult] = useState<{ created: number; skipped: number; total: number; autoCreatedClasses: string[]; parentAccountsCreated: number; errors: string[] } | null>(null);
@@ -190,9 +214,16 @@ export default function StudentsManagement() {
         >
           Graduated
         </button>
+        <button
+          onClick={() => setActiveTab('archived')}
+          className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${activeTab === 'archived' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+        >
+          Archived
+        </button>
       </div>
 
       {activeTab === 'graduated' && <GraduatedStudentsTab />}
+      {activeTab === 'archived' && <ArchivedStudentsTab />}
 
       {activeTab === 'active' && <div className="space-y-8">
         {/* Search bar */}
@@ -337,6 +368,43 @@ export default function StudentsManagement() {
                     {removeClassId ? 'No students in this class' : 'Select a class or leave empty to see all students'}
                   </p>
                 )}
+              </div>
+            </Card>
+
+            <Card>
+              <h2 className="font-bold text-gray-900 mb-4 text-center">Archive Student</h2>
+              <p className="text-xs text-gray-400 mb-3 text-center">Saves grades &amp; parent info, then removes from active roster</p>
+              <div className="space-y-3">
+                <Select
+                  options={students.map(s => ({ value: s.id, label: s.fullName }))}
+                  placeholder="Select Student"
+                  value={archiveStudentId}
+                  onChange={e => setArchiveStudentId(e.target.value)}
+                />
+                <Select
+                  options={[
+                    { value: 'transferred', label: 'Transferred to another school' },
+                    { value: 'withdrew', label: 'Withdrew' },
+                  ]}
+                  placeholder="Reason for leaving"
+                  value={archiveReason}
+                  onChange={e => setArchiveReason(e.target.value)}
+                />
+                <Input
+                  label="Departure Date"
+                  type="date"
+                  value={archiveDepartureDate}
+                  onChange={e => setArchiveDepartureDate(e.target.value)}
+                />
+                <Button
+                  variant="secondary"
+                  fullWidth
+                  loading={archiveSubmitting}
+                  disabled={!archiveStudentId || !archiveReason}
+                  onClick={onArchive}
+                >
+                  Archive Student
+                </Button>
               </div>
             </Card>
 

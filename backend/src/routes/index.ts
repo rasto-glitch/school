@@ -36,6 +36,9 @@ export function createRouter(io: SocketServer) {
   router.delete('/admin/students/:id', authenticate, authorize('admin'), (req, res) => admin.deleteStudent(req as AuthRequest, res));
   router.get('/admin/students/graduated', authenticate, authorize('admin'), (req, res) => admin.getGraduatedStudents(req as AuthRequest, res));
   router.get('/admin/students/:id/brief', authenticate, authorize('admin'), (req, res) => admin.getStudentBrief(req as AuthRequest, res));
+  router.post('/admin/students/:id/archive', authenticate, authorize('admin'), (req, res) => admin.archiveStudent(req as AuthRequest, res));
+  router.get('/admin/archived-students', authenticate, authorize('admin'), (req, res) => admin.getArchivedStudents(req as AuthRequest, res));
+  router.get('/admin/archived-students/:id', authenticate, authorize('admin'), (req, res) => admin.getArchivedStudent(req as AuthRequest, res));
 
   router.get('/admin/parents', authenticate, authorize('admin'), (req, res) => admin.getParents(req as AuthRequest, res));
   router.patch('/admin/parents/:id', authenticate, authorize('admin'), (req, res) => admin.updateParent(req as AuthRequest, res));
