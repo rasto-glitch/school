@@ -1328,3 +1328,39 @@ export async function updateParent(req: AuthRequest, res: Response): Promise<voi
   if (error) { res.status(500).json({ error: error.message }); return; }
   res.json({ success: true });
 }
+
+// ---- SCHEDULE ----
+export async function uploadSchedule(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const file = (req as any).file;
+  if (!file) { res.status(400).json({ error: 'No file uploaded' }); return; }
+
+  const ext = file.originalname.includes('.') ? file.originalname.split('.').pop() : 'jpg';
+  const storagePath = `${schoolId}/schedule/${Date.now()}.${ext}`;
+  const bucket = process.env.SUPABASE_STORAGE_BUCKET || 'homework-attachments';
+
+  const { data: uploadData, error: uploadErr } = await supabase.storage
+    .from(bucket)
+    .upload(storagePath, file.buffer, { contentType: file.mimetype, upsert: false });
+
+  if (uploadErr || !uploadData) {
+    res.status(500).json({ error: uploadErr?.message || 'Upload failed' }); return;
+  }
+
+  const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(uploadData.path);
+  const scheduleUrl = urlData.publicUrl;
+
+  const { error: dbErr } = await supabase
+    .from('schools').update({ schedule_url: scheduleUrl }).eq('id', schoolId);
+  if (dbErr) { res.status(500).json({ error: dbErr.message }); return; }
+
+  res.json({ scheduleUrl });
+}
+
+export async function getSchedule(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { data, error } = await supabase
+    .from('schools').select('schedule_url').eq('id', schoolId).single();
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json({ scheduleUrl: data?.schedule_url ?? null });
+}

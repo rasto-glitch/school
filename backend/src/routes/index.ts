@@ -74,6 +74,7 @@ export function createRouter(io: SocketServer) {
   router.put('/admin/appointments/:id', authenticate, authorize('admin'), (req, res) => admin.respondToAppointment(req as AuthRequest, res));
 
   router.post('/admin/notifications', authenticate, authorize('admin'), (req, res) => admin.sendNotification(req as AuthRequest, res));
+  router.post('/admin/schedule', authenticate, authorize('admin'), upload.single('file'), (req, res) => admin.uploadSchedule(req as AuthRequest, res));
 
   router.get('/admin/announcements', authenticate, authorize('admin', 'teacher', 'parent', 'supervisor'), (req, res) => admin.getAnnouncements(req as AuthRequest, res));
   router.get('/link-preview', authenticate, (req, res) => admin.getLinkPreview(req as AuthRequest, res));
@@ -107,6 +108,7 @@ export function createRouter(io: SocketServer) {
   router.get('/teacher/subjects', authenticate, authorize('admin', 'teacher'), (req, res) => admin.getSubjects(req as AuthRequest, res));
   router.get('/teacher/attendance', authenticate, authorize('teacher'), (req, res) => teacher.getAttendance(req as AuthRequest, res));
   router.post('/teacher/attendance', authenticate, authorize('teacher'), (req, res) => teacher.markAttendance(req as AuthRequest, res));
+  router.get('/teacher/schedule', authenticate, authorize('teacher'), (req, res) => admin.getSchedule(req as AuthRequest, res));
 
   // ---- PARENT ----
   router.get('/parent/children', authenticate, authorize('parent'), (req, res) => parent.getChildren(req as AuthRequest, res));

@@ -101,6 +101,7 @@ export const teacherApi = {
   getStudents: (params?: Record<string, string>) => api.get('/teacher/students', { params }),
   getClasses: () => api.get('/teacher/classes'),
   getSettings: () => api.get('/teacher/settings'),
+  getSchedule: () => api.get('/teacher/schedule'),
 };
 
 // ---- ADMIN ----
@@ -110,6 +111,11 @@ export const adminApi = {
   updateStudent: (id: string, data: object) => api.put(`/admin/students/${id}`, data),
   deleteStudent: (id: string) => api.delete(`/admin/students/${id}`),
   assignStudent: (data: object) => api.post('/admin/students/assign', data),
+  uploadSchedule: (file: File) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return api.post('/admin/schedule', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
   bulkUploadStudents: (file: File) => {
     const fd = new FormData();
     fd.append('file', file);

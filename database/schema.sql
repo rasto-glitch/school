@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS schools (
   domain TEXT,
   subscription_plan TEXT DEFAULT 'basic',
   is_active BOOLEAN DEFAULT TRUE,
+  schedule_url TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

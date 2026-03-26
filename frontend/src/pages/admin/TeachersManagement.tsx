@@ -20,6 +20,8 @@ export default function TeachersManagement() {
   const [addSubmitting, setAddSubmitting] = useState(false);
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [scheduleFile, setScheduleFile] = useState<File | null>(null);
+  const [scheduleUploading, setScheduleUploading] = useState(false);
+  const [scheduleUrl, setScheduleUrl] = useState<string | null>(null);
 
   const addForm = useForm<{ fullName: string; phoneNumber: string; emergencyContact: string; subject: string; classId: string; username: string; password: string }>();
   const editForm = useForm<{ fullName: string; phoneNumber: string; emergencyContact: string; subject: string; classId: string; remove: boolean }>();
@@ -86,6 +88,21 @@ export default function TeachersManagement() {
       toast.error(err.response?.data?.error || 'Failed to update teacher');
     } finally {
       setEditSubmitting(false);
+    }
+  };
+
+  const onUploadSchedule = async () => {
+    if (!scheduleFile) return;
+    setScheduleUploading(true);
+    try {
+      const res = await adminApi.uploadSchedule(scheduleFile);
+      setScheduleUrl(res.data.scheduleUrl);
+      setScheduleFile(null);
+      toast.success('Schedule uploaded! Teachers can now view it on their dashboard.');
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Upload failed');
+    } finally {
+      setScheduleUploading(false);
     }
   };
 
@@ -179,19 +196,22 @@ export default function TeachersManagement() {
 
         {/* Add Schedule */}
         <Card className="max-w-md">
-          <h2 className="font-semibold text-gray-900 mb-4">Add Schedule To Teachers:</h2>
+          <h2 className="font-semibold text-gray-900 mb-4">Schedule for Teachers</h2>
           <label className="flex items-center gap-2 cursor-pointer border-2 border-dashed border-gray-300 rounded-xl p-4 hover:border-primary-400 transition-colors">
             <Paperclip className="w-5 h-5 text-gray-400" />
-            <span className="text-sm text-gray-500">{scheduleFile ? scheduleFile.name : 'Attachment — Click to upload schedule'}</span>
+            <span className="text-sm text-gray-500 truncate">{scheduleFile ? scheduleFile.name : 'Click to upload schedule image or PDF'}</span>
             <input
               type="file"
               className="hidden"
-              accept=".pdf,.doc,.docx,.jpg,.png,.xlsx"
-              onChange={e => setScheduleFile(e.target.files?.[0] || null)}
+              accept=".pdf,.jpg,.jpeg,.png,.webp"
+              onChange={e => { setScheduleFile(e.target.files?.[0] || null); setScheduleUrl(null); }}
             />
           </label>
+          {scheduleUrl && (
+            <p className="text-xs text-green-600 mt-2 font-medium">✓ Schedule uploaded — teachers can now view it.</p>
+          )}
           {scheduleFile && (
-            <Button className="mt-3" fullWidth onClick={() => toast.success('Schedule uploaded (file storage not configured)')}>
+            <Button className="mt-3" fullWidth loading={scheduleUploading} onClick={onUploadSchedule}>
               Upload Schedule
             </Button>
           )}
