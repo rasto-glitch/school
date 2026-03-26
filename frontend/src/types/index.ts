@@ -33,7 +33,7 @@ export interface Student {
   phoneNumber?: string;
   isGraduated?: boolean;
   parents?: { fullName: string; phoneNumber: string; userId?: string };
-  drivers?: { fullName: string; phoneNumber?: string; licenseNumber?: string; buses?: { busNumber: string } };
+  drivers?: { fullName: string; phoneNumber?: string; licenseNumber?: string; vehicleType?: 'bus' | 'taxi'; buses?: { busNumber: string } };
 }
 
 export interface Teacher {
@@ -52,6 +52,7 @@ export interface Driver {
   phoneNumber?: string;
   emergencyContact?: string;
   licenseNumber?: string;
+  vehicleType?: 'bus' | 'taxi';
   busId?: string;
   buses?: { busNumber: string; plateNumber?: string };
   age?: number;

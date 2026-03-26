@@ -192,7 +192,7 @@ export async function getBusLocation(req: AuthRequest, res: Response): Promise<v
   }
 
   const { data: location } = await supabase.from('bus_locations')
-    .select('*, drivers(full_name, phone_number, license_number, buses(bus_number))')
+    .select('*, drivers(full_name, phone_number, license_number, vehicle_type, buses(bus_number))')
     .eq('driver_id', student.driver_id)
     .eq('school_id', schoolId)
     .order('recorded_at', { ascending: false })
@@ -220,7 +220,7 @@ export async function getDriverInfo(req: AuthRequest, res: Response): Promise<vo
   const { data: student } = await supabase.from('students').select('driver_id').eq('id', targetId).eq('school_id', schoolId).single();
   if (!student?.driver_id) { res.status(404).json({ error: 'No driver assigned' }); return; }
   const { data: driver } = await supabase.from('drivers')
-    .select('full_name, phone_number, license_number, buses(bus_number)')
+    .select('full_name, phone_number, license_number, vehicle_type, buses(bus_number)')
     .eq('id', student.driver_id).single();
   if (!driver) { res.status(404).json({ error: 'Driver not found' }); return; }
   res.json(toCC(driver));

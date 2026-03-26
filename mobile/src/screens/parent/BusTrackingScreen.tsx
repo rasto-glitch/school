@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { io as socketIO } from 'socket.io-client';
-import { RefreshCw, User, AlertCircle, Bus, MapPin, ChevronRight, Building2, Home, Check } from 'lucide-react-native';
+import { RefreshCw, User, AlertCircle, Bus, Car, MapPin, ChevronRight, Building2, Home, Check } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { parentApi } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
@@ -21,7 +21,7 @@ interface BusData {
     latitude: number;
     longitude: number;
     isDriving: boolean;
-    drivers?: { fullName: string; phoneNumber?: string; licenseNumber?: string; buses?: { busNumber: string } };
+    drivers?: { fullName: string; phoneNumber?: string; licenseNumber?: string; vehicleType?: 'bus' | 'taxi'; buses?: { busNumber: string } };
   };
   studentHome: { latitude: number; longitude: number };
 }
@@ -30,6 +30,7 @@ interface DriverInfo {
   fullName: string;
   phoneNumber?: string;
   licenseNumber?: string;
+  vehicleType?: 'bus' | 'taxi';
   buses?: { busNumber: string };
 }
 
@@ -292,7 +293,9 @@ export default function BusTrackingScreen() {
                 <MapView style={styles.map} provider={PROVIDER_DEFAULT} region={mapRegion}>
                   <Marker coordinate={{ latitude: busData.location.latitude, longitude: busData.location.longitude }} title="Bus" anchor={{ x: 0.5, y: 0.5 }}>
                     <View style={styles.busMarker}>
-                      <Bus size={18} color="#fff" />
+                      {busData.location.drivers?.vehicleType === 'taxi'
+                        ? <Car size={18} color="#fff" />
+                        : <Bus size={18} color="#fff" />}
                     </View>
                   </Marker>
                   {busData.studentHome?.latitude && (

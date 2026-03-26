@@ -508,7 +508,7 @@ export async function getDrivers(req: AuthRequest, res: Response): Promise<void>
 
 export async function createDriver(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
-  const { fullName, phoneNumber, emergencyContact, licenseNumber, busNumber, age, username, password, studentIds } = req.body;
+  const { fullName, phoneNumber, emergencyContact, licenseNumber, busNumber, age, username, password, studentIds, vehicleType } = req.body;
 
   const rounds = parseInt(process.env.BCRYPT_ROUNDS || '10');
   const finalUsername = username || fullName.toLowerCase().replace(/\s+/g, '.');
@@ -557,6 +557,7 @@ export async function createDriver(req: AuthRequest, res: Response): Promise<voi
     license_number: licenseNumber || null,
     bus_id: busId,
     age: age ? parseInt(age) : null,
+    vehicle_type: vehicleType || 'bus',
   }).select().single();
 
   if (driverErr) { res.status(500).json({ error: driverErr.message }); return; }
@@ -572,7 +573,7 @@ export async function createDriver(req: AuthRequest, res: Response): Promise<voi
 export async function updateDriver(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
   const { id } = req.params;
-  const { fullName, phoneNumber, emergencyContact, licenseNumber, busNumber, age, remove, studentIds } = req.body;
+  const { fullName, phoneNumber, emergencyContact, licenseNumber, busNumber, age, remove, studentIds, vehicleType } = req.body;
 
   if (remove) {
     const { data: driver } = await supabase.from('drivers').select('user_id').eq('id', id).single();
@@ -601,6 +602,7 @@ export async function updateDriver(req: AuthRequest, res: Response): Promise<voi
     age: age ? parseInt(age) : null,
   };
   if (busId) updateData.bus_id = busId;
+  if (vehicleType) updateData.vehicle_type = vehicleType;
 
   const { data, error } = await supabase.from('drivers')
     .update(updateData)

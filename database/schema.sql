@@ -120,11 +120,13 @@ CREATE TABLE IF NOT EXISTS drivers (
   profile_picture TEXT,
   age INTEGER,
   excluded_student_ids UUID[] DEFAULT '{}',
+  vehicle_type TEXT CHECK (vehicle_type IN ('bus', 'taxi')) DEFAULT 'bus',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Run this if the table already exists:
 -- ALTER TABLE drivers ADD COLUMN IF NOT EXISTS excluded_student_ids UUID[] DEFAULT '{}';
+-- ALTER TABLE drivers ADD COLUMN IF NOT EXISTS vehicle_type TEXT CHECK (vehicle_type IN ('bus', 'taxi')) DEFAULT 'bus';
 
 -- ============================================================
 -- STUDENTS

@@ -20,8 +20,8 @@ export default function DriversManagement() {
   const [search, setSearch] = useState('');
   const [classFilter, setClassFilter] = useState('');
 
-  const addForm = useForm<{ fullName: string; phoneNumber: string; emergencyContact: string; licenseNumber: string; busNumber: string; age: string; username: string; password: string }>();
-  const editForm = useForm<{ fullName: string; phoneNumber: string; emergencyContact: string; licenseNumber: string; busNumber: string; age: string; remove: boolean }>();
+  const addForm = useForm<{ fullName: string; phoneNumber: string; emergencyContact: string; licenseNumber: string; busNumber: string; age: string; username: string; password: string; vehicleType: string }>();
+  const editForm = useForm<{ fullName: string; phoneNumber: string; emergencyContact: string; licenseNumber: string; busNumber: string; age: string; remove: boolean; vehicleType: string }>();
   const [addStudentIds, setAddStudentIds] = useState<string[]>([]);
   const [editStudentIds, setEditStudentIds] = useState<string[]>([]);
   const [addStudentSearch, setAddStudentSearch] = useState('');
@@ -45,6 +45,7 @@ export default function DriversManagement() {
     editForm.setValue('emergencyContact', d.emergencyContact || '');
     editForm.setValue('licenseNumber', d.licenseNumber || '');
     editForm.setValue('busNumber', d.buses?.busNumber || '');
+    editForm.setValue('vehicleType', d.vehicleType || 'bus');
     setEditStudentIds(students.filter(s => s.driverId === selectedDriverId).map(s => s.id));
   }, [selectedDriverId, drivers, students]);
 
@@ -60,6 +61,7 @@ export default function DriversManagement() {
         age: data.age || undefined,
         username: data.username || undefined,
         password: data.password || undefined,
+        vehicleType: data.vehicleType || 'bus',
         studentIds: addStudentIds,
       });
       const tempPw = res.data?.tempPassword || 'Driver@123';
@@ -80,7 +82,7 @@ export default function DriversManagement() {
     if (!selectedDriverId) { toast.error('Select a driver first'); return; }
     setEditSubmitting(true);
     try {
-      await adminApi.updateDriver(selectedDriverId, { ...data, studentIds: editStudentIds });
+      await adminApi.updateDriver(selectedDriverId, { ...data, vehicleType: data.vehicleType || 'bus', studentIds: editStudentIds });
       toast.success('Driver updated!');
       setEditStudentIds([]);
       load();
@@ -188,7 +190,12 @@ export default function DriversManagement() {
             <Input placeholder="Primary Phone Number" {...addForm.register('phoneNumber')} />
             <Input placeholder="Emergency Contact" {...addForm.register('emergencyContact')} />
             <Input placeholder="Licence Number" {...addForm.register('licenseNumber')} />
-            <Input placeholder="Bus Number" {...addForm.register('busNumber')} />
+            <Select
+              options={[{ value: 'bus', label: 'Bus' }, { value: 'taxi', label: 'Taxi' }]}
+              placeholder="Vehicle Type"
+              {...addForm.register('vehicleType')}
+            />
+            <Input placeholder="Vehicle / Bus Number" {...addForm.register('busNumber')} />
             <Input type="number" placeholder="Age" {...addForm.register('age')} />
             <div>
               <p className="text-sm font-medium text-gray-700 mb-2">Assign Students</p>
@@ -245,7 +252,12 @@ export default function DriversManagement() {
             <Input placeholder="Primary Phone Number" {...editForm.register('phoneNumber')} />
             <Input placeholder="Emergency Contact" {...editForm.register('emergencyContact')} />
             <Input placeholder="Licence Number" {...editForm.register('licenseNumber')} />
-            <Input placeholder="Bus Number" {...editForm.register('busNumber')} />
+            <Select
+              options={[{ value: 'bus', label: 'Bus' }, { value: 'taxi', label: 'Taxi' }]}
+              placeholder="Vehicle Type"
+              {...editForm.register('vehicleType')}
+            />
+            <Input placeholder="Vehicle / Bus Number" {...editForm.register('busNumber')} />
             <Input type="number" placeholder="Age" {...editForm.register('age')} />
             <div>
               <p className="text-sm font-medium text-gray-700 mb-2">Assign Students</p>

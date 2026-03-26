@@ -21,7 +21,7 @@ interface BusData {
     latitude: number;
     longitude: number;
     isDriving: boolean;
-    drivers?: { fullName: string; phoneNumber?: string; licenseNumber?: string; buses?: { busNumber: string } };
+    drivers?: { fullName: string; phoneNumber?: string; licenseNumber?: string; vehicleType?: 'bus' | 'taxi'; buses?: { busNumber: string } };
   };
   studentHome: { latitude: number; longitude: number };
 }
@@ -276,14 +276,14 @@ export default function BusTrackingPage() {
                 zoom={14}
                 onLoad={setMap}
               >
-                {/* Bus marker */}
+                {/* Vehicle marker */}
                 <Marker
                   position={{ lat: busData!.location.latitude, lng: busData!.location.longitude }}
                   icon={{
                     url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`
                       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="40" height="40">
                         <circle cx="20" cy="20" r="18" fill="#4F46E5" stroke="white" stroke-width="3"/>
-                        <text x="20" y="26" font-size="18" text-anchor="middle" fill="white">🚌</text>
+                        <text x="20" y="26" font-size="18" text-anchor="middle" fill="white">${busData!.location.drivers?.vehicleType === 'taxi' ? '🚕' : '🚌'}</text>
                       </svg>
                     `),
                     scaledSize: new window.google.maps.Size(40, 40),
