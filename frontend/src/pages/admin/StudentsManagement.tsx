@@ -125,7 +125,7 @@ export default function StudentsManagement() {
 
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadLoading, setUploadLoading] = useState(false);
-  const [uploadResult, setUploadResult] = useState<{ created: number; total: number; autoCreatedClasses: string[]; parentAccountsCreated: number; errors: string[] } | null>(null);
+  const [uploadResult, setUploadResult] = useState<{ created: number; skipped: number; total: number; autoCreatedClasses: string[]; parentAccountsCreated: number; errors: string[] } | null>(null);
 
   const onAssign = async (_data: any) => {
     // Bulk assign: all students in selected class, excluding those in excludedStudentIds
@@ -156,10 +156,12 @@ export default function StudentsManagement() {
       const result = res.data;
       setUploadResult(result);
       if (result.created > 0) {
-        toast.success(`${result.created} student${result.created !== 1 ? 's' : ''} uploaded successfully!`);
+        toast.success(`${result.created} student${result.created !== 1 ? 's' : ''} added${result.skipped > 0 ? `, ${result.skipped} already existed` : ''}`);
         load();
         adminApi.getClasses().then(r => setClasses(r.data || []));
         adminApi.getParents().then(r => setParents(r.data || []));
+      } else if (result.skipped > 0) {
+        toast.info(`All ${result.skipped} students already exist — nothing added.`);
       } else {
         toast.error('No students were created. Check the errors below.');
       }
@@ -355,7 +357,7 @@ export default function StudentsManagement() {
               <Button className="mt-3" fullWidth loading={uploadLoading} onClick={onBulkUpload}>Upload</Button>
               {uploadResult && (
                 <div className="mt-3 text-sm space-y-1">
-                  <p className="text-green-700 font-medium">{uploadResult.created} / {uploadResult.total} students created</p>
+                  <p className="text-green-700 font-medium">{uploadResult.created} added · {uploadResult.skipped} skipped (already exist) · {uploadResult.total} total in file</p>
                   {uploadResult.parentAccountsCreated > 0 && (
                     <p className="text-green-600 text-xs">{uploadResult.parentAccountsCreated} parent account{uploadResult.parentAccountsCreated !== 1 ? 's' : ''} created — default password: <span className="font-mono font-semibold">Parent@123</span></p>
                   )}

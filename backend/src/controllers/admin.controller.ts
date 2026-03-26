@@ -105,270 +105,376 @@ export async function bulkUploadStudents(req: AuthRequest, res: Response): Promi
   let workbook: XLSX.WorkBook;
   try {
     workbook = XLSX.read(req.file.buffer, { type: 'buffer', cellDates: true });
-  } catch (e: any) {
+  } catch {
     res.status(400).json({ error: 'Could not parse the file. Make sure it is a valid .xlsx or .xls file.' });
     return;
   }
 
-  const sheetName = workbook.SheetNames[0];
-  const sheet = workbook.Sheets[sheetName];
-  const rows: Record<string, unknown>[] = XLSX.utils.sheet_to_json(sheet, { raw: false, dateNF: 'yyyy-mm-dd', defval: '' });
+  const rows: Record<string, unknown>[] = XLSX.utils.sheet_to_json(
+    workbook.Sheets[workbook.SheetNames[0]],
+    { raw: false, dateNF: 'yyyy-mm-dd', defval: '' }
+  );
 
   if (rows.length === 0) {
     res.status(400).json({ error: 'The file has no data rows.' });
     return;
   }
 
-  // Column name → internal field mapping (case-insensitive)
   const COLUMN_MAP: Record<string, string> = {
-    'full name': 'fullName',
-    'name': 'fullName',
-    'primary phone number': 'phoneNumber',
-    'phone number': 'phoneNumber',
-    'phone': 'phoneNumber',
+    'full name': 'fullName', 'name': 'fullName',
+    'primary phone number': 'phoneNumber', 'phone number': 'phoneNumber', 'phone': 'phoneNumber',
     'emergency contact': 'emergencyContact',
-    'date of birth': 'dateOfBirth',
-    'dob': 'dateOfBirth',
-    'grade': 'grade',
-    'class': 'grade',
-    'grade/class': 'grade',
-    'address': 'homeAddress',
-    'home address': 'homeAddress',
-    'parent phone': 'parentPhone',
-    'parent phone number': 'parentPhone',
-    'father phone': 'parentPhone',
-    'father phone number': 'parentPhone',
-    'residence type': 'residenceType',
-    'house type': 'residenceType',
-    'block number': 'blockNumber',
-    'building number': 'blockNumber',
-    'apartment number': 'blockNumber',
-    'block': 'blockNumber',
-    'building': 'blockNumber',
+    'date of birth': 'dateOfBirth', 'dob': 'dateOfBirth',
+    'grade': 'grade', 'class': 'grade', 'grade/class': 'grade',
+    'address': 'homeAddress', 'home address': 'homeAddress',
+    'parent phone': 'parentPhone', 'parent phone number': 'parentPhone',
+    'father phone': 'parentPhone', 'father phone number': 'parentPhone',
+    'residence type': 'residenceType', 'house type': 'residenceType',
+    'block number': 'blockNumber', 'building number': 'blockNumber',
+    'apartment number': 'blockNumber', 'block': 'blockNumber', 'building': 'blockNumber',
   };
 
-  // Strip "grade " prefix → e.g. "Grade 9" → "9", "9" → "9"
   const stripGradePrefix = (g: string) => g.trim().toLowerCase().replace(/^grade\s+/, '');
-
-  // Format a raw grade cell value into a proper class name
-  // "9" → "Grade 9",  "Grade 9" → "Grade 9",  "KG" → "KG"
   const formatClassName = (g: string): string => {
     const t = g.trim();
     if (/^\d+$/.test(t)) return `Grade ${t}`;
     if (/^grade\s+\d+$/i.test(t)) return `Grade ${t.replace(/^grade\s+/i, '')}`;
     return t;
   };
+  const normaliseResidence = (v?: string): 'apartment' | 'house' | null => {
+    if (!v?.trim()) return null;
+    const lv = v.toLowerCase().trim();
+    if (lv === 'apartment' || lv === 'apt' || lv === 'flat') return 'apartment';
+    if (lv === 'house' || lv === 'villa' || lv === 'compound') return 'house';
+    return null;
+  };
+  const parseDob = (raw: string): string | null => {
+    if (!raw.trim()) return null;
+    let s = raw.trim();
+    const ddmm = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(s);
+    if (ddmm) s = `${ddmm[3]}-${ddmm[2].padStart(2, '0')}-${ddmm[1].padStart(2, '0')}`;
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? null : d.toISOString().split('T')[0];
+  };
 
-  // ---- Class lookup maps ----
-  const { data: existingClasses } = await supabase
-    .from('classes').select('id, name').eq('school_id', schoolId);
+  // =========================================================
+  // PASS 0 — fetch all existing data in one parallel round-trip
+  // =========================================================
+  const [
+    { data: existingClasses },
+    { data: existingParents },
+    { data: existingParentUsers },
+    { data: existingStudents },
+  ] = await Promise.all([
+    supabase.from('classes').select('id, name').eq('school_id', schoolId),
+    supabase.from('parents').select('id, full_name, phone_number').eq('school_id', schoolId),
+    supabase.from('users').select('username').eq('school_id', schoolId).eq('role', 'parent'),
+    supabase.from('students').select('full_name').eq('school_id', schoolId),
+  ]);
 
   const classExactMap = new Map<string, string>(); // name.toLowerCase() → id
-  const classNormMap  = new Map<string, string>(); // strip-prefix form → id
-  for (const cls of (existingClasses || [])) {
-    classExactMap.set(cls.name.toLowerCase(), cls.id);
-    classNormMap.set(stripGradePrefix(cls.name), cls.id);
+  const classNormMap  = new Map<string, string>(); // stripped form → id
+  for (const c of (existingClasses || [])) {
+    classExactMap.set(c.name.toLowerCase(), c.id);
+    classNormMap.set(stripGradePrefix(c.name), c.id);
   }
 
-  // ---- Parent lookup maps ----
-  // Primary key: name-only (siblings share this)
-  // Phone discriminator: if two rows share the same name but have different non-empty phones → different families
-  const { data: existingParents } = await supabase
-    .from('parents').select('id, full_name, phone_number').eq('school_id', schoolId);
-  // name → { id, phone } (first entry per name)
-  const parentByName = new Map<string, { id: string; phone: string | null }>();
-  // `name|phone` → id (for exact phone-keyed lookup)
-  const parentByNamePhone = new Map<string, string>();
+  const parentByName      = new Map<string, { id: string; phone: string | null }>();
+  const parentByNamePhone = new Map<string, string>(); // `name|phone` → id
   for (const p of (existingParents || [])) {
     const nk = (p.full_name || '').toLowerCase().trim();
     if (!parentByName.has(nk)) parentByName.set(nk, { id: p.id, phone: p.phone_number || null });
     if (p.phone_number) parentByNamePhone.set(`${nk}|${p.phone_number}`, p.id);
   }
 
-  // Track taken parent usernames to ensure uniqueness
-  const { data: existingParentUsers } = await supabase
-    .from('users').select('username').eq('school_id', schoolId).eq('role', 'parent');
   const takenUsernames = new Set((existingParentUsers || []).map((u: any) => u.username.toLowerCase()));
 
-  const generateParentUsername = (fatherName: string, grandfatherName: string): string => {
-    const base = (fatherName + grandfatherName).toLowerCase().replace(/[^a-z0-9]/g, '');
-    if (!takenUsernames.has(base)) return base;
-    let n = 2;
-    while (takenUsernames.has(`${base}${n}`)) n++;
-    return `${base}${n}`;
-  };
+  // Dedup set — pre-loaded with names already in the DB
+  const existingStudentNames = new Set(
+    (existingStudents || []).map((s: any) => (s.full_name as string).toLowerCase().trim())
+  );
 
-  // Normalise residence type → 'apartment' | 'house' | null
-  const normaliseResidence = (v?: string): 'apartment' | 'house' | null => {
-    if (!v || !v.trim()) return null;
-    const lv = v.toLowerCase().trim();
-    if (lv === 'apartment' || lv === 'apt' || lv === 'flat') return 'apartment';
-    if (lv === 'house' || lv === 'villa' || lv === 'compound') return 'house';
-    return null;
-  };
-
-  // Hash the default parent password once
   const rounds = parseInt(process.env.BCRYPT_ROUNDS || '10');
   const defaultParentPasswordHash = await bcrypt.hash('Parent@123', rounds);
 
-  let created = 0;
-  let parentAccountsCreated = 0;
-  const autoCreatedClasses: string[] = [];
+  // =========================================================
+  // PASS 1 — parse all rows in memory, zero DB calls
+  // =========================================================
+  interface ParsedRow {
+    fullName: string;
+    phoneNumber: string | null;
+    emergencyContact: string | null;
+    dateOfBirth: string | null;
+    homeAddress: string | null;
+    gradeRaw: string | null;
+    existingParentId: string | null;
+    newParentKey: string | null;
+    parentUpdateId: string | null;
+    parentUpdateResidence: 'apartment' | 'house' | null;
+    parentUpdateBlock: string | null;
+  }
+  interface NewParentEntry {
+    fatherName: string;
+    grandfatherName: string;
+    fullName: string;
+    phone: string | null;
+    normResidence: 'apartment' | 'house' | null;
+    blockNumber: string | null;
+    createdId?: string;
+  }
+
+  const parsedRows: ParsedRow[] = [];
+  const newParentsNeeded = new Map<string, NewParentEntry>();
+  const newClassesNeeded = new Set<string>();
   const errors: string[] = [];
+  const skipped: string[] = [];
+
+  const generateParentUsername = (fn: string, gn: string): string => {
+    const base = (fn + gn).toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (!takenUsernames.has(base)) { takenUsernames.add(base); return base; }
+    let n = 2;
+    while (takenUsernames.has(`${base}${n}`)) n++;
+    takenUsernames.add(`${base}${n}`);
+    return `${base}${n}`;
+  };
 
   for (let i = 0; i < rows.length; i++) {
-    const row = rows[i];
-    const rowNum = i + 2; // row 1 = header
-
-    // Normalize keys
+    const rowNum = i + 2;
     const mapped: Record<string, string> = {};
-    for (const [key, val] of Object.entries(row)) {
+    for (const [key, val] of Object.entries(rows[i])) {
       const norm = key.trim().toLowerCase().replace(/\s+/g, ' ');
       const field = COLUMN_MAP[norm];
       if (field) mapped[field] = String(val).trim();
     }
 
-    const { fullName, phoneNumber, emergencyContact, dateOfBirth, grade, homeAddress, parentPhone, residenceType, blockNumber } = mapped;
+    const { fullName, phoneNumber, emergencyContact, dateOfBirth, grade,
+            homeAddress, parentPhone, residenceType, blockNumber } = mapped;
 
     if (!fullName) {
       errors.push(`Row ${rowNum}: missing "Full Name" — skipped`);
       continue;
     }
 
-    const normResidence = normaliseResidence(residenceType);
-    // Phone to use for parent: dedicated parentPhone column takes priority, then student phone
-    const resolvedParentPhone = (parentPhone || phoneNumber || '').trim() || null;
+    // ---- Student dedup ----
+    const nameKey = fullName.toLowerCase().trim();
+    if (existingStudentNames.has(nameKey)) {
+      skipped.push(fullName);
+      continue;
+    }
+    existingStudentNames.add(nameKey); // also blocks intra-file duplicates
 
-    // ---- Resolve or create parent ----
-    // Name structure: [FirstName] [FatherName] [GrandfatherName ...]
-    // Parent = FatherName + GrandfatherName (+ GreatGrandfather if 4+ parts)
-    // Phone discriminator: same name + different non-empty phone → different family
-    let parentId: string | null = null;
+    const normResidence  = normaliseResidence(residenceType);
+    const resolvedPhone  = (parentPhone || phoneNumber || '').trim() || null;
+
+    // ---- Resolve parent ----
+    let existingParentId: string | null = null;
+    let newParentKey: string | null     = null;
+    let parentUpdateId: string | null   = null;
+    let parentUpdateResidence: 'apartment' | 'house' | null = null;
+    let parentUpdateBlock: string | null = null;
+
     const nameParts = fullName.trim().split(/\s+/);
     if (nameParts.length >= 3) {
       const fatherName      = nameParts[1];
       const grandfatherName = nameParts.slice(2).join(' ');
       const parentFullName  = `${fatherName} ${grandfatherName}`;
-      const parentKey       = parentFullName.toLowerCase();
+      const parentNameKey   = parentFullName.toLowerCase();
+      const phoneKey        = resolvedPhone ? `${parentNameKey}|${resolvedPhone}` : null;
 
-      // Try exact name+phone match first
-      const phoneKey = resolvedParentPhone ? `${parentKey}|${resolvedParentPhone}` : null;
       if (phoneKey && parentByNamePhone.has(phoneKey)) {
-        parentId = parentByNamePhone.get(phoneKey)!;
-      } else if (parentByName.has(parentKey)) {
-        const cached = parentByName.get(parentKey)!;
-        // Phone conflict: both non-empty and different → different family
-        const hasConflict = resolvedParentPhone && cached.phone && cached.phone !== resolvedParentPhone;
+        existingParentId = parentByNamePhone.get(phoneKey)!;
+      } else if (parentByName.has(parentNameKey)) {
+        const cached = parentByName.get(parentNameKey)!;
+        const hasConflict = resolvedPhone && cached.phone && cached.phone !== resolvedPhone;
         if (!hasConflict) {
-          parentId = cached.id;
-          // Update residence on existing parent if provided
+          existingParentId = cached.id;
           if (normResidence || blockNumber) {
-            const upd: Record<string, unknown> = {};
-            if (normResidence) upd.residence_type = normResidence;
-            if (blockNumber) upd.block_number = blockNumber;
-            await supabase.from('parents').update(upd).eq('id', parentId).eq('school_id', schoolId);
+            parentUpdateId = cached.id;
+            parentUpdateResidence = normResidence;
+            parentUpdateBlock = blockNumber || null;
+          }
+        } else {
+          // Same name, different phone → different family
+          const conflictKey = `${parentNameKey}|${resolvedPhone}`;
+          newParentKey = conflictKey;
+          if (!newParentsNeeded.has(conflictKey)) {
+            newParentsNeeded.set(conflictKey, {
+              fatherName, grandfatherName, fullName: parentFullName,
+              phone: resolvedPhone, normResidence, blockNumber: blockNumber || null,
+            });
           }
         }
-      }
-
-      if (!parentId) {
-        // Create new parent account
-        const username = generateParentUsername(fatherName, grandfatherName);
-        const { data: newUser, error: userErr } = await supabase.from('users').insert({
-          school_id: schoolId,
-          first_name: fatherName,
-          last_name: grandfatherName,
-          username,
-          password_hash: defaultParentPasswordHash,
-          role: 'parent',
-        }).select('id').single();
-
-        if (userErr) {
-          errors.push(`Row ${rowNum}: could not create parent account for "${parentFullName}" — ${userErr.message}`);
-        } else {
-          takenUsernames.add(username);
-          const { data: newParent, error: parentErr } = await supabase.from('parents').insert({
-            school_id: schoolId,
-            user_id: newUser.id,
-            full_name: parentFullName,
-            phone_number: resolvedParentPhone,
-            residence_type: normResidence,
-            block_number: blockNumber || null,
-          }).select('id').single();
-
-          if (parentErr) {
-            errors.push(`Row ${rowNum}: could not create parent record for "${parentFullName}" — ${parentErr.message}`);
-          } else {
-            parentByName.set(parentKey, { id: newParent.id, phone: resolvedParentPhone });
-            if (resolvedParentPhone) parentByNamePhone.set(`${parentKey}|${resolvedParentPhone}`, newParent.id);
-            parentId = newParent.id;
-            parentAccountsCreated++;
-          }
+      } else {
+        // Brand-new parent
+        newParentKey = parentNameKey;
+        if (!newParentsNeeded.has(parentNameKey)) {
+          newParentsNeeded.set(parentNameKey, {
+            fatherName, grandfatherName, fullName: parentFullName,
+            phone: resolvedPhone, normResidence, blockNumber: blockNumber || null,
+          });
         }
       }
     }
 
-    // ---- Resolve or auto-create class ----
-    let classId: string | null = null;
+    // ---- Collect new classes needed ----
     if (grade) {
       const gradeLower = grade.toLowerCase();
       const gradeNorm  = stripGradePrefix(grade);
-
-      if (classExactMap.has(gradeLower)) {
-        classId = classExactMap.get(gradeLower)!;
-      } else if (classNormMap.has(gradeNorm)) {
-        classId = classNormMap.get(gradeNorm)!;
-      } else {
-        const className = formatClassName(grade);
-        const { data: newClass, error: classErr } = await supabase.from('classes').insert({
-          school_id: schoolId,
-          name: className,
-          grade_level: className,
-        }).select('id, name').single();
-
-        if (classErr) {
-          errors.push(`Row ${rowNum}: failed to create class "${className}" — ${classErr.message}`);
-          continue;
-        }
-
-        classExactMap.set(className.toLowerCase(), newClass.id);
-        classNormMap.set(stripGradePrefix(className), newClass.id);
-        classId = newClass.id;
-        autoCreatedClasses.push(className);
+      if (!classExactMap.has(gradeLower) && !classNormMap.has(gradeNorm)) {
+        newClassesNeeded.add(formatClassName(grade));
       }
     }
 
-    // ---- Validate / normalise date of birth ----
-    let dob: string | null = null;
-    if (dateOfBirth && dateOfBirth.trim()) {
-      let dobStr = dateOfBirth.trim();
-      // Convert DD/MM/YYYY → YYYY-MM-DD (XLSX date cells already output yyyy-mm-dd via dateNF)
-      const ddmm = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(dobStr);
-      if (ddmm) dobStr = `${ddmm[3]}-${ddmm[2].padStart(2, '0')}-${ddmm[1].padStart(2, '0')}`;
-      const parsed = new Date(dobStr);
-      if (!isNaN(parsed.getTime())) dob = parsed.toISOString().split('T')[0];
-    }
-
-    // ---- Insert student ----
-    const { error: studentErr } = await supabase.from('students').insert({
-      school_id: schoolId,
-      full_name: fullName,
-      phone_number: phoneNumber || null,
-      emergency_contact: emergencyContact || null,
-      home_address: homeAddress || null,
-      date_of_birth: dob,
-      class_id: classId,
-      parent_id: parentId,
+    parsedRows.push({
+      fullName,
+      phoneNumber: phoneNumber || null,
+      emergencyContact: emergencyContact || null,
+      dateOfBirth: parseDob(dateOfBirth || ''),
+      homeAddress: homeAddress || null,
+      gradeRaw: grade || null,
+      existingParentId,
+      newParentKey,
+      parentUpdateId,
+      parentUpdateResidence,
+      parentUpdateBlock,
     });
+  }
 
-    if (studentErr) {
-      errors.push(`Row ${rowNum}: failed to save "${fullName}" — ${studentErr.message}`);
+  // =========================================================
+  // PASS 2 — batch create new classes
+  // =========================================================
+  const autoCreatedClasses: string[] = [];
+  if (newClassesNeeded.size > 0) {
+    const { data: newClasses, error: classErr } = await supabase
+      .from('classes')
+      .insert(Array.from(newClassesNeeded).map((name) => ({ school_id: schoolId, name, grade_level: name })))
+      .select('id, name');
+    if (classErr) {
+      errors.push(`Failed to create classes: ${classErr.message}`);
     } else {
-      created++;
+      for (const c of (newClasses || [])) {
+        classExactMap.set(c.name.toLowerCase(), c.id);
+        classNormMap.set(stripGradePrefix(c.name), c.id);
+        autoCreatedClasses.push(c.name);
+      }
     }
   }
 
-  res.json({ created, total: rows.length, autoCreatedClasses, parentAccountsCreated, errors });
+  // =========================================================
+  // PASS 3 — batch create new parents (users then records)
+  // =========================================================
+  let parentAccountsCreated = 0;
+
+  // Kick off existing-parent residence updates in the background
+  const uniqueUpdates = Array.from(
+    new Map(
+      parsedRows
+        .filter((r) => r.parentUpdateId)
+        .map((r) => [r.parentUpdateId!, r])
+    ).values()
+  );
+  const updatePromises = uniqueUpdates.map((r) => {
+    const upd: Record<string, unknown> = {};
+    if (r.parentUpdateResidence) upd.residence_type = r.parentUpdateResidence;
+    if (r.parentUpdateBlock) upd.block_number = r.parentUpdateBlock;
+    return supabase.from('parents').update(upd).eq('id', r.parentUpdateId!).eq('school_id', schoolId);
+  });
+
+  if (newParentsNeeded.size > 0) {
+    const parentEntries = Array.from(newParentsNeeded.entries());
+
+    // 3a — batch insert parent users
+    const { data: newUsers, error: usersErr } = await supabase
+      .from('users')
+      .insert(parentEntries.map(([, p]) => ({
+        school_id: schoolId,
+        first_name: p.fatherName,
+        last_name: p.grandfatherName,
+        username: generateParentUsername(p.fatherName, p.grandfatherName),
+        password_hash: defaultParentPasswordHash,
+        role: 'parent',
+        is_active: true,
+      })))
+      .select('id');
+
+    if (usersErr) {
+      errors.push(`Failed to create parent user accounts: ${usersErr.message}`);
+    } else if (newUsers && newUsers.length === parentEntries.length) {
+      // 3b — batch insert parent records
+      const { data: newParentRecords, error: parentsErr } = await supabase
+        .from('parents')
+        .insert(parentEntries.map(([, p], idx) => ({
+          school_id: schoolId,
+          user_id: newUsers[idx].id,
+          full_name: p.fullName,
+          phone_number: p.phone,
+          residence_type: p.normResidence,
+          block_number: p.blockNumber,
+        })))
+        .select('id, full_name, phone_number');
+
+      if (parentsErr) {
+        errors.push(`Failed to create parent records: ${parentsErr.message}`);
+      } else if (newParentRecords) {
+        for (let i = 0; i < parentEntries.length; i++) {
+          const [key, entry] = parentEntries[i];
+          const record = newParentRecords[i];
+          entry.createdId = record.id;
+          const nk = record.full_name.toLowerCase().trim();
+          parentByName.set(nk, { id: record.id, phone: record.phone_number });
+          if (record.phone_number) parentByNamePhone.set(`${nk}|${record.phone_number}`, record.id);
+          if (key.includes('|')) parentByNamePhone.set(key, record.id);
+        }
+        parentAccountsCreated = newParentRecords.length;
+      }
+    }
+  }
+
+  await Promise.all(updatePromises);
+
+  // =========================================================
+  // PASS 4 — batch insert all students
+  // =========================================================
+  let created = 0;
+  if (parsedRows.length > 0) {
+    const studentInserts = parsedRows.map((r) => {
+      let classId: string | null = null;
+      if (r.gradeRaw) {
+        const gradeLower = r.gradeRaw.toLowerCase();
+        const gradeNorm  = stripGradePrefix(r.gradeRaw);
+        classId = classExactMap.get(gradeLower) ?? classNormMap.get(gradeNorm) ?? null;
+      }
+
+      let parentId: string | null = r.existingParentId;
+      if (!parentId && r.newParentKey) {
+        parentId = newParentsNeeded.get(r.newParentKey)?.createdId ?? null;
+      }
+
+      return {
+        school_id: schoolId,
+        full_name: r.fullName,
+        phone_number: r.phoneNumber,
+        emergency_contact: r.emergencyContact,
+        home_address: r.homeAddress,
+        date_of_birth: r.dateOfBirth,
+        class_id: classId,
+        parent_id: parentId,
+      };
+    });
+
+    const { data: inserted, error: studentsErr } = await supabase
+      .from('students')
+      .insert(studentInserts)
+      .select('id');
+
+    if (studentsErr) {
+      errors.push(`Failed to insert students: ${studentsErr.message}`);
+    } else {
+      created = (inserted || []).length;
+    }
+  }
+
+  res.json({ created, skipped: skipped.length, total: rows.length, autoCreatedClasses, parentAccountsCreated, errors });
 }
 
 // ---- CLASSES ----
