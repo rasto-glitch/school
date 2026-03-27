@@ -127,6 +127,7 @@ export const adminApi = {
   getArchivedStudents: (search?: string) => api.get('/admin/archived-students', { params: search ? { search } : {} }),
   getArchivedStudent: (id: string) => api.get(`/admin/archived-students/${id}`),
   getParents: () => api.get('/admin/parents'),
+  getParentProfile: (id: string) => api.get(`/admin/parents/${id}/profile`),
   updateParent: (id: string, data: object) => api.patch(`/admin/parents/${id}`, data),
   deleteParent: (id: string) => api.delete(`/admin/parents/${id}`),
   getClasses: () => api.get('/admin/classes'),

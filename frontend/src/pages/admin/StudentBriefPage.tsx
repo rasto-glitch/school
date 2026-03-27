@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import { Search, User } from 'lucide-react';
 import { adminApi } from '../../services/api';
 import PageLayout from '../../components/layout/PageLayout';
@@ -103,6 +103,7 @@ export default function StudentBriefPage() {
   const dob = s?.dateOfBirth || s?.date_of_birth;
   const age = dob ? differenceInYears(new Date(), parseISO(dob)) : null;
   const className = s?.classes?.name || '—';
+  const parentId = s?.parents?.id || null;
   const parentName = s?.parents?.fullName || s?.parents?.full_name || '—';
   const parentPhone = s?.parents?.phoneNumber || s?.parents?.phone_number || s?.phoneNumber || s?.phone_number || '—';
   const address = s?.homeAddress || s?.home_address || '—';
@@ -193,7 +194,13 @@ export default function StudentBriefPage() {
                   </div>
                   <div>
                     <span className="font-semibold text-gray-500 block text-xs uppercase">Parents</span>
-                    <span className="text-gray-900 font-medium">{parentName}</span>
+                    {parentId ? (
+                      <Link to={`/admin/parents/${parentId}`} className="text-primary-600 font-medium hover:underline">
+                        {parentName}
+                      </Link>
+                    ) : (
+                      <span className="text-gray-900 font-medium">{parentName}</span>
+                    )}
                   </div>
                   <div>
                     <span className="font-semibold text-gray-500 block text-xs uppercase">Contact</span>

@@ -41,6 +41,7 @@ import AccountsPage from './pages/admin/AccountsPage';
 import ClassesPage from './pages/admin/ClassesPage';
 import AdminNotificationsPage from './pages/admin/AdminNotificationsPage';
 import StudentBriefPage from './pages/admin/StudentBriefPage';
+import ParentProfilePage from './pages/admin/ParentProfilePage';
 import AnnouncementsPage from './pages/admin/AnnouncementsPage';
 import AdminStudentsListPage from './pages/admin/AdminStudentsListPage';
 import AdminTeachersListPage from './pages/admin/AdminTeachersListPage';
@@ -152,6 +153,7 @@ export default function App() {
         <Route path="/admin/announcements" element={<ProtectedRoute allowedRoles={['admin']}><AnnouncementsPage /></ProtectedRoute>} />
         <Route path="/admin/accounts" element={<ProtectedRoute allowedRoles={['admin']}><AccountsPage /></ProtectedRoute>} />
         <Route path="/admin/settings" element={<ProtectedRoute allowedRoles={['admin']}><SettingsPage /></ProtectedRoute>} />
+        <Route path="/admin/parents/:id" element={<ProtectedRoute allowedRoles={['admin']}><ParentProfilePage /></ProtectedRoute>} />
         <Route path="/admin/profile" element={<ProtectedRoute allowedRoles={['admin']}><ProfilePage /></ProtectedRoute>} />
 
         {/* Supervisor Portal */}

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { UserPlus, Search, Trash2, KeyRound, Clock, CheckCircle2, X, Pencil, Shield } from 'lucide-react';
+import { UserPlus, Search, Trash2, KeyRound, Clock, CheckCircle2, X, Pencil, Shield, ExternalLink } from 'lucide-react';
 import { adminApi } from '../../services/api';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
@@ -22,6 +23,7 @@ const ROLE_FILTERS = ['all', 'parent', 'teacher', 'driver', 'supervisor', 'admin
 type RoleFilter = typeof ROLE_FILTERS[number];
 
 export default function AccountsPage() {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const { register, handleSubmit, reset } = useForm<{
     firstName: string; lastName: string; email: string; phone: string;
@@ -332,6 +334,15 @@ export default function AccountsPage() {
                     >
                       <KeyRound className="w-4 h-4" />
                     </button>
+                    {isParent && parent && (
+                      <button
+                        onClick={() => navigate(`/admin/parents/${parent.id}`)}
+                        className="text-gray-400 hover:text-primary-600 transition-colors p-1.5 rounded-lg hover:bg-primary-50"
+                        title="View parent profile"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                      </button>
+                    )}
                     {isParent && parent ? (
                       <button
                         onClick={() => onDeleteParent(parent)}

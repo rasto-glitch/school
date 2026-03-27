@@ -1168,7 +1168,7 @@ export async function getStudentBrief(req: AuthRequest, res: Response): Promise<
 
   const [studentRes, reportsRes, gradesRes] = await Promise.all([
     supabase.from('students')
-      .select('*, classes(name), parents(full_name, phone_number, email), drivers(full_name, buses(bus_number))')
+      .select('*, classes(name), parents(id, full_name, phone_number, email), drivers(full_name, buses(bus_number))')
       .eq('id', id).eq('school_id', schoolId).single(),
     supabase.from('reports').select('*, teachers(full_name)').eq('student_id', id).eq('school_id', schoolId).order('created_at', { ascending: false }),
     supabase.from('grades').select('*').eq('student_id', id).eq('school_id', schoolId),
@@ -1551,6 +1551,26 @@ export async function getParents(req: AuthRequest, res: Response): Promise<void>
     .order('full_name');
   if (error) { res.status(500).json({ error: error.message }); return; }
   res.json(toCC(data));
+}
+
+export async function getParentProfile(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { id } = req.params;
+
+  const [parentRes, appointmentsRes] = await Promise.all([
+    supabase.from('parents')
+      .select('id, full_name, phone_number, email, residence_type, block_number, user_id, users(id, username, first_name, last_name, is_active), students(id, full_name, classes(name))')
+      .eq('id', id).eq('school_id', schoolId).single(),
+    supabase.from('appointments')
+      .select('id, reason, message, requested_date, scheduled_date, status, created_at, response_message')
+      .eq('parent_id', id).eq('school_id', schoolId)
+      .order('created_at', { ascending: false }),
+  ]);
+
+  if (parentRes.error || !parentRes.data) {
+    res.status(404).json({ error: 'Parent not found' }); return;
+  }
+  res.json({ parent: toCC(parentRes.data), appointments: toCC(appointmentsRes.data) || [] });
 }
 
 export async function deleteParent(req: AuthRequest, res: Response): Promise<void> {
