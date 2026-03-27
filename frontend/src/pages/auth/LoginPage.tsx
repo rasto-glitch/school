@@ -23,7 +23,7 @@ type FormData = z.infer<typeof schema>;
 export default function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { setAuth } = useAuthStore();
+  const { setAuth, isAuthenticated, user } = useAuthStore();
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -35,8 +35,20 @@ export default function LoginPage() {
   })();
   const school = stateSchool ?? storedSchool;
 
-  // No school at all → redirect to picker
+  const ROLE_DASHBOARDS: Record<string, string> = {
+    parent: '/parent/dashboard',
+    teacher: '/teacher/dashboard',
+    admin: '/admin/dashboard',
+    driver: '/driver/dashboard',
+    supervisor: '/supervisor/dashboard',
+  };
+
+  // Already logged in → skip login page
   useEffect(() => {
+    if (isAuthenticated() && user) {
+      navigate(ROLE_DASHBOARDS[user.role] || '/admin/dashboard', { replace: true });
+      return;
+    }
     if (!school) navigate('/select-school', { replace: true });
   }, []);
 
