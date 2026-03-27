@@ -2,15 +2,29 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { GraduationCap, Search } from 'lucide-react';
 import { authApi } from '../../services/api';
+import { useAuthStore } from '../../store/authStore';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
+
+const ROLE_DASHBOARDS: Record<string, string> = {
+  parent: '/parent/dashboard',
+  teacher: '/teacher/dashboard',
+  admin: '/admin/dashboard',
+  driver: '/driver/dashboard',
+  supervisor: '/supervisor/dashboard',
+};
 
 export default function SchoolPickerPage() {
   const navigate = useNavigate();
+  const { isAuthenticated, user } = useAuthStore();
   const [schools, setSchools] = useState<any[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (isAuthenticated() && user) {
+      navigate(ROLE_DASHBOARDS[user.role] || '/admin/dashboard', { replace: true });
+      return;
+    }
     authApi.getSchools()
       .then(r => setSchools(r.data || []))
       .finally(() => setLoading(false));
