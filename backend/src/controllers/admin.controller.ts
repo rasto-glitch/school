@@ -305,13 +305,26 @@ export async function bulkUploadStudents(req: AuthRequest, res: Response): Promi
           }
         }
       } else {
-        // Brand-new parent
-        newParentKey = parentNameKey;
-        if (!newParentsNeeded.has(parentNameKey)) {
-          newParentsNeeded.set(parentNameKey, {
-            fatherName, grandfatherName, fullName: parentFullName,
-            phone: resolvedPhone, normResidence, blockNumber: blockNumber || null,
-          });
+        // Brand-new parent — guard against same-name, different-phone within this file
+        const prior = newParentsNeeded.get(parentNameKey);
+        const intraConflict = prior && resolvedPhone && prior.phone && prior.phone !== resolvedPhone;
+        if (intraConflict) {
+          const conflictKey = `${parentNameKey}|${resolvedPhone}`;
+          newParentKey = conflictKey;
+          if (!newParentsNeeded.has(conflictKey)) {
+            newParentsNeeded.set(conflictKey, {
+              fatherName, grandfatherName, fullName: parentFullName,
+              phone: resolvedPhone, normResidence, blockNumber: blockNumber || null,
+            });
+          }
+        } else {
+          newParentKey = parentNameKey;
+          if (!newParentsNeeded.has(parentNameKey)) {
+            newParentsNeeded.set(parentNameKey, {
+              fatherName, grandfatherName, fullName: parentFullName,
+              phone: resolvedPhone, normResidence, blockNumber: blockNumber || null,
+            });
+          }
         }
       }
     }
