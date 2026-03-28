@@ -52,7 +52,7 @@ const T: Record<string, PushStrings> = {
     bus_2min_title: 'پاس ٢ خولەک دوورە',
     bus_2min_body: 'منداڵەکەت ٢ خولەک دوورە.',
     bus_arriving_title: 'منداڵەکەت گەیشت!',
-    bus_arriving_body: 'منداڵەکەت گەیشتووەتەوە.',
+    bus_arriving_body: 'منداڵەکەت گەیشتە ماڵەوە.',
     bus_set_location_title: 'شوێنی وەرگرتنت دیاری بکە',
     bus_set_location_body: 'ئەپەکە بکەرەوە و شوێنەکەت دیاری بکە بۆ وەرگرتنی ئاگادارکردنەوەی پاس.',
     prefix_homework: 'ئەرکی ماڵەوە',
