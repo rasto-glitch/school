@@ -403,7 +403,7 @@ export async function bulkUploadStudents(req: AuthRequest, res: Response): Promi
         school_id: schoolId,
         first_name: p.fatherName,
         last_name: p.grandfatherName,
-        username: generateParentUsername(p.fatherName, p.grandfatherName),
+        username: generateParentUsername(p.fatherName, p.grandfatherName.split(' ')[0]),
         password_hash: defaultParentPasswordHash,
         role: 'parent',
         is_active: true,
