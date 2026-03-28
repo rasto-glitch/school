@@ -1,7 +1,8 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
-import { View, Text, ScrollView, StyleSheet, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, ActivityIndicator, RefreshControl, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { AlertCircle, Users, CheckCircle, Clock } from 'lucide-react-native';
+import { AlertCircle, Users, CheckCircle, Clock, FileText, ChevronRight } from 'lucide-react-native';
+import { useNavigation } from '@react-navigation/native';
 import { supervisorApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
 import { spacing, radius, font, shadow } from '../../theme';
@@ -27,6 +28,7 @@ export default function SupervisorDashboardScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const navigation = useNavigation<any>();
 
   const [absentList, setAbsentList] = useState<AbsentRecord[]>([]);
   const [summary, setSummary] = useState<ClassSummary[]>([]);
@@ -77,6 +79,26 @@ export default function SupervisorDashboardScreen() {
           <Text style={[styles.statNum, { color: colors.success }]}>{summary.reduce((a, c) => a + c.present, 0)}</Text>
           <Text style={[styles.statLabel, { color: colors.success }]}>Present</Text>
         </View>
+      </View>
+
+      {/* Shortcut cards */}
+      <View style={styles.shortcutRow}>
+        <TouchableOpacity
+          style={styles.shortcutCard}
+          onPress={() => navigation.navigate('SupervisorContent', { initialTab: 'weekly' })}
+        >
+          <Clock size={20} color={colors.primary} />
+          <Text style={styles.shortcutText}>Weekly{'\n'}Summary</Text>
+          <ChevronRight size={14} color={colors.textMuted} style={{ marginLeft: 'auto' }} />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.shortcutCard}
+          onPress={() => navigation.navigate('SupervisorContent', { initialTab: 'reports' })}
+        >
+          <FileText size={20} color={colors.primary} />
+          <Text style={styles.shortcutText}>Student{'\n'}Reports</Text>
+          <ChevronRight size={14} color={colors.textMuted} style={{ marginLeft: 'auto' }} />
+        </TouchableOpacity>
       </View>
 
       {loading ? <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} /> : (
@@ -167,4 +189,7 @@ const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').u
   barFill: { height: 6, borderRadius: 3 },
   summaryRow: { flexDirection: 'row', gap: spacing.md },
   summaryChip: { fontSize: font.xs, fontWeight: '600' },
+  shortcutRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
+  shortcutCard: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, ...shadow.sm },
+  shortcutText: { fontSize: font.xs, fontWeight: '600', color: colors.text, flex: 1 },
 });

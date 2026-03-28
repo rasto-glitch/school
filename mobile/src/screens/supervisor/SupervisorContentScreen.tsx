@@ -3,11 +3,16 @@ import {
   View, Text, ScrollView, StyleSheet, ActivityIndicator,
   RefreshControl, TouchableOpacity, Alert,
 } from 'react-native';
+import { useRoute, RouteProp } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BookOpen, ClipboardList, Trash2 } from 'lucide-react-native';
+import { BookOpen, ClipboardList, Trash2, Clock, FileText } from 'lucide-react-native';
 import { supervisorApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
 import { spacing, radius, font, shadow } from '../../theme';
+import SupervisorWeeklySummaryScreen from './SupervisorWeeklySummaryScreen';
+import SupervisorStudentReportsScreen from './SupervisorStudentReportsScreen';
+
+type TabType = 'homework' | 'assignments' | 'weekly' | 'reports';
 
 interface ContentItem {
   id: string;
@@ -20,12 +25,21 @@ interface ContentItem {
   classes?: { name: string };
 }
 
+const TABS: { key: TabType; label: string; icon: typeof BookOpen }[] = [
+  { key: 'homework',    label: 'Homework',       icon: BookOpen },
+  { key: 'assignments', label: 'Assignments',     icon: ClipboardList },
+  { key: 'weekly',      label: 'Weekly Summary',  icon: Clock },
+  { key: 'reports',     label: 'Student Reports', icon: FileText },
+];
+
 export default function SupervisorContentScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const route = useRoute<RouteProp<{ params: { initialTab?: TabType } }, 'params'>>();
+  const initialTab = (route.params as { initialTab?: TabType } | undefined)?.initialTab;
 
-  const [tab, setTab] = useState<'homework' | 'assignments'>('homework');
+  const [tab, setTab] = useState<TabType>(initialTab ?? 'homework');
   const [homework, setHomework] = useState<ContentItem[]>([]);
   const [assignments, setAssignments] = useState<ContentItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -45,8 +59,9 @@ export default function SupervisorContentScreen() {
   const onRefresh = () => { setRefreshing(true); load().finally(() => setRefreshing(false)); };
 
   const handleDelete = (item: ContentItem) => {
+    const isHw = tab === 'homework';
     Alert.alert(
-      `Delete ${tab === 'homework' ? 'Homework' : 'Assignment'}`,
+      `Delete ${isHw ? 'Homework' : 'Assignment'}`,
       `Are you sure you want to delete "${item.title}"?`,
       [
         { text: 'Cancel', style: 'cancel' },
@@ -54,7 +69,7 @@ export default function SupervisorContentScreen() {
           text: 'Delete', style: 'destructive', onPress: async () => {
             setDeletingId(item.id);
             try {
-              if (tab === 'homework') {
+              if (isHw) {
                 await supervisorApi.deleteHomework(item.id);
                 setHomework(prev => prev.filter(h => h.id !== item.id));
               } else {
@@ -75,99 +90,112 @@ export default function SupervisorContentScreen() {
   const items = tab === 'homework' ? homework : assignments;
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.md }]}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
-    >
-      <Text style={styles.title}>Content</Text>
-
-      {/* Tab toggle */}
-      <View style={styles.tabBar}>
-        <TouchableOpacity
-          style={[styles.tabBtn, tab === 'homework' && styles.tabBtnActive]}
-          onPress={() => setTab('homework')}
+    <View style={[styles.root, { backgroundColor: colors.bg }]}>
+      {/* Fixed header */}
+      <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
+        <Text style={styles.title}>Content</Text>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.tabBar}
         >
-          <BookOpen size={15} color={tab === 'homework' ? colors.primary : colors.textMuted} />
-          <Text style={[styles.tabBtnText, tab === 'homework' && styles.tabBtnTextActive]}>
-            Homework {homework.length > 0 ? `(${homework.length})` : ''}
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tabBtn, tab === 'assignments' && styles.tabBtnActive]}
-          onPress={() => setTab('assignments')}
-        >
-          <ClipboardList size={15} color={tab === 'assignments' ? colors.primary : colors.textMuted} />
-          <Text style={[styles.tabBtnText, tab === 'assignments' && styles.tabBtnTextActive]}>
-            Assignments {assignments.length > 0 ? `(${assignments.length})` : ''}
-          </Text>
-        </TouchableOpacity>
+          {TABS.map(({ key, label, icon: Icon }) => {
+            const active = tab === key;
+            return (
+              <TouchableOpacity
+                key={key}
+                style={[styles.tabBtn, active && styles.tabBtnActive]}
+                onPress={() => setTab(key)}
+              >
+                <Icon size={14} color={active ? colors.primary : colors.textMuted} />
+                <Text style={[styles.tabBtnText, active && styles.tabBtnTextActive]}>
+                  {label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       </View>
 
-      {loading ? (
-        <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
-      ) : items.length === 0 ? (
-        <View style={styles.emptyCard}>
-          {tab === 'homework'
-            ? <BookOpen size={36} color={colors.textMuted} />
-            : <ClipboardList size={36} color={colors.textMuted} />}
-          <Text style={styles.emptyText}>No {tab === 'homework' ? 'homework' : 'assignments'} found.</Text>
-        </View>
+      {/* Content area */}
+      {tab === 'weekly' ? (
+        <SupervisorWeeklySummaryScreen embedded />
+      ) : tab === 'reports' ? (
+        <SupervisorStudentReportsScreen embedded />
       ) : (
-        items.map(item => (
-          <View key={item.id} style={styles.card}>
-            <View style={styles.cardTop}>
-              <View style={[styles.iconBox, { backgroundColor: tab === 'homework' ? '#EFF6FF' : '#F0FDF4' }]}>
-                {tab === 'homework'
-                  ? <BookOpen size={16} color="#2563EB" />
-                  : <ClipboardList size={16} color="#16A34A" />}
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.itemTitle}>{item.title}</Text>
-                <Text style={styles.itemMeta}>
-                  {[item.classes?.name, item.teachers?.fullName].filter(Boolean).join(' · ')}
-                </Text>
-              </View>
-              <TouchableOpacity
-                onPress={() => handleDelete(item)}
-                style={styles.deleteBtn}
-                disabled={deletingId === item.id}
-              >
-                {deletingId === item.id
-                  ? <ActivityIndicator size="small" color={colors.danger} />
-                  : <Trash2 size={16} color={colors.danger} />}
-              </TouchableOpacity>
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+        >
+          {loading ? (
+            <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
+          ) : items.length === 0 ? (
+            <View style={styles.emptyCard}>
+              {tab === 'homework'
+                ? <BookOpen size={36} color={colors.textMuted} />
+                : <ClipboardList size={36} color={colors.textMuted} />}
+              <Text style={styles.emptyText}>No {tab === 'homework' ? 'homework' : 'assignments'} found.</Text>
             </View>
-            {item.description && (
-              <Text style={styles.itemDesc} numberOfLines={2}>{item.description}</Text>
-            )}
-            <View style={styles.tagsRow}>
-              {item.subject && (
-                <View style={styles.subjectTag}>
-                  <Text style={styles.subjectTagText}>{item.subject}</Text>
+          ) : (
+            items.map(item => (
+              <View key={item.id} style={styles.card}>
+                <View style={styles.cardTop}>
+                  <View style={[styles.iconBox, { backgroundColor: tab === 'homework' ? '#EFF6FF' : '#F0FDF4' }]}>
+                    {tab === 'homework'
+                      ? <BookOpen size={16} color="#2563EB" />
+                      : <ClipboardList size={16} color="#16A34A" />}
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.itemTitle}>{item.title}</Text>
+                    <Text style={styles.itemMeta}>
+                      {[item.classes?.name, item.teachers?.fullName].filter(Boolean).join(' · ')}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => handleDelete(item)}
+                    style={styles.deleteBtn}
+                    disabled={deletingId === item.id}
+                  >
+                    {deletingId === item.id
+                      ? <ActivityIndicator size="small" color={colors.danger} />
+                      : <Trash2 size={16} color={colors.danger} />}
+                  </TouchableOpacity>
                 </View>
-              )}
-              {item.dueDate && (
-                <Text style={styles.dueText}>Due {new Date(item.dueDate).toLocaleDateString()}</Text>
-              )}
-              <Text style={styles.dateText}>{new Date(item.createdAt).toLocaleDateString()}</Text>
-            </View>
-          </View>
-        ))
+                {item.description && (
+                  <Text style={styles.itemDesc} numberOfLines={2}>{item.description}</Text>
+                )}
+                <View style={styles.tagsRow}>
+                  {item.subject && (
+                    <View style={styles.subjectTag}>
+                      <Text style={styles.subjectTagText}>{item.subject}</Text>
+                    </View>
+                  )}
+                  {item.dueDate && (
+                    <Text style={styles.dueText}>Due {new Date(item.dueDate).toLocaleDateString()}</Text>
+                  )}
+                  <Text style={styles.dateText}>{new Date(item.createdAt).toLocaleDateString()}</Text>
+                </View>
+              </View>
+            ))
+          )}
+        </ScrollView>
       )}
-    </ScrollView>
+    </View>
   );
 }
 
 const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').useColors>) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: spacing.md, paddingBottom: 40 },
-  title: { fontSize: font.xxxl, fontWeight: '800', color: colors.text, marginBottom: spacing.md },
-  tabBar: { flexDirection: 'row', backgroundColor: colors.card, borderRadius: radius.md, padding: 4, marginBottom: spacing.md, ...shadow.sm },
-  tabBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderRadius: radius.sm },
+  root: { flex: 1 },
+  header: { backgroundColor: colors.bg, paddingHorizontal: spacing.md, paddingBottom: spacing.sm },
+  title: { fontSize: font.xxxl, fontWeight: '800', color: colors.text, marginBottom: spacing.sm },
+  tabBar: { flexDirection: 'row', gap: spacing.xs, paddingBottom: spacing.xs },
+  tabBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 8, paddingHorizontal: 12, borderRadius: radius.full, backgroundColor: colors.card, ...shadow.sm },
   tabBtnActive: { backgroundColor: colors.primaryLight },
-  tabBtnText: { fontSize: font.sm, fontWeight: '600', color: colors.textMuted },
+  tabBtnText: { fontSize: font.xs, fontWeight: '600', color: colors.textMuted },
   tabBtnTextActive: { color: colors.primary },
+  scroll: { flex: 1 },
+  scrollContent: { padding: spacing.md, paddingBottom: 40 },
   emptyCard: { alignItems: 'center', marginTop: 60, gap: spacing.md },
   emptyText: { fontSize: font.md, color: colors.textMuted },
   card: { backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm, ...shadow.sm },

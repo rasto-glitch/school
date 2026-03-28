@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, CheckCircle2, XCircle, Clock, ChevronRight, FileText } from 'lucide-react';
+import { Users, CheckCircle2, XCircle, Clock, ChevronRight } from 'lucide-react';
 import { supervisorApi } from '../../services/api';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
@@ -74,29 +74,6 @@ export default function SupervisorDashboard() {
             <ChevronRight className="w-4 h-4 text-red-500" />
           </button>
         )}
-
-        {/* Shortcuts */}
-        <div className="grid grid-cols-2 gap-3">
-          {[
-            { label: 'Weekly Summary', description: 'Teacher curriculum submissions', icon: Clock, color: 'text-primary-700', bg: 'bg-primary-50', border: 'border-primary-200', to: '/supervisor/weekly-summary' },
-            { label: 'Student Reports', description: 'Grades and teacher reports', icon: FileText, color: 'text-indigo-700', bg: 'bg-indigo-50', border: 'border-indigo-200', to: '/supervisor/student-reports' },
-          ].map(({ label, description, icon: Icon, color, bg, border, to }) => (
-            <button
-              key={to}
-              onClick={() => navigate(to)}
-              className={`flex items-center gap-3 ${bg} border ${border} rounded-2xl px-4 py-4 hover:opacity-80 transition-opacity text-left`}
-            >
-              <div className={`p-2.5 bg-white rounded-xl shadow-sm flex-shrink-0`}>
-                <Icon className={`w-5 h-5 ${color}`} />
-              </div>
-              <div className="min-w-0">
-                <p className={`text-sm font-semibold ${color}`}>{label}</p>
-                <p className="text-xs text-gray-500 truncate">{description}</p>
-              </div>
-              <ChevronRight className="w-4 h-4 text-gray-400 ml-auto flex-shrink-0" />
-            </button>
-          ))}
-        </div>
 
         {/* Per-class breakdown */}
         <Card>
