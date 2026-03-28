@@ -10,8 +10,7 @@ import {
   Bell, MapPin, Globe, Lock, LogOut, FileText,
   Moon, ChevronRight, CheckCircle, XCircle, AlertCircle, X,
 } from 'lucide-react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import i18n, { LANGUAGE_KEY } from '../../i18n';
+import i18n, { changeLanguageAndApply } from '../../i18n';
 import { useAuthStore } from '../../store/authStore';
 import { useThemeStore, useColors } from '../../store/themeStore';
 import { getPushStatus, retryPushRegistration, type PushStatus } from '../../hooks/usePushNotifications';
@@ -52,8 +51,7 @@ export default function DriverSettingsScreen() {
 
   const changeLang = (code: string) => {
     setLang(code);
-    i18n.changeLanguage(code);
-    AsyncStorage.setItem(LANGUAGE_KEY, code);
+    changeLanguageAndApply(code);
     authApi.updateDeviceLanguage(code).catch(() => {});
   };
 

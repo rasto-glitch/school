@@ -21,26 +21,48 @@ i18n.use(initReactI18next).init({
   interpolation: { escapeValue: false },
 });
 
-// Restore saved language on startup and apply RTL silently (already in correct native state from last session)
+// Restore saved language on startup and apply the correct RTL state silently
 AsyncStorage.getItem(LANGUAGE_KEY).then(saved => {
   if (saved) {
     const shouldBeRTL = isRTLLanguage(saved);
-    if (I18nManager.isRTL !== shouldBeRTL) {
-      I18nManager.allowRTL(shouldBeRTL);
-      I18nManager.forceRTL(shouldBeRTL);
-    }
+    I18nManager.allowRTL(shouldBeRTL);
+    I18nManager.forceRTL(shouldBeRTL);
     if (saved !== i18n.language) i18n.changeLanguage(saved);
   }
 });
 
-// When language changes at runtime, update RTL direction and reload if it changed
-i18n.on('languageChanged', (lang: string) => {
-  const shouldBeRTL = isRTLLanguage(lang);
-  if (I18nManager.isRTL !== shouldBeRTL) {
-    I18nManager.allowRTL(shouldBeRTL);
-    I18nManager.forceRTL(shouldBeRTL);
-    Updates.reloadAsync().catch(() => {});
+/**
+ * Change the app language, persist it, update RTL direction, and reload if
+ * the layout direction actually changed (RTL ↔ LTR transition).
+ * Always call this instead of i18n.changeLanguage() directly.
+ *
+ * Reload may silently fail in development builds — RTL will apply on next
+ * native restart in that case (language is always persisted first).
+ */
+export async function changeLanguageAndApply(code: string) {
+  const previouslyRTL = I18nManager.isRTL;
+  const willBeRTL = isRTLLanguage(code);
+
+  // 1. Persist first — so that after any reload the correct language is restored
+  await AsyncStorage.setItem(LANGUAGE_KEY, code);
+
+  // 2. Update i18n strings immediately (UI text updates without reload)
+  await i18n.changeLanguage(code);
+
+  // 3. Update native RTL state
+  I18nManager.allowRTL(willBeRTL);
+  I18nManager.forceRTL(willBeRTL);
+
+  // 4. Reload only when layout direction actually changes.
+  //    Updates.reloadAsync() throws in development/embedded builds — catch it
+  //    so the caller never crashes. RTL will take effect on the next native restart.
+  if (previouslyRTL !== willBeRTL) {
+    try {
+      await Updates.reloadAsync();
+    } catch {
+      // Reload unavailable (dev build or embedded bundle) — RTL applies on next launch
+    }
   }
-});
+}
 
 export default i18n;

@@ -5,12 +5,11 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GraduationCap, ChevronRight, Search } from 'lucide-react-native';
 import { authApi } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { spacing, radius, font, shadow } from '../../theme';
-import i18n, { LANGUAGE_KEY } from '../../i18n';
+import i18n, { changeLanguageAndApply } from '../../i18n';
 import type { School } from '../../types';
 
 const LANGUAGES = [
@@ -37,8 +36,7 @@ export default function SchoolPickerScreen() {
 
   const selectLanguage = async (code: string) => {
     setActiveLang(code);
-    await i18n.changeLanguage(code);
-    await AsyncStorage.setItem(LANGUAGE_KEY, code);
+    await changeLanguageAndApply(code);
   };
 
   const filtered = useMemo(() =>
