@@ -153,6 +153,10 @@ export function createRouter(io: SocketServer) {
   router.delete('/supervisor/homework/:id', authenticate, authorize('supervisor'), (req, res) => supervisor.deleteHomework(req as AuthRequest, res));
   router.get('/supervisor/assignments', authenticate, authorize('supervisor'), (req, res) => supervisor.getAssignments(req as AuthRequest, res));
   router.delete('/supervisor/assignments/:id', authenticate, authorize('supervisor'), (req, res) => supervisor.deleteAssignment(req as AuthRequest, res));
+  router.get('/supervisor/weekly-summaries', authenticate, authorize('supervisor'), (req, res) => admin.getWeeklySummaries(req as AuthRequest, res));
+  router.get('/supervisor/weekly-summary-status', authenticate, authorize('supervisor'), (req, res) => admin.getWeeklySummaryStatus(req as AuthRequest, res));
+  router.get('/supervisor/subjects', authenticate, authorize('supervisor'), (req, res) => admin.getSubjects(req as AuthRequest, res));
+  router.get('/supervisor/student-brief/:id', authenticate, authorize('supervisor'), (req, res) => admin.getStudentBrief(req as AuthRequest, res));
 
   // ---- DRIVER ----
   router.get('/driver/me', authenticate, authorize('driver'), (req, res) => driver.getMyProfile(req as AuthRequest, res));

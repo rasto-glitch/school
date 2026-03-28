@@ -54,6 +54,11 @@ export const supervisorApi = {
   deleteHomework: (id: string) => api.delete(`/supervisor/homework/${id}`),
   getAssignments: () => api.get('/supervisor/assignments'),
   deleteAssignment: (id: string) => api.delete(`/supervisor/assignments/${id}`),
+  getWeeklySummaries: (params?: Record<string, string>) => api.get('/supervisor/weekly-summaries', { params }),
+  getWeeklySummaryStatus: (weekStartDate: string) => api.get('/supervisor/weekly-summary-status', { params: { weekStartDate } }),
+  getSubjects: () => api.get('/supervisor/subjects'),
+  getStudentBrief: (id: string) => api.get(`/supervisor/student-brief/${id}`),
+  getAllStudents: (params?: Record<string, string>) => api.get('/supervisor/students', { params }),
 };
 
 // ---- PARENT ----

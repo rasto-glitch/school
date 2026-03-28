@@ -66,6 +66,8 @@ const navItems: Record<Role, NavItem[]> = {
     { to: '/supervisor/attendance', icon: ClipboardCheck, label: 'Attendance' },
     { to: '/supervisor/homework', icon: BookOpen, label: 'Homework' },
     { to: '/supervisor/assignments', icon: ClipboardList, label: 'Assignments' },
+    { to: '/supervisor/weekly-summary', icon: Clock, label: 'Weekly Summary' },
+    { to: '/supervisor/student-reports', icon: FileText, label: 'Student Reports' },
     { to: '/supervisor/profile', icon: User, label: 'Profile' },
   ],
 };
