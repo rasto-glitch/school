@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { useRoute, RouteProp } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 import { BookOpen, ClipboardList, Trash2, Clock, FileText } from 'lucide-react-native';
 import { supervisorApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
@@ -25,19 +26,20 @@ interface ContentItem {
   classes?: { name: string };
 }
 
-const TABS: { key: TabType; label: string; icon: typeof BookOpen }[] = [
-  { key: 'homework',    label: 'Homework',       icon: BookOpen },
-  { key: 'assignments', label: 'Assignments',     icon: ClipboardList },
-  { key: 'weekly',      label: 'Weekly Summary',  icon: Clock },
-  { key: 'reports',     label: 'Student Reports', icon: FileText },
-];
-
 export default function SupervisorContentScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
+  const { t } = useTranslation();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const route = useRoute<RouteProp<{ params: { initialTab?: TabType } }, 'params'>>();
   const initialTab = (route.params as { initialTab?: TabType } | undefined)?.initialTab;
+
+  const TABS: { key: TabType; label: string; icon: typeof BookOpen }[] = [
+    { key: 'homework',    label: t('nav.homework'),                icon: BookOpen },
+    { key: 'assignments', label: t('nav.assignments'),             icon: ClipboardList },
+    { key: 'weekly',      label: t('supervisor.weekly_summary'),   icon: Clock },
+    { key: 'reports',     label: t('supervisor.student_reports'),  icon: FileText },
+  ];
 
   const [tab, setTab] = useState<TabType>(initialTab ?? 'homework');
   const [homework, setHomework] = useState<ContentItem[]>([]);

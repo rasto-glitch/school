@@ -47,6 +47,7 @@
     "quick_homework": "ئەرکی ماڵەوە",
     "quick_assignments": "ئەرک",
     "quick_reports": "ڕاپۆرت",
+    "quick_grades": "نمرەکان",
     "quick_bus": "بەس",
     "quick_alerts": "ئاگادارکردن",
     "quick_bookings": "وادە"
@@ -213,6 +214,10 @@
     "saved": "شوێنی وەرگرتن پاشەکەوت کرا!",
     "save_error": "شوێنەکەت پاشەکەوت نەکرا",
     "permission_denied": "مۆڵەتی شوێن پێویستە"
+  },
+  "supervisor": {
+    "weekly_summary": "پوختەی هەفتانە",
+    "student_reports": "ڕاپۆرتەکانی خوێندکار"
   },
   "driver": {
     "dashboard_title": "داشبۆردی شۆفێر",

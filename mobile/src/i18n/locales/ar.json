@@ -47,6 +47,7 @@
     "quick_homework": "الواجبات",
     "quick_assignments": "المهام",
     "quick_reports": "التقارير",
+    "quick_grades": "الدرجات",
     "quick_bus": "الحافلة",
     "quick_alerts": "التنبيهات",
     "quick_bookings": "الحجوزات"
@@ -213,6 +214,10 @@
     "saved": "تم حفظ موقع التسليم!",
     "save_error": "فشل حفظ الموقع",
     "permission_denied": "إذن الموقع مطلوب"
+  },
+  "supervisor": {
+    "weekly_summary": "الملخص الأسبوعي",
+    "student_reports": "تقارير الطلاب"
   },
   "driver": {
     "dashboard_title": "لوحة تحكم السائق",

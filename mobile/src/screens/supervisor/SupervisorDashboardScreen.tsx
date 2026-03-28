@@ -3,6 +3,7 @@ import { View, Text, ScrollView, StyleSheet, ActivityIndicator, RefreshControl, 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AlertCircle, Users, CheckCircle, Clock, FileText, ChevronRight } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { supervisorApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
 import { spacing, radius, font, shadow } from '../../theme';
@@ -29,6 +30,7 @@ export default function SupervisorDashboardScreen() {
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const navigation = useNavigation<any>();
+  const { t } = useTranslation();
 
   const [absentList, setAbsentList] = useState<AbsentRecord[]>([]);
   const [summary, setSummary] = useState<ClassSummary[]>([]);
@@ -88,7 +90,7 @@ export default function SupervisorDashboardScreen() {
           onPress={() => navigation.navigate('SupervisorContent', { initialTab: 'weekly' })}
         >
           <Clock size={20} color={colors.primary} />
-          <Text style={styles.shortcutText}>Weekly{'\n'}Summary</Text>
+          <Text style={styles.shortcutText}>{t('supervisor.weekly_summary')}</Text>
           <ChevronRight size={14} color={colors.textMuted} style={{ marginLeft: 'auto' }} />
         </TouchableOpacity>
         <TouchableOpacity
@@ -96,7 +98,7 @@ export default function SupervisorDashboardScreen() {
           onPress={() => navigation.navigate('SupervisorContent', { initialTab: 'reports' })}
         >
           <FileText size={20} color={colors.primary} />
-          <Text style={styles.shortcutText}>Student{'\n'}Reports</Text>
+          <Text style={styles.shortcutText}>{t('supervisor.student_reports')}</Text>
           <ChevronRight size={14} color={colors.textMuted} style={{ marginLeft: 'auto' }} />
         </TouchableOpacity>
       </View>

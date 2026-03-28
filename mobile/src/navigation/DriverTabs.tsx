@@ -30,7 +30,8 @@ export default function DriverTabs() {
           height: 60 + insets.bottom,
           paddingBottom: insets.bottom + 6,
           paddingTop: 6,
-        },
+          direction: 'ltr',
+        } as any,
         tabBarLabelStyle: { fontSize: 11, fontWeight: '500' },
       }}
     >
@@ -57,7 +58,7 @@ export default function DriverTabs() {
           tabBarIcon: ({ color }) => <User size={ICON_SIZE} color={color} />,
           headerShown: true,
           headerTitle: t('nav.me', 'Me'),
-          headerStyle: { backgroundColor: colors.card },
+          headerStyle: { backgroundColor: colors.card, direction: 'ltr' } as any,
           headerTitleStyle: { color: colors.text },
           headerTintColor: colors.primary,
         }}

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, Component, useMemo } from 'react';
+import { useEffect, useState, useCallback, useRef, Component, useMemo } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, TextInput } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -73,6 +73,7 @@ export default function BusTrackingScreen() {
 
   // Pickup location + residence state
   const [hasPickupLocation, setHasPickupLocation] = useState<boolean | null>(null);
+  const hasPickupRef = useRef<boolean | null>(null);
   const [pickupCoords, setPickupCoords] = useState<{ lat: number | null; lng: number | null }>({ lat: null, lng: null });
   const [residenceType, setResidenceType] = useState<'apartment' | 'house' | null>(null);
   const [blockNumber, setBlockNumber] = useState('');
@@ -91,11 +92,13 @@ export default function BusTrackingScreen() {
   useEffect(() => {
     parentApi.getPickupLocation().then(r => {
       const { latitude, longitude, residenceType: rt, blockNumber: bn } = r.data;
-      setHasPickupLocation(!!(latitude && longitude));
+      const has = !!(latitude && longitude);
+      hasPickupRef.current = has;
+      setHasPickupLocation(has);
       setPickupCoords({ lat: latitude ?? null, lng: longitude ?? null });
       setResidenceType((rt as 'apartment' | 'house' | null) ?? null);
       setBlockNumber(bn ?? '');
-    }).catch(() => setHasPickupLocation(false));
+    }).catch(() => { hasPickupRef.current = false; setHasPickupLocation(false); });
   }, []);
 
   useEffect(() => {
@@ -118,12 +121,21 @@ export default function BusTrackingScreen() {
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') return;
-      const getLocation = async () => {
+      const getLocation = async (autoSave = false) => {
         const loc = await Location.getCurrentPositionAsync({});
-        setParentLocation({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+        const { latitude, longitude } = loc.coords;
+        setParentLocation({ latitude, longitude });
+        // Auto-save as pickup location if none set yet
+        if (autoSave && hasPickupRef.current === false) {
+          parentApi.updatePickupLocation(latitude, longitude).then(() => {
+            hasPickupRef.current = true;
+            setHasPickupLocation(true);
+            setPickupCoords({ lat: latitude, lng: longitude });
+          }).catch(() => {});
+        }
       };
-      await getLocation();
-      interval = setInterval(getLocation, 5 * 60 * 1000);
+      await getLocation(true);
+      interval = setInterval(() => getLocation(false), 5 * 60 * 1000);
     })();
     return () => clearInterval(interval);
   }, []);

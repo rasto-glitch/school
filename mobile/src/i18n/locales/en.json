@@ -47,6 +47,7 @@
     "quick_homework": "Homework",
     "quick_assignments": "Assignments",
     "quick_reports": "Reports",
+    "quick_grades": "Grades",
     "quick_bus": "Bus",
     "quick_alerts": "Alerts",
     "quick_bookings": "Bookings"
@@ -213,6 +214,10 @@
     "saved": "Pickup location saved!",
     "save_error": "Failed to save location",
     "permission_denied": "Location permission is required"
+  },
+  "supervisor": {
+    "weekly_summary": "Weekly Summary",
+    "student_reports": "Student Reports"
   },
   "driver": {
     "dashboard_title": "Driver Dashboard",

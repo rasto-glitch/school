@@ -101,7 +101,7 @@ export default function ParentTabs() {
     <Tab.Navigator
       screenOptions={{
         headerShown: true,
-        headerStyle: { backgroundColor: colors.card },
+        headerStyle: { backgroundColor: colors.card, direction: 'ltr' } as any,
         headerTitleStyle: { fontSize: font.lg, fontWeight: '700', color: colors.text },
         headerShadowVisible: false,
         headerRight: () => <NotificationBell />,
@@ -114,7 +114,8 @@ export default function ParentTabs() {
           height: 60 + insets.bottom,
           paddingBottom: insets.bottom + 6,
           paddingTop: 6,
-        },
+          direction: 'ltr',
+        } as any,
         tabBarLabelStyle: { fontSize: 11, fontWeight: '500' },
       }}
     >
