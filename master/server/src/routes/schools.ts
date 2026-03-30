@@ -136,7 +136,7 @@ router.patch('/:id/admin-password', async (req: Request, res: Response) => {
   const passwordHash = await bcrypt.hash(password, 10);
   const { error } = await supabase
     .from('users')
-    .update({ password_hash: passwordHash })
+    .update({ password_hash: passwordHash, password_changed_at: new Date().toISOString() })
     .eq('school_id', id)
     .eq('role', 'admin');
 

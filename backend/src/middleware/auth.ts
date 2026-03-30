@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { supabase } from '../config/supabase';
 
 export interface AuthPayload {
   userId: string;
@@ -12,7 +13,7 @@ export interface AuthRequest extends Request {
   user?: AuthPayload;
 }
 
-export function authenticate(req: AuthRequest, res: Response, next: NextFunction): void {
+export async function authenticate(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     res.status(401).json({ error: 'No token provided' });
@@ -20,13 +21,45 @@ export function authenticate(req: AuthRequest, res: Response, next: NextFunction
   }
 
   const token = authHeader.split(' ')[1];
+  let decoded: AuthPayload & { iat?: number };
   try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET!) as AuthPayload;
-    req.user = payload;
-    next();
+    decoded = jwt.verify(token, process.env.JWT_SECRET!) as AuthPayload & { iat?: number };
   } catch {
     res.status(401).json({ error: 'Invalid or expired token' });
+    return;
   }
+
+  const { data: user } = await supabase
+    .from('users')
+    .select('is_active, password_changed_at, schools(is_active)')
+    .eq('id', decoded.userId)
+    .single();
+
+  if (!user) {
+    res.status(401).json({ error: 'Account not found' });
+    return;
+  }
+
+  if (!user.is_active) {
+    res.status(401).json({ error: 'Account is deactivated' });
+    return;
+  }
+
+  if (!(user.schools as unknown as { is_active: boolean } | null)?.is_active) {
+    res.status(401).json({ error: 'School is deactivated' });
+    return;
+  }
+
+  if (user.password_changed_at && decoded.iat) {
+    const changedAt = new Date(user.password_changed_at).getTime();
+    if (changedAt > decoded.iat * 1000) {
+      res.status(401).json({ error: 'Session invalidated. Please log in again.' });
+      return;
+    }
+  }
+
+  req.user = decoded;
+  next();
 }
 
 export function authorize(...roles: string[]) {

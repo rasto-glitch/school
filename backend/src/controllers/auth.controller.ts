@@ -186,7 +186,7 @@ export async function changePassword(req: Request, res: Response): Promise<void>
   const rounds = parseInt(process.env.BCRYPT_ROUNDS || '10');
   const newHash = await bcrypt.hash(newPassword, rounds);
 
-  await supabase.from('users').update({ password_hash: newHash }).eq('id', userId);
+  await supabase.from('users').update({ password_hash: newHash, password_changed_at: new Date().toISOString() }).eq('id', userId);
 
   res.json({ message: 'Password changed successfully' });
 }

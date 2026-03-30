@@ -37,9 +37,12 @@ CREATE TABLE IF NOT EXISTS users (
   last_name TEXT NOT NULL,
   phone TEXT,
   is_active BOOLEAN DEFAULT TRUE,
+  password_changed_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(school_id, username)
 );
+-- Run this if the table already exists:
+-- ALTER TABLE users ADD COLUMN IF NOT EXISTS password_changed_at TIMESTAMPTZ;
 
 -- ============================================================
 -- BUSES

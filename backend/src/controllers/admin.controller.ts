@@ -1447,7 +1447,7 @@ export async function resetUserPassword(req: AuthRequest, res: Response): Promis
   if (!user) { res.status(404).json({ error: 'User not found' }); return; }
   const rounds = parseInt(process.env.BCRYPT_ROUNDS || '10');
   const hash = await bcrypt.hash(newPassword, rounds);
-  const { error } = await supabase.from('users').update({ password_hash: hash }).eq('id', userId).eq('school_id', schoolId);
+  const { error } = await supabase.from('users').update({ password_hash: hash, password_changed_at: new Date().toISOString() }).eq('id', userId).eq('school_id', schoolId);
   if (error) { res.status(500).json({ error: error.message }); return; }
   await supabase.from('password_reset_requests').update({ status: 'resolved' })
     .eq('user_id', userId).eq('school_id', schoolId).eq('status', 'pending');
