@@ -13,6 +13,7 @@ export default function SchoolsPage({ onLogout }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  const [query, setQuery] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [editTarget, setEditTarget] = useState<School | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<School | null>(null);
@@ -57,6 +58,12 @@ export default function SchoolsPage({ onLogout }: Props) {
 
   const totalStudents = schools.reduce((acc, s) => acc + s.studentCount, 0);
   const activeCount = schools.filter((s) => s.is_active).length;
+  const filtered = query.trim()
+    ? schools.filter((s) =>
+        s.name.toLowerCase().includes(query.toLowerCase()) ||
+        s.slug.toLowerCase().includes(query.toLowerCase())
+      )
+    : schools;
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -106,6 +113,19 @@ export default function SchoolsPage({ onLogout }: Props) {
           </button>
         </div>
 
+        {/* Search */}
+        {schools.length > 0 && (
+          <div className="mb-5">
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search by name or slug…"
+              className="w-full max-w-sm border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            />
+          </div>
+        )}
+
         {/* Content */}
         {loading && (
           <div className="flex justify-center py-20">
@@ -126,7 +146,10 @@ export default function SchoolsPage({ onLogout }: Props) {
 
         {!loading && schools.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {schools.map((school) => (
+            {filtered.length === 0 && (
+              <p className="col-span-full text-sm text-slate-400 py-8 text-center">No schools match "{query}".</p>
+            )}
+            {filtered.map((school) => (
               <SchoolCard
                 key={school.id}
                 school={school}

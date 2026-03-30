@@ -123,6 +123,27 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
   res.json(data);
 });
 
+// PATCH /api/schools/:id/admin-password — reset admin account(s) password
+router.patch('/:id/admin-password', async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { password } = req.body;
+
+  if (!password || password.length < 6) {
+    res.status(400).json({ error: 'Password must be at least 6 characters.' });
+    return;
+  }
+
+  const passwordHash = await bcrypt.hash(password, 10);
+  const { error } = await supabase
+    .from('users')
+    .update({ password_hash: passwordHash })
+    .eq('school_id', id)
+    .eq('role', 'admin');
+
+  if (error) { res.status(400).json({ error: error.message }); return; }
+  res.json({ message: 'Admin password updated.' });
+});
+
 // DELETE /api/schools/:id — permanently delete (cascades via FK)
 router.delete('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;

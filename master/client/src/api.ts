@@ -74,3 +74,6 @@ export const toggleSchoolStatus = (id: string, isActive: boolean) =>
 
 export const deleteSchool = (id: string) =>
   api.delete(`/schools/${id}`);
+
+export const resetAdminPassword = (id: string, password: string) =>
+  api.patch(`/schools/${id}/admin-password`, { password });

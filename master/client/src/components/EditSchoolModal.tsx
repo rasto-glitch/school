@@ -1,5 +1,5 @@
 import { useState, FormEvent } from 'react';
-import { updateSchool, School } from '../api';
+import { updateSchool, resetAdminPassword, School } from '../api';
 
 interface Props {
   school: School;
@@ -18,6 +18,11 @@ export default function EditSchoolModal({ school, onClose, onUpdated }: Props) {
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const [newPassword, setNewPassword] = useState('');
+  const [pwError, setPwError] = useState('');
+  const [pwSuccess, setPwSuccess] = useState('');
+  const [pwLoading, setPwLoading] = useState(false);
 
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -41,6 +46,23 @@ export default function EditSchoolModal({ school, onClose, onUpdated }: Props) {
       setError(msg);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    setPwError('');
+    setPwSuccess('');
+    if (newPassword.length < 6) { setPwError('Password must be at least 6 characters.'); return; }
+    setPwLoading(true);
+    try {
+      await resetAdminPassword(school.id, newPassword);
+      setPwSuccess('Admin password updated.');
+      setNewPassword('');
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to reset password.';
+      setPwError(msg);
+    } finally {
+      setPwLoading(false);
     }
   };
 
@@ -99,6 +121,30 @@ export default function EditSchoolModal({ school, onClose, onUpdated }: Props) {
                 <option value="enterprise">Enterprise</option>
               </select>
             </div>
+          </div>
+
+          {/* Reset admin password */}
+          <div className="border border-slate-200 rounded-lg p-3 space-y-2">
+            <p className="text-xs font-medium text-slate-700">Reset Admin Password</p>
+            <div className="flex gap-2">
+              <input
+                type="password"
+                value={newPassword}
+                onChange={(e) => { setNewPassword(e.target.value); setPwError(''); setPwSuccess(''); }}
+                placeholder="New password (min 6 chars)"
+                className={inputCls}
+              />
+              <button
+                type="button"
+                onClick={handleResetPassword}
+                disabled={pwLoading || !newPassword}
+                className="shrink-0 px-3 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:bg-amber-200 text-white text-xs font-medium transition-colors"
+              >
+                {pwLoading ? '...' : 'Reset'}
+              </button>
+            </div>
+            {pwError && <p className="text-xs text-red-600">{pwError}</p>}
+            {pwSuccess && <p className="text-xs text-emerald-600">{pwSuccess}</p>}
           </div>
 
           {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>}
