@@ -107,6 +107,10 @@ export const teacherApi = {
   getClasses: () => api.get('/teacher/classes'),
   getSettings: () => api.get('/teacher/settings'),
   getSchedule: () => api.get('/teacher/schedule'),
+  getNotifications: () => api.get('/teacher/notifications'),
+  markNotificationRead: (id: string) => api.patch(`/teacher/notifications/${id}/read`),
+  getUnreadCount: () => api.get('/teacher/notifications/unread-count'),
+  markAllRead: () => api.patch('/teacher/notifications/read-all'),
 };
 
 // ---- ADMIN ----
@@ -164,6 +168,8 @@ export const adminApi = {
   getAppointments: () => api.get('/admin/appointments'),
   respondToAppointment: (id: string, data: object) => api.put(`/admin/appointments/${id}`, data),
   sendNotification: (data: object) => api.post('/admin/notifications', data),
+  getUnreadNotificationCount: () => api.get('/admin/notifications/unread-count'),
+  markAllNotificationsRead: () => api.patch('/admin/notifications/read-all'),
   getAnnouncements: () => api.get('/admin/announcements'),
   createAnnouncement: (data: FormData | object) =>
     api.post('/admin/announcements', data,

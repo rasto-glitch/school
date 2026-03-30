@@ -79,6 +79,8 @@ export function createRouter(io: SocketServer) {
   router.put('/admin/appointments/:id', authenticate, authorize('admin'), (req, res) => admin.respondToAppointment(req as AuthRequest, res));
 
   router.post('/admin/notifications', authenticate, authorize('admin'), (req, res) => admin.sendNotification(req as AuthRequest, res));
+  router.get('/admin/notifications/unread-count', authenticate, authorize('admin'), (req, res) => parent.getUnreadCount(req as AuthRequest, res));
+  router.patch('/admin/notifications/read-all', authenticate, authorize('admin'), (req, res) => parent.markAllNotificationsRead(req as AuthRequest, res));
   router.post('/admin/schedule', authenticate, authorize('admin'), upload.single('file'), (req, res) => admin.uploadSchedule(req as AuthRequest, res));
 
   router.get('/admin/announcements', authenticate, authorize('admin', 'teacher', 'parent', 'supervisor'), (req, res) => admin.getAnnouncements(req as AuthRequest, res));
@@ -108,6 +110,8 @@ export function createRouter(io: SocketServer) {
   router.get('/teacher/students', authenticate, authorize('teacher'), (req, res) => teacher.getMyStudents(req as AuthRequest, res));
   router.get('/teacher/classes', authenticate, authorize('teacher'), (req, res) => teacher.getMyClasses(req as AuthRequest, res));
   router.get('/teacher/notifications', authenticate, authorize('teacher'), (req, res) => parent.getNotifications(req as AuthRequest, res));
+  router.get('/teacher/notifications/unread-count', authenticate, authorize('teacher'), (req, res) => parent.getUnreadCount(req as AuthRequest, res));
+  router.patch('/teacher/notifications/read-all', authenticate, authorize('teacher'), (req, res) => parent.markAllNotificationsRead(req as AuthRequest, res));
   router.patch('/teacher/notifications/:id/read', authenticate, authorize('teacher'), (req, res) => parent.markNotificationRead(req as AuthRequest, res));
   router.get('/teacher/announcements', authenticate, authorize('teacher'), (req, res) => admin.getAnnouncements(req as AuthRequest, res));
   router.get('/teacher/subjects', authenticate, authorize('admin', 'teacher'), (req, res) => admin.getSubjects(req as AuthRequest, res));

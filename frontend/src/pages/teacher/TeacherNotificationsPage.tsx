@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Bell, Check, CheckCheck } from 'lucide-react';
-import api from '../../services/api';
+import { teacherApi } from '../../services/api';
+import { useNotificationStore } from '../../store/notificationStore';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
 import EmptyState from '../../components/common/EmptyState';
@@ -22,21 +23,23 @@ function groupByDate(notifications: Notification[]) {
 export default function TeacherNotificationsPage() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
+  const { setTeacherUnreadCount } = useNotificationStore();
 
   useEffect(() => {
-    api.get('/notifications')
+    setTeacherUnreadCount(0);
+    teacherApi.getNotifications()
       .then(r => setNotifications(r.data || []))
       .catch(() => setNotifications([]))
       .finally(() => setLoading(false));
   }, []);
 
   const markRead = async (id: string) => {
-    await api.patch(`/notifications/${id}/read`);
+    await teacherApi.markNotificationRead(id);
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
   };
 
   const markAllRead = async () => {
-    await api.patch('/parent/notifications/read-all');
+    await teacherApi.markAllRead();
     setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
   };
 

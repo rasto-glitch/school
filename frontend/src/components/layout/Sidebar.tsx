@@ -1,10 +1,10 @@
 import { useEffect, useRef } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { io as socketIO } from 'socket.io-client';
 import { useAuthStore } from '../../store/authStore';
 import { useNotificationStore } from '../../store/notificationStore';
-import { parentApi, adminApi } from '../../services/api';
+import { parentApi, adminApi, teacherApi } from '../../services/api';
 import {
   Home, BookOpen, ClipboardList, Megaphone, BarChart2,
   MapPin, Bell, User, Users, GraduationCap, Bus,
@@ -82,21 +82,37 @@ interface SidebarProps {
 export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobileOpen }: SidebarProps) {
   const { user, school, logout, token } = useAuthStore();
   const { t, i18n } = useTranslation();
-  const { unreadCount, setUnreadCount, pendingAppointmentCount, setPendingAppointmentCount, incrementPendingAppointmentCount } = useNotificationStore();
+  const {
+    unreadCount, setUnreadCount,
+    pendingAppointmentCount, setPendingAppointmentCount, incrementPendingAppointmentCount,
+    teacherUnreadCount, setTeacherUnreadCount, incrementTeacherUnreadCount,
+    adminNotificationCount, setAdminNotificationCount, incrementAdminNotificationCount,
+  } = useNotificationStore();
   const socketRef = useRef<ReturnType<typeof socketIO> | null>(null);
+  const location = useLocation();
 
+  // Load initial counts
   useEffect(() => {
     if (user?.role === 'parent') {
       parentApi.getUnreadCount().then(r => setUnreadCount(r.data?.count ?? 0)).catch(() => {});
     }
+    if (user?.role === 'teacher') {
+      teacherApi.getUnreadCount().then(r => setTeacherUnreadCount(r.data?.count ?? 0)).catch(() => {});
+    }
+    if (user?.role === 'admin') {
+      adminApi.getUnreadNotificationCount().then(r => setAdminNotificationCount(r.data?.count ?? 0)).catch(() => {});
+    }
   }, [user?.role]);
 
+  // Socket setup for admin (appointments + notifications) and teacher (notifications)
   useEffect(() => {
-    if (user?.role !== 'admin' || !token) return;
+    if ((user?.role !== 'admin' && user?.role !== 'teacher') || !token) return;
 
-    adminApi.getPendingAppointmentCount()
-      .then(r => setPendingAppointmentCount(r.data?.count ?? 0))
-      .catch(() => {});
+    if (user.role === 'admin') {
+      adminApi.getPendingAppointmentCount()
+        .then(r => setPendingAppointmentCount(r.data?.count ?? 0))
+        .catch(() => {});
+    }
 
     const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
     const socketUrl = apiBase.replace(/\/api$/, '');
@@ -104,7 +120,18 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
     socketRef.current = socket;
 
     socket.on('new_appointment', () => {
-      incrementPendingAppointmentCount();
+      if (window.location.pathname !== '/admin/appointments') {
+        incrementPendingAppointmentCount();
+      }
+    });
+
+    socket.on('notification', () => {
+      if (user.role === 'teacher' && window.location.pathname !== '/teacher/notifications') {
+        incrementTeacherUnreadCount();
+      }
+      if (user.role === 'admin' && window.location.pathname !== '/admin/notifications') {
+        incrementAdminNotificationCount();
+      }
     });
 
     return () => {
@@ -112,6 +139,20 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
       socketRef.current = null;
     };
   }, [user?.role, token]);
+
+  // Auto-clear badge when navigating to the relevant tab
+  useEffect(() => {
+    if (location.pathname === '/teacher/notifications' && teacherUnreadCount > 0) {
+      setTeacherUnreadCount(0);
+    }
+    if (location.pathname === '/admin/notifications' && adminNotificationCount > 0) {
+      setAdminNotificationCount(0);
+    }
+    if (location.pathname === '/admin/appointments' && pendingAppointmentCount > 0) {
+      setPendingAppointmentCount(0);
+    }
+  }, [location.pathname]);
+
   const isRTL = ['ar', 'ku'].includes(i18n.language);
   const showLangSwitcher = user?.role === 'parent' || user?.role === 'driver';
   const items = user ? navItems[user.role] : [];
@@ -164,9 +205,14 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
       <nav className="flex-1 overflow-y-auto py-2">
         {items.map(({ to, icon: Icon, label }) => {
           const showNotifBadge = to === '/parent/notifications' && user?.role === 'parent' && unreadCount > 0;
+          const showTeacherNotifBadge = to === '/teacher/notifications' && user?.role === 'teacher' && teacherUnreadCount > 0;
           const showApptBadge = to === '/admin/appointments' && user?.role === 'admin' && pendingAppointmentCount > 0;
-          const showBadge = showNotifBadge || showApptBadge;
-          const badgeCount = showNotifBadge ? unreadCount : pendingAppointmentCount;
+          const showAdminNotifBadge = to === '/admin/notifications' && user?.role === 'admin' && adminNotificationCount > 0;
+          const showBadge = showNotifBadge || showTeacherNotifBadge || showApptBadge || showAdminNotifBadge;
+          const badgeCount = showNotifBadge ? unreadCount
+            : showTeacherNotifBadge ? teacherUnreadCount
+            : showApptBadge ? pendingAppointmentCount
+            : adminNotificationCount;
           return (
             <NavLink
               key={to}
@@ -174,6 +220,8 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
               onClick={() => {
                 setMobileOpen(false);
                 if (showApptBadge) setPendingAppointmentCount(0);
+                if (showTeacherNotifBadge) setTeacherUnreadCount(0);
+                if (showAdminNotifBadge) setAdminNotificationCount(0);
               }}
               className={({ isActive }) => `
                 flex items-center gap-3 px-4 py-2.5 mx-2 rounded-xl transition-colors duration-150
