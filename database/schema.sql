@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS schools (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   name TEXT NOT NULL,
   slug TEXT UNIQUE NOT NULL,
+  abbreviation TEXT UNIQUE,
   logo_url TEXT,
   primary_color TEXT DEFAULT '#4F46E5',
   secondary_color TEXT DEFAULT '#06B6D4',
@@ -19,8 +20,11 @@ CREATE TABLE IF NOT EXISTS schools (
   subscription_plan TEXT DEFAULT 'basic',
   is_active BOOLEAN DEFAULT TRUE,
   schedule_url TEXT,
+  features JSONB DEFAULT '{"homework":true,"assignments":true,"announcements":true,"grades":true,"reports":true,"bus_tracking":true,"appointments":true,"attendance":true}',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+-- Run this if the table already exists:
+-- ALTER TABLE schools ADD COLUMN IF NOT EXISTS features JSONB DEFAULT '{"homework":true,"assignments":true,"announcements":true,"grades":true,"reports":true,"bus_tracking":true,"appointments":true,"attendance":true}';
 
 -- ============================================================
 -- USERS
@@ -43,6 +47,8 @@ CREATE TABLE IF NOT EXISTS users (
 );
 -- Run this if the table already exists:
 -- ALTER TABLE users ADD COLUMN IF NOT EXISTS password_changed_at TIMESTAMPTZ;
+-- ALTER TABLE schools ADD COLUMN IF NOT EXISTS abbreviation TEXT UNIQUE;
+-- UPDATE schools SET abbreviation = UPPER(slug) WHERE abbreviation IS NULL;
 
 -- ============================================================
 -- BUSES
@@ -426,11 +432,12 @@ CREATE INDEX IF NOT EXISTS idx_archived_students_school ON archived_students(sch
 -- ============================================================
 -- DEMO SCHOOL SEED
 -- ============================================================
-INSERT INTO schools (id, name, slug, primary_color, secondary_color, is_active)
+INSERT INTO schools (id, name, slug, abbreviation, primary_color, secondary_color, is_active)
 VALUES (
   'aaaaaaaa-0000-0000-0000-000000000001',
   'Demo School',
   'demo',
+  'DEMO',
   '#4F46E5',
   '#06B6D4',
   TRUE

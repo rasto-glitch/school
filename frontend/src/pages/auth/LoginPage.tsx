@@ -1,16 +1,14 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { GraduationCap, Eye, EyeOff, LogIn, ArrowLeft } from 'lucide-react';
+import { GraduationCap, Eye, EyeOff, LogIn } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { authApi } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
-
-export const SCHOOL_STORAGE_KEY = 'selected-school';
 
 const schema = z.object({
   username: z.string().min(1, 'Username is required'),
@@ -20,36 +18,24 @@ const schema = z.object({
 
 type FormData = z.infer<typeof schema>;
 
+const ROLE_DASHBOARDS: Record<string, string> = {
+  parent: '/parent/dashboard',
+  teacher: '/teacher/dashboard',
+  admin: '/admin/dashboard',
+  driver: '/driver/dashboard',
+  supervisor: '/supervisor/dashboard',
+};
+
 export default function LoginPage() {
   const navigate = useNavigate();
-  const location = useLocation();
   const { setAuth, isAuthenticated, user } = useAuthStore();
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // School from navigation state (just picked) or localStorage (returning user)
-  const stateSchool = (location.state as any)?.school ?? null;
-  const storedSchool = (() => {
-    try { return JSON.parse(localStorage.getItem(SCHOOL_STORAGE_KEY) || 'null'); }
-    catch { return null; }
-  })();
-  const school = stateSchool ?? storedSchool;
-
-  const ROLE_DASHBOARDS: Record<string, string> = {
-    parent: '/parent/dashboard',
-    teacher: '/teacher/dashboard',
-    admin: '/admin/dashboard',
-    driver: '/driver/dashboard',
-    supervisor: '/supervisor/dashboard',
-  };
-
-  // Already logged in → skip login page
   useEffect(() => {
     if (isAuthenticated() && user) {
       navigate(ROLE_DASHBOARDS[user.role] || '/admin/dashboard', { replace: true });
-      return;
     }
-    if (!school) navigate('/select-school', { replace: true });
   }, []);
 
   const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
@@ -60,30 +46,16 @@ export default function LoginPage() {
   const onSubmit = async (data: FormData) => {
     setLoading(true);
     try {
-      const res = await authApi.login(data.username, data.password, school.slug);
-      const { token, user } = res.data;
-
-      // Persist the school only after a successful login
-      localStorage.setItem(SCHOOL_STORAGE_KEY, JSON.stringify(school));
-
+      const res = await authApi.login(data.username, data.password);
+      const { token, user, school } = res.data;
       setAuth(token, user, school, data.rememberMe);
-
-      const redirects: Record<string, string> = {
-        parent: '/parent/dashboard',
-        teacher: '/teacher/dashboard',
-        admin: '/admin/dashboard',
-        driver: '/driver/dashboard',
-        supervisor: '/supervisor/dashboard',
-      };
-      navigate(redirects[user.role] || '/');
+      navigate(ROLE_DASHBOARDS[user.role] || '/');
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Login failed. Please check your credentials.');
     } finally {
       setLoading(false);
     }
   };
-
-  if (!school) return null;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-600 via-primary-700 to-secondary-600 flex items-center justify-center p-4">
@@ -99,32 +71,10 @@ export default function LoginPage() {
 
         {/* Form card */}
         <div className="bg-white rounded-2xl shadow-2xl p-8">
-          {/* School indicator with back button */}
-          <div className="flex items-center justify-between mb-6 pb-5 border-b border-gray-100">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-primary-100 flex items-center justify-center flex-shrink-0">
-                {school.logoUrl ? (
-                  <img src={school.logoUrl} alt="" className="w-9 h-9 rounded-xl object-cover" />
-                ) : (
-                  <GraduationCap className="w-4 h-4 text-primary-600" />
-                )}
-              </div>
-              <span className="text-sm font-semibold text-gray-800">{school.name}</span>
-            </div>
-            <button
-              type="button"
-              onClick={() => navigate('/select-school')}
-              className="flex items-center gap-1 text-xs text-primary-600 hover:text-primary-800 font-medium transition-colors"
-            >
-              <ArrowLeft className="w-3 h-3" />
-              Change
-            </button>
-          </div>
-
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <Input
               label="Username"
-              placeholder="Enter your username"
+              placeholder="e.g. fisk_username"
               error={errors.username?.message}
               autoComplete="username"
               {...register('username')}
@@ -170,7 +120,7 @@ export default function LoginPage() {
             <div className="text-center mt-3">
               <button
                 type="button"
-                onClick={() => navigate('/forgot-password', { state: { school } })}
+                onClick={() => navigate('/forgot-password')}
                 className="text-sm text-primary-600 hover:text-primary-800 font-medium transition-colors"
               >
                 Forgot password?

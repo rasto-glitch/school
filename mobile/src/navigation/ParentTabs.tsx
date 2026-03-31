@@ -14,6 +14,7 @@ import { useColors } from '../store/themeStore';
 import { useBadgeStore } from '../store/badgeStore';
 import { font } from '../theme';
 import { parentApi } from '../services/api';
+import { useAuthStore } from '../store/authStore';
 
 const Tab = createBottomTabNavigator();
 
@@ -31,10 +32,13 @@ export default function ParentTabs() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const navigation = useNavigation<any>();
+  const { school } = useAuthStore();
   const [homeworkCount, setHomeworkCount] = useState(0);
   const [assignmentCount, setAssignmentCount] = useState(0);
   const { unreadCount, setUnreadCount, setReportCount, setBookingCount } = useBadgeStore();
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const feat = (key: string) => school?.features?.[key] !== false;
 
   const fetchCounts = useCallback(() => {
     parentApi.getUnreadCount()
@@ -128,45 +132,51 @@ export default function ParentTabs() {
           tabBarIcon: ({ color }) => <Home size={22} color={color} />,
         }}
       />
-      <Tab.Screen
-        name="Homework"
-        component={HomeworkScreen}
-        listeners={{ tabPress: handleHomeworkPress }}
-        options={{
-          headerTitle: t('nav.homework'),
-          tabBarLabel: t('nav.homework'),
-          tabBarIcon: ({ color }) => (
-            <View>
-              <BookOpen size={22} color={color} />
-              <TabBadge count={homeworkCount} />
-            </View>
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="Assignments"
-        component={AssignmentsScreen}
-        listeners={{ tabPress: handleAssignmentPress }}
-        options={{
-          headerTitle: t('nav.assignments', 'Assignments'),
-          tabBarLabel: t('nav.assignments', 'Assignments'),
-          tabBarIcon: ({ color }) => (
-            <View>
-              <ClipboardList size={22} color={color} />
-              <TabBadge count={assignmentCount} />
-            </View>
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="BusTracking"
-        component={BusTrackingScreen}
-        options={{
-          headerTitle: t('nav.track_bus'),
-          tabBarLabel: t('nav.track_bus'),
-          tabBarIcon: ({ color }) => <Bus size={22} color={color} />,
-        }}
-      />
+      {feat('homework') && (
+        <Tab.Screen
+          name="Homework"
+          component={HomeworkScreen}
+          listeners={{ tabPress: handleHomeworkPress }}
+          options={{
+            headerTitle: t('nav.homework'),
+            tabBarLabel: t('nav.homework'),
+            tabBarIcon: ({ color }) => (
+              <View>
+                <BookOpen size={22} color={color} />
+                <TabBadge count={homeworkCount} />
+              </View>
+            ),
+          }}
+        />
+      )}
+      {feat('assignments') && (
+        <Tab.Screen
+          name="Assignments"
+          component={AssignmentsScreen}
+          listeners={{ tabPress: handleAssignmentPress }}
+          options={{
+            headerTitle: t('nav.assignments', 'Assignments'),
+            tabBarLabel: t('nav.assignments', 'Assignments'),
+            tabBarIcon: ({ color }) => (
+              <View>
+                <ClipboardList size={22} color={color} />
+                <TabBadge count={assignmentCount} />
+              </View>
+            ),
+          }}
+        />
+      )}
+      {feat('bus_tracking') && (
+        <Tab.Screen
+          name="BusTracking"
+          component={BusTrackingScreen}
+          options={{
+            headerTitle: t('nav.track_bus'),
+            tabBarLabel: t('nav.track_bus'),
+            tabBarIcon: ({ color }) => <Bus size={22} color={color} />,
+          }}
+        />
+      )}
       <Tab.Screen
         name="Me"
         component={MeScreen}

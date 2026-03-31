@@ -4,9 +4,11 @@ export interface School {
   id: string;
   name: string;
   slug: string;
+  abbreviation?: string;
   logoUrl?: string;
   primaryColor: string;
   secondaryColor: string;
+  features?: Record<string, boolean>;
 }
 
 export interface AuthUser {

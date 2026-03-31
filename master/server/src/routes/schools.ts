@@ -38,24 +38,29 @@ router.get('/', async (_req: Request, res: Response) => {
 // POST /api/schools — create school + seed admin account
 router.post('/', async (req: Request, res: Response) => {
   const {
-    name, slug, primaryColor, secondaryColor, domain, subscriptionPlan,
+    name, slug, abbreviation, primaryColor, secondaryColor, domain, subscriptionPlan, features,
     adminFirstName, adminLastName, adminUsername, adminPassword, adminEmail,
   } = req.body;
 
-  if (!name || !slug || !adminFirstName || !adminLastName || !adminUsername || !adminPassword) {
-    res.status(400).json({ error: 'name, slug, adminFirstName, adminLastName, adminUsername, adminPassword are required' });
+  if (!name || !slug || !abbreviation || !adminFirstName || !adminLastName || !adminUsername || !adminPassword) {
+    res.status(400).json({ error: 'name, slug, abbreviation, adminFirstName, adminLastName, adminUsername, adminPassword are required' });
     return;
   }
+
+  const abbrev = abbreviation.toLowerCase();
+  const finalAdminUsername = adminUsername.startsWith(`${abbrev}_`) ? adminUsername : `${abbrev}_${adminUsername}`;
 
   const { data: school, error: schoolErr } = await supabase
     .from('schools')
     .insert({
       name,
       slug,
+      abbreviation: abbreviation.toUpperCase(),
       primary_color: primaryColor || '#4F46E5',
       secondary_color: secondaryColor || '#06B6D4',
       domain: domain || null,
       subscription_plan: subscriptionPlan || 'basic',
+      ...(features && { features }),
       is_active: true,
     })
     .select()
@@ -67,7 +72,7 @@ router.post('/', async (req: Request, res: Response) => {
   const { error: userErr } = await supabase.from('users').insert({
     school_id: school.id,
     email: adminEmail || null,
-    username: adminUsername,
+    username: finalAdminUsername,
     password_hash: passwordHash,
     role: 'admin',
     first_name: adminFirstName,
@@ -87,17 +92,19 @@ router.post('/', async (req: Request, res: Response) => {
 // PUT /api/schools/:id — edit school details
 router.put('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { name, slug, primaryColor, secondaryColor, domain, subscriptionPlan } = req.body;
+  const { name, slug, abbreviation, primaryColor, secondaryColor, domain, subscriptionPlan, features } = req.body;
 
   const { data, error } = await supabase
     .from('schools')
     .update({
       name,
       slug,
+      ...(abbreviation && { abbreviation: abbreviation.toUpperCase() }),
       primary_color: primaryColor,
       secondary_color: secondaryColor,
       domain: domain || null,
       subscription_plan: subscriptionPlan,
+      ...(features && { features }),
     })
     .eq('id', id)
     .select()

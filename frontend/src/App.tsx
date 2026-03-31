@@ -4,8 +4,7 @@ import 'react-toastify/dist/ReactToastify.css';
 import { useAuthStore } from './store/authStore';
 
 // Auth
-import LoginPage, { SCHOOL_STORAGE_KEY } from './pages/auth/LoginPage';
-import SchoolPickerPage from './pages/auth/SchoolPickerPage';
+import LoginPage from './pages/auth/LoginPage';
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage';
 
 // Parent
@@ -97,8 +96,7 @@ function RootRedirect() {
     supervisor: '/supervisor/dashboard',
   };
   if (isAuthenticated()) return <Navigate to={roleRedirects[user?.role || ''] || '/login'} replace />;
-  const hasStoredSchool = !!localStorage.getItem(SCHOOL_STORAGE_KEY);
-  return <Navigate to={hasStoredSchool ? '/login' : '/select-school'} replace />;
+  return <Navigate to="/login" replace />;
 }
 
 export default function App() {
@@ -107,7 +105,7 @@ export default function App() {
       <ToastContainer position="top-right" autoClose={4000} />
       <Routes>
         <Route path="/" element={<RootRedirect />} />
-        <Route path="/select-school" element={<SchoolPickerPage />} />
+        <Route path="/select-school" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
 

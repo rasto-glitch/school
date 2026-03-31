@@ -30,16 +30,16 @@ export default api;
 // ---- AUTH ----
 export const authApi = {
   getSchools: () => api.get('/schools'),
-  login: (username: string, password: string, schoolSlug: string) =>
-    api.post('/auth/login', { username, password, schoolSlug }),
+  login: (username: string, password: string) =>
+    api.post('/auth/login', { username, password }),
   registerDeviceToken: (token: string, language: string) =>
     api.post('/auth/device-token', { token, language }),
   updateDeviceLanguage: (language: string) =>
     api.put('/auth/device-language', { language }),
   changePassword: (currentPassword: string, newPassword: string) =>
     api.post('/auth/change-password', { currentPassword, newPassword }),
-  forgotPassword: (username: string, schoolSlug: string) =>
-    api.post('/auth/forgot-password', { username, schoolSlug }),
+  forgotPassword: (username: string) =>
+    api.post('/auth/forgot-password', { username }),
 };
 
 // ---- PARENT ----

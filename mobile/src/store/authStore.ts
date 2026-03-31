@@ -7,8 +7,6 @@ interface AuthState {
   token: string | null;
   user: AuthUser | null;
   school: School | null;
-  selectedSchool: School | null;
-  setSelectedSchool: (school: School) => void;
   setAuth: (token: string, user: AuthUser, school: School) => void;
   logout: () => void;
   isAuthenticated: () => boolean;
@@ -20,9 +18,7 @@ export const useAuthStore = create<AuthState>()(
       token: null,
       user: null,
       school: null,
-      selectedSchool: null,
-      setSelectedSchool: (school) => set({ selectedSchool: school }),
-      setAuth: (token, user, school) => set({ token, user, school, selectedSchool: school }),
+      setAuth: (token, user, school) => set({ token, user, school }),
       logout: () => set({ token: null, user: null, school: null }),
       isAuthenticated: () => !!get().token && !!get().user,
     }),

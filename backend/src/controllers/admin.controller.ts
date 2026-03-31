@@ -165,12 +165,16 @@ export async function bulkUploadStudents(req: AuthRequest, res: Response): Promi
     { data: existingParents },
     { data: existingParentUsers },
     { data: existingStudents },
+    { data: schoolData },
   ] = await Promise.all([
     supabase.from('classes').select('id, name').eq('school_id', schoolId),
     supabase.from('parents').select('id, full_name, phone_number').eq('school_id', schoolId),
     supabase.from('users').select('username').eq('school_id', schoolId).eq('role', 'parent'),
     supabase.from('students').select('full_name').eq('school_id', schoolId),
+    supabase.from('schools').select('abbreviation').eq('id', schoolId).single(),
   ]);
+
+  const schoolAbbrev = (schoolData?.abbreviation || '').toLowerCase();
 
   const classExactMap = new Map<string, string>(); // name.toLowerCase() → id
   const classNormMap  = new Map<string, string>(); // stripped form → id
@@ -230,7 +234,8 @@ export async function bulkUploadStudents(req: AuthRequest, res: Response): Promi
   const skipped: string[] = [];
 
   const generateParentUsername = (fn: string, gn: string): string => {
-    const base = (fn + gn).toLowerCase().replace(/[^a-z0-9]/g, '');
+    const prefix = schoolAbbrev ? `${schoolAbbrev}_` : '';
+    const base = `${prefix}${(fn + gn).toLowerCase().replace(/[^a-z0-9]/g, '')}`;
     if (!takenUsernames.has(base)) { takenUsernames.add(base); return base; }
     let n = 2;
     while (takenUsernames.has(`${base}${n}`)) n++;
@@ -710,8 +715,12 @@ export async function createTeacher(req: AuthRequest, res: Response): Promise<vo
   const { schoolId } = req.user!;
   const { fullName, phoneNumber, emergencyContact, subject, classIds, classId, username, password } = req.body;
 
+  const { data: schoolData } = await supabase.from('schools').select('abbreviation').eq('id', schoolId).single();
+  const abbrev = (schoolData?.abbreviation || '').toLowerCase();
+  const rawUsername = username || fullName.toLowerCase().replace(/\s+/g, '.');
+  const finalUsername = abbrev && !rawUsername.startsWith(`${abbrev}_`) ? `${abbrev}_${rawUsername}` : rawUsername;
+
   const rounds = parseInt(process.env.BCRYPT_ROUNDS || '10');
-  const finalUsername = username || fullName.toLowerCase().replace(/\s+/g, '.');
   const finalPassword = password || 'Teacher@123';
   const passwordHash = await bcrypt.hash(finalPassword, rounds);
 
@@ -819,8 +828,12 @@ export async function createDriver(req: AuthRequest, res: Response): Promise<voi
   const { schoolId } = req.user!;
   const { fullName, phoneNumber, emergencyContact, licenseNumber, busNumber, age, username, password, studentIds, vehicleType } = req.body;
 
+  const { data: schoolData } = await supabase.from('schools').select('abbreviation').eq('id', schoolId).single();
+  const abbrev = (schoolData?.abbreviation || '').toLowerCase();
+  const rawUsername = username || fullName.toLowerCase().replace(/\s+/g, '.');
+  const finalUsername = abbrev && !rawUsername.startsWith(`${abbrev}_`) ? `${abbrev}_${rawUsername}` : rawUsername;
+
   const rounds = parseInt(process.env.BCRYPT_ROUNDS || '10');
-  const finalUsername = username || fullName.toLowerCase().replace(/\s+/g, '.');
   const finalPassword = password || 'Driver@123';
   const passwordHash = await bcrypt.hash(finalPassword, rounds);
 
@@ -935,6 +948,10 @@ export async function createAccount(req: AuthRequest, res: Response): Promise<vo
   const { schoolId } = req.user!;
   const { firstName, lastName, email, phone, username, password, role } = req.body;
 
+  const { data: schoolData } = await supabase.from('schools').select('abbreviation').eq('id', schoolId).single();
+  const abbrev = (schoolData?.abbreviation || '').toLowerCase();
+  const finalUsername = abbrev && !username.startsWith(`${abbrev}_`) ? `${abbrev}_${username}` : username;
+
   const rounds = parseInt(process.env.BCRYPT_ROUNDS || '10');
   const passwordHash = await bcrypt.hash(password, rounds);
 
@@ -944,7 +961,7 @@ export async function createAccount(req: AuthRequest, res: Response): Promise<vo
     last_name: lastName,
     email: email || null,
     phone: phone || null,
-    username,
+    username: finalUsername,
     password_hash: passwordHash,
     role,
   }).select().single();

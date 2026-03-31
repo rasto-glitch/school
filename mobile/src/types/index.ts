@@ -7,6 +7,7 @@ export interface School {
   logoUrl?: string;
   primaryColor: string;
   secondaryColor: string;
+  features?: Record<string, boolean>;
 }
 
 export interface AuthUser {

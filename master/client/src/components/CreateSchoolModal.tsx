@@ -1,5 +1,5 @@
 import { useState, FormEvent } from 'react';
-import { createSchool, School } from '../api';
+import { createSchool, School, DEFAULT_FEATURES, SchoolFeatures } from '../api';
 
 interface Props {
   onClose: () => void;
@@ -10,6 +10,7 @@ export default function CreateSchoolModal({ onClose, onCreated }: Props) {
   const [form, setForm] = useState({
     name: '',
     slug: '',
+    abbreviation: '',
     primaryColor: '#4F46E5',
     secondaryColor: '#06B6D4',
     domain: '',
@@ -20,6 +21,10 @@ export default function CreateSchoolModal({ onClose, onCreated }: Props) {
     adminPassword: '',
     adminEmail: '',
   });
+  const [features, setFeatures] = useState<SchoolFeatures>({ ...DEFAULT_FEATURES });
+
+  const toggleFeature = (key: keyof SchoolFeatures) =>
+    setFeatures(f => ({ ...f, [key]: !f[key] }));
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -29,9 +34,12 @@ export default function CreateSchoolModal({ onClose, onCreated }: Props) {
   const autoSlug = (name: string) =>
     name.toLowerCase().trim().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
 
+  const autoAbbrev = (name: string) =>
+    name.trim().split(/\s+/).map(w => w[0] || '').join('').toUpperCase().slice(0, 8);
+
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const name = e.target.value;
-    setForm((f) => ({ ...f, name, slug: autoSlug(name) }));
+    setForm((f) => ({ ...f, name, slug: autoSlug(name), abbreviation: autoAbbrev(name) }));
   };
 
   const handleSubmit = async (e: FormEvent) => {
@@ -42,10 +50,12 @@ export default function CreateSchoolModal({ onClose, onCreated }: Props) {
       const res = await createSchool({
         name: form.name,
         slug: form.slug,
+        abbreviation: form.abbreviation,
         primaryColor: form.primaryColor,
         secondaryColor: form.secondaryColor,
         domain: form.domain || undefined,
         subscriptionPlan: form.subscriptionPlan,
+        features,
         adminFirstName: form.adminFirstName,
         adminLastName: form.adminLastName,
         adminUsername: form.adminUsername,
@@ -69,10 +79,13 @@ export default function CreateSchoolModal({ onClose, onCreated }: Props) {
             <Field label="School Name" required>
               <input type="text" value={form.name} onChange={handleNameChange} required className={inputCls} placeholder="Green Valley Academy" />
             </Field>
-            <Field label="Slug" required hint="Used in login URL">
+            <Field label="Slug" required hint="URL identifier">
               <input type="text" value={form.slug} onChange={set('slug')} required pattern="[a-z0-9-]+" className={inputCls} placeholder="green-valley" />
             </Field>
           </div>
+          <Field label="Abbreviation" required hint="Prefix for all usernames, e.g. GVA → gva_username">
+            <input type="text" value={form.abbreviation} onChange={set('abbreviation')} required maxLength={8} className={`${inputCls} uppercase`} placeholder="GVA" />
+          </Field>
           <div className="grid grid-cols-3 gap-3">
             <Field label="Primary Color">
               <div className="flex items-center gap-2">
@@ -109,7 +122,7 @@ export default function CreateSchoolModal({ onClose, onCreated }: Props) {
             </Field>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Username" required>
+            <Field label="Username" required hint={form.abbreviation ? `will be saved as ${form.abbreviation.toLowerCase()}_username` : ''}>
               <input type="text" value={form.adminUsername} onChange={set('adminUsername')} required className={inputCls} placeholder="admin" />
             </Field>
             <Field label="Password" required>
@@ -119,6 +132,22 @@ export default function CreateSchoolModal({ onClose, onCreated }: Props) {
           <Field label="Email (optional)">
             <input type="email" value={form.adminEmail} onChange={set('adminEmail')} className={inputCls} placeholder="admin@school.com" />
           </Field>
+        </Section>
+
+        <Section label="Features">
+          <div className="grid grid-cols-2 gap-2">
+            {(Object.keys(features) as (keyof SchoolFeatures)[]).map(key => (
+              <label key={key} className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={features[key]}
+                  onChange={() => toggleFeature(key)}
+                  className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                <span className="text-sm text-slate-700 capitalize">{key.replace('_', ' ')}</span>
+              </label>
+            ))}
+          </div>
         </Section>
 
         {error && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>}

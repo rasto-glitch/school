@@ -14,29 +14,29 @@ import {
 import type { Dispatch, SetStateAction } from 'react';
 import type { Role } from '../../types';
 
-type NavItem = { to: string; icon: React.ElementType; label: string };
+type NavItem = { to: string; icon: React.ElementType; label: string; feature?: string };
 
 const navItems: Record<Role, NavItem[]> = {
   parent: [
     { to: '/parent/dashboard', icon: Home, label: 'Dashboard' },
-    { to: '/parent/homework', icon: BookOpen, label: 'Homework' },
-    { to: '/parent/assignments', icon: ClipboardList, label: 'Assignments' },
-    { to: '/parent/announcements', icon: Megaphone, label: 'Announcements' },
-    { to: '/parent/grades', icon: Star, label: 'Grades' },
-    { to: '/parent/reports', icon: BarChart2, label: 'Reports' },
-    { to: '/parent/bus', icon: MapPin, label: 'Track Bus' },
-    { to: '/parent/appointments', icon: Calendar, label: 'Appointments' },
+    { to: '/parent/homework', icon: BookOpen, label: 'Homework', feature: 'homework' },
+    { to: '/parent/assignments', icon: ClipboardList, label: 'Assignments', feature: 'assignments' },
+    { to: '/parent/announcements', icon: Megaphone, label: 'Announcements', feature: 'announcements' },
+    { to: '/parent/grades', icon: Star, label: 'Grades', feature: 'grades' },
+    { to: '/parent/reports', icon: BarChart2, label: 'Reports', feature: 'reports' },
+    { to: '/parent/bus', icon: MapPin, label: 'Track Bus', feature: 'bus_tracking' },
+    { to: '/parent/appointments', icon: Calendar, label: 'Appointments', feature: 'appointments' },
     { to: '/parent/notifications', icon: Bell, label: 'Notifications' },
     { to: '/parent/profile', icon: User, label: 'Profile' },
   ],
   teacher: [
     { to: '/teacher/dashboard', icon: Home, label: 'Dashboard' },
-    { to: '/teacher/attendance', icon: ClipboardCheck, label: 'Attendance' },
-    { to: '/teacher/homework', icon: BookOpen, label: 'Homework' },
-    { to: '/teacher/assignments', icon: ClipboardList, label: 'Assignments' },
-    { to: '/teacher/reports', icon: FileText, label: 'Reports' },
-    { to: '/teacher/grades', icon: Star, label: 'Grades' },
-    { to: '/teacher/weekly-summary', icon: Clock, label: 'Weekly Summary' },
+    { to: '/teacher/attendance', icon: ClipboardCheck, label: 'Attendance', feature: 'attendance' },
+    { to: '/teacher/homework', icon: BookOpen, label: 'Homework', feature: 'homework' },
+    { to: '/teacher/assignments', icon: ClipboardList, label: 'Assignments', feature: 'assignments' },
+    { to: '/teacher/reports', icon: FileText, label: 'Reports', feature: 'reports' },
+    { to: '/teacher/grades', icon: Star, label: 'Grades', feature: 'grades' },
+    { to: '/teacher/weekly-summary', icon: Clock, label: 'Weekly Summary', feature: 'homework' },
     { to: '/teacher/students', icon: Users, label: 'Students' },
     { to: '/teacher/notifications', icon: Bell, label: 'Notifications' },
     { to: '/teacher/profile', icon: User, label: 'Profile' },
@@ -46,9 +46,9 @@ const navItems: Record<Role, NavItem[]> = {
     { to: '/admin/students', icon: GraduationCap, label: 'Students' },
     { to: '/admin/classes', icon: BookOpen, label: 'Classes' },
     { to: '/admin/teachers', icon: Users, label: 'Teachers' },
-    { to: '/admin/drivers', icon: Bus, label: 'Drivers' },
-    { to: '/admin/appointments', icon: Calendar, label: 'Appointments' },
-    { to: '/admin/announcements', icon: Megaphone, label: 'Announcements' },
+    { to: '/admin/drivers', icon: Bus, label: 'Drivers', feature: 'bus_tracking' },
+    { to: '/admin/appointments', icon: Calendar, label: 'Appointments', feature: 'appointments' },
+    { to: '/admin/announcements', icon: Megaphone, label: 'Announcements', feature: 'announcements' },
     { to: '/admin/notifications', icon: Bell, label: 'Notifications' },
     { to: '/admin/accounts', icon: UserCog, label: 'Accounts' },
     { to: '/admin/settings', icon: Settings, label: 'Settings' },
@@ -62,12 +62,12 @@ const navItems: Record<Role, NavItem[]> = {
   ],
   supervisor: [
     { to: '/supervisor/dashboard', icon: Home, label: 'Dashboard' },
-    { to: '/supervisor/absent-today', icon: Users, label: 'Absent Today' },
-    { to: '/supervisor/attendance', icon: ClipboardCheck, label: 'Attendance' },
-    { to: '/supervisor/homework', icon: BookOpen, label: 'Homework' },
-    { to: '/supervisor/assignments', icon: ClipboardList, label: 'Assignments' },
-    { to: '/supervisor/weekly-summary', icon: Clock, label: 'Weekly Summary' },
-    { to: '/supervisor/student-reports', icon: FileText, label: 'Student Reports' },
+    { to: '/supervisor/absent-today', icon: Users, label: 'Absent Today', feature: 'attendance' },
+    { to: '/supervisor/attendance', icon: ClipboardCheck, label: 'Attendance', feature: 'attendance' },
+    { to: '/supervisor/homework', icon: BookOpen, label: 'Homework', feature: 'homework' },
+    { to: '/supervisor/assignments', icon: ClipboardList, label: 'Assignments', feature: 'assignments' },
+    { to: '/supervisor/weekly-summary', icon: Clock, label: 'Weekly Summary', feature: 'homework' },
+    { to: '/supervisor/student-reports', icon: FileText, label: 'Student Reports', feature: 'reports' },
     { to: '/supervisor/profile', icon: User, label: 'Profile' },
   ],
 };
@@ -155,7 +155,8 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
 
   const isRTL = ['ar', 'ku'].includes(i18n.language);
   const showLangSwitcher = user?.role === 'parent' || user?.role === 'driver';
-  const items = user ? navItems[user.role] : [];
+  const isFeatureEnabled = (feature?: string) => !feature || school?.features?.[feature] !== false;
+  const items = user ? navItems[user.role].filter(item => isFeatureEnabled(item.feature)) : [];
 
   return (
     <aside className={`

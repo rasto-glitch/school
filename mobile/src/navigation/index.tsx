@@ -2,7 +2,6 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuthStore } from '../store/authStore';
 import { useColors } from '../store/themeStore';
-import SchoolPickerScreen from '../screens/auth/SchoolPickerScreen';
 import LoginScreen from '../screens/auth/LoginScreen';
 import ParentTabs from './ParentTabs';
 import DriverTabs from './DriverTabs';
@@ -22,7 +21,6 @@ import AnnouncementDetailScreen from '../screens/parent/AnnouncementDetailScreen
 import type { Homework, Announcement } from '../types';
 
 export type RootStackParamList = {
-  SchoolPicker: undefined;
   Login: undefined;
   ParentTabs: undefined;
   DriverTabs: undefined;
@@ -44,7 +42,7 @@ export type RootStackParamList = {
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function Navigation() {
-  const { user, isAuthenticated, selectedSchool } = useAuthStore();
+  const { user, isAuthenticated } = useAuthStore();
   const colors = useColors();
   const authed = isAuthenticated();
 
@@ -59,11 +57,7 @@ export default function Navigation() {
         }}
       >
         {!authed ? (
-          !selectedSchool ? (
-            <Stack.Screen name="SchoolPicker" component={SchoolPickerScreen} />
-          ) : (
-            <Stack.Screen name="Login" component={LoginScreen} />
-          )
+          <Stack.Screen name="Login" component={LoginScreen} />
         ) : user?.role === 'driver' ? (
           <>
             <Stack.Screen name="DriverTabs" component={DriverTabs} />

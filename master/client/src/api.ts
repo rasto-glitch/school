@@ -19,16 +19,40 @@ api.interceptors.response.use(
   }
 );
 
+export interface SchoolFeatures {
+  homework: boolean;
+  assignments: boolean;
+  announcements: boolean;
+  grades: boolean;
+  reports: boolean;
+  bus_tracking: boolean;
+  appointments: boolean;
+  attendance: boolean;
+}
+
+export const DEFAULT_FEATURES: SchoolFeatures = {
+  homework: true,
+  assignments: true,
+  announcements: true,
+  grades: true,
+  reports: true,
+  bus_tracking: true,
+  appointments: true,
+  attendance: true,
+};
+
 export interface School {
   id: string;
   name: string;
   slug: string;
+  abbreviation: string;
   logo_url: string | null;
   primary_color: string;
   secondary_color: string;
   domain: string | null;
   subscription_plan: string;
   is_active: boolean;
+  features: SchoolFeatures;
   created_at: string;
   studentCount: number;
   adminCount: number;
@@ -38,10 +62,12 @@ export interface School {
 export interface CreateSchoolPayload {
   name: string;
   slug: string;
+  abbreviation: string;
   primaryColor: string;
   secondaryColor: string;
   domain?: string;
   subscriptionPlan: string;
+  features: SchoolFeatures;
   adminFirstName: string;
   adminLastName: string;
   adminUsername: string;
@@ -52,10 +78,12 @@ export interface CreateSchoolPayload {
 export interface UpdateSchoolPayload {
   name: string;
   slug: string;
+  abbreviation: string;
   primaryColor: string;
   secondaryColor: string;
   domain?: string;
   subscriptionPlan: string;
+  features: SchoolFeatures;
 }
 
 export const authLogin = (secret: string) =>

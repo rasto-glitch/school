@@ -16,23 +16,31 @@ export async function getSchools(_req: Request, res: Response): Promise<void> {
 }
 
 export async function login(req: Request, res: Response): Promise<void> {
-  const { username, password, schoolSlug } = req.body;
+  const { username, password } = req.body;
 
-  if (!username || !password || !schoolSlug) {
-    res.status(400).json({ error: 'username, password and schoolSlug are required' });
+  if (!username || !password) {
+    res.status(400).json({ error: 'username and password are required' });
     return;
   }
 
-  // Find school
+  // Parse school abbreviation from username prefix (e.g. "fisk_karzanahmed" → "fisk")
+  const underscoreIdx = username.indexOf('_');
+  if (underscoreIdx === -1) {
+    res.status(401).json({ error: 'Invalid credentials' });
+    return;
+  }
+  const abbreviation = username.substring(0, underscoreIdx).toLowerCase();
+
+  // Find school by abbreviation
   const { data: school, error: schoolErr } = await supabase
     .from('schools')
-    .select('id, name, slug, logo_url, primary_color, secondary_color')
-    .eq('slug', schoolSlug)
+    .select('id, name, slug, logo_url, primary_color, secondary_color, features')
+    .ilike('abbreviation', abbreviation)
     .eq('is_active', true)
     .single();
 
   if (schoolErr || !school) {
-    res.status(404).json({ error: 'School not found' });
+    res.status(401).json({ error: 'Invalid credentials' });
     return;
   }
 
@@ -83,20 +91,25 @@ export async function login(req: Request, res: Response): Promise<void> {
       logoUrl: school.logo_url,
       primaryColor: school.primary_color,
       secondaryColor: school.secondary_color,
+      features: school.features ?? {},
     },
   });
 }
 
 export async function forgotPassword(req: Request, res: Response): Promise<void> {
-  const { username, schoolSlug } = req.body;
-  if (!username || !schoolSlug) {
-    res.status(400).json({ error: 'username and schoolSlug are required' });
+  const { username } = req.body;
+  if (!username) {
+    res.status(400).json({ error: 'username is required' });
     return;
   }
 
+  const underscoreIdx = username.indexOf('_');
+  if (underscoreIdx === -1) { res.json({ message: 'If this username exists, a reset request has been submitted to your school administrator.' }); return; }
+  const abbreviation = username.substring(0, underscoreIdx).toLowerCase();
+
   const { data: school } = await supabase
-    .from('schools').select('id').eq('slug', schoolSlug).eq('is_active', true).single();
-  if (!school) { res.status(404).json({ error: 'School not found' }); return; }
+    .from('schools').select('id').ilike('abbreviation', abbreviation).eq('is_active', true).single();
+  if (!school) { res.json({ message: 'If this username exists, a reset request has been submitted to your school administrator.' }); return; }
 
   const { data: user } = await supabase
     .from('users').select('id, first_name, last_name')

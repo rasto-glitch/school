@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Home, CalendarCheck, BookOpen, Users, User } from 'lucide-react-native';
 import { useColors } from '../store/themeStore';
+import { useAuthStore } from '../store/authStore';
 import SupervisorDashboardScreen from '../screens/supervisor/SupervisorDashboardScreen';
 import SupervisorAttendanceScreen from '../screens/supervisor/SupervisorAttendanceScreen';
 import SupervisorContentScreen from '../screens/supervisor/SupervisorContentScreen';
@@ -17,6 +18,8 @@ export default function SupervisorTabs() {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const colors = useColors();
+  const { school } = useAuthStore();
+  const feat = (key: string) => school?.features?.[key] !== false;
 
   return (
     <Tab.Navigator
@@ -41,11 +44,13 @@ export default function SupervisorTabs() {
         component={SupervisorDashboardScreen}
         options={{ tabBarLabel: t('nav.dashboard', 'Dashboard'), tabBarIcon: ({ color }) => <Home size={ICON_SIZE} color={color} /> }}
       />
-      <Tab.Screen
-        name="SupervisorAttendance"
-        component={SupervisorAttendanceScreen}
-        options={{ tabBarLabel: t('nav.attendance', 'Attendance'), tabBarIcon: ({ color }) => <CalendarCheck size={ICON_SIZE} color={color} /> }}
-      />
+      {feat('attendance') && (
+        <Tab.Screen
+          name="SupervisorAttendance"
+          component={SupervisorAttendanceScreen}
+          options={{ tabBarLabel: t('nav.attendance', 'Attendance'), tabBarIcon: ({ color }) => <CalendarCheck size={ICON_SIZE} color={color} /> }}
+        />
+      )}
       <Tab.Screen
         name="SupervisorContent"
         component={SupervisorContentScreen}

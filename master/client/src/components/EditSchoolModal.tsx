@@ -1,5 +1,5 @@
 import { useState, FormEvent } from 'react';
-import { updateSchool, resetAdminPassword, School } from '../api';
+import { updateSchool, resetAdminPassword, School, DEFAULT_FEATURES, SchoolFeatures } from '../api';
 
 interface Props {
   school: School;
@@ -11,11 +11,16 @@ export default function EditSchoolModal({ school, onClose, onUpdated }: Props) {
   const [form, setForm] = useState({
     name: school.name,
     slug: school.slug,
+    abbreviation: school.abbreviation || '',
     primaryColor: school.primary_color,
     secondaryColor: school.secondary_color,
     domain: school.domain || '',
     subscriptionPlan: school.subscription_plan || 'basic',
   });
+  const [features, setFeatures] = useState<SchoolFeatures>({ ...DEFAULT_FEATURES, ...school.features });
+
+  const toggleFeature = (key: keyof SchoolFeatures) =>
+    setFeatures(f => ({ ...f, [key]: !f[key] }));
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -35,10 +40,12 @@ export default function EditSchoolModal({ school, onClose, onUpdated }: Props) {
       const res = await updateSchool(school.id, {
         name: form.name,
         slug: form.slug,
+        abbreviation: form.abbreviation,
         primaryColor: form.primaryColor,
         secondaryColor: form.secondaryColor,
         domain: form.domain || undefined,
         subscriptionPlan: form.subscriptionPlan,
+        features,
       });
       onUpdated({ ...school, ...res.data });
     } catch (err: unknown) {
@@ -90,6 +97,10 @@ export default function EditSchoolModal({ school, onClose, onUpdated }: Props) {
               <input type="text" value={form.slug} onChange={set('slug')} required pattern="[a-z0-9-]+" className={inputCls} />
             </div>
           </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-700 mb-1">Abbreviation <span className="text-red-500">*</span> <span className="text-slate-400 font-normal">(username prefix, e.g. FISK)</span></label>
+            <input type="text" value={form.abbreviation} onChange={set('abbreviation')} required maxLength={8} className={`${inputCls} uppercase`} placeholder="FISK" />
+          </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -120,6 +131,24 @@ export default function EditSchoolModal({ school, onClose, onUpdated }: Props) {
                 <option value="pro">Pro</option>
                 <option value="enterprise">Enterprise</option>
               </select>
+            </div>
+          </div>
+
+          {/* Features */}
+          <div>
+            <p className="text-xs font-medium text-slate-700 mb-2">Features</p>
+            <div className="grid grid-cols-2 gap-2">
+              {(Object.keys(features) as (keyof SchoolFeatures)[]).map(key => (
+                <label key={key} className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={features[key]}
+                    onChange={() => toggleFeature(key)}
+                    className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <span className="text-sm text-slate-700 capitalize">{key.replace('_', ' ')}</span>
+                </label>
+              ))}
             </div>
           </div>
 
