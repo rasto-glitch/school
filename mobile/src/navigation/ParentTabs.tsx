@@ -132,7 +132,7 @@ export default function ParentTabs() {
           tabBarIcon: ({ color }) => <Home size={22} color={color} />,
         }}
       />
-      {feat('homework') && (
+      {feat('homework') ? (
         <Tab.Screen
           name="Homework"
           component={HomeworkScreen}
@@ -148,8 +148,8 @@ export default function ParentTabs() {
             ),
           }}
         />
-      )}
-      {feat('assignments') && (
+      ) : null}
+      {feat('assignments') ? (
         <Tab.Screen
           name="Assignments"
           component={AssignmentsScreen}
@@ -165,8 +165,8 @@ export default function ParentTabs() {
             ),
           }}
         />
-      )}
-      {feat('bus_tracking') && (
+      ) : null}
+      {feat('bus_tracking') ? (
         <Tab.Screen
           name="BusTracking"
           component={BusTrackingScreen}
@@ -176,7 +176,7 @@ export default function ParentTabs() {
             tabBarIcon: ({ color }) => <Bus size={22} color={color} />,
           }}
         />
-      )}
+      ) : null}
       <Tab.Screen
         name="Me"
         component={MeScreen}

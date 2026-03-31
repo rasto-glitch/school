@@ -33,7 +33,8 @@ function timeLabel(dateStr: string): string {
 
 export default function FeedScreen() {
   const { t } = useTranslation();
-  const { user } = useAuthStore();
+  const { user, school } = useAuthStore();
+  const feat = (key: string) => school?.features?.[key] !== false;
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   const colors = useColors();
@@ -63,10 +64,10 @@ export default function FeedScreen() {
   const feedItems: FeedItem[] = announcements.map(a => ({ type: 'announcement' as const, date: a.createdAt, data: a }));
 
   const shortcuts = [
-    { label: t('dashboard.quick_reports', 'Reports'), icon: FileText, bg: '#FAF5FF', iconColor: '#9333EA', tab: 'Reports', count: reportCount },
-    { label: t('dashboard.quick_grades', 'Grades'), icon: FileBadge, bg: '#EEF2FF', iconColor: '#4F46E5', tab: 'Grades', count: 0 },
-    { label: t('dashboard.quick_bookings', 'Bookings'), icon: Calendar, bg: '#F0FDFA', iconColor: '#0D9488', tab: 'Appointments', count: bookingCount },
-  ];
+    feat('reports') && { label: t('dashboard.quick_reports', 'Reports'), icon: FileText, bg: '#FAF5FF', iconColor: '#9333EA', tab: 'Reports', count: reportCount },
+    feat('grades') && { label: t('dashboard.quick_grades', 'Grades'), icon: FileBadge, bg: '#EEF2FF', iconColor: '#4F46E5', tab: 'Grades', count: 0 },
+    feat('appointments') && { label: t('dashboard.quick_bookings', 'Bookings'), icon: Calendar, bg: '#F0FDFA', iconColor: '#0D9488', tab: 'Appointments', count: bookingCount },
+  ].filter(Boolean) as { label: string; icon: any; bg: string; iconColor: string; tab: string; count: number }[];
 
   return (
     <ScrollView
@@ -98,7 +99,7 @@ export default function FeedScreen() {
       </View>
 
       {/* Recent Grades */}
-      {grades.length > 0 && (
+      {feat('grades') && grades.length > 0 && (
         <>
           <TouchableOpacity onPress={() => navigation.navigate('Grades')} activeOpacity={0.8} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm }}>
             <Text style={[styles.sectionLabel, { marginBottom: 0 }]}>{t('nav.grades', 'Grades')}</Text>

@@ -44,13 +44,13 @@ export default function SupervisorTabs() {
         component={SupervisorDashboardScreen}
         options={{ tabBarLabel: t('nav.dashboard', 'Dashboard'), tabBarIcon: ({ color }) => <Home size={ICON_SIZE} color={color} /> }}
       />
-      {feat('attendance') && (
+      {feat('attendance') ? (
         <Tab.Screen
           name="SupervisorAttendance"
           component={SupervisorAttendanceScreen}
           options={{ tabBarLabel: t('nav.attendance', 'Attendance'), tabBarIcon: ({ color }) => <CalendarCheck size={ICON_SIZE} color={color} /> }}
         />
-      )}
+      ) : null}
       <Tab.Screen
         name="SupervisorContent"
         component={SupervisorContentScreen}
