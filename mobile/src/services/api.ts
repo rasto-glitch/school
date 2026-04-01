@@ -106,6 +106,18 @@ export const chatApi = {
   deleteMessage: (msgId: string) => api.delete(`/chat/messages/${msgId}`),
   markRead: (conversationId: string) => api.post(`/chat/conversations/${conversationId}/read`),
   getUnreadCount: () => api.get('/chat/unread-count'),
+  uploadAttachment: async (file: { uri: string; name: string; mimeType: string }): Promise<{ url: string; name: string; size: number; type: 'image' | 'file' }> => {
+    const token = useAuthStore.getState().token;
+    const form = new FormData();
+    form.append('file', { uri: file.uri, name: file.name, type: file.mimeType } as any);
+    const res = await fetch(`${API_URL}/chat/upload`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+    });
+    if (!res.ok) throw new Error('Upload failed');
+    return res.json();
+  },
 };
 
 // ---- DRIVER ----

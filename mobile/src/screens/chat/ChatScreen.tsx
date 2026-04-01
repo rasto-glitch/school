@@ -5,10 +5,12 @@ import {
   Pressable, Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Send, Paperclip, Pencil, Trash2, Check, X, FileText } from 'lucide-react-native';
+import { Send, Paperclip, Check, X, FileText } from 'lucide-react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { format, isToday, isYesterday, isSameDay } from 'date-fns';
 import { io as socketIO, type Socket } from 'socket.io-client';
+import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
 import { useColors } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
 import { chatApi } from '../../services/api';
@@ -144,6 +146,7 @@ export default function ChatScreen() {
   const [otherTyping, setOtherTyping] = useState(false);
   const [editingMsg, setEditingMsg] = useState<ChatMessage | null>(null);
   const [editText, setEditText] = useState('');
+  const [uploading, setUploading] = useState(false);
   const socketRef = useRef<Socket | null>(null);
   const flatRef = useRef<FlatList>(null);
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -270,6 +273,49 @@ export default function ChatScreen() {
     })));
   };
 
+  const handlePickImage = async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) { Alert.alert('Permission required', 'Please allow photo access.'); return; }
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 });
+    if (result.canceled || !result.assets[0]) return;
+    const asset = result.assets[0];
+    const name = asset.fileName || `image_${Date.now()}.jpg`;
+    setUploading(true);
+    try {
+      const uploaded = await chatApi.uploadAttachment({ uri: asset.uri, name, mimeType: asset.mimeType || 'image/jpeg' });
+      const res = await chatApi.sendMessage(conversation.id, {
+        type: 'image', attachmentUrl: uploaded.url, attachmentName: uploaded.name, attachmentSize: uploaded.size,
+      });
+      setMessages(prev => prev.find(m => m.id === res.data.id) ? prev : [...prev, res.data]);
+      setTimeout(() => flatRef.current?.scrollToEnd({ animated: true }), 100);
+    } catch { Alert.alert('Upload failed', 'Could not send image.'); }
+    finally { setUploading(false); }
+  };
+
+  const handlePickFile = async () => {
+    const result = await DocumentPicker.getDocumentAsync({ copyToCacheDirectory: true });
+    if (result.canceled || !result.assets[0]) return;
+    const asset = result.assets[0];
+    setUploading(true);
+    try {
+      const uploaded = await chatApi.uploadAttachment({ uri: asset.uri, name: asset.name, mimeType: asset.mimeType || 'application/octet-stream' });
+      const res = await chatApi.sendMessage(conversation.id, {
+        type: 'file', attachmentUrl: uploaded.url, attachmentName: uploaded.name, attachmentSize: uploaded.size,
+      });
+      setMessages(prev => prev.find(m => m.id === res.data.id) ? prev : [...prev, res.data]);
+      setTimeout(() => flatRef.current?.scrollToEnd({ animated: true }), 100);
+    } catch { Alert.alert('Upload failed', 'Could not send file.'); }
+    finally { setUploading(false); }
+  };
+
+  const handleAttach = () => {
+    Alert.alert('Attach', undefined, [
+      { text: 'Image', onPress: handlePickImage },
+      { text: 'File', onPress: handlePickFile },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
+
   const saveEdit = async () => {
     if (!editingMsg || !editText.trim()) { setEditingMsg(null); return; }
     try {
@@ -369,6 +415,15 @@ export default function ChatScreen() {
         {/* Input bar */}
         {!editingMsg && (
           <View style={[s.inputBar, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
+            <TouchableOpacity
+              onPress={handleAttach}
+              disabled={uploading}
+              style={[s.attachBtn, { backgroundColor: colors.bg, borderColor: colors.border }]}
+            >
+              {uploading
+                ? <ActivityIndicator size="small" color={primaryColor} />
+                : <Paperclip size={18} color={colors.textMuted} />}
+            </TouchableOpacity>
             <TextInput
               style={[s.input, { color: colors.text, backgroundColor: colors.bg, borderColor: colors.border }]}
               placeholder="Type a message…"
@@ -402,6 +457,7 @@ const makeStyles = (colors: any) => StyleSheet.create({
   typingDot: { width: 6, height: 6, borderRadius: 3 },
   inputBar: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, paddingHorizontal: 12, paddingVertical: 10, borderTopWidth: 1 },
   input: { flex: 1, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 10, fontSize: font.sm, borderWidth: 1, maxHeight: 100, lineHeight: 20 },
+  attachBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
   sendBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   editBar: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 10, borderTopWidth: 1 },
   editInput: { flex: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, fontSize: font.sm, borderWidth: 1, maxHeight: 80 },
