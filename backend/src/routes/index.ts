@@ -6,6 +6,7 @@ import * as teacher from '../controllers/teacher.controller';
 import * as parent from '../controllers/parent.controller';
 import * as driver from '../controllers/driver.controller';
 import * as supervisor from '../controllers/supervisor.controller';
+import * as academic from '../controllers/academic.controller';
 import { authenticate, authorize } from '../middleware/auth';
 import type { AuthRequest } from '../middleware/auth';
 import { Server as SocketServer } from 'socket.io';
@@ -173,6 +174,20 @@ export function createRouter(io: SocketServer) {
   // ---- SHARED NOTIFICATIONS (all roles) ----
   router.get('/notifications', authenticate, (req, res) => parent.getNotifications(req as AuthRequest, res));
   router.patch('/notifications/:id/read', authenticate, (req, res) => parent.markNotificationRead(req as AuthRequest, res));
+
+  // ---- ACADEMIC PORTAL ----
+  const academicRoles = ['parent', 'teacher', 'admin', 'supervisor'] as const;
+  router.get('/academic/posts', authenticate, authorize(...academicRoles), (req, res) => academic.getPosts(req as AuthRequest, res));
+  router.get('/academic/posts/:id', authenticate, authorize(...academicRoles), (req, res) => academic.getPost(req as AuthRequest, res));
+  router.post('/academic/posts', authenticate, authorize('teacher'), (req, res) => academic.createPost(req as AuthRequest, res));
+  router.put('/academic/posts/:id', authenticate, authorize('teacher'), (req, res) => academic.updatePost(req as AuthRequest, res));
+  router.delete('/academic/posts/:id', authenticate, authorize('teacher', 'admin'), (req, res) => academic.deletePost(req as AuthRequest, res));
+  router.post('/academic/posts/upload', authenticate, authorize('teacher'), upload.single('file'), (req, res) => academic.uploadPostFile(req as AuthRequest, res));
+  router.get('/academic/classes', authenticate, authorize(...academicRoles), (req, res) => academic.getClasses(req as AuthRequest, res));
+
+  router.get('/academic/ebooks', authenticate, authorize(...academicRoles), (req, res) => academic.getEbooks(req as AuthRequest, res));
+  router.post('/academic/ebooks', authenticate, authorize('teacher', 'admin'), upload.single('file'), (req, res) => academic.uploadEbook(req as AuthRequest, res));
+  router.delete('/academic/ebooks/:id', authenticate, authorize('teacher', 'admin'), (req, res) => academic.deleteEbook(req as AuthRequest, res));
 
   return router;
 }

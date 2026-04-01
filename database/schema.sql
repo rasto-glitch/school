@@ -430,6 +430,49 @@ CREATE TABLE IF NOT EXISTS archived_students (
 CREATE INDEX IF NOT EXISTS idx_archived_students_school ON archived_students(school_id, created_at DESC);
 
 -- ============================================================
+-- ACADEMIC POSTS
+-- Blog-style posts written by teachers for specific classes
+-- ============================================================
+CREATE TABLE IF NOT EXISTS academic_posts (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  teacher_id UUID NOT NULL REFERENCES teachers(id) ON DELETE CASCADE,
+  class_id UUID NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  subject TEXT,
+  content TEXT,
+  content_type TEXT NOT NULL DEFAULT 'richtext' CHECK (content_type IN ('richtext', 'plaintext', 'file')),
+  attachment_url TEXT,
+  attachment_name TEXT,
+  is_published BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_academic_posts_school ON academic_posts(school_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_academic_posts_teacher ON academic_posts(teacher_id);
+CREATE INDEX IF NOT EXISTS idx_academic_posts_class ON academic_posts(class_id);
+
+-- ============================================================
+-- E-BOOKS
+-- Digital books uploaded by admin/teachers, readable by parents
+-- ============================================================
+CREATE TABLE IF NOT EXISTS ebooks (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  class_id UUID REFERENCES classes(id) ON DELETE SET NULL,
+  title TEXT NOT NULL,
+  subject TEXT,
+  author TEXT,
+  cover_url TEXT,
+  file_url TEXT NOT NULL,
+  description TEXT,
+  uploaded_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_ebooks_school ON ebooks(school_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ebooks_class ON ebooks(class_id);
+
+-- ============================================================
 -- DEMO SCHOOL SEED
 -- ============================================================
 INSERT INTO schools (id, name, slug, abbreviation, primary_color, secondary_color, is_active)

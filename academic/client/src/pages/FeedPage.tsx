@@ -1,0 +1,152 @@
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { format } from 'date-fns';
+import { Plus, FileText, Paperclip, AlignLeft, Search, Filter } from 'lucide-react';
+import { academicApi } from '../services/api';
+import { useAuthStore } from '../store/authStore';
+import Navbar from '../components/layout/Navbar';
+import type { AcademicPost, AcademicClass } from '../types';
+
+const typeIcon = { richtext: FileText, plaintext: AlignLeft, file: Paperclip };
+const typeLabel = { richtext: 'Article', plaintext: 'Note', file: 'File' };
+const typeColor = {
+  richtext: 'bg-indigo-50 text-indigo-600',
+  plaintext: 'bg-slate-50 text-slate-600',
+  file: 'bg-amber-50 text-amber-600',
+};
+
+function PostCard({ post }: { post: AcademicPost }) {
+  const Icon = typeIcon[post.content_type];
+  const preview = post.content_type !== 'file' && post.content
+    ? post.content.replace(/<[^>]+>/g, '').slice(0, 150)
+    : null;
+
+  return (
+    <Link to={`/posts/${post.id}`} className="block group">
+      <article className="bg-white border border-gray-100 rounded-2xl p-5 hover:shadow-md hover:border-primary-100 transition-all">
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${typeColor[post.content_type]}`}>
+              <Icon className="w-3 h-3" /> {typeLabel[post.content_type]}
+            </span>
+            {post.classes?.name && (
+              <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{post.classes.name}</span>
+            )}
+            {post.subject && (
+              <span className="text-xs bg-primary-50 text-primary-700 px-2 py-0.5 rounded-full">{post.subject}</span>
+            )}
+          </div>
+          <time className="text-xs text-gray-400 flex-shrink-0">
+            {format(new Date(post.created_at), 'MMM d, yyyy')}
+          </time>
+        </div>
+        <h2 className="font-semibold text-gray-900 group-hover:text-primary-600 transition-colors mb-1 line-clamp-2">
+          {post.title}
+        </h2>
+        {preview && <p className="text-sm text-gray-500 line-clamp-2 leading-relaxed">{preview}</p>}
+        {post.content_type === 'file' && post.attachment_name && (
+          <p className="text-sm text-amber-600 flex items-center gap-1 mt-1">
+            <Paperclip className="w-3.5 h-3.5" /> {post.attachment_name}
+          </p>
+        )}
+        <p className="text-xs text-gray-400 mt-3">by {post.teachers?.full_name ?? 'Teacher'}</p>
+      </article>
+    </Link>
+  );
+}
+
+export default function FeedPage() {
+  const { user } = useAuthStore();
+  const [posts, setPosts] = useState<AcademicPost[]>([]);
+  const [classes, setClasses] = useState<AcademicClass[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [classFilter, setClassFilter] = useState('');
+
+  useEffect(() => {
+    Promise.all([
+      academicApi.getPosts(classFilter || undefined),
+      academicApi.getClasses(),
+    ]).then(([postsRes, classesRes]) => {
+      setPosts(postsRes.data ?? []);
+      setClasses(classesRes.data ?? []);
+    }).finally(() => setLoading(false));
+  }, [classFilter]);
+
+  const filtered = posts.filter(p =>
+    p.title.toLowerCase().includes(search.toLowerCase()) ||
+    p.subject?.toLowerCase().includes(search.toLowerCase()) ||
+    p.teachers?.full_name?.toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <Navbar />
+      <div className="max-w-4xl mx-auto px-6 py-8">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Academic Feed</h1>
+            <p className="text-sm text-gray-500 mt-0.5">
+              {user?.role === 'parent' ? "Posts from your child's classes" : 'All published posts'}
+            </p>
+          </div>
+          {user?.role === 'teacher' && (
+            <Link
+              to="/posts/new"
+              className="inline-flex items-center gap-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors"
+            >
+              <Plus className="w-4 h-4" /> New Post
+            </Link>
+          )}
+        </div>
+
+        {/* Filters */}
+        <div className="flex gap-3 mb-6">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search posts..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full border border-gray-200 rounded-xl pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+            />
+          </div>
+          {classes.length > 0 && (
+            <div className="relative">
+              <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <select
+                value={classFilter}
+                onChange={e => setClassFilter(e.target.value)}
+                className="border border-gray-200 rounded-xl pl-9 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white appearance-none"
+              >
+                <option value="">All classes</option>
+                {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+          )}
+        </div>
+
+        {/* Posts */}
+        {loading ? (
+          <div className="flex items-center justify-center py-20">
+            <div className="w-6 h-6 border-2 border-primary-600 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="text-center py-20 text-gray-400">
+            <FileText className="w-10 h-10 mx-auto mb-3 opacity-40" />
+            <p className="font-medium">No posts yet</p>
+            <p className="text-sm mt-1">
+              {user?.role === 'teacher' ? 'Be the first to share something with your class.' : 'Check back later.'}
+            </p>
+          </div>
+        ) : (
+          <div className="grid gap-4">
+            {filtered.map(post => <PostCard key={post.id} post={post} />)}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

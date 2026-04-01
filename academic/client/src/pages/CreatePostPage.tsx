@@ -1,0 +1,194 @@
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ArrowLeft, Upload, Loader2 } from 'lucide-react';
+import { toast } from 'react-toastify';
+import { academicApi } from '../services/api';
+import Navbar from '../components/layout/Navbar';
+import RichTextEditor from '../components/editor/RichTextEditor';
+import type { AcademicClass } from '../types';
+
+type ContentType = 'richtext' | 'plaintext' | 'file';
+
+export default function CreatePostPage() {
+  const navigate = useNavigate();
+  const [classes, setClasses] = useState<AcademicClass[]>([]);
+  const [title, setTitle] = useState('');
+  const [subject, setSubject] = useState('');
+  const [classId, setClassId] = useState('');
+  const [contentType, setContentType] = useState<ContentType>('richtext');
+  const [content, setContent] = useState('');
+  const [file, setFile] = useState<File | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    academicApi.getClasses().then(r => {
+      setClasses(r.data ?? []);
+      if (r.data?.[0]?.id) setClassId(r.data[0].id);
+    });
+  }, []);
+
+  const handleSave = async (publish: boolean) => {
+    if (!title.trim()) { toast.error('Title is required'); return; }
+    if (!classId) { toast.error('Please select a class'); return; }
+    if (contentType !== 'file' && !content.trim()) { toast.error('Content is required'); return; }
+    if (contentType === 'file' && !file) { toast.error('Please select a file'); return; }
+
+    setSaving(true);
+    try {
+      let attachmentUrl: string | undefined;
+      let attachmentName: string | undefined;
+
+      if (contentType === 'file' && file) {
+        const uploadRes = await academicApi.uploadFile(file);
+        attachmentUrl = uploadRes.data.url;
+        attachmentName = uploadRes.data.name;
+      }
+
+      const res = await academicApi.createPost({
+        title: title.trim(),
+        subject: subject.trim() || undefined,
+        classId,
+        content: contentType !== 'file' ? content : undefined,
+        contentType,
+        isPublished: publish,
+        ...(attachmentUrl && { attachmentUrl, attachmentName }),
+      } as any);
+
+      toast.success(publish ? 'Post published!' : 'Draft saved');
+      navigate(`/posts/${res.data.id}`);
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to save post');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <Navbar />
+      <div className="max-w-3xl mx-auto px-6 py-8">
+        <button onClick={() => navigate(-1)} className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 mb-6 transition-colors">
+          <ArrowLeft className="w-4 h-4" /> Back
+        </button>
+
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8">
+          <h1 className="text-xl font-bold text-gray-900 mb-6">New Post</h1>
+
+          <div className="space-y-5">
+            {/* Title */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1.5">Title <span className="text-red-500">*</span></label>
+              <input
+                type="text"
+                value={title}
+                onChange={e => setTitle(e.target.value)}
+                placeholder="e.g. Newton's Laws of Motion — Explained"
+                className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+
+            {/* Class + Subject */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Class <span className="text-red-500">*</span></label>
+                <select
+                  value={classId}
+                  onChange={e => setClassId(e.target.value)}
+                  className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                >
+                  {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Subject</label>
+                <input
+                  type="text"
+                  value={subject}
+                  onChange={e => setSubject(e.target.value)}
+                  placeholder="e.g. Physics"
+                  className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
+            </div>
+
+            {/* Content type */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-2">Content type</label>
+              <div className="flex gap-2">
+                {(['richtext', 'plaintext', 'file'] as ContentType[]).map(t => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setContentType(t)}
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${contentType === t ? 'bg-primary-600 text-white border-primary-600' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}
+                  >
+                    {t === 'richtext' ? 'Rich Text' : t === 'plaintext' ? 'Plain Text' : 'File Upload'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Content area */}
+            {contentType === 'richtext' && (
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Content <span className="text-red-500">*</span></label>
+                <RichTextEditor
+                  content={content}
+                  onChange={setContent}
+                  placeholder="Write your topic explanation, notes, or summary here..."
+                />
+              </div>
+            )}
+
+            {contentType === 'plaintext' && (
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Content <span className="text-red-500">*</span></label>
+                <textarea
+                  value={content}
+                  onChange={e => setContent(e.target.value)}
+                  placeholder="Write your notes here..."
+                  rows={10}
+                  className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 resize-y font-mono"
+                />
+              </div>
+            )}
+
+            {contentType === 'file' && (
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1.5">File <span className="text-red-500">*</span></label>
+                <label className="flex flex-col items-center justify-center border-2 border-dashed border-gray-200 rounded-xl px-6 py-10 cursor-pointer hover:border-primary-400 hover:bg-primary-50/30 transition-colors">
+                  <Upload className="w-8 h-8 text-gray-300 mb-2" />
+                  <span className="text-sm font-medium text-gray-600">{file ? file.name : 'Click to upload file'}</span>
+                  <span className="text-xs text-gray-400 mt-1">PDF, Word, PowerPoint, images, etc.</span>
+                  <input type="file" className="hidden" onChange={e => setFile(e.target.files?.[0] ?? null)} />
+                </label>
+              </div>
+            )}
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-3 mt-8 pt-6 border-t border-gray-100">
+            <button
+              type="button"
+              onClick={() => handleSave(false)}
+              disabled={saving}
+              className="flex items-center gap-2 px-5 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+            >
+              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+              Save as Draft
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSave(true)}
+              disabled={saving}
+              className="flex items-center gap-2 px-5 py-2.5 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 rounded-xl text-sm font-semibold text-white transition-colors"
+            >
+              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+              Publish
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
