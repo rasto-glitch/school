@@ -13,8 +13,12 @@ interface SocketState {
 export const useSocketStore = create<SocketState>((set, get) => ({
   socket: null,
   connect: (token: string) => {
+    if (get().socket?.connected) return;
     get().socket?.disconnect();
-    const socket = io(SOCKET_URL, { auth: { token }, transports: ['websocket'] });
+    // No transports restriction — let socket.io do polling first, then upgrade to WS.
+    // Forcing websocket-only breaks on some proxies (Railway, etc.) where the
+    // initial HTTP handshake is needed before the upgrade can succeed.
+    const socket = io(SOCKET_URL, { auth: { token } });
     set({ socket });
   },
   disconnect: () => {

@@ -13,6 +13,7 @@ import SupervisorStudentsScreen from '../screens/supervisor/SupervisorStudentsSc
 import SupervisorMeScreen from '../screens/supervisor/SupervisorMeScreen';
 import ChatListScreen from '../screens/chat/ChatListScreen';
 import { chatApi } from '../services/api';
+import { useSocketStore } from '../store/socketStore';
 
 function TabBadge({ count }: { count: number }) {
   if (count === 0) return null;
@@ -32,6 +33,7 @@ export default function SupervisorTabs() {
   const colors = useColors();
   const { school } = useAuthStore();
   const feat = (key: string) => school?.features?.[key] !== false;
+  const { socket } = useSocketStore();
   const [chatCount, setChatCount] = useState(0);
   const chatListActive = useRef(false);
 
@@ -44,6 +46,15 @@ export default function SupervisorTabs() {
     const interval = setInterval(fetchChatCount, 30000);
     return () => clearInterval(interval);
   }, [fetchChatCount]);
+
+  useEffect(() => {
+    if (!socket) return;
+    const onMessage = () => {
+      if (!chatListActive.current) setChatCount(prev => prev + 1);
+    };
+    socket.on('chat:message', onMessage);
+    return () => { socket.off('chat:message', onMessage); };
+  }, [socket]);
 
   return (
     <Tab.Navigator

@@ -16,6 +16,7 @@ import { useBadgeStore } from '../store/badgeStore';
 import { font } from '../theme';
 import { parentApi, chatApi } from '../services/api';
 import { useAuthStore } from '../store/authStore';
+import { useSocketStore } from '../store/socketStore';
 
 const Tab = createBottomTabNavigator();
 
@@ -34,6 +35,7 @@ export default function ParentTabs() {
   const colors = useColors();
   const navigation = useNavigation<any>();
   const { school } = useAuthStore();
+  const { socket } = useSocketStore();
   const [homeworkCount, setHomeworkCount] = useState(0);
   const [assignmentCount, setAssignmentCount] = useState(0);
   const [chatCount, setChatCount] = useState(0);
@@ -65,6 +67,16 @@ export default function ParentTabs() {
     intervalRef.current = setInterval(fetchCounts, 30000);
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
   }, [fetchCounts]);
+
+  // Increment chat badge in real-time when a message arrives and user is not on the Chat tab
+  useEffect(() => {
+    if (!socket) return;
+    const onMessage = () => {
+      if (!chatListActive.current) setChatCount(prev => prev + 1);
+    };
+    socket.on('chat:message', onMessage);
+    return () => { socket.off('chat:message', onMessage); };
+  }, [socket]);
 
   const handleHomeworkPress = () => {
     if (homeworkCount > 0) {
