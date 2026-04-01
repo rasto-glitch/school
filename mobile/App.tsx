@@ -9,6 +9,7 @@ import Navigation, { navigationRef } from './src/navigation';
 import { usePushNotifications } from './src/hooks/usePushNotifications';
 import { useRTL } from './src/hooks/useRTL';
 import { useAuthStore } from './src/store/authStore';
+import { useSocketStore } from './src/store/socketStore';
 
 interface BannerInfo {
   title: string;
@@ -53,7 +54,13 @@ function NotificationBanner({ info, onDismiss, onPress }: { info: BannerInfo; on
 function AppInner() {
   usePushNotifications();
   const isRTL = useRTL();
-  const { user } = useAuthStore();
+  const { user, token } = useAuthStore();
+  const { connect, disconnect } = useSocketStore();
+
+  useEffect(() => {
+    if (token) connect(token);
+    else disconnect();
+  }, [token]);
   const [banner, setBanner] = useState<BannerInfo | null>(null);
   const bannerKey = useRef(0);
 

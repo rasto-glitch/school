@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useTranslation } from 'react-i18next';
@@ -33,9 +33,10 @@ export default function SupervisorTabs() {
   const { school } = useAuthStore();
   const feat = (key: string) => school?.features?.[key] !== false;
   const [chatCount, setChatCount] = useState(0);
+  const chatListActive = useRef(false);
 
   const fetchChatCount = useCallback(() => {
-    chatApi.getUnreadCount().then(r => setChatCount(r.data?.count ?? 0)).catch(() => {});
+    chatApi.getUnreadCount().then(r => { if (!chatListActive.current) setChatCount(r.data?.count ?? 0); }).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -88,7 +89,11 @@ export default function SupervisorTabs() {
         <Tab.Screen
           name="ChatList"
           component={ChatListScreen}
-          listeners={{ tabPress: () => setChatCount(0) }}
+          listeners={{
+            tabPress: () => { setChatCount(0); chatListActive.current = true; },
+            focus: () => { setChatCount(0); chatListActive.current = true; },
+            blur: () => { chatListActive.current = false; },
+          }}
           options={{
             headerShown: true,
             headerTitle: t('nav.chat', 'Chat'),

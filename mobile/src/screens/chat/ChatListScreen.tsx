@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
   TextInput, ActivityIndicator, RefreshControl, Image,
@@ -9,6 +9,7 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { formatDistanceToNow } from 'date-fns';
 import { useColors } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
+import { useSocketStore } from '../../store/socketStore';
 import { chatApi } from '../../services/api';
 import { font } from '../../theme';
 import type { Conversation, ChatUser } from '../../types';
@@ -37,6 +38,7 @@ export default function ChatListScreen() {
   const navigation = useNavigation<Nav>();
   const colors = useColors();
   const { user } = useAuthStore();
+  const { socket } = useSocketStore();
   const [convs, setConvs] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -56,6 +58,26 @@ export default function ChatListScreen() {
   }, []);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  // Real-time conversation list updates
+  useEffect(() => {
+    if (!socket || !user) return;
+    const onMessage = (data: any) => {
+      const preview = data.type === 'text' ? (data.content || '') : data.type === 'image' ? '📷 Photo' : `📎 ${data.attachmentName || 'File'}`;
+      setConvs(prev => {
+        const existing = prev.find(c => c.id === data.conversationId);
+        if (!existing) return prev;
+        const isMine = data.senderId === user.id;
+        return prev
+          .map(c => c.id === data.conversationId
+            ? { ...c, lastMessageAt: data.createdAt, lastMessagePreview: preview, lastMessageSenderId: data.senderId, hasUnread: !isMine }
+            : c)
+          .sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime());
+      });
+    };
+    socket.on('chat:message', onMessage);
+    return () => { socket.off('chat:message', onMessage); };
+  }, [socket, user]);
 
   const onRefresh = () => { setRefreshing(true); load(); };
 

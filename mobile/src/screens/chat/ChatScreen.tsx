@@ -8,17 +8,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Send, Paperclip, Check, X, FileText } from 'lucide-react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { format, isToday, isYesterday, isSameDay } from 'date-fns';
-import { io as socketIO, type Socket } from 'socket.io-client';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { useColors } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
+import { useSocketStore } from '../../store/socketStore';
 import { chatApi } from '../../services/api';
 import { font } from '../../theme';
 import type { Conversation, ChatMessage } from '../../types';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5000/api';
-const SOCKET_URL = API_URL.replace(/\/api$/, '');
 const LIMIT = 30;
 
 function formatTime(iso: string) {
@@ -159,7 +157,8 @@ export default function ChatScreen() {
   const route = useRoute<any>();
   const conversation: Conversation = route.params?.conversation;
   const colors = useColors();
-  const { user, token } = useAuthStore();
+  const { user } = useAuthStore();
+  const { socket } = useSocketStore();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -170,7 +169,6 @@ export default function ChatScreen() {
   const [editingMsg, setEditingMsg] = useState<ChatMessage | null>(null);
   const [editText, setEditText] = useState('');
   const [uploading, setUploading] = useState(false);
-  const socketRef = useRef<Socket | null>(null);
   const flatRef = useRef<FlatList>(null);
   const ownTypingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const otherTypingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -195,41 +193,43 @@ export default function ChatScreen() {
     chatApi.markRead(conversation.id).catch(() => {});
   }, [conversation.id]);
 
-  // Socket connection
+  // Attach/detach socket listeners for this conversation
   useEffect(() => {
-    if (!token) return;
-    const socket = socketIO(SOCKET_URL, { auth: { token }, transports: ['websocket'] });
-    socketRef.current = socket;
+    if (!socket) return;
 
-    socket.on('chat:message', (data: ChatMessage & { conversationId: string }) => {
+    const onMessage = (data: ChatMessage & { conversationId: string }) => {
       if (data.conversationId !== conversation.id) return;
       setMessages(prev => prev.find(m => m.id === data.id) ? prev : [...prev, data]);
       chatApi.markRead(conversation.id).catch(() => {});
       setTimeout(() => flatRef.current?.scrollToEnd({ animated: true }), 100);
-    });
-
-    socket.on('chat:edit', (data: ChatMessage & { conversationId: string }) => {
+    };
+    const onEdit = (data: ChatMessage & { conversationId: string }) => {
       if (data.conversationId !== conversation.id) return;
       setMessages(prev => prev.map(m => m.id === data.id ? { ...m, content: data.content, editedAt: data.editedAt } : m));
-    });
-
-    socket.on('chat:delete', (data: { id: string; conversationId: string }) => {
+    };
+    const onDelete = (data: { id: string; conversationId: string }) => {
       if (data.conversationId !== conversation.id) return;
       setMessages(prev => prev.map(m => m.id === data.id ? { ...m, isDeleted: true, content: undefined } : m));
-    });
-
-    socket.on('chat:typing', (data: { conversationId: string; senderId: string; isTyping: boolean }) => {
+    };
+    const onTyping = (data: { conversationId: string; senderId: string; isTyping: boolean }) => {
       if (data.conversationId !== conversation.id || data.senderId !== otherUser?.id) return;
       setOtherTyping(data.isTyping);
       if (otherTypingTimer.current) clearTimeout(otherTypingTimer.current);
       if (data.isTyping) otherTypingTimer.current = setTimeout(() => setOtherTyping(false), 3000);
-    });
+    };
+
+    socket.on('chat:message', onMessage);
+    socket.on('chat:edit', onEdit);
+    socket.on('chat:delete', onDelete);
+    socket.on('chat:typing', onTyping);
 
     return () => {
-      socket.disconnect();
-      socketRef.current = null;
+      socket.off('chat:message', onMessage);
+      socket.off('chat:edit', onEdit);
+      socket.off('chat:delete', onDelete);
+      socket.off('chat:typing', onTyping);
     };
-  }, [token, conversation.id]);
+  }, [socket, conversation.id]);
 
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore || messages.length === 0) return;
@@ -245,10 +245,10 @@ export default function ChatScreen() {
 
   const emitTyping = (val: string) => {
     setText(val);
-    socketRef.current?.emit('chat:typing', { conversationId: conversation.id, recipientId: otherUser?.id, isTyping: true });
+    socket?.emit('chat:typing', { conversationId: conversation.id, recipientId: otherUser?.id, isTyping: true });
     if (ownTypingTimer.current) clearTimeout(ownTypingTimer.current);
     ownTypingTimer.current = setTimeout(() => {
-      socketRef.current?.emit('chat:typing', { conversationId: conversation.id, recipientId: otherUser?.id, isTyping: false });
+      socket?.emit('chat:typing', { conversationId: conversation.id, recipientId: otherUser?.id, isTyping: false });
     }, 1500);
   };
 
@@ -257,7 +257,7 @@ export default function ChatScreen() {
     if (!trimmed || sending) return;
     setSending(true);
     setText('');
-    socketRef.current?.emit('chat:typing', { conversationId: conversation.id, recipientId: otherUser?.id, isTyping: false });
+    socket?.emit('chat:typing', { conversationId: conversation.id, recipientId: otherUser?.id, isTyping: false });
     const tempId = `__temp__${Date.now()}`;
     const optimistic: ChatMessage = { id: tempId, senderId: user!.id, content: trimmed, type: 'text', isDeleted: false, createdAt: new Date().toISOString() };
     setMessages(prev => [...prev, optimistic]);

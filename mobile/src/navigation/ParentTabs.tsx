@@ -39,6 +39,7 @@ export default function ParentTabs() {
   const [chatCount, setChatCount] = useState(0);
   const { unreadCount, setUnreadCount, setReportCount, setBookingCount } = useBadgeStore();
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const chatListActive = useRef(false);
 
   const feat = (key: string) => school?.features?.[key] !== false;
 
@@ -55,7 +56,7 @@ export default function ParentTabs() {
       })
       .catch(() => {});
     chatApi.getUnreadCount()
-      .then(r => setChatCount(r.data?.count ?? 0))
+      .then(r => { if (!chatListActive.current) setChatCount(r.data?.count ?? 0); })
       .catch(() => {});
   }, [setUnreadCount, setReportCount, setBookingCount]);
 
@@ -186,7 +187,11 @@ export default function ParentTabs() {
         <Tab.Screen
           name="ChatList"
           component={ChatListScreen}
-          listeners={{ tabPress: () => setChatCount(0) }}
+          listeners={{
+            tabPress: () => { setChatCount(0); chatListActive.current = true; },
+            focus: () => { setChatCount(0); chatListActive.current = true; },
+            blur: () => { chatListActive.current = false; },
+          }}
           options={{
             headerTitle: t('nav.chat', 'Chat'),
             tabBarLabel: t('nav.chat', 'Chat'),
