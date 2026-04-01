@@ -200,6 +200,44 @@ export async function createAttendanceRecord(req: AuthRequest, res: Response): P
   res.json(toCC(data));
 }
 
+// ---- WEEKLY SUMMARY PERIODS ----
+export async function getActivePeriod(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { data } = await supabase
+    .from('weekly_summary_periods')
+    .select('*')
+    .eq('school_id', schoolId)
+    .eq('is_open', true)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  res.json(data ? toCC(data) : null);
+}
+
+export async function openPeriod(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId, userId } = req.user!;
+  const { weekStartDate, weekEndDate } = req.body;
+  if (!weekStartDate || !weekEndDate) {
+    res.status(400).json({ error: 'weekStartDate and weekEndDate are required' }); return;
+  }
+  // Close any currently open periods first
+  await supabase.from('weekly_summary_periods').update({ is_open: false }).eq('school_id', schoolId).eq('is_open', true);
+
+  const { data, error } = await supabase
+    .from('weekly_summary_periods')
+    .insert({ school_id: schoolId, week_start_date: weekStartDate, week_end_date: weekEndDate, is_open: true, created_by_user_id: userId })
+    .select()
+    .single();
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.status(201).json(toCC(data));
+}
+
+export async function closePeriod(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  await supabase.from('weekly_summary_periods').update({ is_open: false }).eq('school_id', schoolId).eq('is_open', true);
+  res.json({ success: true });
+}
+
 // ---- OVERRIDE ATTENDANCE (supervisor can correct a record) ----
 export async function updateAttendanceRecord(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;

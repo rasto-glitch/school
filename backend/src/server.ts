@@ -18,6 +18,7 @@ const httpServer = http.createServer(app);
 // Socket.io setup
 const allowedOrigins = [
   process.env.FRONTEND_URL || 'http://localhost:5173',
+  process.env.ACADEMIC_URL || 'http://localhost:5174',
 ];
 
 const io = new SocketServer(httpServer, {

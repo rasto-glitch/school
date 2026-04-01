@@ -86,6 +86,9 @@ export const supervisorApi = {
   deleteAssignment: (id: string) => api.delete(`/supervisor/assignments/${id}`),
   getWeeklySummaries: (params?: Record<string, string>) => api.get('/supervisor/weekly-summaries', { params }),
   getWeeklySummaryStatus: (weekStartDate: string) => api.get('/supervisor/weekly-summary-status', { params: { weekStartDate } }),
+  getActivePeriod: () => api.get('/supervisor/weekly-period'),
+  openPeriod: (weekStartDate: string, weekEndDate: string) => api.post('/supervisor/weekly-period', { weekStartDate, weekEndDate }),
+  closePeriod: () => api.delete('/supervisor/weekly-period'),
   getSubjects: () => api.get('/supervisor/subjects'),
   getStudentBrief: (id: string) => api.get(`/supervisor/student-brief/${id}`),
 };

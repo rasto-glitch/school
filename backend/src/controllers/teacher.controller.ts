@@ -296,8 +296,20 @@ export async function getGrades(req: AuthRequest, res: Response): Promise<void> 
 // ---- WEEKLY SUMMARY ----
 export async function upsertWeeklySummary(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId, userId } = req.user!;
-  const { classId, subject, unit, lesson, pages, homeworkReminder, weekStartDate } = req.body;
+  const { classId, subject, unit, lesson, pages, homeworkReminder } = req.body;
 
+  // Require an active period opened by supervisor
+  const { data: period } = await supabase
+    .from('weekly_summary_periods')
+    .select('week_start_date')
+    .eq('school_id', schoolId)
+    .eq('is_open', true)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!period) { res.status(403).json({ error: 'No active summary period. Supervisor must open one first.' }); return; }
+
+  const weekStartDate = period.week_start_date;
   const { data: teacher } = await supabase.from('teachers').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
   if (!teacher) { res.status(404).json({ error: 'Teacher not found' }); return; }
 

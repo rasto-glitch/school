@@ -313,6 +313,20 @@ CREATE TABLE IF NOT EXISTS weekly_summaries (
 );
 
 -- ============================================================
+-- WEEKLY SUMMARY PERIODS (supervisor-controlled submission windows)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS weekly_summary_periods (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  week_start_date DATE NOT NULL,
+  week_end_date DATE NOT NULL,
+  is_open BOOLEAN NOT NULL DEFAULT TRUE,
+  created_by_user_id UUID,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_weekly_summary_periods_school ON weekly_summary_periods(school_id);
+
+-- ============================================================
 -- SUBJECTS (school-defined subject list)
 -- ============================================================
 CREATE TABLE IF NOT EXISTS subjects (

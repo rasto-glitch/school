@@ -28,6 +28,7 @@ export interface SchoolFeatures {
   bus_tracking: boolean;
   appointments: boolean;
   attendance: boolean;
+  weekly_summary: boolean;
 }
 
 export const DEFAULT_FEATURES: SchoolFeatures = {
@@ -39,6 +40,7 @@ export const DEFAULT_FEATURES: SchoolFeatures = {
   bus_tracking: true,
   appointments: true,
   attendance: true,
+  weekly_summary: true,
 };
 
 export interface School {

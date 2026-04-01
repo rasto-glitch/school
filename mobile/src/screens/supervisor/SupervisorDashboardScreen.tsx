@@ -6,6 +6,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { supervisorApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
+import { useAuthStore } from '../../store/authStore';
 import { spacing, radius, font, shadow } from '../../theme';
 
 interface AbsentRecord {
@@ -31,6 +32,8 @@ export default function SupervisorDashboardScreen() {
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const navigation = useNavigation<any>();
   const { t } = useTranslation();
+  const { school } = useAuthStore();
+  const feat = (key: string) => school?.features?.[key] !== false;
 
   const [absentList, setAbsentList] = useState<AbsentRecord[]>([]);
   const [summary, setSummary] = useState<ClassSummary[]>([]);
@@ -85,14 +88,16 @@ export default function SupervisorDashboardScreen() {
 
       {/* Shortcut cards */}
       <View style={styles.shortcutRow}>
-        <TouchableOpacity
-          style={styles.shortcutCard}
-          onPress={() => navigation.navigate('SupervisorContent', { initialTab: 'weekly' })}
-        >
-          <Clock size={20} color={colors.primary} />
-          <Text style={styles.shortcutText}>{t('supervisor.weekly_summary')}</Text>
-          <ChevronRight size={14} color={colors.textMuted} style={{ marginLeft: 'auto' }} />
-        </TouchableOpacity>
+        {feat('weekly_summary') && (
+          <TouchableOpacity
+            style={styles.shortcutCard}
+            onPress={() => navigation.navigate('SupervisorContent', { initialTab: 'weekly' })}
+          >
+            <Clock size={20} color={colors.primary} />
+            <Text style={styles.shortcutText}>{t('supervisor.weekly_summary')}</Text>
+            <ChevronRight size={14} color={colors.textMuted} style={{ marginLeft: 'auto' }} />
+          </TouchableOpacity>
+        )}
         <TouchableOpacity
           style={styles.shortcutCard}
           onPress={() => navigation.navigate('SupervisorContent', { initialTab: 'reports' })}

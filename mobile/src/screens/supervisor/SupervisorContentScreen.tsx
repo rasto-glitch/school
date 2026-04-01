@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next';
 import { BookOpen, ClipboardList, Trash2, Clock, FileText } from 'lucide-react-native';
 import { supervisorApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
+import { useAuthStore } from '../../store/authStore';
 import { spacing, radius, font, shadow } from '../../theme';
 import SupervisorWeeklySummaryScreen from './SupervisorWeeklySummaryScreen';
 import SupervisorStudentReportsScreen from './SupervisorStudentReportsScreen';
@@ -33,15 +34,19 @@ export default function SupervisorContentScreen() {
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const route = useRoute<RouteProp<{ params: { initialTab?: TabType } }, 'params'>>();
   const initialTab = (route.params as { initialTab?: TabType } | undefined)?.initialTab;
+  const { school } = useAuthStore();
+  const feat = (key: string) => school?.features?.[key] !== false;
 
-  const TABS: { key: TabType; label: string; icon: typeof BookOpen }[] = [
+  const ALL_TABS: { key: TabType; label: string; icon: typeof BookOpen; feature?: string }[] = [
     { key: 'homework',    label: t('nav.homework'),                icon: BookOpen },
     { key: 'assignments', label: t('nav.assignments'),             icon: ClipboardList },
-    { key: 'weekly',      label: t('supervisor.weekly_summary'),   icon: Clock },
+    { key: 'weekly',      label: t('supervisor.weekly_summary'),   icon: Clock,        feature: 'weekly_summary' },
     { key: 'reports',     label: t('supervisor.student_reports'),  icon: FileText },
   ];
+  const TABS = ALL_TABS.filter(tab => !tab.feature || feat(tab.feature));
 
-  const [tab, setTab] = useState<TabType>(initialTab ?? 'homework');
+  const validInitialTab = initialTab && feat(initialTab === 'weekly' ? 'weekly_summary' : initialTab) ? initialTab : undefined;
+  const [tab, setTab] = useState<TabType>(validInitialTab ?? 'homework');
   const [homework, setHomework] = useState<ContentItem[]>([]);
   const [assignments, setAssignments] = useState<ContentItem[]>([]);
   const [loading, setLoading] = useState(true);

@@ -160,6 +160,9 @@ export function createRouter(io: SocketServer) {
   router.delete('/supervisor/assignments/:id', authenticate, authorize('supervisor'), (req, res) => supervisor.deleteAssignment(req as AuthRequest, res));
   router.get('/supervisor/weekly-summaries', authenticate, authorize('supervisor'), (req, res) => admin.getWeeklySummaries(req as AuthRequest, res));
   router.get('/supervisor/weekly-summary-status', authenticate, authorize('supervisor'), (req, res) => admin.getWeeklySummaryStatus(req as AuthRequest, res));
+  router.get('/supervisor/weekly-period', authenticate, authorize('supervisor', 'teacher', 'admin'), (req, res) => supervisor.getActivePeriod(req as AuthRequest, res));
+  router.post('/supervisor/weekly-period', authenticate, authorize('supervisor'), (req, res) => supervisor.openPeriod(req as AuthRequest, res));
+  router.delete('/supervisor/weekly-period', authenticate, authorize('supervisor'), (req, res) => supervisor.closePeriod(req as AuthRequest, res));
   router.get('/supervisor/subjects', authenticate, authorize('supervisor'), (req, res) => admin.getSubjects(req as AuthRequest, res));
   router.get('/supervisor/student-brief/:id', authenticate, authorize('supervisor'), (req, res) => admin.getStudentBrief(req as AuthRequest, res));
 
