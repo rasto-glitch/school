@@ -53,7 +53,7 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
     return;
   }
 
-  if (decoded.featuresVersion !== undefined && school.features_version > decoded.featuresVersion) {
+  if (school.features_version > (decoded.featuresVersion ?? 1)) {
     res.status(401).json({ error: 'School settings updated. Please log in again.' });
     return;
   }
