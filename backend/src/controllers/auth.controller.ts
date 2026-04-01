@@ -34,7 +34,7 @@ export async function login(req: Request, res: Response): Promise<void> {
   // Find school by abbreviation
   const { data: school, error: schoolErr } = await supabase
     .from('schools')
-    .select('id, name, slug, logo_url, primary_color, secondary_color, features')
+    .select('id, name, slug, logo_url, primary_color, secondary_color, features, features_version')
     .ilike('abbreviation', abbreviation)
     .eq('is_active', true)
     .single();
@@ -68,6 +68,7 @@ export async function login(req: Request, res: Response): Promise<void> {
     schoolId: school.id,
     role: user.role,
     username: user.username,
+    featuresVersion: school.features_version ?? 1,
   };
 
   const token = jwt.sign(payload, process.env.JWT_SECRET!, {

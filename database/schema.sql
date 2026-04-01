@@ -20,11 +20,29 @@ CREATE TABLE IF NOT EXISTS schools (
   subscription_plan TEXT DEFAULT 'basic',
   is_active BOOLEAN DEFAULT TRUE,
   schedule_url TEXT,
-  features JSONB DEFAULT '{"homework":true,"assignments":true,"announcements":true,"grades":true,"reports":true,"bus_tracking":true,"appointments":true,"attendance":true}',
+  features JSONB DEFAULT '{"homework":true,"assignments":true,"announcements":true,"grades":true,"reports":true,"bus_tracking":true,"appointments":true,"attendance":true,"weekly_summary":true}',
+  features_version INTEGER NOT NULL DEFAULT 1,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 -- Run this if the table already exists:
--- ALTER TABLE schools ADD COLUMN IF NOT EXISTS features JSONB DEFAULT '{"homework":true,"assignments":true,"announcements":true,"grades":true,"reports":true,"bus_tracking":true,"appointments":true,"attendance":true}';
+-- ALTER TABLE schools ADD COLUMN IF NOT EXISTS features JSONB DEFAULT '{"homework":true,"assignments":true,"announcements":true,"grades":true,"reports":true,"bus_tracking":true,"appointments":true,"attendance":true,"weekly_summary":true}';
+-- ALTER TABLE schools ADD COLUMN IF NOT EXISTS features_version INTEGER NOT NULL DEFAULT 1;
+
+-- Trigger: auto-increment features_version whenever the features JSONB column changes
+CREATE OR REPLACE FUNCTION increment_features_version()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.features IS DISTINCT FROM OLD.features THEN
+    NEW.features_version := OLD.features_version + 1;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS schools_features_version_trigger ON schools;
+CREATE TRIGGER schools_features_version_trigger
+  BEFORE UPDATE ON schools
+  FOR EACH ROW EXECUTE FUNCTION increment_features_version();
 
 -- ============================================================
 -- USERS

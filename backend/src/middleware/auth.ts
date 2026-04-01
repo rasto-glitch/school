@@ -7,6 +7,7 @@ export interface AuthPayload {
   schoolId: string;
   role: 'parent' | 'teacher' | 'admin' | 'driver';
   username: string;
+  featuresVersion?: number;
 }
 
 export interface AuthRequest extends Request {
@@ -31,7 +32,7 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
 
   const { data: user } = await supabase
     .from('users')
-    .select('is_active, password_changed_at, schools(is_active)')
+    .select('is_active, password_changed_at, schools(is_active, features_version)')
     .eq('id', decoded.userId)
     .single();
 
@@ -45,8 +46,15 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
     return;
   }
 
-  if (!(user.schools as unknown as { is_active: boolean } | null)?.is_active) {
+  const school = user.schools as unknown as { is_active: boolean; features_version: number } | null;
+
+  if (!school?.is_active) {
     res.status(401).json({ error: 'School is deactivated' });
+    return;
+  }
+
+  if (decoded.featuresVersion !== undefined && school.features_version > decoded.featuresVersion) {
+    res.status(401).json({ error: 'School settings updated. Please log in again.' });
     return;
   }
 
