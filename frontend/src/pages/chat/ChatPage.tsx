@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { ArrowLeft, MoreVertical, MessageSquare } from 'lucide-react';
+import { ArrowLeft, MessageSquare } from 'lucide-react';
 import PageLayout from '../../components/layout/PageLayout';
 import ConversationList, { type Conversation } from './ConversationList';
 import ChatWindow from './ChatWindow';

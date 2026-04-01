@@ -9,7 +9,7 @@ interface Props {
   disabled?: boolean;
 }
 
-export default function MessageInput({ conversationId, onSend, onTyping, disabled }: Props) {
+export default function MessageInput({ onSend, onTyping, disabled }: Props) {
   const [text, setText] = useState('');
   const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState<{ url: string; name: string; size: number; type: 'image' | 'file' } | null>(null);
