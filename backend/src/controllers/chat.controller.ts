@@ -339,7 +339,7 @@ export async function sendMessage(req: AuthRequest, res: Response): Promise<void
     last_message_type: type,
   }).eq('id', id);
 
-  const outMsg = toCC(msg);
+  const outMsg = toCC(msg) as Record<string, unknown>;
 
   // Emit to both participants
   const recipientId = conv.parent_id === userId ? conv.staff_id : conv.parent_id;
@@ -389,7 +389,7 @@ export async function editMessage(req: AuthRequest, res: Response): Promise<void
     .select('id, sender_id, content, type, attachment_url, attachment_name, attachment_size, is_deleted, edited_at, created_at')
     .single();
 
-  const out = toCC(updated);
+  const out = toCC(updated) as Record<string, unknown>;
   const recipientId = conv.parent_id === userId ? conv.staff_id : conv.parent_id;
   const eventPayload = { ...out, conversationId: msg.conversation_id };
   emitToUser(schoolId, recipientId, 'chat:edit', eventPayload);
