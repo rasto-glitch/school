@@ -17,50 +17,62 @@ export async function getContacts(req: AuthRequest, res: Response): Promise<void
   const { userId, schoolId, role } = req.user!;
 
   if (role === 'parent') {
-    // 1. Find parent record
-    const { data: parentRecord } = await supabase
-      .from('parents').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
-
-    if (!parentRecord) { res.json([]); return; }
-
-    // 2. Children's class IDs
-    const { data: children } = await supabase
-      .from('students').select('class_id').eq('parent_id', parentRecord.id).eq('school_id', schoolId);
-
-    const classIds = (children || []).map((c: any) => c.class_id).filter(Boolean);
     const contacts: any[] = [];
 
-    if (classIds.length > 0) {
-      // 3. Teacher IDs for those classes
-      const { data: tcRows } = await supabase
-        .from('teacher_classes').select('teacher_id').in('class_id', classIds);
-      const teacherIds = [...new Set((tcRows || []).map((r: any) => r.teacher_id))];
+    // 1. Find parent record (best-effort — missing record just means no teacher contacts)
+    const { data: parentRecord } = await supabase
+      .from('parents').select('id').eq('user_id', userId).eq('school_id', schoolId).maybeSingle();
 
-      if (teacherIds.length > 0) {
-        const { data: teachers } = await supabase
-          .from('teachers')
-          .select('id, user_id, full_name, subject, users(id, first_name, last_name, profile_picture, is_active)')
-          .in('id', teacherIds)
-          .eq('school_id', schoolId);
+    if (parentRecord) {
+      // 2. Children's class IDs
+      const { data: children } = await supabase
+        .from('students').select('class_id').eq('parent_id', parentRecord.id).eq('school_id', schoolId);
 
-        (teachers || [])
-          .filter((t: any) => (t.users as any)?.is_active)
-          .forEach((t: any) => {
-            const u = t.users as any;
-            contacts.push({
-              id: t.user_id,
-              firstName: u.first_name,
-              lastName: u.last_name,
-              fullName: t.full_name,
-              role: 'teacher',
-              subject: t.subject,
-              profilePicture: u.profile_picture,
+      const classIds = (children || []).map((c: any) => c.class_id).filter(Boolean);
+
+      if (classIds.length > 0) {
+        // 3. Teacher IDs for those classes
+        const { data: tcRows } = await supabase
+          .from('teacher_classes').select('teacher_id').in('class_id', classIds);
+        const teacherIds = [...new Set((tcRows || []).map((r: any) => r.teacher_id))] as string[];
+
+        if (teacherIds.length > 0) {
+          // 4a. Teacher profile rows
+          const { data: teachers } = await supabase
+            .from('teachers')
+            .select('id, user_id, full_name, subject')
+            .in('id', teacherIds)
+            .eq('school_id', schoolId);
+
+          if (teachers && teachers.length > 0) {
+            // 4b. Fetch user rows separately to avoid join ambiguity
+            const teacherUserIds = teachers.map((t: any) => t.user_id);
+            const { data: teacherUsers } = await supabase
+              .from('users').select('id, first_name, last_name, profile_picture, is_active')
+              .in('id', teacherUserIds).eq('is_active', true);
+
+            const userMap: Record<string, any> = {};
+            (teacherUsers || []).forEach((u: any) => { userMap[u.id] = u; });
+
+            teachers.forEach((t: any) => {
+              const u = userMap[t.user_id];
+              if (!u) return;
+              contacts.push({
+                id: t.user_id,
+                firstName: u.first_name,
+                lastName: u.last_name,
+                fullName: t.full_name,
+                role: 'teacher',
+                subject: t.subject,
+                profilePicture: u.profile_picture,
+              });
             });
-          });
+          }
+        }
       }
     }
 
-    // 4. Supervisors in school
+    // 5. Supervisors — always included regardless of parent record
     const { data: supers } = await supabase
       .from('users').select('id, first_name, last_name, profile_picture')
       .eq('school_id', schoolId).eq('role', 'supervisor').eq('is_active', true);
@@ -78,25 +90,35 @@ export async function getContacts(req: AuthRequest, res: Response): Promise<void
 
     res.json(contacts);
   } else {
-    // Teacher / Supervisor → all parents
+    // Teacher / Supervisor → all parents, using separate queries to avoid join issues
     const { data: parents } = await supabase
-      .from('parents')
-      .select('user_id, full_name, users(id, first_name, last_name, profile_picture, is_active)')
-      .eq('school_id', schoolId);
+      .from('parents').select('user_id, full_name').eq('school_id', schoolId);
 
-    const contacts = (parents || [])
-      .filter((p: any) => (p.users as any)?.is_active)
-      .map((p: any) => {
-        const u = p.users as any;
-        return {
-          id: p.user_id,
+    const contacts: any[] = [];
+    if (parents && parents.length > 0) {
+      const parentUserIds = parents.map((p: any) => p.user_id);
+      const { data: parentUsers } = await supabase
+        .from('users').select('id, first_name, last_name, profile_picture, is_active')
+        .in('id', parentUserIds).eq('is_active', true);
+
+      const userMap: Record<string, any> = {};
+      (parentUsers || []).forEach((u: any) => { userMap[u.id] = u; });
+
+      // Build a map of user_id → full_name from parents table
+      const nameMap: Record<string, string> = {};
+      parents.forEach((p: any) => { nameMap[p.user_id] = p.full_name; });
+
+      (parentUsers || []).forEach((u: any) => {
+        contacts.push({
+          id: u.id,
           firstName: u.first_name,
           lastName: u.last_name,
-          fullName: p.full_name,
+          fullName: nameMap[u.id] || `${u.first_name} ${u.last_name}`.trim(),
           role: 'parent',
           profilePicture: u.profile_picture,
-        };
+        });
       });
+    }
 
     res.json(contacts);
   }

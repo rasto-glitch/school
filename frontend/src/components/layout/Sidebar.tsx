@@ -26,7 +26,7 @@ const navItems: Record<Role, NavItem[]> = {
     { to: '/parent/reports', icon: BarChart2, label: 'Reports', feature: 'reports' },
     { to: '/parent/bus', icon: MapPin, label: 'Track Bus', feature: 'bus_tracking' },
     { to: '/parent/appointments', icon: Calendar, label: 'Appointments', feature: 'appointments' },
-    { to: '/chat', icon: MessageSquare, label: 'Chat', feature: 'chat' },
+    { to: '/chat', icon: MessageSquare, label: 'Chat' },
     { to: '/parent/notifications', icon: Bell, label: 'Notifications' },
     { to: '/parent/profile', icon: User, label: 'Profile' },
   ],

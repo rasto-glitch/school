@@ -29,6 +29,7 @@ export interface SchoolFeatures {
   appointments: boolean;
   attendance: boolean;
   weekly_summary: boolean;
+  chat: boolean;
 }
 
 export const DEFAULT_FEATURES: SchoolFeatures = {
@@ -41,6 +42,7 @@ export const DEFAULT_FEATURES: SchoolFeatures = {
   appointments: true,
   attendance: true,
   weekly_summary: true,
+  chat: true,
 };
 
 export interface School {
