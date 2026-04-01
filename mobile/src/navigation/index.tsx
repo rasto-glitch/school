@@ -1,4 +1,4 @@
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuthStore } from '../store/authStore';
 import { useColors } from '../store/themeStore';
@@ -41,6 +41,8 @@ export type RootStackParamList = {
   Chat: { conversation: Conversation };
 };
 
+export const navigationRef = createNavigationContainerRef<RootStackParamList>();
+
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function Navigation() {
@@ -49,7 +51,7 @@ export default function Navigation() {
   const authed = isAuthenticated();
 
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       <Stack.Navigator
         screenOptions={{
           headerStyle: { backgroundColor: colors.card },

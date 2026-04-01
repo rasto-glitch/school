@@ -1,11 +1,11 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useState, useCallback } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
   TextInput, ActivityIndicator, RefreshControl, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MessageSquare, Plus, Search, X } from 'lucide-react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { formatDistanceToNow } from 'date-fns';
 import { useColors } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
@@ -55,7 +55,7 @@ export default function ChatListScreen() {
     finally { setLoading(false); setRefreshing(false); }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useFocusEffect(useCallback(() => { load(); }, [load]));
 
   const onRefresh = () => { setRefreshing(true); load(); };
 
@@ -127,7 +127,12 @@ export default function ChatListScreen() {
           renderItem={({ item: conv }) => (
             <TouchableOpacity
               style={[s.row, { backgroundColor: colors.card, borderBottomColor: colors.border }]}
-              onPress={() => navigation.navigate('Chat', { conversation: conv })}
+              onPress={() => {
+                if (conv.hasUnread) {
+                  setConvs(prev => prev.map(c => c.id === conv.id ? { ...c, hasUnread: false } : c));
+                }
+                navigation.navigate('Chat', { conversation: { ...conv, hasUnread: false } });
+              }}
               activeOpacity={0.7}
             >
               {conv.otherUser ? (
@@ -223,7 +228,7 @@ const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').u
   searchInput: { flex: 1, fontSize: font.sm, padding: 0 },
   newBtn: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8 },
-  emptyText: { fontSize: font.base, fontWeight: '600', textAlign: 'center' },
+  emptyText: { fontSize: font.md, fontWeight: '600', textAlign: 'center' },
   emptySubText: { fontSize: font.sm, textAlign: 'center' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1 },
   rowContent: { flex: 1, minWidth: 0 },
@@ -236,7 +241,7 @@ const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').u
   modalOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', zIndex: 100, padding: 20 },
   modal: { width: '100%', maxWidth: 400, borderRadius: 20, overflow: 'hidden' },
   modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1 },
-  modalTitle: { fontSize: font.base, fontWeight: '700' },
+  modalTitle: { fontSize: font.md, fontWeight: '700' },
   closeBtn: { padding: 4 },
   modalSearch: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1 },
   contactRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1 },

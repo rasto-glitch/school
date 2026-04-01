@@ -6,14 +6,14 @@ import { authApi } from '../services/api';
 import i18n from '../i18n';
 import { useAuthStore } from '../store/authStore';
 
-// How foreground notifications are presented
+// Suppress system UI in foreground — we show our own in-app banner instead
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
+    shouldShowAlert: false,
     shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
+    shouldSetBadge: false,
+    shouldShowBanner: false,
+    shouldShowList: false,
   }),
 });
 

@@ -10,6 +10,47 @@ function emitToUser(schoolId: string, userId: string, event: string, data: unkno
   getIo()?.to(`school:${schoolId}:user:${userId}`).emit(event, data);
 }
 
+async function buildConvWithUser(conv: any, userId: string, schoolId: string) {
+  const otherId = conv.parent_id === userId ? conv.staff_id : conv.parent_id;
+  const { data: other } = await supabase
+    .from('users').select('id, first_name, last_name, profile_picture, role')
+    .eq('id', otherId).maybeSingle();
+
+  let subject: string | undefined;
+  if (other?.role === 'teacher') {
+    const { data: t } = await supabase
+      .from('teachers').select('subject').eq('user_id', otherId).eq('school_id', schoolId).maybeSingle();
+    subject = t?.subject;
+  }
+
+  const { data: readRow } = await supabase
+    .from('conversation_reads').select('last_read_at')
+    .eq('conversation_id', conv.id).eq('user_id', userId).maybeSingle();
+
+  const hasUnread = conv.last_message_sender_id &&
+    conv.last_message_sender_id !== userId &&
+    (!readRow?.last_read_at || new Date(conv.last_message_at) > new Date(readRow.last_read_at));
+
+  return {
+    id: conv.id,
+    otherUser: other ? {
+      id: other.id,
+      firstName: other.first_name,
+      lastName: other.last_name,
+      fullName: `${other.first_name} ${other.last_name}`.trim(),
+      role: other.role,
+      subject,
+      profilePicture: other.profile_picture,
+    } : null,
+    lastMessageAt: conv.last_message_at,
+    lastMessagePreview: conv.last_message_preview,
+    lastMessageSenderId: conv.last_message_sender_id,
+    lastMessageType: conv.last_message_type,
+    hasUnread,
+    createdAt: conv.created_at,
+  };
+}
+
 // ── GET /chat/contacts ─────────────────────────────────────────────────────
 // Parent → teachers of their children's classes + supervisors
 // Teacher/Supervisor → all parents in school
@@ -240,7 +281,7 @@ export async function getOrCreateConversation(req: AuthRequest, res: Response): 
     .single();
 
   if (existing) {
-    res.json(toCC(existing));
+    res.json(await buildConvWithUser(existing, userId, schoolId));
     return;
   }
 
@@ -252,7 +293,7 @@ export async function getOrCreateConversation(req: AuthRequest, res: Response): 
 
   if (error || !created) { res.status(500).json({ error: 'Could not create conversation' }); return; }
 
-  res.json(toCC(created));
+  res.json(await buildConvWithUser(created, userId, schoolId));
 }
 
 // ── GET /chat/conversations/:id/messages ───────────────────────────────────
@@ -351,7 +392,7 @@ export async function sendMessage(req: AuthRequest, res: Response): Promise<void
   const { data: sender } = await supabase.from('users').select('first_name, last_name').eq('id', userId).single();
   if (sender) {
     const senderName = `${sender.first_name} ${sender.last_name}`.trim();
-    chatPush(recipientId, senderName, preview).catch(() => {});
+    chatPush(recipientId, senderName, preview, id as string).catch(() => {});
   }
 
   res.status(201).json(outMsg);

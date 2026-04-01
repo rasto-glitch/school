@@ -99,16 +99,18 @@ export async function notifyMany(payloads: NotifyPayload[]): Promise<void> {
 /**
  * Send a push notification for a new chat message without writing to the notifications table.
  */
-export async function chatPush(userId: string, senderName: string, preview: string): Promise<void> {
-  await sendPush(userId, senderName, preview, 'chat');
+export async function chatPush(userId: string, senderName: string, preview: string, conversationId?: string): Promise<void> {
+  const extra: Record<string, string> = { type: 'chat' };
+  if (conversationId) extra.conversationId = conversationId;
+  await sendPush(userId, senderName, preview, 'chat', extra);
 }
 
-async function sendPush(userId: string, title: string, body: string, type: string): Promise<void> {
+async function sendPush(userId: string, title: string, body: string, type: string, extraData?: Record<string, string>): Promise<void> {
   const { data: tokens } = await supabase.from('device_tokens').select('token, language').eq('user_id', userId);
   if (!tokens || tokens.length === 0) return;
   const messages = tokens.map((t: { token: string; language: string | null }) => {
     const { title: tTitle, body: tBody } = translatePush(title, body, type, t.language ?? 'en');
-    return { to: t.token, title: tTitle, body: tBody, data: { type }, sound: 'default', channelId: 'default', priority: 'high' };
+    return { to: t.token, title: tTitle, body: tBody, data: { type, ...extraData }, sound: 'default', channelId: 'default', priority: 'high' };
   });
   try {
     await fetch('https://exp.host/--/api/v2/push/send', {

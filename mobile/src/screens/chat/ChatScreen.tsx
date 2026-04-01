@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet,
   KeyboardAvoidingView, Platform, ActivityIndicator, Alert, Image,
-  Pressable, Linking,
+  Pressable, Linking, Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Send, Paperclip, Check, X, FileText } from 'lucide-react-native';
@@ -81,7 +81,7 @@ function Bubble({ msg, isMine, showAvatar, initials, primaryColor, colors, onLon
         delayLongPress={400}
       >
         <View style={[
-          styles.bubble,
+          { borderRadius: 16, paddingHorizontal: 12, paddingVertical: 8 },
           isMine
             ? { backgroundColor: primaryColor, borderBottomRightRadius: 4 }
             : { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderBottomLeftRadius: 4 },
@@ -131,6 +131,29 @@ function Bubble({ msg, isMine, showAvatar, initials, primaryColor, colors, onLon
   );
 }
 
+function TypingDots({ color }: { color: string }) {
+  const dots = useRef([new Animated.Value(0), new Animated.Value(0), new Animated.Value(0)]).current;
+  useEffect(() => {
+    const anims = dots.map((d, i) =>
+      Animated.loop(Animated.sequence([
+        Animated.delay(i * 150),
+        Animated.timing(d, { toValue: -5, duration: 300, useNativeDriver: true }),
+        Animated.timing(d, { toValue: 0, duration: 300, useNativeDriver: true }),
+        Animated.delay(300),
+      ]))
+    );
+    anims.forEach(a => a.start());
+    return () => anims.forEach(a => a.stop());
+  }, []);
+  return (
+    <View style={{ flexDirection: 'row', gap: 4, alignItems: 'center', paddingVertical: 4 }}>
+      {dots.map((d, i) => (
+        <Animated.View key={i} style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: color, transform: [{ translateY: d }] }} />
+      ))}
+    </View>
+  );
+}
+
 export default function ChatScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
@@ -149,7 +172,8 @@ export default function ChatScreen() {
   const [uploading, setUploading] = useState(false);
   const socketRef = useRef<Socket | null>(null);
   const flatRef = useRef<FlatList>(null);
-  const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ownTypingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const otherTypingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const primaryColor = colors.primary;
   const otherUser = conversation?.otherUser;
   const initials = `${otherUser?.firstName?.[0] || ''}${otherUser?.lastName?.[0] || ''}`.toUpperCase();
@@ -197,8 +221,8 @@ export default function ChatScreen() {
     socket.on('chat:typing', (data: { conversationId: string; senderId: string; isTyping: boolean }) => {
       if (data.conversationId !== conversation.id || data.senderId !== otherUser?.id) return;
       setOtherTyping(data.isTyping);
-      if (typingTimer.current) clearTimeout(typingTimer.current);
-      if (data.isTyping) typingTimer.current = setTimeout(() => setOtherTyping(false), 3000);
+      if (otherTypingTimer.current) clearTimeout(otherTypingTimer.current);
+      if (data.isTyping) otherTypingTimer.current = setTimeout(() => setOtherTyping(false), 3000);
     });
 
     return () => {
@@ -222,8 +246,8 @@ export default function ChatScreen() {
   const emitTyping = (val: string) => {
     setText(val);
     socketRef.current?.emit('chat:typing', { conversationId: conversation.id, recipientId: otherUser?.id, isTyping: true });
-    if (typingTimer.current) clearTimeout(typingTimer.current);
-    typingTimer.current = setTimeout(() => {
+    if (ownTypingTimer.current) clearTimeout(ownTypingTimer.current);
+    ownTypingTimer.current = setTimeout(() => {
       socketRef.current?.emit('chat:typing', { conversationId: conversation.id, recipientId: otherUser?.id, isTyping: false });
     }, 1500);
   };
@@ -234,12 +258,20 @@ export default function ChatScreen() {
     setSending(true);
     setText('');
     socketRef.current?.emit('chat:typing', { conversationId: conversation.id, recipientId: otherUser?.id, isTyping: false });
+    const tempId = `__temp__${Date.now()}`;
+    const optimistic: ChatMessage = { id: tempId, senderId: user!.id, content: trimmed, type: 'text', isDeleted: false, createdAt: new Date().toISOString() };
+    setMessages(prev => [...prev, optimistic]);
+    setTimeout(() => flatRef.current?.scrollToEnd({ animated: true }), 50);
     try {
       const res = await chatApi.sendMessage(conversation.id, { content: trimmed, type: 'text' });
-      setMessages(prev => prev.find(m => m.id === res.data.id) ? prev : [...prev, res.data]);
+      setMessages(prev => {
+        const without = prev.filter(m => m.id !== tempId);
+        return without.find(m => m.id === res.data.id) ? without : [...without, res.data];
+      });
       setTimeout(() => flatRef.current?.scrollToEnd({ animated: true }), 100);
-    } catch {}
-    finally { setSending(false); }
+    } catch {
+      setMessages(prev => prev.filter(m => m.id !== tempId));
+    } finally { setSending(false); }
   };
 
   const handleLongPress = (msg: ChatMessage) => {
@@ -369,11 +401,7 @@ export default function ChatScreen() {
                       <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>{initials}</Text>
                     </View>
                     <View style={[s.bubble, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderBottomLeftRadius: 4 }]}>
-                      <View style={{ flexDirection: 'row', gap: 3, alignItems: 'center', paddingVertical: 2 }}>
-                        {[0, 150, 300].map(delay => (
-                          <View key={delay} style={[s.typingDot, { backgroundColor: colors.textMuted }]} />
-                        ))}
-                      </View>
+                      <TypingDots color={colors.textMuted} />
                     </View>
                   </View>
                 );
@@ -447,14 +475,9 @@ export default function ChatScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  bubble: { borderRadius: 16, paddingHorizontal: 12, paddingVertical: 8 },
-});
-
-const makeStyles = (colors: any) => StyleSheet.create({
+const makeStyles = (_colors: any) => StyleSheet.create({
   container: { flex: 1 },
   bubble: { borderRadius: 16, paddingHorizontal: 12, paddingVertical: 8 },
-  typingDot: { width: 6, height: 6, borderRadius: 3 },
   inputBar: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, paddingHorizontal: 12, paddingVertical: 10, borderTopWidth: 1 },
   input: { flex: 1, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 10, fontSize: font.sm, borderWidth: 1, maxHeight: 100, lineHeight: 20 },
   attachBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
