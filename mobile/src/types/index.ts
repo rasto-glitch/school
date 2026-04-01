@@ -95,6 +95,41 @@ export interface Notification {
   createdAt: string;
 }
 
+export interface ChatUser {
+  id: string;
+  firstName: string;
+  lastName: string;
+  fullName: string;
+  role: string;
+  subject?: string;
+  profilePicture?: string;
+}
+
+export interface Conversation {
+  id: string;
+  otherUser: ChatUser | null;
+  lastMessageAt: string;
+  lastMessagePreview: string | null;
+  lastMessageSenderId: string | null;
+  lastMessageType: string;
+  hasUnread: boolean;
+  createdAt: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  conversationId?: string;
+  senderId: string;
+  content?: string;
+  type: 'text' | 'image' | 'file';
+  attachmentUrl?: string;
+  attachmentName?: string;
+  attachmentSize?: number;
+  isDeleted: boolean;
+  editedAt?: string;
+  createdAt: string;
+}
+
 export interface BusLocation {
   id: string;
   driverId: string;

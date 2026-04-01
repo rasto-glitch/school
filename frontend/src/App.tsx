@@ -1,7 +1,10 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import { useEffect } from 'react';
 import { useAuthStore } from './store/authStore';
+import { useSocketStore } from './store/socketStore';
+import ChatPage from './pages/chat/ChatPage';
 
 // Auth
 import LoginPage from './pages/auth/LoginPage';
@@ -70,6 +73,22 @@ import GradesPage from './pages/parent/GradesPage';
 // Teacher Attendance
 import AttendancePage from './pages/teacher/AttendancePage';
 
+function SocketProvider({ children }: { children: React.ReactNode }) {
+  const { token, isAuthenticated } = useAuthStore();
+  const { connect, disconnect } = useSocketStore();
+
+  useEffect(() => {
+    if (isAuthenticated() && token) {
+      connect(token);
+    } else {
+      disconnect();
+    }
+    return () => { disconnect(); };
+  }, [token]);
+
+  return <>{children}</>;
+}
+
 function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode; allowedRoles?: string[] }) {
   const { isAuthenticated, user } = useAuthStore();
   if (!isAuthenticated()) return <Navigate to="/login" replace />;
@@ -103,6 +122,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <ToastContainer position="top-right" autoClose={4000} />
+      <SocketProvider>
       <Routes>
         <Route path="/" element={<RootRedirect />} />
         <Route path="/select-school" element={<Navigate to="/login" replace />} />
@@ -172,8 +192,12 @@ export default function App() {
         <Route path="/driver/students" element={<ProtectedRoute allowedRoles={['driver']}><DriverStudentsPage /></ProtectedRoute>} />
         <Route path="/driver/profile" element={<ProtectedRoute allowedRoles={['driver']}><ProfilePage /></ProtectedRoute>} />
 
+        {/* Chat */}
+        <Route path="/chat" element={<ProtectedRoute allowedRoles={['parent', 'teacher', 'supervisor']}><ChatPage /></ProtectedRoute>} />
+
         <Route path="*" element={<RootRedirect />} />
       </Routes>
+      </SocketProvider>
     </BrowserRouter>
   );
 }

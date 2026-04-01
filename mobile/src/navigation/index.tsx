@@ -18,7 +18,8 @@ import ReportDetailScreen from '../screens/parent/ReportDetailScreen';
 import HomeworkDetailScreen from '../screens/parent/HomeworkDetailScreen';
 import AssignmentDetailScreen from '../screens/parent/AssignmentDetailScreen';
 import AnnouncementDetailScreen from '../screens/parent/AnnouncementDetailScreen';
-import type { Homework, Announcement } from '../types';
+import ChatScreen from '../screens/chat/ChatScreen';
+import type { Homework, Announcement, Conversation } from '../types';
 
 export type RootStackParamList = {
   Login: undefined;
@@ -37,6 +38,7 @@ export type RootStackParamList = {
   HomeworkDetail: { homework: Homework };
   AssignmentDetail: { assignment: { id: string; title: string; description?: string; subject?: string; dueDate?: string; submissionStatus?: string; grade?: number | null; createdAt: string; classes?: { name: string }; students?: { fullName: string } } };
   AnnouncementDetail: { announcement: Announcement };
+  Chat: { conversation: Conversation };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -74,6 +76,11 @@ export default function Navigation() {
               name="SupervisorSettings"
               component={SupervisorSettingsScreen}
               options={{ headerShown: true, headerTitle: 'Settings', headerBackTitle: 'Back', presentation: 'card' }}
+            />
+            <Stack.Screen
+              name="Chat"
+              component={ChatScreen}
+              options={{ headerShown: true, headerBackTitle: 'Back' }}
             />
           </>
         ) : (
@@ -124,6 +131,11 @@ export default function Navigation() {
               name="AnnouncementDetail"
               component={AnnouncementDetailScreen}
               options={{ headerShown: true, headerTitle: 'Announcement', headerBackTitle: 'Back' }}
+            />
+            <Stack.Screen
+              name="Chat"
+              component={ChatScreen}
+              options={{ headerShown: true, headerBackTitle: 'Back' }}
             />
           </>
         )}

@@ -7,6 +7,7 @@ import * as parent from '../controllers/parent.controller';
 import * as driver from '../controllers/driver.controller';
 import * as supervisor from '../controllers/supervisor.controller';
 import * as academic from '../controllers/academic.controller';
+import * as chat from '../controllers/chat.controller';
 import { authenticate, authorize } from '../middleware/auth';
 import type { AuthRequest } from '../middleware/auth';
 import { Server as SocketServer } from 'socket.io';
@@ -191,6 +192,19 @@ export function createRouter(io: SocketServer) {
   router.get('/academic/ebooks', authenticate, authorize(...academicRoles), (req, res) => academic.getEbooks(req as AuthRequest, res));
   router.post('/academic/ebooks', authenticate, authorize('teacher', 'admin'), upload.single('file'), (req, res) => academic.uploadEbook(req as AuthRequest, res));
   router.delete('/academic/ebooks/:id', authenticate, authorize('teacher', 'admin'), (req, res) => academic.deleteEbook(req as AuthRequest, res));
+
+  // ---- CHAT ----
+  const chatRoles = ['parent', 'teacher', 'supervisor'] as const;
+  router.get('/chat/contacts', authenticate, authorize(...chatRoles), (req, res) => chat.getContacts(req as AuthRequest, res));
+  router.get('/chat/conversations', authenticate, authorize(...chatRoles), (req, res) => chat.getConversations(req as AuthRequest, res));
+  router.post('/chat/conversations', authenticate, authorize(...chatRoles), (req, res) => chat.getOrCreateConversation(req as AuthRequest, res));
+  router.get('/chat/conversations/:id/messages', authenticate, authorize(...chatRoles), (req, res) => chat.getMessages(req as AuthRequest, res));
+  router.post('/chat/conversations/:id/messages', authenticate, authorize(...chatRoles), (req, res) => chat.sendMessage(req as AuthRequest, res));
+  router.post('/chat/conversations/:id/read', authenticate, authorize(...chatRoles), (req, res) => chat.markRead(req as AuthRequest, res));
+  router.patch('/chat/messages/:msgId', authenticate, authorize(...chatRoles), (req, res) => chat.editMessage(req as AuthRequest, res));
+  router.delete('/chat/messages/:msgId', authenticate, authorize(...chatRoles), (req, res) => chat.deleteMessage(req as AuthRequest, res));
+  router.get('/chat/unread-count', authenticate, authorize(...chatRoles), (req, res) => chat.getUnreadCount(req as AuthRequest, res));
+  router.post('/chat/upload', authenticate, authorize(...chatRoles), upload.single('file'), (req, res) => chat.uploadAttachment(req as AuthRequest, res));
 
   return router;
 }

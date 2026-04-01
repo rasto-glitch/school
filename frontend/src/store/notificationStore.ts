@@ -12,6 +12,9 @@ interface NotificationState {
   adminNotificationCount: number;
   setAdminNotificationCount: (count: number) => void;
   incrementAdminNotificationCount: () => void;
+  chatUnreadCount: number;
+  setChatUnreadCount: (count: number) => void;
+  incrementChatUnreadCount: () => void;
 }
 
 export const useNotificationStore = create<NotificationState>((set, get) => ({
@@ -26,4 +29,7 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
   adminNotificationCount: 0,
   setAdminNotificationCount: (adminNotificationCount) => set({ adminNotificationCount }),
   incrementAdminNotificationCount: () => set({ adminNotificationCount: get().adminNotificationCount + 1 }),
+  chatUnreadCount: 0,
+  setChatUnreadCount: (chatUnreadCount) => set({ chatUnreadCount }),
+  incrementChatUnreadCount: () => set({ chatUnreadCount: get().chatUnreadCount + 1 }),
 }));

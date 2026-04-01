@@ -93,6 +93,21 @@ export const supervisorApi = {
   getStudentBrief: (id: string) => api.get(`/supervisor/student-brief/${id}`),
 };
 
+// ---- CHAT ----
+export const chatApi = {
+  getContacts: () => api.get('/chat/contacts'),
+  getConversations: () => api.get('/chat/conversations'),
+  getOrCreateConversation: (otherUserId: string) => api.post('/chat/conversations', { otherUserId }),
+  getMessages: (conversationId: string, before?: string) =>
+    api.get(`/chat/conversations/${conversationId}/messages`, { params: before ? { before } : {} }),
+  sendMessage: (conversationId: string, data: { content?: string; type?: string; attachmentUrl?: string; attachmentName?: string; attachmentSize?: number }) =>
+    api.post(`/chat/conversations/${conversationId}/messages`, data),
+  editMessage: (msgId: string, content: string) => api.patch(`/chat/messages/${msgId}`, { content }),
+  deleteMessage: (msgId: string) => api.delete(`/chat/messages/${msgId}`),
+  markRead: (conversationId: string) => api.post(`/chat/conversations/${conversationId}/read`),
+  getUnreadCount: () => api.get('/chat/unread-count'),
+};
+
 // ---- DRIVER ----
 export const driverApi = {
   getProfile: () => api.get('/driver/me'),

@@ -1,7 +1,9 @@
+import { useState, useCallback, useEffect } from 'react';
+import { View, Text, StyleSheet } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Home, CalendarCheck, BookOpen, Users, User } from 'lucide-react-native';
+import { Home, CalendarCheck, BookOpen, Users, User, MessageSquare } from 'lucide-react-native';
 import { useColors } from '../store/themeStore';
 import { useAuthStore } from '../store/authStore';
 import SupervisorDashboardScreen from '../screens/supervisor/SupervisorDashboardScreen';
@@ -9,9 +11,19 @@ import SupervisorAttendanceScreen from '../screens/supervisor/SupervisorAttendan
 import SupervisorContentScreen from '../screens/supervisor/SupervisorContentScreen';
 import SupervisorStudentsScreen from '../screens/supervisor/SupervisorStudentsScreen';
 import SupervisorMeScreen from '../screens/supervisor/SupervisorMeScreen';
+import ChatListScreen from '../screens/chat/ChatListScreen';
+import { chatApi } from '../services/api';
+
+function TabBadge({ count }: { count: number }) {
+  if (count === 0) return null;
+  return (
+    <View style={styles.badge}>
+      <Text style={styles.badgeText}>{count > 99 ? '99+' : count}</Text>
+    </View>
+  );
+}
 
 const Tab = createBottomTabNavigator();
-
 const ICON_SIZE = 22;
 
 export default function SupervisorTabs() {
@@ -20,6 +32,17 @@ export default function SupervisorTabs() {
   const colors = useColors();
   const { school } = useAuthStore();
   const feat = (key: string) => school?.features?.[key] !== false;
+  const [chatCount, setChatCount] = useState(0);
+
+  const fetchChatCount = useCallback(() => {
+    chatApi.getUnreadCount().then(r => setChatCount(r.data?.count ?? 0)).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetchChatCount();
+    const interval = setInterval(fetchChatCount, 30000);
+    return () => clearInterval(interval);
+  }, [fetchChatCount]);
 
   return (
     <Tab.Navigator
@@ -61,6 +84,26 @@ export default function SupervisorTabs() {
         component={SupervisorStudentsScreen}
         options={{ tabBarLabel: t('nav.students', 'Students'), tabBarIcon: ({ color }) => <Users size={ICON_SIZE} color={color} /> }}
       />
+      {feat('chat') ? (
+        <Tab.Screen
+          name="ChatList"
+          component={ChatListScreen}
+          listeners={{ tabPress: () => setChatCount(0) }}
+          options={{
+            headerShown: true,
+            headerTitle: t('nav.chat', 'Chat'),
+            headerStyle: { backgroundColor: colors.card, direction: 'ltr' } as any,
+            headerTitleStyle: { color: colors.text },
+            tabBarLabel: t('nav.chat', 'Chat'),
+            tabBarIcon: ({ color }) => (
+              <View>
+                <MessageSquare size={ICON_SIZE} color={color} />
+                <TabBadge count={chatCount} />
+              </View>
+            ),
+          }}
+        />
+      ) : null}
       <Tab.Screen
         name="SupervisorMe"
         component={SupervisorMeScreen}
@@ -77,3 +120,14 @@ export default function SupervisorTabs() {
     </Tab.Navigator>
   );
 }
+
+const styles = StyleSheet.create({
+  badge: {
+    position: 'absolute', top: -4, right: -6,
+    minWidth: 16, height: 16, borderRadius: 8,
+    backgroundColor: '#EF4444',
+    alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  badgeText: { fontSize: 9, fontWeight: '800', color: '#fff' },
+});

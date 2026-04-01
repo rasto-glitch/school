@@ -8,6 +8,10 @@ export function setIo(io: SocketServer) {
   _io = io;
 }
 
+export function getIo(): SocketServer | null {
+  return _io;
+}
+
 export function emitToAdmins(schoolId: string, event: string, data: unknown): void {
   if (_io) _io.to(`school:${schoolId}:admins`).emit(event, data);
 }
@@ -90,6 +94,13 @@ export async function notifyMany(payloads: NotifyPayload[]): Promise<void> {
     if (_io) _io.to(`school:${p.schoolId}:user:${p.userId}`).emit('notification', { title: p.title, message: p.message, type: p.type });
     return sendPush(p.userId, p.title, p.message, p.type ?? 'general');
   }));
+}
+
+/**
+ * Send a push notification for a new chat message without writing to the notifications table.
+ */
+export async function chatPush(userId: string, senderName: string, preview: string): Promise<void> {
+  await sendPush(userId, senderName, preview, 'chat');
 }
 
 async function sendPush(userId: string, title: string, body: string, type: string): Promise<void> {

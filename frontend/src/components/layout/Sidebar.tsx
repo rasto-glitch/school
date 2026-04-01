@@ -1,15 +1,15 @@
 import { useEffect, useRef } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { io as socketIO } from 'socket.io-client';
 import { useAuthStore } from '../../store/authStore';
 import { useNotificationStore } from '../../store/notificationStore';
-import { parentApi, adminApi, teacherApi } from '../../services/api';
+import { useSocketStore } from '../../store/socketStore';
+import { parentApi, adminApi, teacherApi, chatApi } from '../../services/api';
 import {
   Home, BookOpen, ClipboardList, Megaphone, BarChart2,
   MapPin, Bell, User, Users, GraduationCap, Bus,
   Calendar, Settings, UserCog, LogOut, ChevronLeft, ChevronRight,
-  FileText, Star, Clock, X, ClipboardCheck
+  FileText, Star, Clock, X, ClipboardCheck, MessageSquare
 } from 'lucide-react';
 import type { Dispatch, SetStateAction } from 'react';
 import type { Role } from '../../types';
@@ -26,6 +26,7 @@ const navItems: Record<Role, NavItem[]> = {
     { to: '/parent/reports', icon: BarChart2, label: 'Reports', feature: 'reports' },
     { to: '/parent/bus', icon: MapPin, label: 'Track Bus', feature: 'bus_tracking' },
     { to: '/parent/appointments', icon: Calendar, label: 'Appointments', feature: 'appointments' },
+    { to: '/chat', icon: MessageSquare, label: 'Chat', feature: 'chat' },
     { to: '/parent/notifications', icon: Bell, label: 'Notifications' },
     { to: '/parent/profile', icon: User, label: 'Profile' },
   ],
@@ -38,6 +39,7 @@ const navItems: Record<Role, NavItem[]> = {
     { to: '/teacher/grades', icon: Star, label: 'Grades', feature: 'grades' },
     { to: '/teacher/weekly-summary', icon: Clock, label: 'Weekly Summary', feature: 'weekly_summary' },
     { to: '/teacher/students', icon: Users, label: 'Students' },
+    { to: '/chat', icon: MessageSquare, label: 'Chat', feature: 'chat' },
     { to: '/teacher/notifications', icon: Bell, label: 'Notifications' },
     { to: '/teacher/profile', icon: User, label: 'Profile' },
   ],
@@ -68,6 +70,7 @@ const navItems: Record<Role, NavItem[]> = {
     { to: '/supervisor/assignments', icon: ClipboardList, label: 'Assignments', feature: 'assignments' },
     { to: '/supervisor/weekly-summary', icon: Clock, label: 'Weekly Summary', feature: 'weekly_summary' },
     { to: '/supervisor/student-reports', icon: FileText, label: 'Student Reports', feature: 'reports' },
+    { to: '/chat', icon: MessageSquare, label: 'Chat', feature: 'chat' },
     { to: '/supervisor/profile', icon: User, label: 'Profile' },
   ],
 };
@@ -80,18 +83,19 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobileOpen }: SidebarProps) {
-  const { user, school, logout, token } = useAuthStore();
+  const { user, school, logout } = useAuthStore();
   const { t, i18n } = useTranslation();
   const {
     unreadCount, setUnreadCount,
     pendingAppointmentCount, setPendingAppointmentCount, incrementPendingAppointmentCount,
     teacherUnreadCount, setTeacherUnreadCount, incrementTeacherUnreadCount,
     adminNotificationCount, setAdminNotificationCount, incrementAdminNotificationCount,
+    chatUnreadCount, setChatUnreadCount, incrementChatUnreadCount,
   } = useNotificationStore();
-  const socketRef = useRef<ReturnType<typeof socketIO> | null>(null);
+  const { socket } = useSocketStore();
   const location = useLocation();
 
-  // Load initial counts
+  // Load initial notification counts
   useEffect(() => {
     if (user?.role === 'parent') {
       parentApi.getUnreadCount().then(r => setUnreadCount(r.data?.count ?? 0)).catch(() => {});
@@ -102,55 +106,68 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
     if (user?.role === 'admin') {
       adminApi.getUnreadNotificationCount().then(r => setAdminNotificationCount(r.data?.count ?? 0)).catch(() => {});
     }
+    const chatRoles = ['parent', 'teacher', 'supervisor'];
+    if (user?.role && chatRoles.includes(user.role)) {
+      chatApi.getUnreadCount().then(r => setChatUnreadCount(r.data?.count ?? 0)).catch(() => {});
+    }
   }, [user?.role]);
 
-  // Socket setup for admin (appointments + notifications) and teacher (notifications)
+  // Socket: admin appointment count init + shared socket event listeners
   useEffect(() => {
-    if ((user?.role !== 'admin' && user?.role !== 'teacher') || !token) return;
+    if (!user) return;
 
     if (user.role === 'admin') {
       adminApi.getPendingAppointmentCount()
         .then(r => setPendingAppointmentCount(r.data?.count ?? 0))
         .catch(() => {});
     }
+  }, [user?.role]);
 
-    const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
-    const socketUrl = apiBase.replace(/\/api$/, '');
-    const socket = socketIO(socketUrl, { auth: { token } });
-    socketRef.current = socket;
+  // Socket listeners — use the shared socket from SocketProvider
+  useEffect(() => {
+    if (!socket || !user) return;
 
-    socket.on('new_appointment', () => {
+    const onAppointment = () => {
       if (window.location.pathname !== '/admin/appointments') {
         incrementPendingAppointmentCount();
       }
-    });
+    };
 
-    socket.on('notification', () => {
+    const onNotification = () => {
       if (user.role === 'teacher' && window.location.pathname !== '/teacher/notifications') {
         incrementTeacherUnreadCount();
       }
       if (user.role === 'admin' && window.location.pathname !== '/admin/notifications') {
         incrementAdminNotificationCount();
       }
-    });
+    };
+
+    const onChatMessage = (data: any) => {
+      if (window.location.pathname !== '/chat') {
+        // Only increment if message is from other person
+        if (data.senderId !== user.id) {
+          incrementChatUnreadCount();
+        }
+      }
+    };
+
+    socket.on('new_appointment', onAppointment);
+    socket.on('notification', onNotification);
+    socket.on('chat:message', onChatMessage);
 
     return () => {
-      socket.disconnect();
-      socketRef.current = null;
+      socket.off('new_appointment', onAppointment);
+      socket.off('notification', onNotification);
+      socket.off('chat:message', onChatMessage);
     };
-  }, [user?.role, token]);
+  }, [socket, user]);
 
-  // Auto-clear badge when navigating to the relevant tab
+  // Auto-clear badges on navigation
   useEffect(() => {
-    if (location.pathname === '/teacher/notifications' && teacherUnreadCount > 0) {
-      setTeacherUnreadCount(0);
-    }
-    if (location.pathname === '/admin/notifications' && adminNotificationCount > 0) {
-      setAdminNotificationCount(0);
-    }
-    if (location.pathname === '/admin/appointments' && pendingAppointmentCount > 0) {
-      setPendingAppointmentCount(0);
-    }
+    if (location.pathname === '/teacher/notifications' && teacherUnreadCount > 0) setTeacherUnreadCount(0);
+    if (location.pathname === '/admin/notifications' && adminNotificationCount > 0) setAdminNotificationCount(0);
+    if (location.pathname === '/admin/appointments' && pendingAppointmentCount > 0) setPendingAppointmentCount(0);
+    if (location.pathname === '/chat' && chatUnreadCount > 0) setChatUnreadCount(0);
   }, [location.pathname]);
 
   const isRTL = ['ar', 'ku'].includes(i18n.language);
@@ -177,14 +194,12 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
         {!collapsed && (
           <span className="font-bold text-gray-900 text-sm truncate">{school?.name || 'School'}</span>
         )}
-        {/* Desktop collapse toggle */}
         <button
           onClick={() => setCollapsed(!collapsed)}
           className="ml-auto p-1 rounded-lg hover:bg-gray-100 transition-colors flex-shrink-0 hidden lg:flex"
         >
           {collapsed ? <ChevronRight className="w-4 h-4 text-gray-500" /> : <ChevronLeft className="w-4 h-4 text-gray-500" />}
         </button>
-        {/* Mobile close button */}
         <button
           onClick={() => setMobileOpen(false)}
           className="ml-auto p-1 rounded-lg hover:bg-gray-100 transition-colors flex-shrink-0 lg:hidden"
@@ -209,10 +224,12 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
           const showTeacherNotifBadge = to === '/teacher/notifications' && user?.role === 'teacher' && teacherUnreadCount > 0;
           const showApptBadge = to === '/admin/appointments' && user?.role === 'admin' && pendingAppointmentCount > 0;
           const showAdminNotifBadge = to === '/admin/notifications' && user?.role === 'admin' && adminNotificationCount > 0;
-          const showBadge = showNotifBadge || showTeacherNotifBadge || showApptBadge || showAdminNotifBadge;
+          const showChatBadge = to === '/chat' && chatUnreadCount > 0;
+          const showBadge = showNotifBadge || showTeacherNotifBadge || showApptBadge || showAdminNotifBadge || showChatBadge;
           const badgeCount = showNotifBadge ? unreadCount
             : showTeacherNotifBadge ? teacherUnreadCount
             : showApptBadge ? pendingAppointmentCount
+            : showChatBadge ? chatUnreadCount
             : adminNotificationCount;
           return (
             <NavLink
@@ -223,6 +240,7 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
                 if (showApptBadge) setPendingAppointmentCount(0);
                 if (showTeacherNotifBadge) setTeacherUnreadCount(0);
                 if (showAdminNotifBadge) setAdminNotificationCount(0);
+                if (showChatBadge) setChatUnreadCount(0);
               }}
               className={({ isActive }) => `
                 flex items-center gap-3 px-4 py-2.5 mx-2 rounded-xl transition-colors duration-150

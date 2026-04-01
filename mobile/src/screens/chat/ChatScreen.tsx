@@ -1,0 +1,409 @@
+import { useEffect, useRef, useState, useCallback } from 'react';
+import {
+  View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet,
+  KeyboardAvoidingView, Platform, ActivityIndicator, Alert, Image,
+  Pressable, Linking,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Send, Paperclip, Pencil, Trash2, Check, X, FileText } from 'lucide-react-native';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import { format, isToday, isYesterday, isSameDay } from 'date-fns';
+import { io as socketIO, type Socket } from 'socket.io-client';
+import { useColors } from '../../store/themeStore';
+import { useAuthStore } from '../../store/authStore';
+import { chatApi } from '../../services/api';
+import { font } from '../../theme';
+import type { Conversation, ChatMessage } from '../../types';
+
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5000/api';
+const SOCKET_URL = API_URL.replace(/\/api$/, '');
+const LIMIT = 30;
+
+function formatTime(iso: string) {
+  const d = new Date(iso);
+  if (isToday(d)) return format(d, 'HH:mm');
+  if (isYesterday(d)) return `Yesterday ${format(d, 'HH:mm')}`;
+  return format(d, 'MMM d, HH:mm');
+}
+
+function humanSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function DateSeparator({ date, colors }: { date: Date; colors: any }) {
+  const label = isToday(date) ? 'Today' : isYesterday(date) ? 'Yesterday' : format(date, 'MMMM d, yyyy');
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 12, paddingHorizontal: 16 }}>
+      <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
+      <Text style={{ fontSize: 11, color: colors.textMuted, marginHorizontal: 10, fontWeight: '500' }}>{label}</Text>
+      <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
+    </View>
+  );
+}
+
+interface BubbleProps {
+  msg: ChatMessage;
+  isMine: boolean;
+  showAvatar: boolean;
+  initials: string;
+  primaryColor: string;
+  colors: any;
+  onLongPress: (msg: ChatMessage) => void;
+}
+
+function Bubble({ msg, isMine, showAvatar, initials, primaryColor, colors, onLongPress }: BubbleProps) {
+  if (msg.isDeleted) {
+    return (
+      <View style={{ paddingHorizontal: 20, marginVertical: 2 }}>
+        <Text style={{ fontSize: 12, color: colors.textMuted, fontStyle: 'italic', textAlign: isMine ? 'right' : 'left' }}>Message deleted</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={{ flexDirection: isMine ? 'row-reverse' : 'row', alignItems: 'flex-end', marginVertical: 2, paddingHorizontal: 12, gap: 8 }}>
+      {/* Avatar */}
+      <View style={{ width: 28, alignItems: 'center' }}>
+        {showAvatar && !isMine && (
+          <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: primaryColor, alignItems: 'center', justifyContent: 'center' }}>
+            <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>{initials}</Text>
+          </View>
+        )}
+      </View>
+
+      <Pressable
+        style={{ maxWidth: '72%' }}
+        onLongPress={() => onLongPress(msg)}
+        delayLongPress={400}
+      >
+        <View style={[
+          styles.bubble,
+          isMine
+            ? { backgroundColor: primaryColor, borderBottomRightRadius: 4 }
+            : { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderBottomLeftRadius: 4 },
+        ]}>
+          {msg.type === 'text' && (
+            <Text style={{ color: isMine ? '#fff' : colors.text, fontSize: font.sm, lineHeight: 20 }}>
+              {msg.content}
+            </Text>
+          )}
+
+          {msg.type === 'image' && msg.attachmentUrl && (
+            <TouchableOpacity onPress={() => Linking.openURL(msg.attachmentUrl!)}>
+              <Image
+                source={{ uri: msg.attachmentUrl }}
+                style={{ width: 200, height: 200, borderRadius: 8 }}
+                resizeMode="cover"
+              />
+            </TouchableOpacity>
+          )}
+
+          {msg.type === 'file' && msg.attachmentUrl && (
+            <TouchableOpacity
+              onPress={() => Linking.openURL(msg.attachmentUrl!)}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}
+            >
+              <View style={{ padding: 8, borderRadius: 8, backgroundColor: isMine ? 'rgba(255,255,255,0.2)' : colors.bg }}>
+                <FileText size={20} color={isMine ? '#fff' : colors.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: isMine ? '#fff' : colors.text }} numberOfLines={2}>
+                  {msg.attachmentName || 'File'}
+                </Text>
+                {msg.attachmentSize != null && (
+                  <Text style={{ fontSize: 11, color: isMine ? 'rgba(255,255,255,0.7)' : colors.textMuted }}>{humanSize(msg.attachmentSize)}</Text>
+                )}
+              </View>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        <View style={{ flexDirection: isMine ? 'row-reverse' : 'row', alignItems: 'center', gap: 4, marginTop: 3, paddingHorizontal: 2 }}>
+          <Text style={{ fontSize: 10, color: colors.textMuted }}>{formatTime(msg.createdAt)}</Text>
+          {msg.editedAt && <Text style={{ fontSize: 10, color: colors.textMuted, fontStyle: 'italic' }}>edited</Text>}
+        </View>
+      </Pressable>
+    </View>
+  );
+}
+
+export default function ChatScreen() {
+  const navigation = useNavigation<any>();
+  const route = useRoute<any>();
+  const conversation: Conversation = route.params?.conversation;
+  const colors = useColors();
+  const { user, token } = useAuthStore();
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [text, setText] = useState('');
+  const [sending, setSending] = useState(false);
+  const [otherTyping, setOtherTyping] = useState(false);
+  const [editingMsg, setEditingMsg] = useState<ChatMessage | null>(null);
+  const [editText, setEditText] = useState('');
+  const socketRef = useRef<Socket | null>(null);
+  const flatRef = useRef<FlatList>(null);
+  const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const primaryColor = colors.primary;
+  const otherUser = conversation?.otherUser;
+  const initials = `${otherUser?.firstName?.[0] || ''}${otherUser?.lastName?.[0] || ''}`.toUpperCase();
+
+  // Set header title
+  useEffect(() => {
+    navigation.setOptions({ title: otherUser?.fullName || 'Chat' });
+  }, [otherUser]);
+
+  // Load messages
+  useEffect(() => {
+    chatApi.getMessages(conversation.id)
+      .then(res => {
+        setMessages(res.data);
+        setHasMore(res.data.length === LIMIT);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+    chatApi.markRead(conversation.id).catch(() => {});
+  }, [conversation.id]);
+
+  // Socket connection
+  useEffect(() => {
+    if (!token) return;
+    const socket = socketIO(SOCKET_URL, { auth: { token }, transports: ['websocket'] });
+    socketRef.current = socket;
+
+    socket.on('chat:message', (data: ChatMessage & { conversationId: string }) => {
+      if (data.conversationId !== conversation.id) return;
+      setMessages(prev => prev.find(m => m.id === data.id) ? prev : [...prev, data]);
+      chatApi.markRead(conversation.id).catch(() => {});
+      setTimeout(() => flatRef.current?.scrollToEnd({ animated: true }), 100);
+    });
+
+    socket.on('chat:edit', (data: ChatMessage & { conversationId: string }) => {
+      if (data.conversationId !== conversation.id) return;
+      setMessages(prev => prev.map(m => m.id === data.id ? { ...m, content: data.content, editedAt: data.editedAt } : m));
+    });
+
+    socket.on('chat:delete', (data: { id: string; conversationId: string }) => {
+      if (data.conversationId !== conversation.id) return;
+      setMessages(prev => prev.map(m => m.id === data.id ? { ...m, isDeleted: true, content: undefined } : m));
+    });
+
+    socket.on('chat:typing', (data: { conversationId: string; senderId: string; isTyping: boolean }) => {
+      if (data.conversationId !== conversation.id || data.senderId !== otherUser?.id) return;
+      setOtherTyping(data.isTyping);
+      if (typingTimer.current) clearTimeout(typingTimer.current);
+      if (data.isTyping) typingTimer.current = setTimeout(() => setOtherTyping(false), 3000);
+    });
+
+    return () => {
+      socket.disconnect();
+      socketRef.current = null;
+    };
+  }, [token, conversation.id]);
+
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore || messages.length === 0) return;
+    setLoadingMore(true);
+    try {
+      const res = await chatApi.getMessages(conversation.id, messages[0].id);
+      const older: ChatMessage[] = res.data;
+      setHasMore(older.length === LIMIT);
+      setMessages(prev => [...older, ...prev]);
+    } catch {}
+    finally { setLoadingMore(false); }
+  }, [conversation.id, messages, loadingMore, hasMore]);
+
+  const emitTyping = (val: string) => {
+    setText(val);
+    socketRef.current?.emit('chat:typing', { conversationId: conversation.id, recipientId: otherUser?.id, isTyping: true });
+    if (typingTimer.current) clearTimeout(typingTimer.current);
+    typingTimer.current = setTimeout(() => {
+      socketRef.current?.emit('chat:typing', { conversationId: conversation.id, recipientId: otherUser?.id, isTyping: false });
+    }, 1500);
+  };
+
+  const handleSend = async () => {
+    const trimmed = text.trim();
+    if (!trimmed || sending) return;
+    setSending(true);
+    setText('');
+    socketRef.current?.emit('chat:typing', { conversationId: conversation.id, recipientId: otherUser?.id, isTyping: false });
+    try {
+      const res = await chatApi.sendMessage(conversation.id, { content: trimmed, type: 'text' });
+      setMessages(prev => prev.find(m => m.id === res.data.id) ? prev : [...prev, res.data]);
+      setTimeout(() => flatRef.current?.scrollToEnd({ animated: true }), 100);
+    } catch {}
+    finally { setSending(false); }
+  };
+
+  const handleLongPress = (msg: ChatMessage) => {
+    if (msg.isDeleted) return;
+    const options: string[] = [];
+    const actions: (() => void)[] = [];
+
+    if (msg.senderId === user?.id && msg.type === 'text') {
+      options.push('Edit');
+      actions.push(() => { setEditingMsg(msg); setEditText(msg.content || ''); });
+    }
+    if (msg.senderId === user?.id) {
+      options.push('Delete');
+      actions.push(() => {
+        Alert.alert('Delete message?', 'This cannot be undone.', [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Delete', style: 'destructive', onPress: async () => {
+            await chatApi.deleteMessage(msg.id).catch(() => {});
+            setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, isDeleted: true, content: undefined } : m));
+          }},
+        ]);
+      });
+    }
+    options.push('Cancel');
+    actions.push(() => {});
+
+    Alert.alert('Message', undefined, options.map((o, i) => ({
+      text: o,
+      style: o === 'Cancel' ? 'cancel' : o === 'Delete' ? 'destructive' : 'default',
+      onPress: actions[i],
+    })));
+  };
+
+  const saveEdit = async () => {
+    if (!editingMsg || !editText.trim()) { setEditingMsg(null); return; }
+    try {
+      await chatApi.editMessage(editingMsg.id, editText.trim());
+      setMessages(prev => prev.map(m => m.id === editingMsg.id ? { ...m, content: editText.trim(), editedAt: new Date().toISOString() } : m));
+    } catch {}
+    setEditingMsg(null);
+  };
+
+  // Build grouped messages with date separators
+  type Item = { type: 'separator'; date: Date; key: string } | { type: 'msg'; msg: ChatMessage; showAvatar: boolean; key: string };
+  const items: Item[] = [];
+  messages.forEach((msg, i) => {
+    const prev = messages[i - 1];
+    if (!prev || !isSameDay(new Date(msg.createdAt), new Date(prev.createdAt))) {
+      items.push({ type: 'separator', date: new Date(msg.createdAt), key: `sep-${msg.createdAt}` });
+    }
+    const sameGroup = prev && prev.senderId === msg.senderId && new Date(msg.createdAt).getTime() - new Date(prev.createdAt).getTime() < 5 * 60_000;
+    items.push({ type: 'msg', msg, showAvatar: !sameGroup, key: msg.id });
+  });
+
+  if (otherTyping) {
+    items.push({ type: 'msg', msg: { id: '__typing__', senderId: otherUser?.id || '', content: '', type: 'text', isDeleted: false, createdAt: new Date().toISOString() }, showAvatar: true, key: '__typing__' });
+  }
+
+  const s = makeStyles(colors);
+
+  return (
+    <SafeAreaView style={[s.container, { backgroundColor: colors.bg }]} edges={['bottom']}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={90}>
+        {loading ? (
+          <ActivityIndicator style={{ flex: 1 }} color={primaryColor} />
+        ) : (
+          <FlatList
+            ref={flatRef}
+            data={items}
+            keyExtractor={item => item.key}
+            contentContainerStyle={{ paddingVertical: 8 }}
+            onEndReached={loadMore}
+            onEndReachedThreshold={0.2}
+            ListHeaderComponent={loadingMore ? <ActivityIndicator size="small" color={primaryColor} style={{ padding: 8 }} /> : null}
+            onContentSizeChange={() => flatRef.current?.scrollToEnd({ animated: false })}
+            renderItem={({ item }) => {
+              if (item.type === 'separator') {
+                return <DateSeparator date={item.date} colors={colors} />;
+              }
+              if (item.msg.id === '__typing__') {
+                return (
+                  <View style={{ flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 12, gap: 8, marginVertical: 2 }}>
+                    <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: primaryColor, alignItems: 'center', justifyContent: 'center' }}>
+                      <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>{initials}</Text>
+                    </View>
+                    <View style={[s.bubble, { backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderBottomLeftRadius: 4 }]}>
+                      <View style={{ flexDirection: 'row', gap: 3, alignItems: 'center', paddingVertical: 2 }}>
+                        {[0, 150, 300].map(delay => (
+                          <View key={delay} style={[s.typingDot, { backgroundColor: colors.textMuted }]} />
+                        ))}
+                      </View>
+                    </View>
+                  </View>
+                );
+              }
+              return (
+                <Bubble
+                  msg={item.msg}
+                  isMine={item.msg.senderId === user?.id}
+                  showAvatar={item.showAvatar}
+                  initials={initials}
+                  primaryColor={primaryColor}
+                  colors={colors}
+                  onLongPress={handleLongPress}
+                />
+              );
+            }}
+          />
+        )}
+
+        {/* Edit bar */}
+        {editingMsg && (
+          <View style={[s.editBar, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
+            <TextInput
+              style={[s.editInput, { color: colors.text, borderColor: colors.border }]}
+              value={editText}
+              onChangeText={setEditText}
+              multiline
+              autoFocus
+            />
+            <TouchableOpacity onPress={() => setEditingMsg(null)} style={s.editAction}>
+              <X size={18} color={colors.textMuted} />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={saveEdit} style={[s.editAction, { backgroundColor: colors.primaryLight }]}>
+              <Check size={18} color={colors.primary} />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Input bar */}
+        {!editingMsg && (
+          <View style={[s.inputBar, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
+            <TextInput
+              style={[s.input, { color: colors.text, backgroundColor: colors.bg, borderColor: colors.border }]}
+              placeholder="Type a message…"
+              placeholderTextColor={colors.textMuted}
+              value={text}
+              onChangeText={emitTyping}
+              multiline
+              maxLength={2000}
+            />
+            <TouchableOpacity
+              onPress={handleSend}
+              disabled={!text.trim() || sending}
+              style={[s.sendBtn, { backgroundColor: (!text.trim() || sending) ? colors.borderLight : primaryColor }]}
+            >
+              {sending ? <ActivityIndicator size="small" color="#fff" /> : <Send size={18} color="#fff" />}
+            </TouchableOpacity>
+          </View>
+        )}
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  bubble: { borderRadius: 16, paddingHorizontal: 12, paddingVertical: 8 },
+});
+
+const makeStyles = (colors: any) => StyleSheet.create({
+  container: { flex: 1 },
+  bubble: { borderRadius: 16, paddingHorizontal: 12, paddingVertical: 8 },
+  typingDot: { width: 6, height: 6, borderRadius: 3 },
+  inputBar: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, paddingHorizontal: 12, paddingVertical: 10, borderTopWidth: 1 },
+  input: { flex: 1, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 10, fontSize: font.sm, borderWidth: 1, maxHeight: 100, lineHeight: 20 },
+  sendBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  editBar: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 10, borderTopWidth: 1 },
+  editInput: { flex: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, fontSize: font.sm, borderWidth: 1, maxHeight: 80 },
+  editAction: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+});

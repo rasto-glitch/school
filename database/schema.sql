@@ -505,6 +505,47 @@ CREATE INDEX IF NOT EXISTS idx_ebooks_school ON ebooks(school_id, created_at DES
 CREATE INDEX IF NOT EXISTS idx_ebooks_class ON ebooks(class_id);
 
 -- ============================================================
+-- CHAT
+-- ============================================================
+CREATE TABLE IF NOT EXISTS conversations (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  parent_id UUID NOT NULL REFERENCES users(id),
+  staff_id UUID NOT NULL REFERENCES users(id),
+  staff_role TEXT NOT NULL CHECK (staff_role IN ('teacher', 'supervisor')),
+  last_message_at TIMESTAMPTZ DEFAULT NOW(),
+  last_message_preview TEXT,
+  last_message_sender_id UUID REFERENCES users(id),
+  last_message_type TEXT DEFAULT 'text',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(school_id, parent_id, staff_id)
+);
+CREATE INDEX IF NOT EXISTS idx_conversations_parent ON conversations(school_id, parent_id, last_message_at DESC);
+CREATE INDEX IF NOT EXISTS idx_conversations_staff ON conversations(school_id, staff_id, last_message_at DESC);
+
+CREATE TABLE IF NOT EXISTS messages (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  sender_id UUID NOT NULL REFERENCES users(id),
+  content TEXT,
+  type TEXT NOT NULL DEFAULT 'text' CHECK (type IN ('text', 'image', 'file')),
+  attachment_url TEXT,
+  attachment_name TEXT,
+  attachment_size INTEGER,
+  is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+  edited_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS conversation_reads (
+  conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id),
+  last_read_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (conversation_id, user_id)
+);
+
+-- ============================================================
 -- DEMO SCHOOL SEED
 -- ============================================================
 INSERT INTO schools (id, name, slug, abbreviation, primary_color, secondary_color, is_active)

@@ -135,6 +135,19 @@ io.on('connection', (socket) => {
     socket.join(`school:${schoolId}:driver:${driverId}`);
   });
 
+  // Forward typing indicator to the other participant's room
+  socket.on('chat:typing', (data: { conversationId: string; recipientId: string; isTyping: boolean }) => {
+    if (
+      typeof data?.conversationId !== 'string' || !UUID_RE.test(data.conversationId) ||
+      typeof data?.recipientId !== 'string' || !UUID_RE.test(data.recipientId)
+    ) return;
+    io.to(`school:${schoolId}:user:${data.recipientId}`).emit('chat:typing', {
+      conversationId: data.conversationId,
+      senderId: userId,
+      isTyping: !!data.isTyping,
+    });
+  });
+
   socket.on('disconnect', () => {});
 });
 

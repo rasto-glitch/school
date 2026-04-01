@@ -4,16 +4,17 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { TouchableOpacity, View, Text, StyleSheet } from 'react-native';
-import { Home, BookOpen, ClipboardList, Bus, Bell, User, Settings } from 'lucide-react-native';
+import { Home, BookOpen, ClipboardList, Bus, Bell, User, Settings, MessageSquare } from 'lucide-react-native';
 import FeedScreen from '../screens/parent/FeedScreen';
 import HomeworkScreen from '../screens/parent/HomeworkScreen';
 import AssignmentsScreen from '../screens/parent/AssignmentsScreen';
 import BusTrackingScreen from '../screens/parent/BusTrackingScreen';
 import MeScreen from '../screens/parent/MeScreen';
+import ChatListScreen from '../screens/chat/ChatListScreen';
 import { useColors } from '../store/themeStore';
 import { useBadgeStore } from '../store/badgeStore';
 import { font } from '../theme';
-import { parentApi } from '../services/api';
+import { parentApi, chatApi } from '../services/api';
 import { useAuthStore } from '../store/authStore';
 
 const Tab = createBottomTabNavigator();
@@ -35,6 +36,7 @@ export default function ParentTabs() {
   const { school } = useAuthStore();
   const [homeworkCount, setHomeworkCount] = useState(0);
   const [assignmentCount, setAssignmentCount] = useState(0);
+  const [chatCount, setChatCount] = useState(0);
   const { unreadCount, setUnreadCount, setReportCount, setBookingCount } = useBadgeStore();
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -51,6 +53,9 @@ export default function ParentTabs() {
         setReportCount(r.data?.report ?? 0);
         setBookingCount(r.data?.booking ?? 0);
       })
+      .catch(() => {});
+    chatApi.getUnreadCount()
+      .then(r => setChatCount(r.data?.count ?? 0))
       .catch(() => {});
   }, [setUnreadCount, setReportCount, setBookingCount]);
 
@@ -174,6 +179,23 @@ export default function ParentTabs() {
             headerTitle: t('nav.track_bus'),
             tabBarLabel: t('nav.track_bus'),
             tabBarIcon: ({ color }) => <Bus size={22} color={color} />,
+          }}
+        />
+      ) : null}
+      {feat('chat') ? (
+        <Tab.Screen
+          name="ChatList"
+          component={ChatListScreen}
+          listeners={{ tabPress: () => setChatCount(0) }}
+          options={{
+            headerTitle: t('nav.chat', 'Chat'),
+            tabBarLabel: t('nav.chat', 'Chat'),
+            tabBarIcon: ({ color }) => (
+              <View>
+                <MessageSquare size={22} color={color} />
+                <TabBadge count={chatCount} />
+              </View>
+            ),
           }}
         />
       ) : null}

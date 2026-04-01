@@ -1,0 +1,245 @@
+import { useEffect, useState, useCallback, useRef } from 'react';
+import {
+  View, Text, FlatList, TouchableOpacity, StyleSheet,
+  TextInput, ActivityIndicator, RefreshControl, Image,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { MessageSquare, Plus, Search, X } from 'lucide-react-native';
+import { useNavigation } from '@react-navigation/native';
+import { formatDistanceToNow } from 'date-fns';
+import { useColors } from '../../store/themeStore';
+import { useAuthStore } from '../../store/authStore';
+import { chatApi } from '../../services/api';
+import { font } from '../../theme';
+import type { Conversation, ChatUser } from '../../types';
+
+type Nav = any;
+
+function Avatar({ user, size, primaryColor }: { user: ChatUser; size: number; primaryColor: string }) {
+  const initials = `${user.firstName?.[0] || ''}${user.lastName?.[0] || ''}`.toUpperCase();
+  if (user.profilePicture) {
+    return <Image source={{ uri: user.profilePicture }} style={{ width: size, height: size, borderRadius: size / 2 }} />;
+  }
+  return (
+    <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: primaryColor, alignItems: 'center', justifyContent: 'center' }}>
+      <Text style={{ color: '#fff', fontWeight: '700', fontSize: size * 0.35 }}>{initials}</Text>
+    </View>
+  );
+}
+
+function roleLabel(role: string, subject?: string) {
+  if (role === 'teacher') return subject ? `Teacher · ${subject}` : 'Teacher';
+  if (role === 'supervisor') return 'Supervisor';
+  return 'Parent';
+}
+
+export default function ChatListScreen() {
+  const navigation = useNavigation<Nav>();
+  const colors = useColors();
+  const { user } = useAuthStore();
+  const [convs, setConvs] = useState<Conversation[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [search, setSearch] = useState('');
+  const [showNew, setShowNew] = useState(false);
+  const [contacts, setContacts] = useState<ChatUser[]>([]);
+  const [contactSearch, setContactSearch] = useState('');
+  const [loadingContacts, setLoadingContacts] = useState(false);
+  const [startingId, setStartingId] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const res = await chatApi.getConversations();
+      setConvs(res.data);
+    } catch {}
+    finally { setLoading(false); setRefreshing(false); }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const onRefresh = () => { setRefreshing(true); load(); };
+
+  const openNew = async () => {
+    setShowNew(true);
+    setContactSearch('');
+    setLoadingContacts(true);
+    try {
+      const res = await chatApi.getContacts();
+      setContacts(res.data);
+    } catch {}
+    finally { setLoadingContacts(false); }
+  };
+
+  const startConv = async (contactId: string) => {
+    setStartingId(contactId);
+    try {
+      const res = await chatApi.getOrCreateConversation(contactId);
+      const conv: Conversation = res.data;
+      setConvs(prev => prev.find(c => c.id === conv.id) ? prev : [conv, ...prev]);
+      setShowNew(false);
+      navigation.navigate('Chat', { conversation: conv });
+    } catch {}
+    finally { setStartingId(null); }
+  };
+
+  const filtered = convs.filter(c => !search || c.otherUser?.fullName?.toLowerCase().includes(search.toLowerCase()));
+  const filteredContacts = contacts.filter(c => !contactSearch || c.fullName.toLowerCase().includes(contactSearch.toLowerCase()));
+
+  const s = makeStyles(colors);
+
+  return (
+    <SafeAreaView style={[s.container, { backgroundColor: colors.bg }]} edges={['bottom']}>
+      {/* Search bar */}
+      <View style={s.searchRow}>
+        <View style={s.searchBox}>
+          <Search size={14} color={colors.textMuted} />
+          <TextInput
+            style={[s.searchInput, { color: colors.text }]}
+            placeholder="Search…"
+            placeholderTextColor={colors.textMuted}
+            value={search}
+            onChangeText={setSearch}
+          />
+          {search.length > 0 && (
+            <TouchableOpacity onPress={() => setSearch('')}>
+              <X size={14} color={colors.textMuted} />
+            </TouchableOpacity>
+          )}
+        </View>
+        <TouchableOpacity onPress={openNew} style={[s.newBtn, { backgroundColor: colors.primaryLight }]}>
+          <Plus size={18} color={colors.primary} />
+        </TouchableOpacity>
+      </View>
+
+      {loading ? (
+        <ActivityIndicator style={{ marginTop: 40 }} color={colors.primary} />
+      ) : filtered.length === 0 ? (
+        <View style={s.empty}>
+          <MessageSquare size={40} color={colors.textMuted} />
+          <Text style={[s.emptyText, { color: colors.textMuted }]}>No conversations yet</Text>
+          <Text style={[s.emptySubText, { color: colors.textMuted }]}>Tap + to start one</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={filtered}
+          keyExtractor={item => item.id}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+          renderItem={({ item: conv }) => (
+            <TouchableOpacity
+              style={[s.row, { backgroundColor: colors.card, borderBottomColor: colors.border }]}
+              onPress={() => navigation.navigate('Chat', { conversation: conv })}
+              activeOpacity={0.7}
+            >
+              {conv.otherUser ? (
+                <Avatar user={conv.otherUser} size={46} primaryColor={colors.primary} />
+              ) : (
+                <View style={{ width: 46, height: 46, borderRadius: 23, backgroundColor: colors.border }} />
+              )}
+              <View style={s.rowContent}>
+                <View style={s.rowTop}>
+                  <Text style={[s.rowName, { color: colors.text, fontWeight: conv.hasUnread ? '700' : '600' }]} numberOfLines={1}>
+                    {conv.otherUser?.fullName || 'Unknown'}
+                  </Text>
+                  {conv.lastMessageAt && (
+                    <Text style={[s.rowTime, { color: colors.textMuted }]}>
+                      {formatDistanceToNow(new Date(conv.lastMessageAt), { addSuffix: false })
+                        .replace('about ', '').replace(' ago', '')}
+                    </Text>
+                  )}
+                </View>
+                <View style={s.rowBottom}>
+                  <Text style={[s.rowPreview, { color: conv.hasUnread ? colors.text : colors.textSecondary, fontWeight: conv.hasUnread ? '600' : '400' }]} numberOfLines={1}>
+                    {conv.lastMessagePreview
+                      ? (conv.lastMessageSenderId === user?.id ? `You: ${conv.lastMessagePreview}` : conv.lastMessagePreview)
+                      : 'No messages yet'}
+                  </Text>
+                  {conv.hasUnread && (
+                    <View style={[s.unreadDot, { backgroundColor: colors.primary }]} />
+                  )}
+                </View>
+              </View>
+            </TouchableOpacity>
+          )}
+        />
+      )}
+
+      {/* New conversation modal */}
+      {showNew && (
+        <View style={s.modalOverlay}>
+          <View style={[s.modal, { backgroundColor: colors.card }]}>
+            <View style={[s.modalHeader, { borderBottomColor: colors.border }]}>
+              <Text style={[s.modalTitle, { color: colors.text }]}>New Conversation</Text>
+              <TouchableOpacity onPress={() => setShowNew(false)} style={s.closeBtn}>
+                <X size={18} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <View style={[s.modalSearch, { borderBottomColor: colors.border }]}>
+              <Search size={14} color={colors.textMuted} />
+              <TextInput
+                style={[s.searchInput, { color: colors.text, flex: 1 }]}
+                placeholder="Search contacts…"
+                placeholderTextColor={colors.textMuted}
+                value={contactSearch}
+                onChangeText={setContactSearch}
+                autoFocus
+              />
+            </View>
+            {loadingContacts ? (
+              <ActivityIndicator style={{ padding: 24 }} color={colors.primary} />
+            ) : (
+              <FlatList
+                data={filteredContacts}
+                keyExtractor={c => c.id}
+                style={{ maxHeight: 360 }}
+                ListEmptyComponent={<Text style={[s.emptyText, { color: colors.textMuted, padding: 24 }]}>No contacts found</Text>}
+                renderItem={({ item: contact }) => (
+                  <TouchableOpacity
+                    style={[s.contactRow, { borderBottomColor: colors.borderLight }]}
+                    onPress={() => startConv(contact.id)}
+                    disabled={startingId === contact.id}
+                    activeOpacity={0.7}
+                  >
+                    <Avatar user={contact} size={38} primaryColor={colors.primary} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={[s.contactName, { color: colors.text }]}>{contact.fullName}</Text>
+                      <Text style={[s.contactRole, { color: colors.textMuted }]}>{roleLabel(contact.role, contact.subject)}</Text>
+                    </View>
+                    {startingId === contact.id && <ActivityIndicator size="small" color={colors.primary} />}
+                  </TouchableOpacity>
+                )}
+              />
+            )}
+          </View>
+        </View>
+      )}
+    </SafeAreaView>
+  );
+}
+
+const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').useColors>) => StyleSheet.create({
+  container: { flex: 1 },
+  searchRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 10 },
+  searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.card, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: colors.border },
+  searchInput: { flex: 1, fontSize: font.sm, padding: 0 },
+  newBtn: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8 },
+  emptyText: { fontSize: font.base, fontWeight: '600', textAlign: 'center' },
+  emptySubText: { fontSize: font.sm, textAlign: 'center' },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1 },
+  rowContent: { flex: 1, minWidth: 0 },
+  rowTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  rowName: { flex: 1, fontSize: font.sm },
+  rowTime: { fontSize: 11 },
+  rowBottom: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 },
+  rowPreview: { flex: 1, fontSize: 12, marginRight: 4 },
+  unreadDot: { width: 8, height: 8, borderRadius: 4 },
+  modalOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', zIndex: 100, padding: 20 },
+  modal: { width: '100%', maxWidth: 400, borderRadius: 20, overflow: 'hidden' },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1 },
+  modalTitle: { fontSize: font.base, fontWeight: '700' },
+  closeBtn: { padding: 4 },
+  modalSearch: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1 },
+  contactRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1 },
+  contactName: { fontSize: font.sm, fontWeight: '600' },
+  contactRole: { fontSize: 12, marginTop: 1 },
+});
