@@ -202,6 +202,13 @@ export const driverApi = {
   stopDrive: () => api.post('/driver/stop'),
 };
 
+// ---- RECEPTION ----
+export const receptionApi = {
+  getPendingAppointmentCount: () => api.get('/reception/appointments/pending-count'),
+  getAppointments: () => api.get('/reception/appointments'),
+  respondToAppointment: (id: string, data: object) => api.put(`/reception/appointments/${id}`, data),
+};
+
 // ---- CHAT ----
 export const chatApi = {
   getContacts: () => api.get('/chat/contacts'),

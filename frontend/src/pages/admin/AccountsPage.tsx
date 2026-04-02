@@ -17,9 +17,10 @@ const ROLE_COLORS: Record<string, string> = {
   driver:     'bg-orange-100 text-orange-700',
   supervisor: 'bg-teal-100 text-teal-700',
   parent:     'bg-green-100 text-green-700',
+  reception:  'bg-pink-100 text-pink-700',
 };
 
-const ROLE_FILTERS = ['all', 'parent', 'teacher', 'driver', 'supervisor', 'admin'] as const;
+const ROLE_FILTERS = ['all', 'parent', 'teacher', 'driver', 'supervisor', 'admin', 'reception'] as const;
 type RoleFilter = typeof ROLE_FILTERS[number];
 
 export default function AccountsPage() {
@@ -242,6 +243,7 @@ export default function AccountsPage() {
                 { value: 'teacher', label: 'Teacher' },
                 { value: 'driver', label: 'Driver' },
                 { value: 'supervisor', label: 'Supervisor' },
+                { value: 'reception', label: 'Reception' },
                 { value: 'admin', label: 'Admin' },
               ]}
               placeholder="Select role"
@@ -352,7 +354,7 @@ export default function AccountsPage() {
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
-                    ) : (acc.role === 'teacher' || acc.role === 'supervisor') ? (
+                    ) : (acc.role === 'teacher' || acc.role === 'supervisor' || acc.role === 'reception') ? (
                       <button
                         onClick={() => onDeleteAccount(acc)}
                         disabled={deletingId === acc.id}

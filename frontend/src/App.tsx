@@ -53,6 +53,10 @@ import SettingsPage from './pages/admin/SettingsPage';
 import ParentAppointmentsPage from './pages/parent/AppointmentsPage';
 import WriteAssignmentsPage from './pages/teacher/WriteAssignmentsPage';
 
+// Reception
+import ReceptionDashboard from './pages/reception/ReceptionDashboard';
+import ReceptionAppointmentsPage from './pages/reception/AppointmentsPage';
+
 // Driver
 import DriverDashboard from './pages/driver/DriverDashboard';
 import StartDrivePage from './pages/driver/StartDrivePage';
@@ -99,6 +103,7 @@ function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode;
       admin: '/admin/dashboard',
       driver: '/driver/dashboard',
       supervisor: '/supervisor/dashboard',
+      reception: '/reception/dashboard',
     };
     return <Navigate to={roleRedirects[user.role] || '/login'} replace />;
   }
@@ -113,6 +118,7 @@ function RootRedirect() {
     admin: '/admin/dashboard',
     driver: '/driver/dashboard',
     supervisor: '/supervisor/dashboard',
+    reception: '/reception/dashboard',
   };
   if (isAuthenticated()) return <Navigate to={roleRedirects[user?.role || ''] || '/login'} replace />;
   return <Navigate to="/login" replace />;
@@ -185,6 +191,11 @@ export default function App() {
         <Route path="/supervisor/weekly-summary" element={<ProtectedRoute allowedRoles={['supervisor']}><SupervisorWeeklySummaryPage /></ProtectedRoute>} />
         <Route path="/supervisor/student-reports" element={<ProtectedRoute allowedRoles={['supervisor']}><SupervisorStudentReportsPage /></ProtectedRoute>} />
         <Route path="/supervisor/profile" element={<ProtectedRoute allowedRoles={['supervisor']}><ProfilePage /></ProtectedRoute>} />
+
+        {/* Reception Portal */}
+        <Route path="/reception/dashboard" element={<ProtectedRoute allowedRoles={['reception']}><ReceptionDashboard /></ProtectedRoute>} />
+        <Route path="/reception/appointments" element={<ProtectedRoute allowedRoles={['reception']}><ReceptionAppointmentsPage /></ProtectedRoute>} />
+        <Route path="/reception/profile" element={<ProtectedRoute allowedRoles={['reception']}><ProfilePage /></ProtectedRoute>} />
 
         {/* Driver Portal */}
         <Route path="/driver/dashboard" element={<ProtectedRoute allowedRoles={['driver']}><DriverDashboard /></ProtectedRoute>} />

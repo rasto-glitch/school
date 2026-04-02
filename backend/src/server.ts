@@ -123,8 +123,8 @@ io.on('connection', (socket) => {
   // Auto-join personal notification room (scoped by school)
   socket.join(`school:${schoolId}:user:${userId}`);
 
-  // Admins join a school-wide room for real-time appointment alerts
-  if (socket.data.role === 'admin') {
+  // Admins and reception join a school-wide room for real-time appointment alerts
+  if (socket.data.role === 'admin' || socket.data.role === 'reception') {
     socket.join(`school:${schoolId}:admins`);
   }
 

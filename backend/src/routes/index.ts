@@ -8,6 +8,7 @@ import * as driver from '../controllers/driver.controller';
 import * as supervisor from '../controllers/supervisor.controller';
 import * as academic from '../controllers/academic.controller';
 import * as chat from '../controllers/chat.controller';
+import * as reception from '../controllers/reception.controller';
 import { authenticate, authorize } from '../middleware/auth';
 import type { AuthRequest } from '../middleware/auth';
 import { Server as SocketServer } from 'socket.io';
@@ -172,6 +173,11 @@ export function createRouter(io: SocketServer) {
   router.delete('/supervisor/weekly-period', authenticate, authorize('supervisor'), (req, res) => supervisor.closePeriod(req as AuthRequest, res));
   router.get('/supervisor/subjects', authenticate, authorize('supervisor'), (req, res) => admin.getSubjects(req as AuthRequest, res));
   router.get('/supervisor/student-brief/:id', authenticate, authorize('supervisor'), (req, res) => admin.getStudentBrief(req as AuthRequest, res));
+
+  // ---- RECEPTION ----
+  router.get('/reception/appointments/pending-count', authenticate, authorize('reception'), (req, res) => reception.getPendingAppointmentCount(req as AuthRequest, res));
+  router.get('/reception/appointments', authenticate, authorize('reception'), (req, res) => reception.getAppointments(req as AuthRequest, res));
+  router.put('/reception/appointments/:id', authenticate, authorize('reception'), (req, res) => reception.respondToAppointment(req as AuthRequest, res));
 
   // ---- DRIVER ----
   router.get('/driver/me', authenticate, authorize('driver'), (req, res) => driver.getMyProfile(req as AuthRequest, res));

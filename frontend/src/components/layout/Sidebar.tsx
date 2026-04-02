@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../../store/authStore';
 import { useNotificationStore } from '../../store/notificationStore';
 import { useSocketStore } from '../../store/socketStore';
-import { parentApi, adminApi, teacherApi, chatApi } from '../../services/api';
+import { parentApi, adminApi, teacherApi, chatApi, receptionApi } from '../../services/api';
 import {
   Home, BookOpen, ClipboardList, Megaphone, BarChart2,
   MapPin, Bell, User, Users, GraduationCap, Bus,
@@ -49,12 +49,16 @@ const navItems: Record<Role, NavItem[]> = {
     { to: '/admin/classes', icon: BookOpen, label: 'Classes' },
     { to: '/admin/teachers', icon: Users, label: 'Teachers' },
     { to: '/admin/drivers', icon: Bus, label: 'Drivers', feature: 'bus_tracking' },
-    { to: '/admin/appointments', icon: Calendar, label: 'Appointments', feature: 'appointments' },
     { to: '/admin/announcements', icon: Megaphone, label: 'Announcements', feature: 'announcements' },
     { to: '/admin/notifications', icon: Bell, label: 'Notifications' },
     { to: '/admin/accounts', icon: UserCog, label: 'Accounts' },
     { to: '/admin/settings', icon: Settings, label: 'Settings' },
     { to: '/admin/profile', icon: User, label: 'Profile' },
+  ],
+  reception: [
+    { to: '/reception/dashboard', icon: Home, label: 'Dashboard' },
+    { to: '/reception/appointments', icon: Calendar, label: 'Appointments', feature: 'appointments' },
+    { to: '/reception/profile', icon: User, label: 'Profile' },
   ],
   driver: [
     { to: '/driver/dashboard', icon: Home, label: 'Dashboard' },
@@ -112,12 +116,17 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
     }
   }, [user?.role]);
 
-  // Socket: admin appointment count init + shared socket event listeners
+  // Appointment count init for admin and reception
   useEffect(() => {
     if (!user) return;
 
     if (user.role === 'admin') {
       adminApi.getPendingAppointmentCount()
+        .then(r => setPendingAppointmentCount(r.data?.count ?? 0))
+        .catch(() => {});
+    }
+    if (user.role === 'reception') {
+      receptionApi.getPendingAppointmentCount()
         .then(r => setPendingAppointmentCount(r.data?.count ?? 0))
         .catch(() => {});
     }
@@ -128,7 +137,8 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
     if (!socket || !user) return;
 
     const onAppointment = () => {
-      if (window.location.pathname !== '/admin/appointments') {
+      const apptPath = user.role === 'reception' ? '/reception/appointments' : '/admin/appointments';
+      if (window.location.pathname !== apptPath) {
         incrementPendingAppointmentCount();
       }
     };
@@ -166,7 +176,7 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
   useEffect(() => {
     if (location.pathname === '/teacher/notifications' && teacherUnreadCount > 0) setTeacherUnreadCount(0);
     if (location.pathname === '/admin/notifications' && adminNotificationCount > 0) setAdminNotificationCount(0);
-    if (location.pathname === '/admin/appointments' && pendingAppointmentCount > 0) setPendingAppointmentCount(0);
+    if ((location.pathname === '/admin/appointments' || location.pathname === '/reception/appointments') && pendingAppointmentCount > 0) setPendingAppointmentCount(0);
     if (location.pathname === '/chat' && chatUnreadCount > 0) setChatUnreadCount(0);
   }, [location.pathname]);
 
@@ -222,7 +232,10 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
         {items.map(({ to, icon: Icon, label }) => {
           const showNotifBadge = to === '/parent/notifications' && user?.role === 'parent' && unreadCount > 0;
           const showTeacherNotifBadge = to === '/teacher/notifications' && user?.role === 'teacher' && teacherUnreadCount > 0;
-          const showApptBadge = to === '/admin/appointments' && user?.role === 'admin' && pendingAppointmentCount > 0;
+          const showApptBadge = (
+            (to === '/admin/appointments' && user?.role === 'admin') ||
+            (to === '/reception/appointments' && user?.role === 'reception')
+          ) && pendingAppointmentCount > 0;
           const showAdminNotifBadge = to === '/admin/notifications' && user?.role === 'admin' && adminNotificationCount > 0;
           const showChatBadge = to === '/chat' && chatUnreadCount > 0;
           const showBadge = showNotifBadge || showTeacherNotifBadge || showApptBadge || showAdminNotifBadge || showChatBadge;
