@@ -1,0 +1,148 @@
+import { useEffect, useState, useMemo } from 'react';
+import {
+  View, Text, ScrollView, StyleSheet, TouchableOpacity,
+  TextInput, ActivityIndicator, Alert,
+} from 'react-native';
+import { Clock, Lock, Send } from 'lucide-react-native';
+import { teacherApi } from '../../services/api';
+import { useColors } from '../../store/themeStore';
+import { spacing, radius, font, shadow } from '../../theme';
+
+interface ClassItem { id: string; name: string }
+interface PeriodItem { id: string; weekStartDate: string; weekEndDate: string }
+
+interface Props { subject?: string; classes: ClassItem[]; embedded?: boolean }
+
+export default function TeacherWeeklySummaryScreen({ subject, classes, embedded }: Props) {
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  const [period, setPeriod] = useState<PeriodItem | null>(null);
+  const [periodLoading, setPeriodLoading] = useState(true);
+  const [selectedClass, setSelectedClass] = useState('');
+  const [unit, setUnit] = useState('');
+  const [lesson, setLesson] = useState('');
+  const [pages, setPages] = useState('');
+  const [homeworkReminder, setHomeworkReminder] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [loadingExisting, setLoadingExisting] = useState(false);
+
+  useEffect(() => {
+    teacherApi.getActivePeriod()
+      .then(r => setPeriod(r.data || null))
+      .catch(() => setPeriod(null))
+      .finally(() => setPeriodLoading(false));
+  }, []);
+
+  useEffect(() => {
+    if (classes.length > 0 && !selectedClass) setSelectedClass(classes[0].id);
+  }, [classes]);
+
+  useEffect(() => {
+    if (!selectedClass || !period) return;
+    setLoadingExisting(true);
+    teacherApi.getWeeklySummary({ classId: selectedClass, weekStartDate: period.weekStartDate })
+      .then(r => {
+        const data = r.data;
+        if (data) {
+          setUnit(data.unit || '');
+          setLesson(data.lesson || '');
+          setPages(data.pages || '');
+          setHomeworkReminder(data.homeworkReminder || '');
+        } else {
+          setUnit(''); setLesson(''); setPages(''); setHomeworkReminder('');
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoadingExisting(false));
+  }, [selectedClass, period]);
+
+  const handleSave = async () => {
+    if (!selectedClass || !period) return;
+    setSaving(true);
+    try {
+      await teacherApi.upsertWeeklySummary({ classId: selectedClass, subject, unit: unit.trim() || undefined, lesson: lesson.trim() || undefined, pages: pages.trim() || undefined, homeworkReminder: homeworkReminder.trim() || undefined });
+      Alert.alert('Saved', 'Weekly summary saved.');
+    } catch {
+      Alert.alert('Error', 'Could not save weekly summary.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const periodLabel = period
+    ? `${new Date(period.weekStartDate + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – ${new Date(period.weekEndDate + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
+    : null;
+
+  return (
+    <ScrollView contentContainerStyle={{ padding: spacing.md, paddingBottom: 40 }}>
+      {/* Period banner */}
+      {periodLoading ? (
+        <ActivityIndicator color={colors.primary} style={{ marginBottom: spacing.md }} />
+      ) : period ? (
+        <View style={styles.periodBanner}>
+          <Clock size={16} color={colors.success} />
+          <Text style={styles.periodText}>Period open · {periodLabel}</Text>
+        </View>
+      ) : (
+        <View style={styles.noPeriodBanner}>
+          <Lock size={16} color={colors.warning} />
+          <Text style={styles.noPeriodText}>No active submission period. Contact your supervisor.</Text>
+        </View>
+      )}
+
+      {/* Class selector */}
+      <Text style={styles.label}>Class</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing.md }}>
+        {classes.map(c => (
+          <TouchableOpacity key={c.id} style={[styles.chip, selectedClass === c.id && styles.chipActive]} onPress={() => setSelectedClass(c.id)} disabled={!period}>
+            <Text style={[styles.chipText, selectedClass === c.id && styles.chipTextActive]}>{c.name}</Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
+      {subject && <View style={styles.subjectBadge}><Text style={styles.subjectText}>{subject}</Text></View>}
+
+      {loadingExisting ? (
+        <ActivityIndicator color={colors.primary} style={{ marginTop: 24 }} />
+      ) : (
+        <>
+          <Text style={styles.label}>Unit</Text>
+          <TextInput style={styles.input} placeholder="Unit name or number" placeholderTextColor={colors.textMuted} value={unit} onChangeText={setUnit} editable={!!period} />
+
+          <Text style={styles.label}>Lessons Covered</Text>
+          <TextInput style={styles.input} placeholder="Lesson numbers/titles" placeholderTextColor={colors.textMuted} value={lesson} onChangeText={setLesson} editable={!!period} />
+
+          <Text style={styles.label}>Pages</Text>
+          <TextInput style={styles.input} placeholder="Page numbers covered" placeholderTextColor={colors.textMuted} value={pages} onChangeText={setPages} editable={!!period} />
+
+          <Text style={styles.label}>Homework Reminder</Text>
+          <TextInput style={[styles.input, styles.textarea]} placeholder="Any homework or reminders..." placeholderTextColor={colors.textMuted} value={homeworkReminder} onChangeText={setHomeworkReminder} multiline numberOfLines={3} editable={!!period} />
+
+          <TouchableOpacity style={[styles.saveBtn, !period && styles.saveBtnDisabled]} onPress={handleSave} disabled={saving || !period}>
+            {saving ? <ActivityIndicator color="#fff" size="small" /> : <><Send size={16} color="#fff" /><Text style={styles.saveBtnText}>Save Summary</Text></>}
+          </TouchableOpacity>
+        </>
+      )}
+    </ScrollView>
+  );
+}
+
+const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').useColors>) => StyleSheet.create({
+  periodBanner: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.successLight, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.md },
+  periodText: { fontSize: font.sm, fontWeight: '600', color: colors.success, flex: 1 },
+  noPeriodBanner: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.warningLight, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.md },
+  noPeriodText: { fontSize: font.sm, fontWeight: '600', color: colors.warning, flex: 1 },
+  label: { fontSize: font.xs, fontWeight: '700', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.xs },
+  chip: { borderWidth: 1.5, borderColor: colors.border, borderRadius: radius.full, paddingHorizontal: 14, paddingVertical: 8, marginRight: spacing.sm, backgroundColor: colors.card },
+  chipActive: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
+  chipText: { fontSize: font.sm, color: colors.textSecondary, fontWeight: '500' },
+  chipTextActive: { color: colors.primary, fontWeight: '700' },
+  subjectBadge: { backgroundColor: colors.primaryLight, borderRadius: radius.full, paddingHorizontal: 14, paddingVertical: 7, alignSelf: 'flex-start', marginBottom: spacing.md },
+  subjectText: { fontSize: font.sm, fontWeight: '700', color: colors.primary },
+  input: { backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, fontSize: font.md, color: colors.text, borderWidth: 1, borderColor: colors.border, marginBottom: spacing.sm },
+  textarea: { minHeight: 80, textAlignVertical: 'top' },
+  saveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, backgroundColor: colors.primary, borderRadius: radius.md, padding: spacing.md, marginTop: spacing.sm },
+  saveBtnDisabled: { opacity: 0.4 },
+  saveBtnText: { fontSize: font.md, fontWeight: '700', color: '#fff' },
+});

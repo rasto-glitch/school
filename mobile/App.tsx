@@ -96,7 +96,7 @@ function AppInner() {
 
   const handleBannerPress = () => {
     if (!navigationRef.isReady()) return;
-    const tabScreen = user?.role === 'supervisor' ? 'SupervisorTabs' : 'ParentTabs';
+    const tabScreen = user?.role === 'supervisor' ? 'SupervisorTabs' : user?.role === 'teacher' ? 'TeacherTabs' : 'ParentTabs';
     try {
       (navigationRef as any).navigate(tabScreen, { screen: 'ChatList' });
     } catch {}

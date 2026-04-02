@@ -105,6 +105,66 @@ export const supervisorApi = {
   getStudentBrief: (id: string) => api.get(`/supervisor/student-brief/${id}`),
 };
 
+// ---- TEACHER ----
+export const teacherApi = {
+  getProfileData: () => api.get('/teacher/profile-data'),
+  getClasses: () => api.get('/teacher/classes'),
+  getStudents: (params?: Record<string, string>) => api.get('/teacher/students', { params }),
+  getSettings: () => api.get('/teacher/settings'),
+  getAttendance: (classId: string, date: string) => api.get('/teacher/attendance', { params: { classId, date } }),
+  markAttendance: (data: { classId: string; date: string; records: { studentId: string; status: string; notes?: string }[] }) =>
+    api.post('/teacher/attendance', data),
+  getHomework: (params?: Record<string, string>) => api.get('/teacher/homework', { params }),
+  createHomework: async (data: { classId: string; title: string; description?: string; dueDate?: string; subject?: string; file?: { uri: string; name: string; mimeType: string } }) => {
+    const token = useAuthStore.getState().token;
+    const { file, ...rest } = data;
+    if (file) {
+      const form = new FormData();
+      form.append('attachment', { uri: file.uri, name: file.name, type: file.mimeType } as any);
+      Object.entries(rest).forEach(([k, v]) => v !== undefined && form.append(k, String(v)));
+      const res = await fetch(`${API_URL}/teacher/homework`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: form,
+      });
+      if (!res.ok) throw new Error('Upload failed');
+      return { data: await res.json() };
+    }
+    return api.post('/teacher/homework', rest);
+  },
+  deleteHomework: (id: string) => api.delete(`/teacher/homework/${id}`),
+  getAssignments: (params?: Record<string, string>) => api.get('/teacher/assignments', { params }),
+  createAssignment: async (data: { classId: string; studentId?: string; title: string; description?: string; dueDate?: string; subject?: string; file?: { uri: string; name: string; mimeType: string } }) => {
+    const token = useAuthStore.getState().token;
+    const { file, ...rest } = data;
+    if (file) {
+      const form = new FormData();
+      form.append('attachment', { uri: file.uri, name: file.name, type: file.mimeType } as any);
+      Object.entries(rest).forEach(([k, v]) => v !== undefined && form.append(k, String(v)));
+      const res = await fetch(`${API_URL}/teacher/assignments`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: form,
+      });
+      if (!res.ok) throw new Error('Upload failed');
+      return { data: await res.json() };
+    }
+    return api.post('/teacher/assignments', rest);
+  },
+  deleteAssignment: (id: string) => api.delete(`/teacher/assignments/${id}`),
+  createReport: (data: object) => api.post('/teacher/reports', data),
+  getGrades: (studentId: string) => api.get('/teacher/grades', { params: { studentId } }),
+  upsertGrade: (data: object) => api.post('/teacher/grades', data),
+  getMarkTypes: (appliesTo?: 'report' | 'grade') => api.get('/teacher/mark-types', { params: appliesTo ? { for: appliesTo } : {} }),
+  getActivePeriod: () => api.get('/supervisor/weekly-period'),
+  getWeeklySummary: (params?: Record<string, string>) => api.get('/teacher/weekly-summary', { params }),
+  upsertWeeklySummary: (data: object) => api.post('/teacher/weekly-summary', data),
+  getNotifications: () => api.get('/teacher/notifications'),
+  markNotificationRead: (id: string) => api.patch(`/teacher/notifications/${id}/read`),
+  getUnreadCount: () => api.get('/teacher/notifications/unread-count'),
+  markAllRead: () => api.patch('/teacher/notifications/read-all'),
+};
+
 // ---- CHAT ----
 export const chatApi = {
   getContacts: () => api.get('/chat/contacts'),
