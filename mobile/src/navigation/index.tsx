@@ -10,6 +10,7 @@ import SupervisorTabs from './SupervisorTabs';
 import SupervisorSettingsScreen from '../screens/supervisor/SupervisorSettingsScreen';
 import TeacherTabs from './TeacherTabs';
 import TeacherSettingsScreen from '../screens/teacher/TeacherSettingsScreen';
+import TeacherNotificationsScreen from '../screens/teacher/TeacherNotificationsScreen';
 import SetPickupLocationScreen from '../screens/parent/SetPickupLocationScreen';
 import SettingsScreen from '../screens/parent/SettingsScreen';
 import ReportsScreen from '../screens/parent/ReportsScreen';
@@ -32,6 +33,7 @@ export type RootStackParamList = {
   SupervisorSettings: undefined;
   TeacherTabs: undefined;
   TeacherSettings: undefined;
+  TeacherNotifications: undefined;
   SetPickupLocation: undefined;
   Settings: undefined;
   Reports: undefined;
@@ -96,6 +98,11 @@ export default function Navigation() {
               name="TeacherSettings"
               component={TeacherSettingsScreen}
               options={{ headerShown: true, headerTitle: 'Settings', headerBackTitle: 'Back', presentation: 'card' }}
+            />
+            <Stack.Screen
+              name="TeacherNotifications"
+              component={TeacherNotificationsScreen}
+              options={{ headerShown: true, headerTitle: 'Notifications', headerBackTitle: 'Back' }}
             />
             <Stack.Screen
               name="Chat"

@@ -1,6 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Home, CalendarCheck, BookOpen, ClipboardList, Star, FileText, Clock, Users, ChevronRight } from 'lucide-react-native';
 import { teacherApi } from '../../services/api';
@@ -13,7 +12,6 @@ interface HomeworkItem { id: string; title: string; subject?: string; dueDate?: 
 interface PeriodItem { id: string; weekStartDate: string; weekEndDate: string }
 
 export default function TeacherDashboardScreen() {
-  const insets = useSafeAreaInsets();
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const navigation = useNavigation<any>();
@@ -55,7 +53,7 @@ export default function TeacherDashboardScreen() {
   return (
     <ScrollView
       style={styles.container}
-      contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.md }]}
+      contentContainerStyle={styles.content}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
     >
       <Text style={styles.title}>Dashboard</Text>

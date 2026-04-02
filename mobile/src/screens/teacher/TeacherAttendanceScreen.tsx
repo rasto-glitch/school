@@ -3,7 +3,6 @@ import {
   View, Text, ScrollView, StyleSheet, ActivityIndicator,
   TouchableOpacity, Alert,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, ChevronRight, CheckCircle, XCircle, Clock, Save } from 'lucide-react-native';
 import { teacherApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
@@ -20,7 +19,6 @@ const STATUS_COLORS: Record<AttStatus, string> = {
 };
 
 export default function TeacherAttendanceScreen() {
-  const insets = useSafeAreaInsets();
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
@@ -77,12 +75,8 @@ export default function TeacherAttendanceScreen() {
     setStatuses(next);
   };
 
-  const toggleStatus = (studentId: string) => {
-    setStatuses(prev => {
-      const current = prev[studentId] ?? 'present';
-      const next: AttStatus = current === 'present' ? 'absent' : current === 'absent' ? 'late' : 'present';
-      return { ...prev, [studentId]: next };
-    });
+  const setStudentStatus = (studentId: string, status: AttStatus) => {
+    setStatuses(prev => ({ ...prev, [studentId]: status }));
   };
 
   const handleSave = async () => {
@@ -120,7 +114,7 @@ export default function TeacherAttendanceScreen() {
   return (
     <ScrollView
       style={styles.container}
-      contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.md }]}
+      contentContainerStyle={styles.content}
     >
       <Text style={styles.title}>Attendance</Text>
 
@@ -226,16 +220,31 @@ export default function TeacherAttendanceScreen() {
       ) : (
         students.map(student => {
           const status: AttStatus = statuses[student.id] ?? 'present';
-          const color = STATUS_COLORS[status];
-          const Icon = status === 'present' ? CheckCircle : status === 'absent' ? XCircle : Clock;
           return (
-            <TouchableOpacity key={student.id} style={styles.studentCard} onPress={() => toggleStatus(student.id)} activeOpacity={0.7}>
-              <Icon size={20} color={color} />
+            <View key={student.id} style={styles.studentCard}>
               <Text style={styles.studentName}>{student.fullName}</Text>
-              <View style={[styles.statusBadge, { backgroundColor: color + '20' }]}>
-                <Text style={[styles.statusText, { color }]}>{status.charAt(0).toUpperCase() + status.slice(1)}</Text>
+              <View style={styles.statusBtns}>
+                {(['present', 'absent', 'late'] as AttStatus[]).map(s => {
+                  const active = status === s;
+                  const color = STATUS_COLORS[s];
+                  return (
+                    <TouchableOpacity
+                      key={s}
+                      style={[
+                        styles.statusBtn,
+                        { borderColor: color },
+                        active && { backgroundColor: color },
+                      ]}
+                      onPress={() => setStudentStatus(student.id, s)}
+                    >
+                      <Text style={[styles.statusBtnText, active && { color: '#fff' }]}>
+                        {s.charAt(0).toUpperCase() + s.slice(1)}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
-            </TouchableOpacity>
+            </View>
           );
         })
       )}
@@ -287,10 +296,11 @@ const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').u
   markAllText: { fontSize: font.sm, fontWeight: '700' },
   emptyCard: { backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.lg, alignItems: 'center', ...shadow.sm },
   emptyText: { fontSize: font.sm, color: colors.textMuted },
-  studentCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.xs, ...shadow.sm },
-  studentName: { flex: 1, fontSize: font.sm, fontWeight: '600', color: colors.text },
-  statusBadge: { borderRadius: radius.full, paddingHorizontal: 10, paddingVertical: 4 },
-  statusText: { fontSize: 11, fontWeight: '700' },
+  studentCard: { backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.xs, ...shadow.sm },
+  studentName: { fontSize: font.sm, fontWeight: '600', color: colors.text, marginBottom: spacing.sm },
+  statusBtns: { flexDirection: 'row', gap: spacing.sm },
+  statusBtn: { flex: 1, borderWidth: 1.5, borderRadius: radius.md, paddingVertical: 8, alignItems: 'center', justifyContent: 'center' },
+  statusBtnText: { fontSize: font.xs, fontWeight: '700', color: colors.text },
   saveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, backgroundColor: colors.primary, borderRadius: radius.md, padding: spacing.md, marginTop: spacing.md },
   saveBtnText: { fontSize: font.md, fontWeight: '700', color: '#fff' },
 });

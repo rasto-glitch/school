@@ -3,7 +3,6 @@ import {
   View, Text, ScrollView, StyleSheet, ActivityIndicator,
   TouchableOpacity, TextInput, RefreshControl, Modal, Image,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Search, User, X, Phone } from 'lucide-react-native';
 import { teacherApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
@@ -17,7 +16,6 @@ interface StudentItem {
 }
 
 export default function TeacherStudentsScreen() {
-  const insets = useSafeAreaInsets();
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
@@ -53,7 +51,7 @@ export default function TeacherStudentsScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.bg }]}>
-      <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
+      <View style={[styles.header, { paddingTop: spacing.md }]}>
         <Text style={styles.title}>Students</Text>
 
         {/* Search */}

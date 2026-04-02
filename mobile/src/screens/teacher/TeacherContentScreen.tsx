@@ -2,7 +2,6 @@ import { useEffect, useState, useMemo } from 'react';
 import { View, Text, ScrollView, StyleSheet, ActivityIndicator } from 'react-native';
 import { TouchableOpacity } from 'react-native';
 import { useRoute, RouteProp } from '@react-navigation/native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BookOpen, ClipboardList, Star, FileText, Clock } from 'lucide-react-native';
 import { teacherApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
@@ -18,7 +17,6 @@ type TabKey = 'homework' | 'assignments' | 'grades' | 'reports' | 'weekly';
 interface ClassItem { id: string; name: string }
 
 export default function TeacherContentScreen() {
-  const insets = useSafeAreaInsets();
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { school } = useAuthStore();
@@ -64,7 +62,7 @@ export default function TeacherContentScreen() {
   return (
     <View style={[styles.root, { backgroundColor: colors.bg }]}>
       {/* Fixed header */}
-      <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
+      <View style={[styles.header, { paddingTop: spacing.md }]}>
         <Text style={styles.title}>Content</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabBar}>
           {TABS.map(({ key, label, icon: Icon }) => {

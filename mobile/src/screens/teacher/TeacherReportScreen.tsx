@@ -1,9 +1,9 @@
 import { useEffect, useState, useMemo } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  TextInput, ActivityIndicator, Alert,
+  TextInput, ActivityIndicator, Alert, Modal,
 } from 'react-native';
-import { Plus, Trash2, Send } from 'lucide-react-native';
+import { Plus, Trash2, Send, ChevronDown, Check } from 'lucide-react-native';
 import { teacherApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
 import { spacing, radius, font } from '../../theme';
@@ -29,6 +29,9 @@ export default function TeacherReportScreen({ subject, classes }: Props) {
   const [teacherNotes, setTeacherNotes] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // Mark type picker state
+  const [pickerIndex, setPickerIndex] = useState<number | null>(null);
+
   useEffect(() => {
     teacherApi.getMarkTypes('report').then(r => setMarkTypes(r.data || [])).catch(() => {});
     if (classes.length > 0) setSelectedClass(classes[0].id);
@@ -46,6 +49,10 @@ export default function TeacherReportScreen({ subject, classes }: Props) {
   const removeMark = (i: number) => setMarks(prev => prev.filter((_, idx) => idx !== i));
   const updateMark = (i: number, field: 'name' | 'value', val: string) =>
     setMarks(prev => prev.map((m, idx) => idx === i ? { ...m, [field]: val } : m));
+  const selectMarkType = (i: number, name: string) => {
+    updateMark(i, 'name', name);
+    setPickerIndex(null);
+  };
 
   const handleSave = async () => {
     if (!selectedStudent) { Alert.alert('Required', 'Please select a student.'); return; }
@@ -101,13 +108,22 @@ export default function TeacherReportScreen({ subject, classes }: Props) {
       {marks.map((mark, i) => (
         <View key={i} style={styles.markRow}>
           <View style={{ flex: 2 }}>
-            <TextInput
-              style={styles.input}
-              placeholder={markTypes[i]?.name || 'Mark name'}
-              placeholderTextColor={colors.textMuted}
-              value={mark.name}
-              onChangeText={v => updateMark(i, 'name', v)}
-            />
+            {markTypes.length > 0 ? (
+              <TouchableOpacity style={[styles.input, styles.dropdownBtn]} onPress={() => setPickerIndex(i)}>
+                <Text style={[styles.dropdownText, !mark.name && { color: colors.textMuted }]}>
+                  {mark.name || 'Select mark type'}
+                </Text>
+                <ChevronDown size={14} color={colors.textMuted} />
+              </TouchableOpacity>
+            ) : (
+              <TextInput
+                style={styles.input}
+                placeholder="Mark name"
+                placeholderTextColor={colors.textMuted}
+                value={mark.name}
+                onChangeText={v => updateMark(i, 'name', v)}
+              />
+            )}
           </View>
           <View style={{ flex: 1 }}>
             <TextInput
@@ -146,6 +162,30 @@ export default function TeacherReportScreen({ subject, classes }: Props) {
       <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={saving || !selectedStudent}>
         {saving ? <ActivityIndicator color="#fff" size="small" /> : <><Send size={16} color="#fff" /><Text style={styles.saveBtnText}>Submit Report</Text></>}
       </TouchableOpacity>
+
+      {/* Mark type picker modal */}
+      <Modal visible={pickerIndex !== null} animationType="slide" presentationStyle="pageSheet" transparent>
+        <View style={styles.pickerOverlay}>
+          <View style={[styles.pickerBox, { backgroundColor: colors.card }]}>
+            <Text style={styles.pickerTitle}>Select Mark Type</Text>
+            {markTypes.map(mt => (
+              <TouchableOpacity
+                key={mt.id}
+                style={styles.pickerOption}
+                onPress={() => pickerIndex !== null && selectMarkType(pickerIndex, mt.name)}
+              >
+                <Text style={styles.pickerOptionText}>{mt.name}</Text>
+                {pickerIndex !== null && marks[pickerIndex]?.name === mt.name && (
+                  <Check size={16} color={colors.primary} />
+                )}
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity style={styles.pickerCancel} onPress={() => setPickerIndex(null)}>
+              <Text style={styles.pickerCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -160,6 +200,8 @@ const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').u
   subjectText: { fontSize: font.sm, fontWeight: '700', color: colors.primary },
   input: { backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, fontSize: font.md, color: colors.text, borderWidth: 1, borderColor: colors.border, marginBottom: spacing.sm },
   textarea: { minHeight: 80, textAlignVertical: 'top' },
+  dropdownBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  dropdownText: { fontSize: font.md, color: colors.text, flex: 1 },
   markRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start' },
   removeBtn: { paddingTop: spacing.md, paddingHorizontal: 4 },
   marksFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
@@ -168,4 +210,11 @@ const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').u
   totalText: { fontSize: font.md, fontWeight: '800', color: colors.text },
   saveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, backgroundColor: colors.primary, borderRadius: radius.md, padding: spacing.md, marginTop: spacing.sm },
   saveBtnText: { fontSize: font.md, fontWeight: '700', color: '#fff' },
+  pickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+  pickerBox: { borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, padding: spacing.lg, paddingBottom: 32 },
+  pickerTitle: { fontSize: font.lg, fontWeight: '800', color: colors.text, marginBottom: spacing.md },
+  pickerOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.border },
+  pickerOptionText: { fontSize: font.md, color: colors.text },
+  pickerCancel: { marginTop: spacing.md, alignItems: 'center', padding: spacing.md },
+  pickerCancelText: { fontSize: font.md, fontWeight: '700', color: colors.textMuted },
 });

@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as DocumentPicker from 'expo-document-picker';
-import { BookOpen, Plus, Trash2, Paperclip, X, Send } from 'lucide-react-native';
+import { BookOpen, Plus, Trash2, Paperclip, X, Send, ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { teacherApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
 import { spacing, radius, font, shadow } from '../../theme';
@@ -32,6 +32,10 @@ export default function TeacherHomeworkScreen({ subject, classes }: Props) {
   const [dueDate, setDueDate] = useState('');
   const [file, setFile] = useState<{ uri: string; name: string; mimeType: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // Date picker state
+  const [showCal, setShowCal] = useState(false);
+  const [calViewDate, setCalViewDate] = useState(() => { const d = new Date(); d.setDate(1); return d; });
 
   const load = useCallback(() => {
     teacherApi.getHomework()
@@ -80,6 +84,18 @@ export default function TeacherHomeworkScreen({ subject, classes }: Props) {
       }},
     ]);
   };
+
+  // Calendar helpers
+  const calYear = calViewDate.getFullYear();
+  const calMonth = calViewDate.getMonth();
+  const firstDay = new Date(calYear, calMonth, 1).getDay();
+  const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+  const calCells: (number | null)[] = [...Array(firstDay).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
+  while (calCells.length % 7 !== 0) calCells.push(null);
+  const calMonthLabel = calViewDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+  const displayDueDate = dueDate
+    ? new Date(dueDate + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })
+    : '';
 
   return (
     <View style={{ flex: 1 }}>
@@ -138,8 +154,60 @@ export default function TeacherHomeworkScreen({ subject, classes }: Props) {
             <TextInput style={styles.input} placeholder="Homework title" placeholderTextColor={colors.textMuted} value={title} onChangeText={setTitle} />
             <Text style={styles.fieldLabel}>Description</Text>
             <TextInput style={[styles.input, styles.textarea]} placeholder="Description (optional)" placeholderTextColor={colors.textMuted} value={description} onChangeText={setDescription} multiline numberOfLines={3} />
+
+            {/* Due Date with inline calendar */}
             <Text style={styles.fieldLabel}>Due Date</Text>
-            <TextInput style={styles.input} placeholder="YYYY-MM-DD" placeholderTextColor={colors.textMuted} value={dueDate} onChangeText={setDueDate} />
+            <TouchableOpacity style={styles.dateBtn} onPress={() => setShowCal(v => !v)} activeOpacity={0.7}>
+              <Text style={[styles.dateBtnText, !dueDate && { color: colors.textMuted }]}>
+                {displayDueDate || 'Select due date (optional)'}
+              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                {dueDate ? (
+                  <TouchableOpacity onPress={() => { setDueDate(''); setShowCal(false); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <X size={14} color={colors.textMuted} />
+                  </TouchableOpacity>
+                ) : null}
+                <ChevronRight size={14} color={colors.textMuted} style={{ transform: [{ rotate: showCal ? '90deg' : '0deg' }] }} />
+              </View>
+            </TouchableOpacity>
+
+            {showCal && (
+              <View style={styles.calendarBox}>
+                <View style={styles.calHeader}>
+                  <TouchableOpacity onPress={() => setCalViewDate(new Date(calYear, calMonth - 1, 1))} style={styles.calNav}>
+                    <ChevronLeft size={16} color={colors.text} />
+                  </TouchableOpacity>
+                  <Text style={styles.calMonthText}>{calMonthLabel}</Text>
+                  <TouchableOpacity onPress={() => setCalViewDate(new Date(calYear, calMonth + 1, 1))} style={styles.calNav}>
+                    <ChevronRight size={16} color={colors.text} />
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.calDayRow}>
+                  {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(d => (
+                    <Text key={d} style={styles.calDayLabel}>{d}</Text>
+                  ))}
+                </View>
+                {Array.from({ length: calCells.length / 7 }, (_, row) => (
+                  <View key={row} style={styles.calWeekRow}>
+                    {calCells.slice(row * 7, row * 7 + 7).map((day, col) => {
+                      if (!day) return <View key={col} style={styles.calCell} />;
+                      const iso = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                      const selected = dueDate === iso;
+                      return (
+                        <TouchableOpacity
+                          key={col}
+                          style={[styles.calCell, selected && styles.calCellSelected]}
+                          onPress={() => { setDueDate(iso); setShowCal(false); }}
+                        >
+                          <Text style={[styles.calDayNum, selected && styles.calDayNumSelected]}>{day}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                ))}
+              </View>
+            )}
+
             <TouchableOpacity style={styles.fileBtn} onPress={pickFile}>
               <Paperclip size={16} color={colors.primary} />
               <Text style={styles.fileBtnText}>{file ? file.name : 'Attach File (optional)'}</Text>
@@ -178,6 +246,19 @@ const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').u
   subjectText: { fontSize: font.sm, fontWeight: '700', color: colors.primary },
   input: { backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, fontSize: font.md, color: colors.text, borderWidth: 1, borderColor: colors.border, marginBottom: spacing.sm },
   textarea: { minHeight: 80, textAlignVertical: 'top' },
+  dateBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm, borderWidth: 1, borderColor: colors.border },
+  dateBtnText: { fontSize: font.md, fontWeight: '600', color: colors.text },
+  calendarBox: { backgroundColor: colors.card, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.sm, marginBottom: spacing.md },
+  calHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
+  calNav: { padding: 6 },
+  calMonthText: { fontSize: font.sm, fontWeight: '700', color: colors.text },
+  calDayRow: { flexDirection: 'row', marginBottom: 4 },
+  calDayLabel: { flex: 1, textAlign: 'center', fontSize: 10, fontWeight: '700', color: colors.textMuted, textTransform: 'uppercase' },
+  calWeekRow: { flexDirection: 'row' },
+  calCell: { flex: 1, aspectRatio: 1, alignItems: 'center', justifyContent: 'center', borderRadius: radius.sm },
+  calCellSelected: { backgroundColor: colors.primary },
+  calDayNum: { fontSize: font.sm, color: colors.text },
+  calDayNumSelected: { color: '#fff', fontWeight: '700' },
   fileBtn: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderWidth: 1.5, borderColor: colors.primary, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.md },
   fileBtnText: { flex: 1, fontSize: font.sm, color: colors.primary, fontWeight: '600' },
   submitBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, backgroundColor: colors.primary, borderRadius: radius.md, padding: spacing.md, marginTop: spacing.sm },
