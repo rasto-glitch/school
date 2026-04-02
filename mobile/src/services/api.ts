@@ -40,6 +40,18 @@ export const authApi = {
     api.post('/auth/change-password', { currentPassword, newPassword }),
   forgotPassword: (username: string) =>
     api.post('/auth/forgot-password', { username }),
+  uploadProfilePicture: async (uri: string, name: string, mimeType: string): Promise<{ profilePicture: string }> => {
+    const token = useAuthStore.getState().token;
+    const form = new FormData();
+    form.append('avatar', { uri, name, type: mimeType } as any);
+    const res = await fetch(`${API_URL}/auth/profile-picture`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+    });
+    if (!res.ok) throw new Error('Upload failed');
+    return res.json();
+  },
 };
 
 // ---- PARENT ----
