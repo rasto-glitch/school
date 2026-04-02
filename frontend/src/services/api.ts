@@ -37,6 +37,11 @@ export const authApi = {
     api.post('/auth/change-password', { currentPassword, newPassword }),
   forgotPassword: (username: string) =>
     api.post('/auth/forgot-password', { username }),
+  uploadProfilePicture: (file: File) => {
+    const fd = new FormData();
+    fd.append('avatar', file);
+    return api.patch('/auth/profile-picture', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
 };
 
 // ---- SUPERVISOR ----

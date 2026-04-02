@@ -157,6 +157,31 @@ export async function updateDeviceLanguage(req: AuthRequest, res: Response): Pro
   res.json({ message: 'Language updated' });
 }
 
+export async function uploadProfilePicture(req: AuthRequest, res: Response): Promise<void> {
+  const { userId, schoolId } = req.user!;
+  const file = (req as any).file;
+  if (!file) { res.status(400).json({ error: 'No file uploaded' }); return; }
+
+  const ext = file.originalname.includes('.') ? '.' + file.originalname.split('.').pop() : '.jpg';
+  const storagePath = `avatars/${schoolId}/${userId}${ext}`;
+  const bucket = process.env.SUPABASE_STORAGE_BUCKET || 'homework-attachments';
+
+  const { data: uploadData, error: uploadErr } = await supabase.storage
+    .from(bucket)
+    .upload(storagePath, file.buffer, { contentType: file.mimetype, upsert: true });
+
+  if (uploadErr || !uploadData) {
+    res.status(500).json({ error: 'Upload failed' }); return;
+  }
+
+  const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(uploadData.path);
+  const profilePicture = urlData.publicUrl;
+
+  await supabase.from('users').update({ profile_picture: profilePicture }).eq('id', userId);
+
+  res.json({ profilePicture });
+}
+
 export async function removeDeviceToken(req: AuthRequest, res: Response): Promise<void> {
   const { userId } = req.user!;
   const { token } = req.body;

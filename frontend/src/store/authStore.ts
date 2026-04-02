@@ -8,6 +8,7 @@ interface AuthState {
   school: School | null;
   rememberMe: boolean;
   setAuth: (token: string, user: AuthUser, school: School, rememberMe: boolean) => void;
+  setProfilePicture: (url: string) => void;
   logout: () => void;
   isAuthenticated: () => boolean;
 }
@@ -46,6 +47,7 @@ export const useAuthStore = create<AuthState>()(
       school: null,
       rememberMe: false,
       setAuth: (token, user, school, rememberMe) => set({ token, user, school, rememberMe }),
+      setProfilePicture: (url) => set(s => s.user ? { user: { ...s.user, profilePicture: url } } : {}),
       logout: () => set({ token: null, user: null, school: null, rememberMe: false }),
       isAuthenticated: () => !!get().token && !!get().user,
     }),
