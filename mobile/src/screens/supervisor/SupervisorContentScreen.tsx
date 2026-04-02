@@ -3,7 +3,7 @@ import {
   View, Text, ScrollView, StyleSheet, ActivityIndicator,
   RefreshControl, TouchableOpacity, Alert,
 } from 'react-native';
-import { useRoute, RouteProp } from '@react-navigation/native';
+import { useRoute, RouteProp, useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { BookOpen, ClipboardList, Trash2, Clock, FileText } from 'lucide-react-native';
@@ -53,10 +53,12 @@ export default function SupervisorContentScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  // Update tab when navigating from dashboard shortcuts
-  useEffect(() => {
-    if (initialTab && TABS.find(t => t.key === initialTab)) setTab(initialTab);
-  }, [initialTab]);
+  // Update tab when navigating from dashboard shortcuts (runs on every focus)
+  useFocusEffect(
+    useCallback(() => {
+      if (initialTab && TABS.find(t => t.key === initialTab)) setTab(initialTab);
+    }, [initialTab])
+  );
 
   const load = useCallback(async () => {
     const [hw, as_] = await Promise.allSettled([
