@@ -53,6 +53,11 @@ export default function SupervisorContentScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
+  // Update tab when navigating from dashboard shortcuts
+  useEffect(() => {
+    if (initialTab && TABS.find(t => t.key === initialTab)) setTab(initialTab);
+  }, [initialTab]);
+
   const load = useCallback(async () => {
     const [hw, as_] = await Promise.allSettled([
       supervisorApi.getHomework(),
