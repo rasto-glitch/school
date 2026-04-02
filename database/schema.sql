@@ -530,12 +530,12 @@ CREATE INDEX IF NOT EXISTS idx_ebooks_class ON ebooks(class_id);
 CREATE TABLE IF NOT EXISTS conversations (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
-  parent_id UUID NOT NULL REFERENCES users(id),
-  staff_id UUID NOT NULL REFERENCES users(id),
+  parent_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  staff_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   staff_role TEXT NOT NULL CHECK (staff_role IN ('teacher', 'supervisor')),
   last_message_at TIMESTAMPTZ DEFAULT NOW(),
   last_message_preview TEXT,
-  last_message_sender_id UUID REFERENCES users(id),
+  last_message_sender_id UUID REFERENCES users(id) ON DELETE SET NULL,
   last_message_type TEXT DEFAULT 'text',
   created_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(school_id, parent_id, staff_id)
@@ -546,7 +546,7 @@ CREATE INDEX IF NOT EXISTS idx_conversations_staff ON conversations(school_id, s
 CREATE TABLE IF NOT EXISTS messages (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-  sender_id UUID NOT NULL REFERENCES users(id),
+  sender_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   content TEXT,
   type TEXT NOT NULL DEFAULT 'text' CHECK (type IN ('text', 'image', 'file')),
   attachment_url TEXT,
@@ -560,7 +560,7 @@ CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id
 
 CREATE TABLE IF NOT EXISTS conversation_reads (
   conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-  user_id UUID NOT NULL REFERENCES users(id),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   last_read_at TIMESTAMPTZ DEFAULT NOW(),
   PRIMARY KEY (conversation_id, user_id)
 );
