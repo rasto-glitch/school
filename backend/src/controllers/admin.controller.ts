@@ -1667,3 +1667,35 @@ export async function getSchedule(req: AuthRequest, res: Response): Promise<void
   if (error) { res.status(500).json({ error: error.message }); return; }
   res.json({ scheduleUrl: data?.schedule_url ?? null });
 }
+
+// ---- MARK TYPES ----
+export async function getMarkTypes(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { for: appliesTo } = req.query as Record<string, string>;
+  let query = supabase.from('mark_types').select('*').eq('school_id', schoolId).order('order_index').order('created_at');
+  if (appliesTo) query = (query as any).in('applies_to', [appliesTo, 'both']);
+  const { data, error } = await query;
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json(toCC(data));
+}
+
+export async function createMarkType(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { name, appliesTo } = req.body;
+  if (!name?.trim()) { res.status(400).json({ error: 'name is required' }); return; }
+  const { data, error } = await supabase.from('mark_types').insert({
+    school_id: schoolId,
+    name: name.trim(),
+    applies_to: appliesTo || 'both',
+  }).select().single();
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.status(201).json(toCC(data));
+}
+
+export async function deleteMarkType(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { id } = req.params;
+  const { error } = await supabase.from('mark_types').delete().eq('id', id).eq('school_id', schoolId);
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json({ message: 'Deleted' });
+}

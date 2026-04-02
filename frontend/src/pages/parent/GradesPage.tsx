@@ -8,7 +8,7 @@ import Select from '../../components/common/Select';
 import EmptyState from '../../components/common/EmptyState';
 import ErrorMessage from '../../components/common/ErrorMessage';
 import { GradesTableSkeleton } from '../../components/common/Skeleton';
-import type { Student, Grade } from '../../types';
+import type { Student, Grade, Mark } from '../../types';
 
 export default function GradesPage() {
   const { t } = useTranslation();
@@ -74,25 +74,33 @@ export default function GradesPage() {
               new Set(terms.flatMap(t => Object.keys(byYear[yr][t])))
             ).sort();
 
-            // Term averages (average of all subject totals per term)
-            const termAvgs = terms.map(t => termAverage(subjects, byYear[yr][t]));
-            // Year average = average of term averages
+            // Collect all dynamic mark names used in this year, preserving order of first appearance
+            const markNameSet = new LinkedSet();
+            for (const term of terms) {
+              for (const subj of subjects) {
+                const g = byYear[yr][term][subj];
+                if (!g) continue;
+                getMarkNames(g).forEach(n => markNameSet.add(n));
+              }
+            }
+            const markNames = markNameSet.values();
+
+            // Term averages
+            const termAvgs = terms.map(term => termAverage(subjects, byYear[yr][term], markNames));
             const validTermAvgs = termAvgs.filter(a => a > 0);
             const overallYearAvg = validTermAvgs.length === 0 ? 0
               : Math.round((validTermAvgs.reduce((a, b) => a + b, 0) / validTermAvgs.length) * 10) / 10;
 
             return (
               <Card key={yr} className="p-0 overflow-hidden">
-                {/* Year header */}
                 <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
                   <h2 className="font-semibold text-gray-900">{yr}</h2>
                 </div>
 
-                {/* Term tables side by side */}
                 <div className="overflow-x-auto">
                   <div className="inline-flex gap-0 min-w-full divide-x divide-gray-200">
                     {terms.map((term, ti) => (
-                      <div key={term} className="flex-1 min-w-[300px]">
+                      <div key={term} className="flex-1 min-w-[260px]">
                         <div className="px-4 py-2 bg-primary-50 border-b border-gray-200">
                           <p className="text-xs font-semibold text-primary-700 uppercase tracking-wide">{term}</p>
                         </div>
@@ -100,24 +108,24 @@ export default function GradesPage() {
                           <thead>
                             <tr className="border-b border-gray-100 bg-white">
                               <th className="text-left px-4 py-2 font-medium text-gray-500 text-xs">{t('grades.subject')}</th>
-                              <th className="text-center px-2 py-2 font-medium text-gray-500 text-xs">{t('grades.daily')}</th>
-                              <th className="text-center px-2 py-2 font-medium text-gray-500 text-xs">{t('grades.quiz')}</th>
-                              <th className="text-center px-2 py-2 font-medium text-gray-500 text-xs">{t('grades.monthly')}</th>
-                              <th className="text-center px-2 py-2 font-medium text-gray-500 text-xs">{t('grades.term')}</th>
+                              {markNames.map(name => (
+                                <th key={name} className="text-center px-2 py-2 font-medium text-gray-500 text-xs">{name}</th>
+                              ))}
                               <th className="text-center px-2 py-2 font-medium text-gray-500 text-xs">{t('grades.total')}</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-50">
                             {subjects.map(subject => {
                               const g = byYear[yr][term][subject];
-                              const total = g ? termTotal(g) : 0;
+                              const total = g ? gradeTotal(g, markNames) : 0;
                               return (
                                 <tr key={subject} className="hover:bg-gray-50">
                                   <td className="px-4 py-2.5 font-medium text-gray-800 text-sm">{subject}</td>
-                                  <td className="px-2 py-2.5 text-center"><MarkBadge value={g?.dailyGrade} /></td>
-                                  <td className="px-2 py-2.5 text-center"><MarkBadge value={g?.quizGrade} /></td>
-                                  <td className="px-2 py-2.5 text-center"><MarkBadge value={g?.monthlyExamGrade} /></td>
-                                  <td className="px-2 py-2.5 text-center"><MarkBadge value={g?.termExamGrade} /></td>
+                                  {markNames.map(name => (
+                                    <td key={name} className="px-2 py-2.5 text-center">
+                                      <MarkBadge value={g ? getMarkValue(g, name) : null} />
+                                    </td>
+                                  ))}
                                   <td className="px-2 py-2.5 text-center">
                                     {total > 0 ? <MarkBadge value={total} /> : <span className="text-gray-300">—</span>}
                                   </td>
@@ -127,7 +135,8 @@ export default function GradesPage() {
                           </tbody>
                           <tfoot>
                             <tr className="border-t-2 border-gray-200 bg-gray-50">
-                              <td className="px-4 py-2.5 font-semibold text-gray-700 text-xs uppercase tracking-wide" colSpan={5}>
+                              <td className="px-4 py-2.5 font-semibold text-gray-700 text-xs uppercase tracking-wide"
+                                colSpan={markNames.length + 1}>
                                 {t('grades.term_average')}
                               </td>
                               <td className="px-2 py-2.5 text-center">
@@ -143,7 +152,6 @@ export default function GradesPage() {
                   </div>
                 </div>
 
-                {/* Year Average */}
                 <div className="border-t-2 border-gray-200 px-4 py-3 bg-gray-50 flex items-center justify-between">
                   <span className="text-sm font-semibold text-gray-700">{t('grades.year_average')}</span>
                   {overallYearAvg > 0
@@ -159,18 +167,54 @@ export default function GradesPage() {
   );
 }
 
-function termTotal(g: Grade): number {
-  return (g.dailyGrade || 0) + (g.quizGrade || 0) + (g.monthlyExamGrade || 0) + (g.termExamGrade || 0);
+// Collect mark names from a grade, with legacy fallback
+function getMarkNames(g: Grade): string[] {
+  if (g.marks && g.marks.length > 0) return g.marks.map(m => m.name);
+  const legacy: string[] = [];
+  if (g.dailyGrade) legacy.push('Daily');
+  if (g.quizGrade) legacy.push('Quiz');
+  if (g.monthlyExamGrade) legacy.push('Monthly');
+  if (g.termExamGrade) legacy.push('Term Exam');
+  return legacy;
 }
 
-function termAverage(subjects: string[], termData: Record<string, Grade>): number {
-  const totals = subjects.map(s => termData[s] ? termTotal(termData[s]) : 0).filter(t => t > 0);
+// Get value for a named mark (dynamic or legacy)
+function getMarkValue(g: Grade, name: string): number | null {
+  if (g.marks && g.marks.length > 0) {
+    const m = g.marks.find((m: Mark) => m.name === name);
+    return m ? m.value : null;
+  }
+  // legacy fallback
+  if (name === 'Daily') return g.dailyGrade ?? null;
+  if (name === 'Quiz') return g.quizGrade ?? null;
+  if (name === 'Monthly') return g.monthlyExamGrade ?? null;
+  if (name === 'Term Exam') return g.termExamGrade ?? null;
+  return null;
+}
+
+function gradeTotal(g: Grade, markNames: string[]): number {
+  if (g.marks && g.marks.length > 0) {
+    return g.marks.reduce((s, m) => s + m.value, 0);
+  }
+  // legacy fallback — sum only the columns visible in the table
+  return markNames.reduce((s, name) => s + (getMarkValue(g, name) || 0), 0);
+}
+
+function termAverage(subjects: string[], termData: Record<string, Grade>, markNames: string[]): number {
+  const totals = subjects.map(s => termData[s] ? gradeTotal(termData[s], markNames) : 0).filter(t => t > 0);
   if (totals.length === 0) return 0;
   return Math.round((totals.reduce((a, b) => a + b, 0) / totals.length) * 10) / 10;
 }
 
+// Insertion-order preserving set of strings
+class LinkedSet {
+  private map = new Map<string, true>();
+  add(v: string) { this.map.set(v, true); }
+  values(): string[] { return Array.from(this.map.keys()); }
+}
+
 function MarkBadge({ value }: { value?: number | null }) {
-  if (!value) return <span className="text-gray-300">—</span>;
+  if (value == null || value === 0) return <span className="text-gray-300">—</span>;
   const color = value >= 90 ? 'text-green-700 bg-green-50'
     : value >= 75 ? 'text-blue-700 bg-blue-50'
     : value >= 60 ? 'text-amber-700 bg-amber-50'

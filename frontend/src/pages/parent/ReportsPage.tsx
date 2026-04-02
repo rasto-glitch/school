@@ -62,55 +62,65 @@ export default function ReportsPage() {
           <EmptyState title={t('reports.no_reports')} icon={<BarChart2 className="w-8 h-8 text-gray-400" />} />
         ) : (
           <div className="grid gap-4">
-            {reports.map((r) => (
-              <Card key={r.id} hover onClick={() => navigate(`/parent/reports/${r.id}`)}>
-                <div className="flex items-center justify-between mb-3">
-                  <div>
-                    <h3 className="font-semibold text-gray-900">{r.subject}</h3>
-                    {r.students && <p className="text-xs text-gray-500">{r.students.fullName}</p>}
+            {reports.map((r) => {
+              const marks = r.marks && r.marks.length > 0
+                ? r.marks
+                : legacyMarks(r);
+              return (
+                <Card key={r.id} hover onClick={() => navigate(`/parent/reports/${r.id}`)}>
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <h3 className="font-semibold text-gray-900">{r.subject}</h3>
+                      {r.students && <p className="text-xs text-gray-500">{r.students.fullName}</p>}
+                    </div>
+                    {r.reportDate && (
+                      <span className="text-xs text-gray-400">{format(parseISO(r.reportDate), 'MMM d, yyyy')}</span>
+                    )}
                   </div>
-                  {r.reportDate && (
-                    <span className="text-xs text-gray-400">{format(parseISO(r.reportDate), 'MMM d, yyyy')}</span>
-                  )}
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
-                  {r.quizMarks !== undefined && (
-                    <div className="bg-blue-50 rounded-xl p-3 text-center">
-                      <div className="text-lg font-bold text-blue-600">{r.quizMarks}</div>
-                      <div className="text-xs text-gray-500">Quiz</div>
+
+                  {marks.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      {marks.map((m, i) => (
+                        <div key={i} className="bg-primary-50 rounded-xl px-3 py-2 text-center min-w-[72px]">
+                          <div className="text-base font-bold text-primary-600">{m.value}</div>
+                          <div className="text-xs text-gray-500">{m.name}</div>
+                        </div>
+                      ))}
                     </div>
                   )}
-                  {r.examMarks !== undefined && (
-                    <div className="bg-green-50 rounded-xl p-3 text-center">
-                      <div className="text-lg font-bold text-green-600">{r.examMarks}</div>
-                      <div className="text-xs text-gray-500">Exam</div>
+
+                  {r.attendanceNotes && (
+                    <div className="mb-2">
+                      <span className="text-xs font-semibold text-gray-500 uppercase">Attendance: </span>
+                      <span className="text-sm text-gray-700">{r.attendanceNotes}</span>
                     </div>
                   )}
-                </div>
-                {r.attendanceNotes && (
-                  <div className="mb-2">
-                    <span className="text-xs font-semibold text-gray-500 uppercase">Attendance: </span>
-                    <span className="text-sm text-gray-700">{r.attendanceNotes}</span>
-                  </div>
-                )}
-                {r.behaviorNotes && (
-                  <div className="mb-2">
-                    <span className="text-xs font-semibold text-gray-500 uppercase">Behavior: </span>
-                    <span className="text-sm text-gray-700">{r.behaviorNotes}</span>
-                  </div>
-                )}
-                {r.teacherNotes && (
-                  <div className="bg-gray-50 rounded-xl p-3 mt-2">
-                    <span className="text-xs font-semibold text-gray-500 uppercase block mb-1">Teacher Notes</span>
-                    <p className="text-sm text-gray-700">{r.teacherNotes}</p>
-                  </div>
-                )}
-                {r.teachers && <p className="text-xs text-gray-400 mt-2">By {r.teachers.fullName}</p>}
-              </Card>
-            ))}
+                  {r.behaviorNotes && (
+                    <div className="mb-2">
+                      <span className="text-xs font-semibold text-gray-500 uppercase">Behavior: </span>
+                      <span className="text-sm text-gray-700">{r.behaviorNotes}</span>
+                    </div>
+                  )}
+                  {r.teacherNotes && (
+                    <div className="bg-gray-50 rounded-xl p-3 mt-2">
+                      <span className="text-xs font-semibold text-gray-500 uppercase block mb-1">Teacher Notes</span>
+                      <p className="text-sm text-gray-700">{r.teacherNotes}</p>
+                    </div>
+                  )}
+                  {r.teachers && <p className="text-xs text-gray-400 mt-2">By {r.teachers.fullName}</p>}
+                </Card>
+              );
+            })}
           </div>
         )}
       </div>
     </PageLayout>
   );
+}
+
+function legacyMarks(r: Report) {
+  const out: { name: string; value: number }[] = [];
+  if (r.quizMarks != null) out.push({ name: 'Quiz', value: r.quizMarks });
+  if (r.examMarks != null) out.push({ name: 'Exam', value: r.examMarks });
+  return out;
 }

@@ -94,16 +94,30 @@ export interface Assignment {
   classes?: { name: string };
 }
 
+export interface Mark {
+  name: string;
+  value: number;
+}
+
+export interface MarkType {
+  id: string;
+  name: string;
+  appliesTo: 'report' | 'grade' | 'both';
+  orderIndex: number;
+}
+
 export interface Grade {
   id: string;
   subject: string;
-  dailyGrade: number;
-  quizGrade: number;
-  monthlyExamGrade: number;
-  termExamGrade: number;
+  marks: Mark[];
   gradingPeriod?: string;
   academicYear?: string;
   createdAt: string;
+  // legacy fields — present on old records
+  dailyGrade?: number;
+  quizGrade?: number;
+  monthlyExamGrade?: number;
+  termExamGrade?: number;
 }
 
 export interface Report {
@@ -111,13 +125,15 @@ export interface Report {
   subject: string;
   attendanceNotes?: string;
   behaviorNotes?: string;
-  quizMarks?: number;
-  examMarks?: number;
+  marks?: Mark[];
   teacherNotes?: string;
   reportDate?: string;
   createdAt: string;
   students?: { fullName: string };
   teachers?: { fullName: string };
+  // legacy fields — present on old records
+  quizMarks?: number;
+  examMarks?: number;
 }
 
 export interface Announcement {

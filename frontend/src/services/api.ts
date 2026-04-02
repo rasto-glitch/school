@@ -104,6 +104,7 @@ export const teacherApi = {
   createReport: (data: object) => api.post('/teacher/reports', data),
   getGrades: (studentId: string) => api.get('/teacher/grades', { params: { studentId } }),
   upsertGrade: (data: object) => api.post('/teacher/grades', data),
+  getMarkTypes: (appliesTo?: 'report' | 'grade') => api.get('/teacher/mark-types', { params: appliesTo ? { for: appliesTo } : {} }),
   getActivePeriod: () => api.get('/supervisor/weekly-period'),
   getWeeklySummary: (params?: Record<string, string>) => api.get('/teacher/weekly-summary', { params }),
   upsertWeeklySummary: (data: object) => api.post('/teacher/weekly-summary', data),
@@ -183,6 +184,9 @@ export const adminApi = {
   updateSettings: (data: object) => api.put('/admin/settings', data),
   yearTransition: (data: { newAcademicYear: string; studentIdsToGraduate: string[]; classAssignments: { studentId: string; classId: string }[] }) =>
     api.post('/admin/year-transition', data),
+  getMarkTypes: (appliesTo?: 'report' | 'grade') => api.get('/admin/mark-types', { params: appliesTo ? { for: appliesTo } : {} }),
+  createMarkType: (data: { name: string; appliesTo: 'report' | 'grade' | 'both' }) => api.post('/admin/mark-types', data),
+  deleteMarkType: (id: string) => api.delete(`/admin/mark-types/${id}`),
 };
 
 // ---- DRIVER ----

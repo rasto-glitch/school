@@ -1,46 +1,75 @@
-import { useEffect, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useEffect, useState, type FormEvent } from 'react';
 import { toast } from 'react-toastify';
-import { FileText } from 'lucide-react';
+import { FileText, Plus, Trash2 } from 'lucide-react';
 import { teacherApi } from '../../services/api';
 import { useTeacherProfile } from '../../hooks/useTeacherProfile';
 import SubjectBadge from '../../components/common/SubjectBadge';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
-import Input from '../../components/common/Input';
 import Select from '../../components/common/Select';
 import Button from '../../components/common/Button';
-import type { Class, Student } from '../../types';
+import type { Class, Student, MarkType, Mark } from '../../types';
 
 export default function WriteReportPage() {
   const { subject: teacherSubject, loading: subjectLoading } = useTeacherProfile();
   const [classes, setClasses] = useState<Class[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [selectedClass, setSelectedClass] = useState('');
+  const [selectedStudent, setSelectedStudent] = useState('');
+  const [attendanceNotes, setAttendanceNotes] = useState('');
+  const [behaviorNotes, setBehaviorNotes] = useState('');
+  const [teacherNotes, setTeacherNotes] = useState('');
+  const [marks, setMarks] = useState<Mark[]>([]);
+  const [markTypes, setMarkTypes] = useState<MarkType[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const { register, handleSubmit, reset, setValue } = useForm<{
-    studentId: string; subject: string; attendanceNotes: string; behaviorNotes: string;
-    quizMarks: number; examMarks: number; teacherNotes: string;
-  }>();
-
-  useEffect(() => { teacherApi.getClasses().then(r => setClasses(r.data || [])); }, []);
-
   useEffect(() => {
-    if (teacherSubject) setValue('subject', teacherSubject);
-  }, [teacherSubject]);
+    teacherApi.getClasses().then(r => setClasses(r.data || []));
+    teacherApi.getMarkTypes('report').then(r => setMarkTypes(r.data || []));
+  }, []);
 
   useEffect(() => {
     if (!selectedClass) return;
     teacherApi.getStudents({ classId: selectedClass }).then(r => setStudents(r.data || []));
   }, [selectedClass]);
 
-  const onSubmit = async (data: any) => {
+  const addMark = () => {
+    const defaultName = markTypes[0]?.name || '';
+    setMarks(prev => [...prev, { name: defaultName, value: 0 }]);
+  };
+
+  const updateMark = (i: number, field: 'name' | 'value', val: string | number) => {
+    setMarks(prev => prev.map((m, idx) => idx === i ? { ...m, [field]: val } : m));
+  };
+
+  const removeMark = (i: number) => {
+    setMarks(prev => prev.filter((_, idx) => idx !== i));
+  };
+
+  const total = marks.reduce((sum, m) => sum + (parseFloat(String(m.value)) || 0), 0);
+
+  const onSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!selectedStudent || !teacherSubject) {
+      toast.error('Please select a student');
+      return;
+    }
     setLoading(true);
     try {
-      await teacherApi.createReport({ ...data, quizMarks: parseFloat(data.quizMarks), examMarks: parseFloat(data.examMarks) });
+      await teacherApi.createReport({
+        studentId: selectedStudent,
+        subject: teacherSubject,
+        attendanceNotes,
+        behaviorNotes,
+        teacherNotes,
+        marks: marks.map(m => ({ name: m.name, value: parseFloat(String(m.value)) || 0 })),
+      });
       toast.success('Report submitted!');
-      reset();
+      setSelectedStudent('');
+      setAttendanceNotes('');
+      setBehaviorNotes('');
+      setTeacherNotes('');
+      setMarks([]);
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Failed to submit report');
     } finally {
@@ -56,31 +85,133 @@ export default function WriteReportPage() {
             <FileText className="w-5 h-5 text-purple-600" />
             <h2 className="font-semibold text-gray-900">New Report</h2>
           </div>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            <Select label="Class" options={classes.map(c => ({ value: c.id, label: c.name }))} placeholder="Select class" value={selectedClass} onChange={e => setSelectedClass(e.target.value)} />
-            <Select label="Student" options={students.map(s => ({ value: s.id, label: s.fullName }))} placeholder="Select student" {...register('studentId', { required: true })} />
+          <form onSubmit={onSubmit} className="space-y-4">
+            <Select
+              label="Class"
+              options={classes.map(c => ({ value: c.id, label: c.name }))}
+              placeholder="Select class"
+              value={selectedClass}
+              onChange={e => { setSelectedClass(e.target.value); setSelectedStudent(''); }}
+            />
+            <Select
+              label="Student"
+              options={students.map(s => ({ value: s.id, label: s.fullName }))}
+              placeholder="Select student"
+              value={selectedStudent}
+              onChange={e => setSelectedStudent(e.target.value)}
+            />
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Subject</label>
               <SubjectBadge subject={teacherSubject} loading={subjectLoading} />
-              <input type="hidden" {...register('subject', { required: true })} value={teacherSubject} />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <Input label="Quiz Marks" type="number" step="0.1" min="0" placeholder="0" {...register('quizMarks')} />
-              <Input label="Exam Marks" type="number" step="0.1" min="0" placeholder="0" {...register('examMarks')} />
+
+            {/* Dynamic marks */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm font-medium text-gray-700">Marks</label>
+                <button
+                  type="button"
+                  onClick={addMark}
+                  className="flex items-center gap-1 text-xs font-medium text-primary-600 hover:text-primary-700 transition-colors"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Add Mark
+                </button>
+              </div>
+
+              {marks.length === 0 ? (
+                <div className="border-2 border-dashed border-gray-200 rounded-xl p-4 text-center">
+                  <p className="text-sm text-gray-400">No marks added yet.</p>
+                  <button
+                    type="button"
+                    onClick={addMark}
+                    className="mt-1 text-xs text-primary-600 hover:text-primary-700 font-medium"
+                  >
+                    + Add first mark
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {marks.map((m, i) => (
+                    <div key={i} className="flex gap-2 items-center">
+                      {markTypes.length > 0 ? (
+                        <select
+                          value={m.name}
+                          onChange={e => updateMark(i, 'name', e.target.value)}
+                          className="input-field flex-1 text-sm"
+                        >
+                          {markTypes.map(mt => (
+                            <option key={mt.id} value={mt.name}>{mt.name}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          type="text"
+                          value={m.name}
+                          onChange={e => updateMark(i, 'name', e.target.value)}
+                          placeholder="Mark name"
+                          className="input-field flex-1 text-sm"
+                        />
+                      )}
+                      <input
+                        type="number"
+                        value={m.value}
+                        onChange={e => updateMark(i, 'value', e.target.value)}
+                        step="0.1"
+                        min="0"
+                        placeholder="0"
+                        className="input-field w-24 text-sm"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeMark(i)}
+                        className="p-1.5 text-gray-400 hover:text-red-500 transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                  {marks.length > 1 && (
+                    <div className="flex justify-end pt-1">
+                      <span className="text-sm font-semibold text-gray-700">
+                        Total: <span className="text-primary-600">{total.toFixed(1)}</span>
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Attendance Notes</label>
-              <textarea className="input-field min-h-[80px] resize-none" {...register('attendanceNotes')} placeholder="Attendance observations..." />
+              <textarea
+                className="input-field min-h-[80px] resize-none"
+                value={attendanceNotes}
+                onChange={e => setAttendanceNotes(e.target.value)}
+                placeholder="Attendance observations..."
+              />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Behavior Notes</label>
-              <textarea className="input-field min-h-[80px] resize-none" {...register('behaviorNotes')} placeholder="Behavior observations..." />
+              <textarea
+                className="input-field min-h-[80px] resize-none"
+                value={behaviorNotes}
+                onChange={e => setBehaviorNotes(e.target.value)}
+                placeholder="Behavior observations..."
+              />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Teacher Notes</label>
-              <textarea className="input-field min-h-[100px] resize-none" {...register('teacherNotes')} placeholder="Additional notes..." />
+              <textarea
+                className="input-field min-h-[100px] resize-none"
+                value={teacherNotes}
+                onChange={e => setTeacherNotes(e.target.value)}
+                placeholder="Additional notes..."
+              />
             </div>
-            <Button type="submit" loading={loading} fullWidth icon={<FileText className="w-4 h-4" />}>Submit Report</Button>
+            <Button type="submit" loading={loading} fullWidth icon={<FileText className="w-4 h-4" />}>
+              Submit Report
+            </Button>
           </form>
         </Card>
       </div>

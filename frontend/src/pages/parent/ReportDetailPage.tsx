@@ -22,6 +22,13 @@ export default function ReportDetailPage() {
   if (loading) return <PageLayout title="Report"><LoadingSpinner /></PageLayout>;
   if (!report) return <PageLayout title="Report"><p className="text-gray-500">Report not found.</p></PageLayout>;
 
+  const marks = report.marks && report.marks.length > 0
+    ? report.marks
+    : [
+        ...(report.quizMarks != null ? [{ name: 'Quiz', value: report.quizMarks }] : []),
+        ...(report.examMarks != null ? [{ name: 'Exam', value: report.examMarks }] : []),
+      ];
+
   return (
     <PageLayout title="Report">
       <div className="max-w-2xl space-y-4">
@@ -40,23 +47,25 @@ export default function ReportDetailPage() {
           </p>
         </div>
 
-        {(report.quizMarks !== undefined || report.examMarks !== undefined) && (
+        {marks.length > 0 && (
           <div className="bg-white rounded-2xl border border-gray-200 p-5">
             <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Marks</h2>
-            <div className="grid grid-cols-2 gap-3">
-              {report.quizMarks !== undefined && (
-                <div className="bg-blue-50 rounded-xl p-4 text-center">
-                  <div className="text-2xl font-bold text-blue-600">{report.quizMarks}</div>
-                  <div className="text-xs text-gray-500 mt-1">Quiz</div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {marks.map((m, i) => (
+                <div key={i} className="bg-primary-50 rounded-xl p-4 text-center">
+                  <div className="text-2xl font-bold text-primary-600">{m.value}</div>
+                  <div className="text-xs text-gray-500 mt-1">{m.name}</div>
                 </div>
-              )}
-              {report.examMarks !== undefined && (
-                <div className="bg-green-50 rounded-xl p-4 text-center">
-                  <div className="text-2xl font-bold text-green-600">{report.examMarks}</div>
-                  <div className="text-xs text-gray-500 mt-1">Exam</div>
-                </div>
-              )}
+              ))}
             </div>
+            {marks.length > 1 && (
+              <div className="mt-3 pt-3 border-t border-gray-100 flex justify-between items-center">
+                <span className="text-sm text-gray-500">Total</span>
+                <span className="text-lg font-bold text-primary-600">
+                  {marks.reduce((s, m) => s + m.value, 0).toFixed(1)}
+                </span>
+              </div>
+            )}
           </div>
         )}
 

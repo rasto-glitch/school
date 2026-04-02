@@ -95,6 +95,11 @@ export function createRouter(io: SocketServer) {
   router.post('/admin/year-transition', authenticate, authorize('admin'), (req, res) => admin.yearTransition(req as AuthRequest, res));
   router.get('/teacher/settings', authenticate, authorize('teacher'), (req, res) => admin.getSettings(req as AuthRequest, res));
 
+  router.get('/admin/mark-types', authenticate, authorize('admin'), (req, res) => admin.getMarkTypes(req as AuthRequest, res));
+  router.post('/admin/mark-types', authenticate, authorize('admin'), (req, res) => admin.createMarkType(req as AuthRequest, res));
+  router.delete('/admin/mark-types/:id', authenticate, authorize('admin'), (req, res) => admin.deleteMarkType(req as AuthRequest, res));
+  router.get('/teacher/mark-types', authenticate, authorize('teacher'), (req, res) => admin.getMarkTypes(req as AuthRequest, res));
+
   // ---- TEACHER ----
   router.get('/teacher/profile-data', authenticate, authorize('teacher'), (req, res) => teacher.getProfileData(req as AuthRequest, res));
   router.get('/teacher/homework', authenticate, authorize('teacher'), (req, res) => teacher.getHomework(req as AuthRequest, res));

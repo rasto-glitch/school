@@ -164,7 +164,7 @@ export async function getGrades(req: AuthRequest, res: Response): Promise<void> 
 
   const { data, error } = await supabase
     .from('grades')
-    .select('id, subject, daily_grade, quiz_grade, monthly_exam_grade, term_exam_grade, grading_period, academic_year, created_at')
+    .select('id, subject, marks, daily_grade, quiz_grade, monthly_exam_grade, term_exam_grade, grading_period, academic_year, created_at')
     .eq('school_id', schoolId)
     .eq('student_id', targetId)
     .order('academic_year', { ascending: false })

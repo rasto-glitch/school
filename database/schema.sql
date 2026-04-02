@@ -213,6 +213,20 @@ CREATE TABLE IF NOT EXISTS assignments (
 );
 
 -- ============================================================
+-- MARK TYPES (admin-defined per school)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS mark_types (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  applies_to TEXT NOT NULL DEFAULT 'both' CHECK (applies_to IN ('report', 'grade', 'both')),
+  order_index INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+-- Run if table already exists:
+-- ALTER TABLE mark_types ADD COLUMN IF NOT EXISTS order_index INTEGER DEFAULT 0;
+
+-- ============================================================
 -- GRADES
 -- ============================================================
 CREATE TABLE IF NOT EXISTS grades (
@@ -226,10 +240,13 @@ CREATE TABLE IF NOT EXISTS grades (
   quiz_grade NUMERIC(5,2) DEFAULT 0,
   monthly_exam_grade NUMERIC(5,2) DEFAULT 0,
   term_exam_grade NUMERIC(5,2) DEFAULT 0,
+  marks JSONB DEFAULT '[]',
   grading_period TEXT,
   academic_year TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+-- Run if table already exists:
+-- ALTER TABLE grades ADD COLUMN IF NOT EXISTS marks JSONB DEFAULT '[]';
 
 -- ============================================================
 -- REPORTS
@@ -244,10 +261,13 @@ CREATE TABLE IF NOT EXISTS reports (
   behavior_notes TEXT,
   quiz_marks NUMERIC(5,2),
   exam_marks NUMERIC(5,2),
+  marks JSONB DEFAULT '[]',
   teacher_notes TEXT,
   report_date DATE DEFAULT CURRENT_DATE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+-- Run if table already exists:
+-- ALTER TABLE reports ADD COLUMN IF NOT EXISTS marks JSONB DEFAULT '[]';
 
 -- ============================================================
 -- ANNOUNCEMENTS

@@ -1,19 +1,47 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'react-toastify';
-import { CalendarDays, Settings } from 'lucide-react';
+import { CalendarDays, Settings, Tag, Trash2, Plus } from 'lucide-react';
 import { adminApi } from '../../services/api';
+import { useAuthStore } from '../../store/authStore';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
 import Input from '../../components/common/Input';
 import Button from '../../components/common/Button';
 import YearTransitionModal from './YearTransitionModal';
+import type { MarkType } from '../../types';
+
+const APPLIES_OPTIONS = [
+  { value: 'both', label: 'Reports & Grades' },
+  { value: 'report', label: 'Reports only' },
+  { value: 'grade', label: 'Grades only' },
+];
+
+function appliesLabel(v: string) {
+  return APPLIES_OPTIONS.find(o => o.value === v)?.label ?? v;
+}
+
+function appliesBadgeColor(v: string) {
+  if (v === 'report') return 'bg-purple-50 text-purple-700';
+  if (v === 'grade') return 'bg-amber-50 text-amber-700';
+  return 'bg-blue-50 text-blue-700';
+}
 
 export default function SettingsPage() {
+  const { school } = useAuthStore();
+  const feat = (key: string) => school?.features?.[key] !== false;
+
   const [academicYear, setAcademicYear] = useState('');
   const [editYear, setEditYear] = useState('');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showWizard, setShowWizard] = useState(false);
+
+  // mark types state
+  const [markTypes, setMarkTypes] = useState<MarkType[]>([]);
+  const [markTypesLoading, setMarkTypesLoading] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newAppliesTo, setNewAppliesTo] = useState<'report' | 'grade' | 'both'>('both');
+  const [addingMark, setAddingMark] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -24,6 +52,14 @@ export default function SettingsPage() {
         setEditYear(y);
       })
       .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    if (!feat('grades') && !feat('reports')) return;
+    setMarkTypesLoading(true);
+    adminApi.getMarkTypes()
+      .then(r => setMarkTypes(r.data || []))
+      .finally(() => setMarkTypesLoading(false));
   }, []);
 
   const saveCorrection = async () => {
@@ -39,11 +75,36 @@ export default function SettingsPage() {
     }
   };
 
+  const addMarkType = async () => {
+    if (!newName.trim()) return;
+    setAddingMark(true);
+    try {
+      const r = await adminApi.createMarkType({ name: newName.trim(), appliesTo: newAppliesTo });
+      setMarkTypes(prev => [...prev, r.data]);
+      setNewName('');
+    } catch {
+      toast.error('Failed to add mark type');
+    } finally {
+      setAddingMark(false);
+    }
+  };
+
+  const deleteMarkType = async (id: string) => {
+    try {
+      await adminApi.deleteMarkType(id);
+      setMarkTypes(prev => prev.filter(m => m.id !== id));
+    } catch {
+      toast.error('Failed to delete');
+    }
+  };
+
+  const showMarkTypes = feat('grades') || feat('reports');
+
   return (
     <PageLayout title="Settings" subtitle="School-wide configuration">
       <div className="max-w-lg space-y-6">
 
-        {/* Current academic year — quick correction */}
+        {/* Current academic year */}
         <Card>
           <div className="flex items-center gap-2 mb-1">
             <Settings className="w-5 h-5 text-primary-600" />
@@ -92,6 +153,76 @@ export default function SettingsPage() {
             Begin Year Transition
           </Button>
         </Card>
+
+        {/* Mark Types */}
+        {showMarkTypes && (
+          <Card>
+            <div className="flex items-center gap-2 mb-1">
+              <Tag className="w-5 h-5 text-emerald-600" />
+              <h2 className="font-semibold text-gray-900">Mark Types</h2>
+            </div>
+            <p className="text-sm text-gray-500 mb-4">
+              Define the mark categories teachers can use when submitting reports and grades. Teachers select from this list when adding marks.
+            </p>
+
+            {/* Add new */}
+            <div className="flex gap-2 mb-4">
+              <div className="flex-1">
+                <Input
+                  placeholder="e.g. Quiz, Oral Exam, Project…"
+                  value={newName}
+                  onChange={e => setNewName(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') addMarkType(); }}
+                />
+              </div>
+              <select
+                value={newAppliesTo}
+                onChange={e => setNewAppliesTo(e.target.value as any)}
+                className="input-field w-44 text-sm"
+              >
+                {APPLIES_OPTIONS.map(o => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+              <Button
+                onClick={addMarkType}
+                loading={addingMark}
+                disabled={!newName.trim()}
+                icon={<Plus className="w-4 h-4" />}
+              >
+                Add
+              </Button>
+            </div>
+
+            {/* List */}
+            {markTypesLoading ? (
+              <div className="space-y-2">
+                {[1, 2, 3].map(i => <div key={i} className="h-10 bg-gray-100 rounded-xl animate-pulse" />)}
+              </div>
+            ) : markTypes.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-4">No mark types yet. Add one above.</p>
+            ) : (
+              <div className="space-y-2">
+                {markTypes.map(mt => (
+                  <div key={mt.id} className="flex items-center justify-between gap-3 px-3 py-2.5 bg-gray-50 rounded-xl">
+                    <span className="text-sm font-medium text-gray-800">{mt.name}</span>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${appliesBadgeColor(mt.appliesTo)}`}>
+                        {appliesLabel(mt.appliesTo)}
+                      </span>
+                      <button
+                        onClick={() => deleteMarkType(mt.id)}
+                        className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+        )}
 
       </div>
 

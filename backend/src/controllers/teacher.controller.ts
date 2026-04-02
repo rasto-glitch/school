@@ -197,7 +197,7 @@ export async function deleteAssignment(req: AuthRequest, res: Response): Promise
 // ---- REPORTS ----
 export async function createReport(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId, userId } = req.user!;
-  const { studentId, subject, attendanceNotes, behaviorNotes, quizMarks, examMarks, teacherNotes } = req.body;
+  const { studentId, subject, attendanceNotes, behaviorNotes, marks, teacherNotes } = req.body;
 
   const [{ data: teacher }, { data: school }] = await Promise.all([
     supabase.from('teachers').select('id').eq('user_id', userId).eq('school_id', schoolId).single(),
@@ -212,8 +212,7 @@ export async function createReport(req: AuthRequest, res: Response): Promise<voi
     subject,
     attendance_notes: attendanceNotes,
     behavior_notes: behaviorNotes,
-    quiz_marks: quizMarks,
-    exam_marks: examMarks,
+    marks: marks || [],
     teacher_notes: teacherNotes,
     academic_year: school?.current_academic_year || null,
   }).select().single();
@@ -236,7 +235,7 @@ export async function createReport(req: AuthRequest, res: Response): Promise<voi
 // ---- GRADES ----
 export async function upsertGrade(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId, userId } = req.user!;
-  const { studentId, classId, subject, dailyGrade, quizGrade, monthlyExamGrade, termExamGrade, gradingPeriod } = req.body;
+  const { studentId, classId, subject, marks, gradingPeriod } = req.body;
 
   const [teacherRes, schoolRes] = await Promise.all([
     supabase.from('teachers').select('id').eq('user_id', userId).eq('school_id', schoolId).single(),
@@ -251,10 +250,7 @@ export async function upsertGrade(req: AuthRequest, res: Response): Promise<void
     student_id: studentId,
     class_id: classId,
     subject,
-    daily_grade: dailyGrade,
-    quiz_grade: quizGrade,
-    monthly_exam_grade: monthlyExamGrade,
-    term_exam_grade: termExamGrade ?? 0,
+    marks: marks || [],
     grading_period: gradingPeriod,
     academic_year: academicYear,
   }, { onConflict: 'student_id,subject,grading_period,academic_year' }).select().single();
@@ -283,7 +279,7 @@ export async function getGrades(req: AuthRequest, res: Response): Promise<void> 
   if (!teacher) { res.status(404).json({ error: 'Teacher not found' }); return; }
 
   const { data, error } = await supabase.from('grades')
-    .select('*')
+    .select('id, subject, marks, grading_period, academic_year, created_at')
     .eq('school_id', schoolId)
     .eq('student_id', studentId)
     .eq('subject', teacher.subject)
