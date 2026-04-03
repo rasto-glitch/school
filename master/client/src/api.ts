@@ -20,6 +20,7 @@ api.interceptors.response.use(
 );
 
 export interface SchoolFeatures {
+  academic_portal: boolean;
   homework: boolean;
   assignments: boolean;
   announcements: boolean;
@@ -33,6 +34,7 @@ export interface SchoolFeatures {
 }
 
 export const DEFAULT_FEATURES: SchoolFeatures = {
+  academic_portal: true,
   homework: true,
   assignments: true,
   announcements: true,

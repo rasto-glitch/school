@@ -12,7 +12,9 @@ export async function getSchools(_req: Request, res: Response): Promise<void> {
     .eq('is_active', true)
     .order('name');
   if (error) { res.status(500).json({ error: error.message }); return; }
-  res.json(toCC(data));
+  // Filter out schools with academic_portal disabled
+  const filtered = (data || []).filter((s: any) => s.features?.academic_portal !== false);
+  res.json(toCC(filtered));
 }
 
 export async function login(req: Request, res: Response): Promise<void> {
@@ -41,6 +43,12 @@ export async function login(req: Request, res: Response): Promise<void> {
 
   if (schoolErr || !school) {
     res.status(401).json({ error: 'Invalid credentials' });
+    return;
+  }
+
+  // Check if academic portal is enabled for this school
+  if (school.features?.academic_portal === false) {
+    res.status(403).json({ error: 'Academic portal is not enabled for this school. Please contact your administrator.' });
     return;
   }
 
