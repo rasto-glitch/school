@@ -24,7 +24,7 @@ api.interceptors.response.use(
 
 export const authApi = {
   login: (username: string, password: string) =>
-    api.post('/auth/login', { username, password }),
+    api.post('/auth/login', { username, password, portal: 'academic' }),
 };
 
 export const academicApi = {

@@ -12,52 +12,69 @@ export default function Navbar() {
   };
 
   const linkCls = ({ isActive }: { isActive: boolean }) =>
-    `text-sm font-medium transition-colors ${isActive ? 'text-primary-600' : 'text-gray-500 hover:text-gray-900'}`;
+    `flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg transition-all ${
+      isActive
+        ? 'text-primary-700 bg-primary-50'
+        : 'text-gray-500 hover:text-gray-900 hover:bg-gray-50'
+    }`;
 
   return (
-    <nav className="sticky top-0 z-20 bg-white border-b border-gray-100">
+    <nav className="sticky top-0 z-20 bg-white/80 backdrop-blur-xl border-b border-gray-200/60">
       <div className="max-w-6xl mx-auto px-6 h-14 flex items-center gap-6">
         {/* Logo */}
         <div className="flex items-center gap-2.5 mr-2">
           {school?.logoUrl ? (
-            <img src={school.logoUrl} alt={school.name} className="w-7 h-7 rounded-lg object-cover" />
+            <img src={school.logoUrl} alt={school.name} className="w-8 h-8 rounded-lg object-cover ring-2 ring-gray-100" />
           ) : (
-            <div className="w-7 h-7 bg-primary-600 rounded-lg flex items-center justify-center flex-shrink-0">
+            <div className="w-8 h-8 bg-gradient-to-br from-primary-600 to-primary-700 rounded-lg flex items-center justify-center flex-shrink-0 shadow-md shadow-primary-200">
               <GraduationCap className="w-4 h-4 text-white" />
             </div>
           )}
-          <span className="font-bold text-gray-900 text-sm hidden sm:block">
-            {school?.name ? `${school.name} — Academic` : 'Academic Portal'}
-          </span>
+          <div className="hidden sm:block">
+            <span className="font-bold text-gray-900 text-sm leading-tight block">
+              {school?.name || 'Academic Portal'}
+            </span>
+            <span className="text-[10px] text-gray-400 font-medium leading-tight block -mt-0.5">Academic Portal</span>
+          </div>
         </div>
 
         {/* Nav links */}
-        <div className="flex items-center gap-5 flex-1">
+        <div className="flex items-center gap-1 flex-1">
           <NavLink to="/feed" className={linkCls}>
-            <span className="flex items-center gap-1.5"><FileText className="w-3.5 h-3.5" />Posts</span>
+            <FileText className="w-3.5 h-3.5" />Posts
           </NavLink>
           <NavLink to="/ebooks" className={linkCls}>
-            <span className="flex items-center gap-1.5"><Library className="w-3.5 h-3.5" />E-Books</span>
+            <Library className="w-3.5 h-3.5" />E-Books
           </NavLink>
           {user?.role === 'teacher' && (
             <NavLink to="/my-posts" className={linkCls}>
-              <span className="flex items-center gap-1.5"><BookOpen className="w-3.5 h-3.5" />My Posts</span>
+              <BookOpen className="w-3.5 h-3.5" />My Posts
             </NavLink>
           )}
         </div>
 
         {/* User + logout */}
         <div className="flex items-center gap-3">
-          <span className="text-xs text-gray-500 hidden sm:block">
-            {user?.firstName} {user?.lastName}
-            <span className="ml-1.5 bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded text-xs capitalize">{user?.role}</span>
-          </span>
+          <div className="hidden sm:flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg overflow-hidden flex items-center justify-center bg-gradient-to-br from-primary-100 to-primary-50 ring-2 ring-gray-100">
+              <span className="text-[10px] font-bold text-primary-700">
+                {user?.firstName?.[0]}{user?.lastName?.[0]}
+              </span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-xs font-medium text-gray-700 leading-tight">
+                {user?.firstName} {user?.lastName}
+              </span>
+              <span className="text-[10px] text-gray-400 capitalize leading-tight">{user?.role}</span>
+            </div>
+          </div>
+          <div className="w-px h-6 bg-gray-200 hidden sm:block" />
           <button
             onClick={handleLogout}
-            className="flex items-center gap-1.5 text-xs text-red-500 hover:text-red-700 transition-colors"
+            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-red-500 transition-colors p-1.5 rounded-lg hover:bg-red-50 group"
           >
-            <LogOut className="w-3.5 h-3.5" />
-            <span className="hidden sm:block">Sign out</span>
+            <LogOut className="w-3.5 h-3.5 group-hover:rotate-12 transition-transform" />
+            <span className="hidden sm:block font-medium">Sign out</span>
           </button>
         </div>
       </div>
