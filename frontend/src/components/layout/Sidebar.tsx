@@ -99,6 +99,7 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
   const { socket } = useSocketStore();
   const location = useLocation();
 
+  // Load initial notification counts
   useEffect(() => {
     if (user?.role === 'parent') {
       parentApi.getUnreadCount().then(r => setUnreadCount(r.data?.count ?? 0)).catch(() => {});
@@ -115,35 +116,63 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
     }
   }, [user?.role]);
 
+  // Appointment count init for admin and reception
   useEffect(() => {
     if (!user) return;
+
     if (user.role === 'admin') {
-      adminApi.getPendingAppointmentCount().then(r => setPendingAppointmentCount(r.data?.count ?? 0)).catch(() => {});
+      adminApi.getPendingAppointmentCount()
+        .then(r => setPendingAppointmentCount(r.data?.count ?? 0))
+        .catch(() => {});
     }
     if (user.role === 'reception') {
-      receptionApi.getPendingAppointmentCount().then(r => setPendingAppointmentCount(r.data?.count ?? 0)).catch(() => {});
+      receptionApi.getPendingAppointmentCount()
+        .then(r => setPendingAppointmentCount(r.data?.count ?? 0))
+        .catch(() => {});
     }
   }, [user?.role]);
 
+  // Socket listeners — use the shared socket from SocketProvider
   useEffect(() => {
     if (!socket || !user) return;
+
     const onAppointment = () => {
       const apptPath = user.role === 'reception' ? '/reception/appointments' : '/admin/appointments';
-      if (window.location.pathname !== apptPath) incrementPendingAppointmentCount();
+      if (window.location.pathname !== apptPath) {
+        incrementPendingAppointmentCount();
+      }
     };
+
     const onNotification = () => {
-      if (user.role === 'teacher' && window.location.pathname !== '/teacher/notifications') incrementTeacherUnreadCount();
-      if (user.role === 'admin' && window.location.pathname !== '/admin/notifications') incrementAdminNotificationCount();
+      if (user.role === 'teacher' && window.location.pathname !== '/teacher/notifications') {
+        incrementTeacherUnreadCount();
+      }
+      if (user.role === 'admin' && window.location.pathname !== '/admin/notifications') {
+        incrementAdminNotificationCount();
+      }
     };
+
     const onChatMessage = (data: any) => {
-      if (window.location.pathname !== '/chat' && data.senderId !== user.id) incrementChatUnreadCount();
+      if (window.location.pathname !== '/chat') {
+        // Only increment if message is from other person
+        if (data.senderId !== user.id) {
+          incrementChatUnreadCount();
+        }
+      }
     };
+
     socket.on('new_appointment', onAppointment);
     socket.on('notification', onNotification);
     socket.on('chat:message', onChatMessage);
-    return () => { socket.off('new_appointment', onAppointment); socket.off('notification', onNotification); socket.off('chat:message', onChatMessage); };
+
+    return () => {
+      socket.off('new_appointment', onAppointment);
+      socket.off('notification', onNotification);
+      socket.off('chat:message', onChatMessage);
+    };
   }, [socket, user]);
 
+  // Auto-clear badges on navigation
   useEffect(() => {
     if (location.pathname === '/teacher/notifications' && teacherUnreadCount > 0) setTeacherUnreadCount(0);
     if (location.pathname === '/admin/notifications' && adminNotificationCount > 0) setAdminNotificationCount(0);
@@ -158,53 +187,48 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
 
   return (
     <aside className={`
-      fixed top-0 h-screen z-30 flex flex-col transition-all duration-300
-      bg-white/80 backdrop-blur-xl
-      ${isRTL ? 'right-0 border-l border-gray-200/60' : 'left-0 border-r border-gray-200/60'}
+      fixed top-0 h-screen bg-white z-30 flex flex-col transition-all duration-300
+      ${isRTL ? 'right-0 border-l border-gray-200' : 'left-0 border-r border-gray-200'}
       ${mobileOpen ? 'translate-x-0' : isRTL ? 'translate-x-full lg:translate-x-0' : '-translate-x-full lg:translate-x-0'}
-      w-64 ${collapsed ? 'lg:w-[68px]' : 'lg:w-64'}
+      w-64 ${collapsed ? 'lg:w-16' : 'lg:w-64'}
     `}>
-      {/* Logo area */}
-      <div className="flex items-center gap-3 px-4 py-4 border-b border-gray-100">
+      {/* Logo */}
+      <div className="flex items-center gap-3 p-4 border-b border-gray-100">
         {school?.logoUrl ? (
-          <img src={school.logoUrl} alt={school.name} className="w-9 h-9 rounded-xl object-cover flex-shrink-0 ring-2 ring-gray-100" />
+          <img src={school.logoUrl} alt={school.name} className="w-8 h-8 rounded-lg object-cover flex-shrink-0" />
         ) : (
-          <div className="w-9 h-9 bg-gradient-to-br from-primary-600 to-primary-700 rounded-xl flex items-center justify-center flex-shrink-0 shadow-md shadow-primary-200">
+          <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center flex-shrink-0">
             <GraduationCap className="w-5 h-5 text-white" />
           </div>
         )}
         {!collapsed && (
-          <div className="min-w-0 flex-1">
-            <span className="font-bold text-gray-900 text-sm truncate block">{school?.name || 'School'}</span>
-            <span className="text-[10px] text-gray-400 font-medium">Academic Portal</span>
-          </div>
+          <span className="font-bold text-gray-900 text-sm truncate">{school?.name || 'School'}</span>
         )}
         <button
           onClick={() => setCollapsed(!collapsed)}
-          className="ml-auto p-1.5 rounded-lg hover:bg-gray-100 transition-colors flex-shrink-0 hidden lg:flex"
+          className="ml-auto p-1 rounded-lg hover:bg-gray-100 transition-colors flex-shrink-0 hidden lg:flex"
         >
-          {collapsed ? <ChevronRight className="w-4 h-4 text-gray-400" /> : <ChevronLeft className="w-4 h-4 text-gray-400" />}
+          {collapsed ? <ChevronRight className="w-4 h-4 text-gray-500" /> : <ChevronLeft className="w-4 h-4 text-gray-500" />}
         </button>
         <button
           onClick={() => setMobileOpen(false)}
-          className="ml-auto p-1.5 rounded-lg hover:bg-gray-100 transition-colors flex-shrink-0 lg:hidden"
+          className="ml-auto p-1 rounded-lg hover:bg-gray-100 transition-colors flex-shrink-0 lg:hidden"
         >
-          <X className="w-4 h-4 text-gray-400" />
+          <X className="w-4 h-4 text-gray-500" />
         </button>
       </div>
 
       {/* Role badge */}
       {!collapsed && user && (
-        <div className="px-4 pt-3 pb-1">
-          <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-primary-700 bg-primary-50 px-2.5 py-1 rounded-md uppercase tracking-wider">
-            <span className="w-1.5 h-1.5 bg-primary-500 rounded-full" />
-            {user.role}
+        <div className="px-4 py-2">
+          <span className="text-xs font-medium text-primary-600 bg-primary-50 px-2 py-1 rounded-lg capitalize">
+            {user.role} Portal
           </span>
         </div>
       )}
 
-      {/* Nav */}
-      <nav className="flex-1 overflow-y-auto py-2 px-2">
+      {/* Nav links */}
+      <nav className="flex-1 overflow-y-auto py-2">
         {items.map(({ to, icon: Icon, label }) => {
           const showNotifBadge = to === '/parent/notifications' && user?.role === 'parent' && unreadCount > 0;
           const showTeacherNotifBadge = to === '/teacher/notifications' && user?.role === 'teacher' && teacherUnreadCount > 0;
@@ -232,22 +256,20 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
                 if (showChatBadge) setChatUnreadCount(0);
               }}
               className={({ isActive }) => `
-                flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-150 mb-0.5
-                ${isActive
-                  ? 'bg-primary-50 text-primary-700 font-semibold shadow-sm shadow-primary-100/50'
-                  : 'text-gray-500 hover:bg-gray-50 hover:text-gray-800'}
+                flex items-center gap-3 px-4 py-2.5 mx-2 rounded-xl transition-colors duration-150
+                ${isActive ? 'bg-primary-50 text-primary-700 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}
               `}
               title={collapsed ? label : undefined}
             >
               <div className="relative flex-shrink-0">
-                <Icon className="w-[18px] h-[18px]" />
+                <Icon className="w-5 h-5" />
                 {showBadge && collapsed && (
-                  <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full ring-2 ring-white" />
+                  <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full" />
                 )}
               </div>
-              {!collapsed && <span className="text-[13px]">{t(`nav.${label.toLowerCase().replace(/ /g, '_')}`, label)}</span>}
+              {!collapsed && <span className="text-sm">{t(`nav.${label.toLowerCase().replace(/ /g, '_')}`, label)}</span>}
               {!collapsed && showBadge && (
-                <span className="ml-auto bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+                <span className="ml-auto bg-red-500 text-white text-xs font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
                   {badgeCount > 99 ? '99+' : badgeCount}
                 </span>
               )}
@@ -256,22 +278,22 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
         })}
       </nav>
 
-      {/* User section */}
-      <div className="border-t border-gray-100 p-3">
+      {/* User + Logout */}
+      <div className="border-t border-gray-100 p-4">
         {!collapsed && user && (
-          <div className="flex items-center gap-2.5 mb-3 px-1">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden bg-gradient-to-br from-primary-100 to-primary-50">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center flex-shrink-0">
               {user.profilePicture ? (
-                <img src={user.profilePicture} alt="" className="w-8 h-8 object-cover" />
+                <img src={user.profilePicture} alt="" className="w-8 h-8 rounded-full object-cover" />
               ) : (
-                <span className="text-xs font-bold text-primary-700">
+                <span className="text-sm font-bold text-primary-700">
                   {user.firstName?.[0]}{user.lastName?.[0]}
                 </span>
               )}
             </div>
             <div className="min-w-0">
               <p className="text-sm font-semibold text-gray-900 truncate">{user.firstName} {user.lastName}</p>
-              <p className="text-[11px] text-gray-400 truncate font-mono">{user.username}</p>
+              <p className="text-xs text-gray-500 truncate">{user.username}</p>
             </div>
           </div>
         )}
@@ -280,11 +302,11 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
             <select
               value={i18n.language}
               onChange={e => i18n.changeLanguage(e.target.value)}
-              className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-gray-50 text-gray-600 focus:outline-none focus:ring-2 focus:ring-primary-400 cursor-pointer"
+              className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 bg-gray-50 text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-400 cursor-pointer"
             >
-              <option value="en">English</option>
-              <option value="ar">عربي</option>
-              <option value="ku">کوردی</option>
+              <option value="en">🌐 English</option>
+              <option value="ar">🌐 عربي</option>
+              <option value="ku">🌐 کوردی</option>
             </select>
           </div>
         )}
@@ -292,7 +314,7 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
           <select
             value={i18n.language}
             onChange={e => i18n.changeLanguage(e.target.value)}
-            className="w-full text-[10px] border border-gray-200 rounded-lg p-1 mb-2 bg-gray-50 text-gray-600 focus:outline-none cursor-pointer"
+            className="w-full text-xs border border-gray-200 rounded-xl p-1 mb-2 bg-gray-50 text-gray-700 focus:outline-none cursor-pointer"
             title="Language"
           >
             <option value="en">EN</option>
@@ -302,11 +324,11 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
         )}
         <button
           onClick={logout}
-          className="flex items-center gap-2.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all duration-150 w-full px-3 py-2 group"
+          className="flex items-center gap-3 text-red-500 hover:bg-red-50 rounded-xl transition-colors duration-150 w-full p-2"
           title={collapsed ? t('nav.logout') : undefined}
         >
-          <LogOut className="w-[18px] h-[18px] flex-shrink-0 group-hover:rotate-12 transition-transform" />
-          {!collapsed && <span className="text-[13px] font-medium">{t('nav.logout')}</span>}
+          <LogOut className="w-5 h-5 flex-shrink-0" />
+          {!collapsed && <span className="text-sm font-medium">{t('nav.logout')}</span>}
         </button>
       </div>
     </aside>
