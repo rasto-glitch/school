@@ -1,8 +1,9 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, ActivityIndicator,
+  View, Text, ScrollView, StyleSheet,
   TouchableOpacity, TextInput, RefreshControl, Modal, Image,
 } from 'react-native';
+import { CardListSkeleton } from '../../components/Skeleton';
 import { Search, User, X, Phone } from 'lucide-react-native';
 import { teacherApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
@@ -86,7 +87,7 @@ export default function TeacherStudentsScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
       >
         {loading ? (
-          <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
+          <CardListSkeleton count={5} />
         ) : students.length === 0 ? (
           <View style={styles.empty}>
             <User size={36} color={colors.textMuted} />

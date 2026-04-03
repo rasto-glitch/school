@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
-import { View, Text, ScrollView, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import { CardListSkeleton } from '../../components/Skeleton';
 import { TouchableOpacity } from 'react-native';
 import { useRoute, RouteProp } from '@react-navigation/native';
 import { BookOpen, ClipboardList, Star, FileText, Clock } from 'lucide-react-native';
@@ -82,7 +83,7 @@ export default function TeacherContentScreen() {
       </View>
 
       {profileLoading ? (
-        <ActivityIndicator color={colors.primary} style={{ marginTop: 60 }} />
+        <CardListSkeleton count={4} />
       ) : tab === 'homework' ? (
         <TeacherHomeworkScreen subject={subject} classes={classes} />
       ) : tab === 'assignments' ? (

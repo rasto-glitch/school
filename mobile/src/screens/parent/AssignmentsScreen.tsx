@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef, useCallback } from 'react';
-import { View, Text, ScrollView, StyleSheet, ActivityIndicator, RefreshControl, TouchableOpacity } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, RefreshControl, TouchableOpacity } from 'react-native';
+import { CardListSkeleton } from '../../components/Skeleton';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -65,7 +66,7 @@ export default function AssignmentsScreen() {
       </View>
 
       {loading ? (
-        <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
+        <CardListSkeleton count={4} />
       ) : assignments.length === 0 ? (
         <View style={styles.emptyBox}>
           <ClipboardList size={40} color={colors.textMuted} />

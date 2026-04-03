@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { CardListSkeleton } from '../../components/Skeleton';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -117,7 +118,7 @@ export default function NotificationsScreen() {
       </View>
 
       {loading ? (
-        <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
+        <CardListSkeleton count={5} />
       ) : items.length === 0 ? (
         <Text style={styles.empty}>{t('notifications.no_notifications')}</Text>
       ) : (

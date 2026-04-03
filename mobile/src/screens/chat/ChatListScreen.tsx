@@ -3,6 +3,7 @@ import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
   TextInput, ActivityIndicator, RefreshControl, Image,
 } from 'react-native';
+import { ChatListSkeleton as ChatSkeleton } from '../../components/Skeleton';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MessageSquare, Plus, Search, X } from 'lucide-react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -134,7 +135,7 @@ export default function ChatListScreen() {
       </View>
 
       {loading ? (
-        <ActivityIndicator style={{ marginTop: 40 }} color={colors.primary} />
+        <ChatSkeleton />
       ) : filtered.length === 0 ? (
         <View style={s.empty}>
           <MessageSquare size={40} color={colors.textMuted} />

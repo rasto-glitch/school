@@ -3,6 +3,7 @@ import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
   TextInput, ActivityIndicator, Alert, Modal,
 } from 'react-native';
+import { CardListSkeleton } from '../../components/Skeleton';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as DocumentPicker from 'expo-document-picker';
 import { ClipboardList, Plus, Trash2, Paperclip, X, Send, ChevronLeft, ChevronRight } from 'lucide-react-native';
@@ -115,7 +116,7 @@ export default function TeacherAssignmentsScreen({ subject, classes }: Props) {
       </TouchableOpacity>
 
       {loading ? (
-        <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
+        <CardListSkeleton count={4} />
       ) : assignments.length === 0 ? (
         <View style={styles.empty}>
           <ClipboardList size={36} color={colors.textMuted} />

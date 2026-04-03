@@ -3,6 +3,7 @@ import {
   View, Text, ScrollView, StyleSheet, ActivityIndicator,
   TouchableOpacity, Alert,
 } from 'react-native';
+import { CardListSkeleton } from '../../components/Skeleton';
 import { ChevronLeft, ChevronRight, CheckCircle, XCircle, Clock, Save } from 'lucide-react-native';
 import { teacherApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
@@ -212,7 +213,7 @@ export default function TeacherAttendanceScreen() {
       {/* Student list */}
       <Text style={styles.sectionLabel}>Students</Text>
       {loading ? (
-        <ActivityIndicator color={colors.primary} style={{ marginTop: 24 }} />
+        <CardListSkeleton count={5} />
       ) : students.length === 0 ? (
         <View style={styles.emptyCard}>
           <Text style={styles.emptyText}>No students in this class.</Text>

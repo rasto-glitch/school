@@ -1,8 +1,9 @@
 import { useEffect, useState, useMemo } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, ActivityIndicator,
+  View, Text, ScrollView, StyleSheet,
   RefreshControl, TouchableOpacity,
 } from 'react-native';
+import { DashboardSkeleton } from '../../components/Skeleton';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -129,7 +130,7 @@ export default function FeedScreen() {
       <Text style={styles.sectionLabel}>{t('dashboard.latest_activity')}</Text>
 
       {loading ? (
-        <ActivityIndicator color={colors.primary} style={{ marginTop: 24 }} />
+        <DashboardSkeleton />
       ) : feedItems.length === 0 ? (
         <View style={styles.emptyBox}>
           <FileText size={40} color={colors.textMuted} />

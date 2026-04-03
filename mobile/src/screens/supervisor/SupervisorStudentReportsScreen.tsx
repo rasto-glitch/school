@@ -1,8 +1,9 @@
 import { useEffect, useState, useMemo } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, ActivityIndicator,
+  View, Text, ScrollView, StyleSheet,
   TouchableOpacity, TextInput,
 } from 'react-native';
+import { CardListSkeleton } from '../../components/Skeleton';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Search, FileText, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { supervisorApi } from '../../services/api';
@@ -134,7 +135,7 @@ export default function SupervisorStudentReportsScreen({ embedded = false }: { e
         </View>
       )}
 
-      {loading && <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />}
+      {loading && <CardListSkeleton count={4} />}
 
       {brief && student && (
         <>

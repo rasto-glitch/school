@@ -1,8 +1,9 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, ActivityIndicator,
+  View, Text, ScrollView, StyleSheet,
   TouchableOpacity, TextInput, Linking, RefreshControl,
 } from 'react-native';
+import { CardListSkeleton } from '../../components/Skeleton';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { Search, Phone, MapPin, Home, Building2 } from 'lucide-react-native';
@@ -93,7 +94,7 @@ export default function SupervisorStudentsScreen() {
       </View>
 
       {loading ? (
-        <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
+        <CardListSkeleton count={5} />
       ) : grouped.length === 0 ? (
         <View style={styles.emptyCard}>
           <Text style={styles.emptyText}>No students found.</Text>

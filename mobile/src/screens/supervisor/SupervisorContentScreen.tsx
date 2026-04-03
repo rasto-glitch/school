@@ -3,6 +3,7 @@ import {
   View, Text, ScrollView, StyleSheet, ActivityIndicator,
   RefreshControl, TouchableOpacity, Alert,
 } from 'react-native';
+import { CardListSkeleton } from '../../components/Skeleton';
 import { useRoute, RouteProp, useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -143,7 +144,7 @@ export default function SupervisorContentScreen() {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
         >
           {loading ? (
-            <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
+            <CardListSkeleton count={4} />
           ) : items.length === 0 ? (
             <View style={styles.emptyCard}>
               {tab === 'homework'

@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
-import { View, Text, ScrollView, TextInput, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TextInput, StyleSheet } from 'react-native';
+import { CardListSkeleton } from '../../components/Skeleton';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Search, Users } from 'lucide-react-native';
@@ -48,7 +49,7 @@ export default function DriverStudentsScreen() {
       </View>
 
       {loading ? (
-        <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
+        <CardListSkeleton count={5} />
       ) : filtered.length === 0 ? (
         <View style={styles.emptyBox}>
           <Users size={40} color={colors.textMuted} />

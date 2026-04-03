@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Image, Alert } from 'react-native';
+import { CardListSkeleton } from '../../components/Skeleton';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -131,7 +132,7 @@ export default function DriverMeScreen() {
       <Text style={styles.sectionTitle}>{t('me.bus_info', 'Bus Information')}</Text>
 
       {loading ? (
-        <ActivityIndicator color={colors.primary} style={{ marginTop: 16 }} />
+        <CardListSkeleton count={3} />
       ) : (
         <View style={styles.infoCard}>
           <View style={styles.infoRow}>

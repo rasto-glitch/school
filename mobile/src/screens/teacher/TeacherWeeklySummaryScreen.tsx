@@ -3,6 +3,7 @@ import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
   TextInput, ActivityIndicator, Alert,
 } from 'react-native';
+import { CardListSkeleton } from '../../components/Skeleton';
 import { Clock, Lock, Send } from 'lucide-react-native';
 import { teacherApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
@@ -78,7 +79,7 @@ export default function TeacherWeeklySummaryScreen({ subject, classes, embedded 
     <ScrollView contentContainerStyle={{ padding: spacing.md, paddingBottom: 40 }}>
       {/* Period banner */}
       {periodLoading ? (
-        <ActivityIndicator color={colors.primary} style={{ marginBottom: spacing.md }} />
+        <CardListSkeleton count={1} hasIcon={false} />
       ) : period ? (
         <View style={styles.periodBanner}>
           <Clock size={16} color={colors.success} />
@@ -104,7 +105,7 @@ export default function TeacherWeeklySummaryScreen({ subject, classes, embedded 
       {subject && <View style={styles.subjectBadge}><Text style={styles.subjectText}>{subject}</Text></View>}
 
       {loadingExisting ? (
-        <ActivityIndicator color={colors.primary} style={{ marginTop: 24 }} />
+        <CardListSkeleton count={4} hasIcon={false} />
       ) : (
         <>
           <Text style={styles.label}>Unit</Text>

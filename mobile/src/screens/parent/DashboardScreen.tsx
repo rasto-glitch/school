@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { DashboardSkeleton } from '../../components/Skeleton';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../../store/authStore';
 import { parentApi } from '../../services/api';
@@ -30,7 +31,7 @@ export default function DashboardScreen() {
       </View>
 
       {loading ? (
-        <ActivityIndicator style={{ marginTop: 40 }} color="#4F46E5" />
+        <DashboardSkeleton />
       ) : (
         <>
           <Text style={styles.sectionTitle}>{t('dashboard.latest_activity')}</Text>

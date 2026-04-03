@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, TouchableOpacity, FlatList,
-  StyleSheet, ActivityIndicator, Alert, TextInput,
+  StyleSheet, Alert, TextInput,
 } from 'react-native';
+import { RowListSkeleton } from '../../components/Skeleton';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { GraduationCap, ChevronRight, Search } from 'lucide-react-native';
@@ -89,7 +90,7 @@ export default function SchoolPickerScreen() {
         </View>
 
         {loading ? (
-          <ActivityIndicator color="#4F46E5" size="large" style={{ marginTop: 40 }} />
+          <RowListSkeleton count={4} />
         ) : filtered.length === 0 ? (
           <View style={styles.emptyBox}>
             <Text style={styles.emptyText}>

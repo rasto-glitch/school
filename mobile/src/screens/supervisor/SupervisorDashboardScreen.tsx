@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
-import { View, Text, ScrollView, StyleSheet, ActivityIndicator, RefreshControl, TouchableOpacity } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, RefreshControl, TouchableOpacity } from 'react-native';
+import { DashboardSkeleton } from '../../components/Skeleton';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AlertCircle, Users, CheckCircle, Clock, FileText, ChevronRight } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -108,7 +109,7 @@ export default function SupervisorDashboardScreen() {
         </TouchableOpacity>
       </View>
 
-      {loading ? <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} /> : (
+      {loading ? <DashboardSkeleton /> : (
         <>
           {/* Absent / Late today */}
           <Text style={styles.sectionLabel}>Absent & Late Today</Text>

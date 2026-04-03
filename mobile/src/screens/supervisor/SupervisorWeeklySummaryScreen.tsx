@@ -3,6 +3,7 @@ import {
   View, Text, ScrollView, StyleSheet, ActivityIndicator,
   RefreshControl, TouchableOpacity, Alert,
 } from 'react-native';
+import { CardListSkeleton } from '../../components/Skeleton';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CheckCircle, XCircle, ChevronDown, ChevronUp, PlayCircle, StopCircle, ChevronLeft, ChevronRight, X } from 'lucide-react-native';
 import { supervisorApi } from '../../services/api';
@@ -291,7 +292,7 @@ export default function SupervisorWeeklySummaryScreen({ embedded = false }: { em
 
       {/* ── Summaries ── */}
       {loading ? (
-        <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
+        <CardListSkeleton count={4} />
       ) : summaries.length === 0 ? (
         <View style={styles.emptyCard}>
           <Text style={styles.emptyText}>No summaries submitted for this week.</Text>

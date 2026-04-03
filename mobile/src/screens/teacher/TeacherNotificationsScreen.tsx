@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { View, Text, ScrollView, StyleSheet, ActivityIndicator, TouchableOpacity, RefreshControl } from 'react-native';
+import { CardListSkeleton } from '../../components/Skeleton';
 import { Bell, CheckCircle } from 'lucide-react-native';
 import { format, isToday, isYesterday, parseISO } from 'date-fns';
 import { teacherApi } from '../../services/api';
@@ -83,7 +84,7 @@ export default function TeacherNotificationsScreen() {
       {unreadCount > 0 && <Text style={styles.unreadLabel}>{unreadCount} unread</Text>}
 
       {loading ? (
-        <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
+        <CardListSkeleton count={5} />
       ) : notifications.length === 0 ? (
         <View style={styles.empty}>
           <Bell size={36} color={colors.textMuted} />

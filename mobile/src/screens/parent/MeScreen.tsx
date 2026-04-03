@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { View, Text, ScrollView, StyleSheet, ActivityIndicator, TouchableOpacity, Image, Alert } from 'react-native';
+import { CardListSkeleton } from '../../components/Skeleton';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { User, GraduationCap, Bus, Plus, Pencil } from 'lucide-react-native';
@@ -112,7 +113,7 @@ export default function MeScreen() {
       </Text>
 
       {loading ? (
-        <ActivityIndicator color={colors.primary} style={{ marginTop: 16 }} />
+        <CardListSkeleton count={2} />
       ) : children.length === 0 ? (
         <View style={styles.emptyBox}>
           <Text style={styles.emptyText}>No children linked to this account.</Text>

@@ -3,6 +3,7 @@ import {
   View, Text, ScrollView, StyleSheet, ActivityIndicator,
   TouchableOpacity, Alert, Modal, TextInput,
 } from 'react-native';
+import { CardListSkeleton } from '../../components/Skeleton';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { ChevronLeft, ChevronRight, CheckCircle, XCircle, Clock, Edit2, CalendarOff } from 'lucide-react-native';
@@ -240,7 +241,7 @@ export default function SupervisorAttendanceScreen() {
       </View>
 
       {loading ? (
-        <ActivityIndicator color={colors.primary} style={{ marginTop: 24 }} />
+        <CardListSkeleton count={5} />
       ) : allStudents.length === 0 ? (
         <View style={styles.emptyCard}>
           <Text style={styles.emptyText}>No students in this class.</Text>

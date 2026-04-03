@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl } from 'react-native';
+import { DashboardSkeleton } from '../../components/Skeleton';
 import { useNavigation } from '@react-navigation/native';
 import { Home, CalendarCheck, BookOpen, ClipboardList, Star, FileText, Clock, Users, ChevronRight } from 'lucide-react-native';
 import { teacherApi } from '../../services/api';
@@ -105,7 +106,7 @@ export default function TeacherDashboardScreen() {
 
       {/* Recent homework */}
       {loading ? (
-        <ActivityIndicator color={colors.primary} style={{ marginTop: 32 }} />
+        <DashboardSkeleton />
       ) : recentHw.length > 0 ? (
         <>
           <Text style={[styles.sectionLabel, { marginTop: spacing.md }]}>Recent Homework</Text>

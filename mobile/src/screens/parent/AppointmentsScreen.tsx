@@ -1,8 +1,9 @@
 import { useEffect, useState, useMemo } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, ActivityIndicator,
+  View, Text, ScrollView, StyleSheet,
   RefreshControl, TouchableOpacity, TextInput, Alert, Modal,
 } from 'react-native';
+import { CardListSkeleton } from '../../components/Skeleton';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Calendar, Plus, X, Clock, CheckCircle, XCircle, ChevronDown, ChevronUp, ChevronLeft, ChevronRight } from 'lucide-react-native';
@@ -95,7 +96,7 @@ export default function AppointmentsScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
       >
         {loading ? (
-          <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
+          <CardListSkeleton count={3} />
         ) : items.length === 0 ? (
           <View style={styles.empty}>
             <Calendar size={40} color={colors.textMuted} />
