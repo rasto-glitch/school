@@ -24,7 +24,7 @@ const LANGUAGES = [
 
 export default function SupervisorSettingsScreen() {
   const { t } = useTranslation();
-  const { logout, user, selectedSchool } = useAuthStore();
+  const { logout, user } = useAuthStore();
   const { isDark, toggleTheme } = useThemeStore();
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -107,10 +107,10 @@ export default function SupervisorSettingsScreen() {
   };
 
   const handleForgotPassword = async () => {
-    if (!user?.username || !selectedSchool?.slug) return;
+    if (!user?.username) return;
     setSendingForgot(true);
     try {
-      await authApi.forgotPassword(user.username, selectedSchool.slug);
+      await authApi.forgotPassword(user.username);
       Alert.alert(t('settings.forgot_sent_title'), t('settings.forgot_sent_body'));
     } catch {
       Alert.alert('Error', 'Could not send reset request.');
