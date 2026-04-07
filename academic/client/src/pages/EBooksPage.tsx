@@ -66,8 +66,8 @@ export default function EBooksPage() {
   const [form, setForm] = useState({ title: '', subject: '', author: '', description: '', classId: '' });
   const [file, setFile] = useState<File | null>(null);
 
-  const canUpload = user?.role === 'teacher' || user?.role === 'admin';
-  const canDelete = user?.role === 'teacher' || user?.role === 'admin';
+  const canUpload = user?.role === 'admin';
+  const canDelete = user?.role === 'admin';
 
   useEffect(() => {
     Promise.all([academicApi.getEbooks(), academicApi.getClasses()])

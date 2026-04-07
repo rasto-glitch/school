@@ -496,6 +496,7 @@ CREATE TABLE IF NOT EXISTS academic_posts (
   content_type TEXT NOT NULL DEFAULT 'richtext' CHECK (content_type IN ('richtext', 'plaintext', 'file')),
   attachment_url TEXT,
   attachment_name TEXT,
+  image_url TEXT,
   is_published BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()

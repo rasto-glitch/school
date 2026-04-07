@@ -56,7 +56,7 @@ export default function PostDetailPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar />
-      <div className="max-w-3xl mx-auto px-6 py-8">
+      <div className="max-w-4xl mx-auto px-6 py-8">
         {/* Back */}
         <button onClick={() => navigate(-1)} className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 mb-6 transition-colors">
           <ArrowLeft className="w-4 h-4" /> Back
@@ -107,6 +107,13 @@ export default function PostDetailPage() {
               </div>
             </div>
           </div>
+
+          {/* Post image */}
+          {post.image_url && (
+            <div className="px-8 pt-7">
+              <img src={post.image_url} alt="" className="w-full rounded-xl object-cover max-h-96" />
+            </div>
+          )}
 
           {/* Content */}
           <div className="px-8 py-7">

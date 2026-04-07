@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Upload, Loader2 } from 'lucide-react';
+import { ArrowLeft, Upload, Loader2, ImagePlus, X } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { academicApi } from '../services/api';
 import Navbar from '../components/layout/Navbar';
@@ -18,6 +18,8 @@ export default function CreatePostPage() {
   const [contentType, setContentType] = useState<ContentType>('richtext');
   const [content, setContent] = useState('');
   const [file, setFile] = useState<File | null>(null);
+  const [image, setImage] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -37,11 +39,17 @@ export default function CreatePostPage() {
     try {
       let attachmentUrl: string | undefined;
       let attachmentName: string | undefined;
+      let imageUrl: string | undefined;
 
       if (contentType === 'file' && file) {
         const uploadRes = await academicApi.uploadFile(file);
         attachmentUrl = uploadRes.data.url;
         attachmentName = uploadRes.data.name;
+      }
+
+      if (image) {
+        const imgRes = await academicApi.uploadFile(image);
+        imageUrl = imgRes.data.url;
       }
 
       const res = await academicApi.createPost({
@@ -51,6 +59,7 @@ export default function CreatePostPage() {
         content: contentType !== 'file' ? content : undefined,
         contentType,
         isPublished: publish,
+        imageUrl,
         ...(attachmentUrl && { attachmentUrl, attachmentName }),
       } as any);
 
@@ -66,7 +75,7 @@ export default function CreatePostPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar />
-      <div className="max-w-3xl mx-auto px-6 py-8">
+      <div className="max-w-4xl mx-auto px-6 py-8">
         <button onClick={() => navigate(-1)} className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 mb-6 transition-colors">
           <ArrowLeft className="w-4 h-4" /> Back
         </button>
@@ -164,6 +173,39 @@ export default function CreatePostPage() {
                 </label>
               </div>
             )}
+            {/* Post Image (optional) */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1.5">Post Image <span className="text-gray-400 font-normal">(optional — shown as thumbnail)</span></label>
+              {imagePreview ? (
+                <div className="relative inline-block">
+                  <img src={imagePreview} alt="Preview" className="h-32 rounded-xl object-cover border border-gray-200" />
+                  <button
+                    type="button"
+                    onClick={() => { setImage(null); setImagePreview(''); }}
+                    className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <label className="flex items-center gap-3 border-2 border-dashed border-gray-200 rounded-xl px-4 py-4 cursor-pointer hover:border-primary-400 hover:bg-primary-50/20 transition-colors">
+                  <ImagePlus className="w-5 h-5 text-gray-300 flex-shrink-0" />
+                  <span className="text-sm text-gray-500">Click to add an image</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={e => {
+                      const f = e.target.files?.[0];
+                      if (f) {
+                        setImage(f);
+                        setImagePreview(URL.createObjectURL(f));
+                      }
+                    }}
+                  />
+                </label>
+              )}
+            </div>
           </div>
 
           {/* Actions */}

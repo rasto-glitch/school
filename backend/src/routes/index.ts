@@ -202,8 +202,8 @@ export function createRouter(io: SocketServer) {
   router.get('/academic/classes', authenticate, authorize(...academicRoles), (req, res) => academic.getClasses(req as AuthRequest, res));
 
   router.get('/academic/ebooks', authenticate, authorize(...academicRoles), (req, res) => academic.getEbooks(req as AuthRequest, res));
-  router.post('/academic/ebooks', authenticate, authorize('teacher', 'admin'), upload.single('file'), (req, res) => academic.uploadEbook(req as AuthRequest, res));
-  router.delete('/academic/ebooks/:id', authenticate, authorize('teacher', 'admin'), (req, res) => academic.deleteEbook(req as AuthRequest, res));
+  router.post('/academic/ebooks', authenticate, authorize('admin'), upload.single('file'), (req, res) => academic.uploadEbook(req as AuthRequest, res));
+  router.delete('/academic/ebooks/:id', authenticate, authorize('admin'), (req, res) => academic.deleteEbook(req as AuthRequest, res));
 
   // ---- CHAT ----
   const chatRoles = ['parent', 'teacher', 'supervisor'] as const;

@@ -31,6 +31,7 @@ export interface AcademicPost {
   content_type: 'richtext' | 'plaintext' | 'file';
   attachment_url?: string;
   attachment_name?: string;
+  image_url?: string;
   is_published: boolean;
   created_at: string;
   updated_at: string;

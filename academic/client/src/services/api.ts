@@ -35,10 +35,12 @@ export const academicApi = {
   createPost: (data: {
     title: string; subject?: string; classId: string;
     content?: string; contentType: string; isPublished: boolean;
+    imageUrl?: string;
   }) => api.post('/academic/posts', data),
   updatePost: (id: string, data: Partial<{
     title: string; subject: string; classId: string;
     content: string; contentType: string; isPublished: boolean;
+    imageUrl: string;
   }>) => api.put(`/academic/posts/${id}`, data),
   deletePost: (id: string) => api.delete(`/academic/posts/${id}`),
   uploadFile: (file: File) => {

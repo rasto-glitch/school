@@ -25,7 +25,7 @@ export async function getPosts(req: AuthRequest, res: Response): Promise<void> {
   try {
     let query = supabase
       .from('academic_posts')
-      .select('id, title, subject, content_type, content, attachment_url, attachment_name, is_published, created_at, updated_at, class_id, teacher_id, classes(name), teachers(full_name, user_id)')
+      .select('id, title, subject, content_type, content, attachment_url, attachment_name, image_url, is_published, created_at, updated_at, class_id, teacher_id, classes(name), teachers(full_name, user_id)')
       .eq('school_id', schoolId)
       .order('created_at', { ascending: false });
 
@@ -88,7 +88,7 @@ export async function getPost(req: AuthRequest, res: Response): Promise<void> {
 
 export async function createPost(req: AuthRequest, res: Response): Promise<void> {
   const { userId, schoolId } = req.user!;
-  const { title, subject, classId, content, contentType, isPublished } = req.body;
+  const { title, subject, classId, content, contentType, isPublished, imageUrl } = req.body;
 
   if (!title || !classId || !contentType) {
     res.status(400).json({ error: 'title, classId, contentType are required' });
@@ -109,6 +109,7 @@ export async function createPost(req: AuthRequest, res: Response): Promise<void>
         subject: subject || null,
         content: content || null,
         content_type: contentType,
+        image_url: imageUrl || null,
         is_published: isPublished === true,
         updated_at: new Date().toISOString(),
       })
@@ -125,7 +126,7 @@ export async function createPost(req: AuthRequest, res: Response): Promise<void>
 export async function updatePost(req: AuthRequest, res: Response): Promise<void> {
   const { userId, schoolId } = req.user!;
   const { id } = req.params;
-  const { title, subject, classId, content, contentType, isPublished } = req.body;
+  const { title, subject, classId, content, contentType, isPublished, imageUrl } = req.body;
 
   try {
     const teacherId = await getTeacherId(userId);
@@ -150,6 +151,7 @@ export async function updatePost(req: AuthRequest, res: Response): Promise<void>
     if (content !== undefined) updates.content = content;
     if (contentType !== undefined) updates.content_type = contentType;
     if (isPublished !== undefined) updates.is_published = isPublished;
+    if (imageUrl !== undefined) updates.image_url = imageUrl;
 
     const { data, error } = await supabase
       .from('academic_posts')
@@ -224,6 +226,15 @@ export async function getClasses(req: AuthRequest, res: Response): Promise<void>
         .select('class_id, classes(id, name, grade_level)')
         .eq('teacher_id', teacherId!);
       res.json((data ?? []).map((r: any) => r.classes).filter(Boolean));
+    } else if (role === 'parent') {
+      const classIds = await getParentClassIds(userId);
+      if (classIds.length === 0) { res.json([]); return; }
+      const { data } = await supabase
+        .from('classes')
+        .select('id, name, grade_level')
+        .in('id', classIds)
+        .order('name');
+      res.json(data ?? []);
     } else {
       const { data } = await supabase
         .from('classes')

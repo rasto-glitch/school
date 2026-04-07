@@ -23,33 +23,41 @@ function PostCard({ post }: { post: AcademicPost }) {
 
   return (
     <Link to={`/posts/${post.id}`} className="block group">
-      <article className="bg-white border border-gray-100 rounded-2xl p-5 hover:shadow-md hover:border-primary-100 transition-all">
-        <div className="flex items-start justify-between gap-3 mb-3">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${typeColor[post.content_type]}`}>
-              <Icon className="w-3 h-3" /> {typeLabel[post.content_type]}
-            </span>
-            {post.classes?.name && (
-              <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{post.classes.name}</span>
-            )}
-            {post.subject && (
-              <span className="text-xs bg-primary-50 text-primary-700 px-2 py-0.5 rounded-full">{post.subject}</span>
-            )}
+      <article className={`bg-white border border-gray-100 rounded-2xl hover:shadow-md hover:border-primary-100 transition-all overflow-hidden ${post.image_url ? 'flex' : 'p-5'}`}>
+        {/* Thumbnail */}
+        {post.image_url && (
+          <div className="w-40 sm:w-48 flex-shrink-0">
+            <img src={post.image_url} alt="" className="w-full h-full object-cover" />
           </div>
-          <time className="text-xs text-gray-400 flex-shrink-0">
-            {format(new Date(post.created_at), 'MMM d, yyyy')}
-          </time>
-        </div>
-        <h2 className="font-semibold text-gray-900 group-hover:text-primary-600 transition-colors mb-1 line-clamp-2">
-          {post.title}
-        </h2>
-        {preview && <p className="text-sm text-gray-500 line-clamp-2 leading-relaxed">{preview}</p>}
-        {post.content_type === 'file' && post.attachment_name && (
-          <p className="text-sm text-amber-600 flex items-center gap-1 mt-1">
-            <Paperclip className="w-3.5 h-3.5" /> {post.attachment_name}
-          </p>
         )}
-        <p className="text-xs text-gray-400 mt-3">by {post.teachers?.full_name ?? 'Teacher'}</p>
+        <div className={post.image_url ? 'flex-1 p-5' : ''}>
+          <div className="flex items-start justify-between gap-3 mb-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${typeColor[post.content_type]}`}>
+                <Icon className="w-3 h-3" /> {typeLabel[post.content_type]}
+              </span>
+              {post.classes?.name && (
+                <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{post.classes.name}</span>
+              )}
+              {post.subject && (
+                <span className="text-xs bg-primary-50 text-primary-700 px-2 py-0.5 rounded-full">{post.subject}</span>
+              )}
+            </div>
+            <time className="text-xs text-gray-400 flex-shrink-0">
+              {format(new Date(post.created_at), 'MMM d, yyyy')}
+            </time>
+          </div>
+          <h2 className="font-semibold text-gray-900 group-hover:text-primary-600 transition-colors mb-1 line-clamp-2">
+            {post.title}
+          </h2>
+          {preview && <p className="text-sm text-gray-500 line-clamp-2 leading-relaxed">{preview}</p>}
+          {post.content_type === 'file' && post.attachment_name && (
+            <p className="text-sm text-amber-600 flex items-center gap-1 mt-1">
+              <Paperclip className="w-3.5 h-3.5" /> {post.attachment_name}
+            </p>
+          )}
+          <p className="text-xs text-gray-400 mt-3">by {post.teachers?.full_name ?? 'Teacher'}</p>
+        </div>
       </article>
     </Link>
   );
