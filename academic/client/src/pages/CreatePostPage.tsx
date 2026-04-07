@@ -29,6 +29,11 @@ export default function CreatePostPage() {
     });
   }, []);
 
+  const uploadImage = async (file: File): Promise<string> => {
+    const res = await academicApi.uploadFile(file);
+    return res.data.url;
+  };
+
   const handleSave = async (publish: boolean) => {
     if (!title.trim()) { toast.error('Title is required'); return; }
     if (!classId) { toast.error('Please select a class'); return; }
@@ -120,6 +125,40 @@ export default function CreatePostPage() {
               </div>
             </div>
 
+            {/* Post Image — thumbnail */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1.5">Cover Image <span className="text-gray-400 font-normal">(optional — shown as thumbnail)</span></label>
+              {imagePreview ? (
+                <div className="relative inline-block">
+                  <img src={imagePreview} alt="Preview" className="h-32 rounded-xl object-cover border border-gray-200" />
+                  <button
+                    type="button"
+                    onClick={() => { setImage(null); setImagePreview(''); }}
+                    className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <label className="flex items-center gap-3 border-2 border-dashed border-gray-200 rounded-xl px-4 py-4 cursor-pointer hover:border-primary-400 hover:bg-primary-50/20 transition-colors">
+                  <ImagePlus className="w-5 h-5 text-gray-300 flex-shrink-0" />
+                  <span className="text-sm text-gray-500">Click to add a cover image</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={e => {
+                      const f = e.target.files?.[0];
+                      if (f) {
+                        setImage(f);
+                        setImagePreview(URL.createObjectURL(f));
+                      }
+                    }}
+                  />
+                </label>
+              )}
+            </div>
+
             {/* Content type */}
             <div>
               <label className="block text-xs font-semibold text-gray-700 mb-2">Content type</label>
@@ -145,6 +184,7 @@ export default function CreatePostPage() {
                   content={content}
                   onChange={setContent}
                   placeholder="Write your topic explanation, notes, or summary here..."
+                  onUploadImage={uploadImage}
                 />
               </div>
             )}
@@ -173,39 +213,6 @@ export default function CreatePostPage() {
                 </label>
               </div>
             )}
-            {/* Post Image (optional) */}
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1.5">Post Image <span className="text-gray-400 font-normal">(optional — shown as thumbnail)</span></label>
-              {imagePreview ? (
-                <div className="relative inline-block">
-                  <img src={imagePreview} alt="Preview" className="h-32 rounded-xl object-cover border border-gray-200" />
-                  <button
-                    type="button"
-                    onClick={() => { setImage(null); setImagePreview(''); }}
-                    className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ) : (
-                <label className="flex items-center gap-3 border-2 border-dashed border-gray-200 rounded-xl px-4 py-4 cursor-pointer hover:border-primary-400 hover:bg-primary-50/20 transition-colors">
-                  <ImagePlus className="w-5 h-5 text-gray-300 flex-shrink-0" />
-                  <span className="text-sm text-gray-500">Click to add an image</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={e => {
-                      const f = e.target.files?.[0];
-                      if (f) {
-                        setImage(f);
-                        setImagePreview(URL.createObjectURL(f));
-                      }
-                    }}
-                  />
-                </label>
-              )}
-            </div>
           </div>
 
           {/* Actions */}

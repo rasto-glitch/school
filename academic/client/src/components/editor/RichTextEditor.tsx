@@ -1,17 +1,20 @@
+import { useRef } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
 import Link from '@tiptap/extension-link';
+import Image from '@tiptap/extension-image';
 import Placeholder from '@tiptap/extension-placeholder';
 import {
   Bold, Italic, UnderlineIcon, Strikethrough, Code, Link2,
-  List, ListOrdered, Quote, Heading1, Heading2, Heading3, Minus,
+  List, ListOrdered, Quote, Heading1, Heading2, Heading3, Minus, ImagePlus,
 } from 'lucide-react';
 
 interface Props {
   content: string;
   onChange: (html: string) => void;
   placeholder?: string;
+  onUploadImage?: (file: File) => Promise<string>;
 }
 
 function ToolbarBtn({
@@ -29,13 +32,16 @@ function ToolbarBtn({
   );
 }
 
-export default function RichTextEditor({ content, onChange, placeholder }: Props) {
+export default function RichTextEditor({ content, onChange, placeholder, onUploadImage }: Props) {
+  const imgInputRef = useRef<HTMLInputElement>(null);
+
   const editor = useEditor({
     extensions: [
       StarterKit,
       Underline,
       Placeholder.configure({ placeholder: placeholder ?? 'Start writing...' }),
       Link.configure({ openOnClick: false }),
+      Image.configure({ inline: false, allowBase64: false }),
     ],
     content,
     onUpdate({ editor }) {
@@ -51,6 +57,18 @@ export default function RichTextEditor({ content, onChange, placeholder }: Props
     if (url === null) return;
     if (url === '') { editor.chain().focus().extendMarkRange('link').unsetLink().run(); return; }
     editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
+  };
+
+  const handleInsertImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !onUploadImage) return;
+    e.target.value = '';
+    try {
+      const url = await onUploadImage(file);
+      editor.chain().focus().setImage({ src: url }).run();
+    } catch {
+      // error handled by caller
+    }
   };
 
   return (
@@ -98,6 +116,15 @@ export default function RichTextEditor({ content, onChange, placeholder }: Props
         <ToolbarBtn active={false} onClick={() => editor.chain().focus().setHorizontalRule().run()} title="Divider">
           <Minus className="w-4 h-4" />
         </ToolbarBtn>
+        {onUploadImage && (
+          <>
+            <div className="w-px h-5 bg-gray-200 mx-1" />
+            <ToolbarBtn active={false} onClick={() => imgInputRef.current?.click()} title="Insert image">
+              <ImagePlus className="w-4 h-4" />
+            </ToolbarBtn>
+            <input ref={imgInputRef} type="file" accept="image/*" className="hidden" onChange={handleInsertImage} />
+          </>
+        )}
       </div>
 
       {/* Editor */}

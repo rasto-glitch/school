@@ -9,6 +9,7 @@
     "preview": "vite preview --port 5174"
   },
   "dependencies": {
+    "@tiptap/extension-image": "^2.27.2",
     "@tiptap/extension-link": "^2.11.5",
     "@tiptap/extension-placeholder": "^2.11.5",
     "@tiptap/extension-underline": "^2.11.5",

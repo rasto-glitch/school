@@ -16,6 +16,7 @@
 .tiptap-content a   { @apply text-primary-600 underline; }
 .tiptap-content strong { @apply font-semibold; }
 .tiptap-content hr { @apply my-4 border-gray-200; }
+.tiptap-content img { @apply rounded-xl my-4 max-w-full h-auto; }
 
 /* Editor container */
 .ProseMirror { @apply outline-none min-h-[280px]; }
