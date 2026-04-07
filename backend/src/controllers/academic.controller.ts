@@ -206,12 +206,12 @@ export async function uploadPostFile(req: AuthRequest, res: Response): Promise<v
   const path = `posts/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
 
   const { error } = await supabase.storage
-    .from('academic-files')
+    .from(process.env.SUPABASE_STORAGE_BUCKET || 'homework-attachments')
     .upload(path, file.buffer, { contentType: file.mimetype, upsert: false });
 
   if (error) { res.status(500).json({ error: error.message }); return; }
 
-  const { data: { publicUrl } } = supabase.storage.from('academic-files').getPublicUrl(path);
+  const { data: { publicUrl } } = supabase.storage.from(process.env.SUPABASE_STORAGE_BUCKET || 'homework-attachments').getPublicUrl(path);
   res.json({ url: publicUrl, name: file.originalname });
 }
 
@@ -289,13 +289,15 @@ export async function uploadEbook(req: AuthRequest, res: Response): Promise<void
     const ext = file.originalname.split('.').pop();
     const path = `ebooks/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
 
+    const bucket = process.env.SUPABASE_STORAGE_BUCKET || 'homework-attachments';
+
     const { error: uploadErr } = await supabase.storage
-      .from('ebooks')
+      .from(bucket)
       .upload(path, file.buffer, { contentType: file.mimetype, upsert: false });
 
     if (uploadErr) { res.status(500).json({ error: uploadErr.message }); return; }
 
-    const { data: { publicUrl } } = supabase.storage.from('ebooks').getPublicUrl(path);
+    const { data: { publicUrl } } = supabase.storage.from(bucket).getPublicUrl(path);
 
     const { data, error } = await supabase
       .from('ebooks')
