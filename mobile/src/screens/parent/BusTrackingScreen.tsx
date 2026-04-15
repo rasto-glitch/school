@@ -196,9 +196,12 @@ export default function BusTrackingScreen() {
 
   const isActive = !!busData?.location?.isDriving;
   const driverInfo: DriverInfo | null = busData?.location?.drivers || staticDriverInfo;
-  const etaTarget = parentLocation
-    ? { lat: parentLocation.latitude, lng: parentLocation.longitude }
-    : busData?.studentHome ? { lat: busData.studentHome.latitude, lng: busData.studentHome.longitude } : null;
+  // Prefer manually-set pickup location for ETA and map marker
+  const etaTarget = pickupCoords.lat && pickupCoords.lng
+    ? { lat: pickupCoords.lat, lng: pickupCoords.lng }
+    : parentLocation
+      ? { lat: parentLocation.latitude, lng: parentLocation.longitude }
+      : busData?.studentHome ? { lat: busData.studentHome.latitude, lng: busData.studentHome.longitude } : null;
   const etaTime = isActive && busData?.location && etaTarget
     ? computeETA(busData.location.latitude, busData.location.longitude, etaTarget.lat, etaTarget.lng, busSpeed)
     : null;
@@ -299,7 +302,7 @@ export default function BusTrackingScreen() {
             <View style={styles.etaCard}>
               <Text style={styles.etaLabel}>{t('bus.arrives_at')}</Text>
               <Text style={styles.etaTime}>{etaTime}</Text>
-              <Text style={styles.etaNote}>{parentLocation ? t('bus.eta_your_location') : t('bus.eta_home_location')}</Text>
+              <Text style={styles.etaNote}>{pickupCoords.lat ? t('bus.eta_pickup_location', { defaultValue: 'Based on your pickup location' }) : parentLocation ? t('bus.eta_your_location') : t('bus.eta_home_location')}</Text>
             </View>
           )}
 
@@ -317,9 +320,11 @@ export default function BusTrackingScreen() {
                   {busData.studentHome?.latitude && (
                     <Marker coordinate={{ latitude: busData.studentHome.latitude, longitude: busData.studentHome.longitude }} title="Home" pinColor="green" />
                   )}
-                  {parentLocation && (
+                  {pickupCoords.lat && pickupCoords.lng ? (
+                    <Marker coordinate={{ latitude: pickupCoords.lat, longitude: pickupCoords.lng }} title="Pickup Location" pinColor="red" />
+                  ) : parentLocation ? (
                     <Marker coordinate={parentLocation} title="Your Location" pinColor="red" />
-                  )}
+                  ) : null}
                 </MapView>
               </MapErrorBoundary>
             </View>
