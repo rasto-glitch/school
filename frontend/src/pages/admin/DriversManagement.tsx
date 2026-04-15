@@ -32,7 +32,7 @@ export default function DriversManagement() {
 
   const load = () => {
     adminApi.getDrivers().then(r => setDrivers(r.data || []));
-    adminApi.getStudents().then(r => setStudents(r.data?.students || []));
+    adminApi.getStudents({ limit: '1000' }).then(r => setStudents(r.data?.students || []));
     adminApi.getClasses().then(r => setClasses(r.data || []));
   };
   useEffect(() => { load(); }, []);
