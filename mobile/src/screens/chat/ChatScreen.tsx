@@ -7,6 +7,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Send, Paperclip, Check, X, FileText } from 'lucide-react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { useHeaderHeight } from '@react-navigation/elements';
 import { format, isToday, isYesterday, isSameDay } from 'date-fns';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
@@ -172,14 +173,26 @@ export default function ChatScreen() {
   const flatRef = useRef<FlatList>(null);
   const ownTypingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const otherTypingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const headerHeight = useHeaderHeight();
   const primaryColor = colors.primary;
   const otherUser = conversation?.otherUser;
   const initials = `${otherUser?.firstName?.[0] || ''}${otherUser?.lastName?.[0] || ''}`.toUpperCase();
 
-  // Set header title
+  // Set header title with role/subject subtitle
+  const roleSubtitle = otherUser?.role === 'teacher'
+    ? (otherUser.subject || 'Teacher')
+    : otherUser?.role === 'supervisor' ? 'Supervisor' : null;
+
   useEffect(() => {
-    navigation.setOptions({ title: otherUser?.fullName || 'Chat' });
-  }, [otherUser]);
+    navigation.setOptions({
+      headerTitle: () => (
+        <View style={{ alignItems: 'center' }}>
+          <Text style={{ fontSize: 16, fontWeight: '700', color: colors.text }}>{otherUser?.fullName || 'Chat'}</Text>
+          {roleSubtitle && <Text style={{ fontSize: 12, color: colors.primary, fontWeight: '500' }}>{roleSubtitle}</Text>}
+        </View>
+      ),
+    });
+  }, [otherUser, colors]);
 
   // Load messages
   useEffect(() => {
@@ -377,7 +390,7 @@ export default function ChatScreen() {
 
   return (
     <SafeAreaView style={[s.container, { backgroundColor: colors.bg }]} edges={['bottom']}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={90}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={headerHeight}>
         {loading ? (
           <ActivityIndicator style={{ flex: 1 }} color={primaryColor} />
         ) : (

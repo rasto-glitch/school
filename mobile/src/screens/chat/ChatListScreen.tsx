@@ -167,6 +167,11 @@ export default function ChatListScreen() {
                 <View style={s.rowTop}>
                   <Text style={[s.rowName, { color: colors.text, fontWeight: conv.hasUnread ? '700' : '600' }]} numberOfLines={1}>
                     {conv.otherUser?.fullName || 'Unknown'}
+                    {conv.otherUser?.role && conv.otherUser.role !== 'parent' && (
+                      <Text style={{ fontSize: 11, fontWeight: '500', color: colors.primary }}>
+                        {' '}({conv.otherUser.role === 'teacher' ? (conv.otherUser.subject || 'Teacher') : conv.otherUser.role === 'supervisor' ? 'Supervisor' : conv.otherUser.role})
+                      </Text>
+                    )}
                   </Text>
                   {conv.lastMessageAt && (
                     <Text style={[s.rowTime, { color: colors.textMuted }]}>
