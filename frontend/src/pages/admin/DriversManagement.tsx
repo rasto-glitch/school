@@ -24,6 +24,7 @@ export default function DriversManagement() {
   const editForm = useForm<{ fullName: string; phoneNumber: string; emergencyContact: string; licenseNumber: string; busNumber: string; age: string; remove: boolean; vehicleType: string }>();
   const [addStudentIds, setAddStudentIds] = useState<string[]>([]);
   const [editStudentIds, setEditStudentIds] = useState<string[]>([]);
+  const [editStudentsDirty, setEditStudentsDirty] = useState(false);
   const [addStudentSearch, setAddStudentSearch] = useState('');
   const [addStudentClass, setAddStudentClass] = useState('');
   const [editStudentSearch, setEditStudentSearch] = useState('');
@@ -47,6 +48,7 @@ export default function DriversManagement() {
     editForm.setValue('busNumber', d.buses?.busNumber || '');
     editForm.setValue('vehicleType', d.vehicleType || 'bus');
     setEditStudentIds(students.filter(s => s.driverId === selectedDriverId).map(s => s.id));
+    setEditStudentsDirty(false);
   }, [selectedDriverId, drivers, students]);
 
   const onAdd = async (data: any) => {
@@ -82,9 +84,11 @@ export default function DriversManagement() {
     if (!selectedDriverId) { toast.error('Select a driver first'); return; }
     setEditSubmitting(true);
     try {
-      await adminApi.updateDriver(selectedDriverId, { ...data, vehicleType: data.vehicleType || 'bus', studentIds: editStudentIds });
+      const payload: Record<string, unknown> = { ...data, vehicleType: data.vehicleType || 'bus' };
+      if (editStudentsDirty) payload.studentIds = editStudentIds;
+      await adminApi.updateDriver(selectedDriverId, payload);
       toast.success('Driver updated!');
-      setEditStudentIds([]);
+      setEditStudentsDirty(false);
       load();
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Failed to update driver');
@@ -110,8 +114,9 @@ export default function DriversManagement() {
     }
   };
 
-  const toggleStudent = (id: string, list: string[], setter: (v: string[]) => void) => {
+  const toggleStudent = (id: string, list: string[], setter: (v: string[]) => void, markDirty?: () => void) => {
     setter(list.includes(id) ? list.filter(s => s !== id) : [...list, id]);
+    markDirty?.();
   };
 
   // Drivers whose IDs appear in students belonging to the selected class
@@ -198,7 +203,14 @@ export default function DriversManagement() {
             <Input placeholder="Vehicle / Bus Number" {...addForm.register('busNumber')} />
             <Input type="number" placeholder="Age" {...addForm.register('age')} />
             <div>
-              <p className="text-sm font-medium text-gray-700 mb-2">Assign Students</p>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-medium text-gray-700">Assign Students</p>
+                {addStudentIds.length > 0 && (
+                  <span className="text-xs font-semibold text-primary-600 bg-primary-50 px-2 py-0.5 rounded-full">
+                    {addStudentIds.length} selected
+                  </span>
+                )}
+              </div>
               <div className="flex gap-2 mb-2">
                 <input
                   type="text"
@@ -216,20 +228,42 @@ export default function DriversManagement() {
                   {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </div>
-              <div className="max-h-36 overflow-y-auto border border-gray-200 rounded-xl p-2 space-y-1">
-                {students
-                  .filter(s => {
+              <div className="max-h-64 overflow-y-auto border border-gray-200 rounded-xl">
+                {(() => {
+                  const filtered = students.filter(s => {
                     if (addStudentClass && s.classId !== addStudentClass) return false;
                     if (addStudentSearch && !(s.fullName || '').toLowerCase().includes(addStudentSearch.toLowerCase())) return false;
                     return true;
-                  })
-                  .map(s => (
-                    <label key={s.id} className="flex items-center gap-2 cursor-pointer p-1 hover:bg-gray-50 rounded-lg">
-                      <input type="checkbox" checked={addStudentIds.includes(s.id)} onChange={() => toggleStudent(s.id, addStudentIds, setAddStudentIds)} className="w-4 h-4 text-primary-600" />
-                      <span className="text-sm text-gray-800">{s.fullName}</span>
-                      {s.classes?.name && <span className="text-xs text-gray-400 ml-auto">{s.classes.name}</span>}
-                    </label>
-                  ))}
+                  });
+                  const grouped = new Map<string, { className: string; students: typeof filtered }>();
+                  for (const s of filtered) {
+                    const key = s.classId || '_none';
+                    if (!grouped.has(key)) grouped.set(key, { className: s.classes?.name || 'No Class', students: [] });
+                    grouped.get(key)!.students.push(s);
+                  }
+                  return [...grouped.entries()].sort((a, b) => a[1].className.localeCompare(b[1].className)).map(([key, { className, students: grpStudents }]) => (
+                    <div key={key}>
+                      <div className="sticky top-0 bg-gray-50 px-3 py-1.5 border-b border-gray-100">
+                        <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">{className}</span>
+                        <span className="text-xs text-gray-400 ml-1">({grpStudents.length})</span>
+                      </div>
+                      {grpStudents.map((s: Student) => {
+                        const isSelected = addStudentIds.includes(s.id);
+                        return (
+                          <label key={s.id} className={`flex items-center gap-2 cursor-pointer px-3 py-1.5 transition-colors ${isSelected ? 'bg-primary-50' : 'hover:bg-gray-50'}`}>
+                            <input type="checkbox" checked={isSelected} onChange={() => toggleStudent(s.id, addStudentIds, setAddStudentIds)} className="w-4 h-4 text-primary-600 rounded" />
+                            <span className={`text-sm flex-1 ${isSelected ? 'font-semibold text-primary-700' : 'text-gray-800'}`}>{s.fullName}</span>
+                            {s.driverId && (
+                              <span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full font-medium">
+                                {drivers.find(d => d.id === s.driverId)?.fullName || 'Has driver'}
+                              </span>
+                            )}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  ));
+                })()}
               </div>
             </div>
             <Input placeholder="Username (optional)" {...addForm.register('username')} />
@@ -260,7 +294,14 @@ export default function DriversManagement() {
             <Input placeholder="Vehicle / Bus Number" {...editForm.register('busNumber')} />
             <Input type="number" placeholder="Age" {...editForm.register('age')} />
             <div>
-              <p className="text-sm font-medium text-gray-700 mb-2">Assign Students</p>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-medium text-gray-700">Assign Students</p>
+                {editStudentIds.length > 0 && (
+                  <span className="text-xs font-semibold text-primary-600 bg-primary-50 px-2 py-0.5 rounded-full">
+                    {editStudentIds.length} assigned
+                  </span>
+                )}
+              </div>
               <div className="flex gap-2 mb-2">
                 <input
                   type="text"
@@ -278,21 +319,59 @@ export default function DriversManagement() {
                   {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </div>
-              <div className="max-h-36 overflow-y-auto border border-gray-200 rounded-xl p-2 space-y-1">
-                {students
-                  .filter(s => {
+              <div className="max-h-64 overflow-y-auto border border-gray-200 rounded-xl">
+                {(() => {
+                  const filtered = students.filter(s => {
                     if (editStudentClass && s.classId !== editStudentClass) return false;
                     if (editStudentSearch && !(s.fullName || '').toLowerCase().includes(editStudentSearch.toLowerCase())) return false;
                     return true;
-                  })
-                  .map(s => (
-                    <label key={s.id} className="flex items-center gap-2 cursor-pointer p-1 hover:bg-gray-50 rounded-lg">
-                      <input type="checkbox" checked={editStudentIds.includes(s.id)} onChange={() => toggleStudent(s.id, editStudentIds, setEditStudentIds)} className="w-4 h-4 text-primary-600" />
-                      <span className="text-sm text-gray-800">{s.fullName}</span>
-                      {s.classes?.name && <span className="text-xs text-gray-400 ml-auto">{s.classes.name}</span>}
-                    </label>
-                  ))}
+                  });
+                  // Group by class
+                  const grouped = new Map<string, { className: string; students: typeof filtered }>();
+                  for (const s of filtered) {
+                    const key = s.classId || '_none';
+                    if (!grouped.has(key)) grouped.set(key, { className: s.classes?.name || 'No Class', students: [] });
+                    grouped.get(key)!.students.push(s);
+                  }
+                  // Sort: classes with assigned students first
+                  const entries = [...grouped.entries()].sort((a, b) => {
+                    const aHas = a[1].students.some(s => editStudentIds.includes(s.id)) ? 0 : 1;
+                    const bHas = b[1].students.some(s => editStudentIds.includes(s.id)) ? 0 : 1;
+                    return aHas - bHas || a[1].className.localeCompare(b[1].className);
+                  });
+                  return entries.map(([key, { className, students: classStudents }]) => (
+                    <div key={key}>
+                      <div className="sticky top-0 bg-gray-50 px-3 py-1.5 border-b border-gray-100">
+                        <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">{className}</span>
+                        <span className="text-xs text-gray-400 ml-1">({classStudents.length})</span>
+                      </div>
+                      {classStudents.map(s => {
+                        const isAssigned = editStudentIds.includes(s.id);
+                        const assignedToOther = !isAssigned && s.driverId && s.driverId !== selectedDriverId;
+                        return (
+                          <label key={s.id} className={`flex items-center gap-2 cursor-pointer px-3 py-1.5 transition-colors ${isAssigned ? 'bg-primary-50' : 'hover:bg-gray-50'}`}>
+                            <input
+                              type="checkbox"
+                              checked={isAssigned}
+                              onChange={() => toggleStudent(s.id, editStudentIds, setEditStudentIds, () => setEditStudentsDirty(true))}
+                              className="w-4 h-4 text-primary-600 rounded"
+                            />
+                            <span className={`text-sm flex-1 ${isAssigned ? 'font-semibold text-primary-700' : 'text-gray-800'}`}>{s.fullName}</span>
+                            {assignedToOther && (
+                              <span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full font-medium">
+                                {drivers.find(d => d.id === s.driverId)?.fullName || 'Other driver'}
+                              </span>
+                            )}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  ));
+                })()}
               </div>
+              {editStudentsDirty && (
+                <p className="text-xs text-amber-600 mt-1 font-medium">Student assignments changed — click Update to save</p>
+              )}
             </div>
             <div className="flex gap-2">
               <Button type="submit" loading={editSubmitting} fullWidth disabled={!selectedDriverId}>Update Driver</Button>

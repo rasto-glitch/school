@@ -932,8 +932,8 @@ export async function updateDriver(req: AuthRequest, res: Response): Promise<voi
 
   if (error) { res.status(500).json({ error: error.message }); return; }
 
-  // Update student assignments
-  if (studentIds && Array.isArray(studentIds)) {
+  // Update student assignments — only when explicitly provided in the request
+  if (req.body.hasOwnProperty('studentIds') && Array.isArray(studentIds)) {
     await supabase.from('students').update({ driver_id: null }).eq('driver_id', id).eq('school_id', schoolId);
     if (studentIds.length > 0) {
       await supabase.from('students').update({ driver_id: id }).in('id', studentIds).eq('school_id', schoolId);
