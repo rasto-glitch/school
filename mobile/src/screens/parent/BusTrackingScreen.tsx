@@ -105,7 +105,11 @@ export default function BusTrackingScreen() {
     parentApi.getChildren().then(r => {
       const kids = r.data || [];
       setChildren(kids);
-      if (kids.length > 0) setSelectedChild(kids[0].id);
+      if (kids.length > 0) {
+        // Prefer the first child who has a driver assigned
+        const withDriver = kids.find((k: any) => k.drivers && (Array.isArray(k.drivers) ? k.drivers.length > 0 : k.drivers.fullName));
+        setSelectedChild(withDriver?.id || kids[0].id);
+      }
     });
   }, []);
 

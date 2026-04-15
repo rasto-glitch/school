@@ -178,16 +178,24 @@ export async function getBusLocation(req: AuthRequest, res: Response): Promise<v
   const { studentId } = req.query as Record<string, string>;
 
   const { studentIds } = await getParentAndChildren(userId, schoolId);
-  const targetId = studentId || studentIds[0];
-  if (!targetId) { console.log('[getBusLocation] No students for userId:', userId, 'schoolId:', schoolId); res.status(404).json({ error: 'No students found' }); return; }
+  if (studentIds.length === 0) { res.status(404).json({ error: 'No students found' }); return; }
 
-  const { data: student } = await supabase.from('students').select('driver_id, home_latitude, home_longitude').eq('id', targetId).eq('school_id', schoolId).single();
-  if (!student?.driver_id) { console.log('[getBusLocation] No driver_id for student:', targetId, 'student data:', student); res.status(404).json({ error: 'No driver assigned' }); return; }
+  // If a specific student was requested, use that; otherwise find the first child with a driver
+  let student: { id: string; driver_id: string | null; home_latitude: number | null; home_longitude: number | null } | null = null;
+  if (studentId) {
+    const { data } = await supabase.from('students').select('id, driver_id, home_latitude, home_longitude').eq('id', studentId).eq('school_id', schoolId).single();
+    student = data;
+  } else {
+    // Try each child until we find one with a driver
+    const { data: allChildren } = await supabase.from('students').select('id, driver_id, home_latitude, home_longitude').in('id', studentIds).eq('school_id', schoolId);
+    student = allChildren?.find(s => s.driver_id) || allChildren?.[0] || null;
+  }
+  if (!student?.driver_id) { res.status(404).json({ error: 'No driver assigned' }); return; }
 
   // Check if student was marked absent for today's drive
   const { data: driverRecord } = await supabase.from('drivers').select('excluded_student_ids').eq('id', student.driver_id).single();
   const excludedIds: string[] = (driverRecord as any)?.excluded_student_ids || [];
-  if (excludedIds.includes(targetId)) {
+  if (excludedIds.includes(student.id)) {
     res.status(404).json({ error: 'Your child is marked absent today and is not on the bus.' });
     return;
   }
@@ -204,7 +212,7 @@ export async function getBusLocation(req: AuthRequest, res: Response): Promise<v
   const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
   if (!location || !location.is_driving || new Date(location.recorded_at).getTime() < fiveMinutesAgo) {
     console.log('[getBusLocation] inactive debug:', {
-      targetId,
+      studentId: student.id,
       driverId: student.driver_id,
       hasLocation: !!location,
       isDriving: location?.is_driving,
@@ -226,13 +234,21 @@ export async function getDriverInfo(req: AuthRequest, res: Response): Promise<vo
   const { schoolId, userId } = req.user!;
   const { studentId } = req.query as Record<string, string>;
   const { studentIds } = await getParentAndChildren(userId, schoolId);
-  const targetId = studentId || studentIds[0];
-  if (!targetId) { console.log('[getDriverInfo] No students for userId:', userId); res.status(404).json({ error: 'No students found' }); return; }
-  const { data: student } = await supabase.from('students').select('driver_id').eq('id', targetId).eq('school_id', schoolId).single();
-  if (!student?.driver_id) { console.log('[getDriverInfo] No driver_id for student:', targetId, 'student data:', student); res.status(404).json({ error: 'No driver assigned' }); return; }
+  if (studentIds.length === 0) { res.status(404).json({ error: 'No students found' }); return; }
+
+  let driverId: string | null = null;
+  if (studentId) {
+    const { data } = await supabase.from('students').select('driver_id').eq('id', studentId).eq('school_id', schoolId).single();
+    driverId = data?.driver_id ?? null;
+  } else {
+    const { data: allChildren } = await supabase.from('students').select('driver_id').in('id', studentIds).eq('school_id', schoolId);
+    driverId = allChildren?.find(s => s.driver_id)?.driver_id ?? null;
+  }
+  if (!driverId) { res.status(404).json({ error: 'No driver assigned' }); return; }
+
   const { data: driver } = await supabase.from('drivers')
     .select('full_name, phone_number, license_number, vehicle_type, buses(bus_number)')
-    .eq('id', student.driver_id).single();
+    .eq('id', driverId).single();
   if (!driver) { res.status(404).json({ error: 'Driver not found' }); return; }
   res.json(toCC(driver));
 }
