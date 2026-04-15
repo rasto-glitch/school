@@ -201,8 +201,8 @@ export async function getBusLocation(req: AuthRequest, res: Response): Promise<v
     .single();
 
   // Only return data if the most recent record is an active drive within the last 5 minutes
-  const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-  if (!location || !location.is_driving || location.recorded_at < fiveMinutesAgo) {
+  const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+  if (!location || !location.is_driving || new Date(location.recorded_at).getTime() < fiveMinutesAgo) {
     res.status(404).json({ error: 'inactive' }); return;
   }
 

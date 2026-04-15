@@ -160,7 +160,7 @@ export default function BusTrackingScreen() {
   useEffect(() => {
     const driverId = busData?.location?.driverId;
     if (!driverId) return;
-    const socket = socketIO(SOCKET_URL, { transports: ['websocket'], auth: { token } });
+    const socket = socketIO(SOCKET_URL, { auth: { token } });
     socket.emit('watchDriver', driverId);
     socket.on('locationUpdate', (data: { latitude: number; longitude: number; isDriving: boolean; speed?: number }) => {
       if (data.speed !== undefined) setBusSpeed(data.speed);
