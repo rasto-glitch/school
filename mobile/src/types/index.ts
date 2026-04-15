@@ -49,13 +49,16 @@ export interface Homework {
   classes?: { name: string };
 }
 
+export interface GradeMark { name: string; value: number }
+
 export interface Grade {
   id: string;
   subject: string;
-  dailyGrade: number;
-  quizGrade: number;
-  monthlyExamGrade: number;
-  termExamGrade: number;
+  marks?: GradeMark[];
+  dailyGrade?: number;
+  quizGrade?: number;
+  monthlyExamGrade?: number;
+  termExamGrade?: number;
   gradingPeriod?: string;
   academicYear?: string;
   createdAt: string;

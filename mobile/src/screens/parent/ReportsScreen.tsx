@@ -10,12 +10,15 @@ import { useColors } from '../../store/themeStore';
 import { useBadgeStore } from '../../store/badgeStore';
 import { spacing, radius, font, shadow } from '../../theme';
 
+export interface ReportMark { name: string; value: number }
+
 export interface Report {
   id: string;
   subject: string;
   attendanceNotes?: string;
   behaviorNotes?: string;
   teacherNotes?: string;
+  marks?: ReportMark[];
   quizMarks?: number;
   examMarks?: number;
   reportDate?: string;

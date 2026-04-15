@@ -9,18 +9,43 @@ import { useColors } from '../../store/themeStore';
 import { spacing, radius, font, shadow } from '../../theme';
 import type { Grade, Student } from '../../types';
 
-function termTotal(g: Grade): number {
-  return (g.dailyGrade || 0) + (g.quizGrade || 0) + (g.monthlyExamGrade || 0) + (g.termExamGrade || 0);
+function getMarkNames(g: Grade): string[] {
+  if (g.marks && g.marks.length > 0) return g.marks.map(m => m.name);
+  const legacy: string[] = [];
+  if (g.dailyGrade) legacy.push('Daily');
+  if (g.quizGrade) legacy.push('Quiz');
+  if (g.monthlyExamGrade) legacy.push('Monthly');
+  if (g.termExamGrade) legacy.push('Term Exam');
+  return legacy;
 }
 
-function termAverage(subjects: string[], termData: Record<string, Grade>): number {
-  const totals = subjects.map(s => termData[s] ? termTotal(termData[s]) : 0).filter(t => t > 0);
+function getMarkValue(g: Grade, name: string): number | null {
+  if (g.marks && g.marks.length > 0) {
+    const m = g.marks.find(mm => mm.name === name);
+    return m ? Number(m.value) : null;
+  }
+  if (name === 'Daily') return g.dailyGrade ?? null;
+  if (name === 'Quiz') return g.quizGrade ?? null;
+  if (name === 'Monthly') return g.monthlyExamGrade ?? null;
+  if (name === 'Term Exam') return g.termExamGrade ?? null;
+  return null;
+}
+
+function gradeTotal(g: Grade, markNames: string[]): number {
+  if (g.marks && g.marks.length > 0) {
+    return g.marks.reduce((s, m) => s + (Number(m.value) || 0), 0);
+  }
+  return markNames.reduce((s, name) => s + (getMarkValue(g, name) || 0), 0);
+}
+
+function termAverage(subjects: string[], termData: Record<string, Grade>, markNames: string[]): number {
+  const totals = subjects.map(s => termData[s] ? gradeTotal(termData[s], markNames) : 0).filter(t => t > 0);
   if (totals.length === 0) return 0;
   return Math.round((totals.reduce((a, b) => a + b, 0) / totals.length) * 10) / 10;
 }
 
 function MarkBadge({ value, colors }: { value?: number | null; colors: any }) {
-  if (!value) return <Text style={{ color: colors.textMuted, fontSize: font.sm }}>—</Text>;
+  if (value == null || value === 0) return <Text style={{ color: colors.textMuted, fontSize: font.sm }}>—</Text>;
   const bg = value >= 90 ? '#F0FDF4' : value >= 75 ? '#EFF6FF' : value >= 60 ? '#FFFBEB' : '#FEF2F2';
   const color = value >= 90 ? '#15803D' : value >= 75 ? '#1D4ED8' : value >= 60 ? '#B45309' : '#DC2626';
   return (
@@ -29,6 +54,9 @@ function MarkBadge({ value, colors }: { value?: number | null; colors: any }) {
     </View>
   );
 }
+
+const SUBJECT_COL_WIDTH = 110;
+const MARK_COL_WIDTH = 68;
 
 export default function GradesScreen() {
   const { t } = useTranslation();
@@ -60,7 +88,7 @@ export default function GradesScreen() {
 
   const onRefresh = () => { setRefreshing(true); load().finally(() => setRefreshing(false)); };
 
-  // Group: year → term → subject → Grade (same logic as web)
+  // Group: year → term → subject → Grade
   const byYear = useMemo(() => grades.reduce((acc, g) => {
     const yr = g.academicYear || 'Current Year';
     const term = g.gradingPeriod || 'Term 1';
@@ -104,57 +132,86 @@ export default function GradesScreen() {
         years.map(yr => {
           const terms = Object.keys(byYear[yr]).sort();
           const subjects = Array.from(new Set(terms.flatMap(tm => Object.keys(byYear[yr][tm])))).sort();
-          const termAvgs = terms.map(tm => termAverage(subjects, byYear[yr][tm]));
+
+          // Collect mark names across the year, preserving insertion order
+          const seen = new Set<string>();
+          const markNames: string[] = [];
+          for (const term of terms) {
+            for (const subj of subjects) {
+              const g = byYear[yr][term][subj];
+              if (!g) continue;
+              for (const n of getMarkNames(g)) {
+                if (!seen.has(n)) { seen.add(n); markNames.push(n); }
+              }
+            }
+          }
+
+          const termAvgs = terms.map(tm => termAverage(subjects, byYear[yr][tm], markNames));
           const validTermAvgs = termAvgs.filter(a => a > 0);
           const yearAvg = validTermAvgs.length === 0 ? 0
             : Math.round((validTermAvgs.reduce((a, b) => a + b, 0) / validTermAvgs.length) * 10) / 10;
 
+          const tableWidth = SUBJECT_COL_WIDTH + markNames.length * MARK_COL_WIDTH + MARK_COL_WIDTH;
+
           return (
             <View key={yr} style={styles.yearCard}>
-              {/* Year header */}
               <View style={styles.yearHeader}>
                 <Text style={styles.yearTitle}>{yr}</Text>
               </View>
 
-              {/* One table per term */}
               {terms.map((term, ti) => (
                 <View key={term} style={styles.termBlock}>
                   <View style={styles.termHeader}>
                     <Text style={styles.termTitle}>{term.toUpperCase()}</Text>
                   </View>
 
-                  {/* Column headers */}
-                  <View style={styles.tableRow}>
-                    <Text style={[styles.colHeader, styles.subjectCol]}>{t('grades.subject')}</Text>
-                    <Text style={styles.colHeader}>{t('grades.daily')}</Text>
-                    <Text style={styles.colHeader}>{t('grades.quiz')}</Text>
-                    <Text style={styles.colHeader}>{t('grades.monthly')}</Text>
-                    <Text style={styles.colHeader}>{t('grades.term')}</Text>
-                    <Text style={styles.colHeader}>{t('grades.total')}</Text>
-                  </View>
-
-                  {/* Subject rows */}
-                  {subjects.map((subject, si) => {
-                    const g = byYear[yr][term][subject];
-                    const total = g ? termTotal(g) : 0;
-                    return (
-                      <View key={subject} style={[styles.tableRow, si % 2 === 0 && styles.rowEven]}>
-                        <Text style={[styles.subjectCell, styles.subjectCol]} numberOfLines={1}>{subject}</Text>
-                        <View style={styles.cell}><MarkBadge value={g?.dailyGrade} colors={colors} /></View>
-                        <View style={styles.cell}><MarkBadge value={g?.quizGrade} colors={colors} /></View>
-                        <View style={styles.cell}><MarkBadge value={g?.monthlyExamGrade} colors={colors} /></View>
-                        <View style={styles.cell}><MarkBadge value={g?.termExamGrade} colors={colors} /></View>
-                        <View style={styles.cell}><MarkBadge value={total > 0 ? total : null} colors={colors} /></View>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    <View style={{ width: tableWidth }}>
+                      {/* Column headers */}
+                      <View style={styles.tableRow}>
+                        <Text style={[styles.colHeader, { width: SUBJECT_COL_WIDTH, textAlign: 'left' }]}>
+                          {t('grades.subject')}
+                        </Text>
+                        {markNames.map(name => (
+                          <Text key={name} style={[styles.colHeader, { width: MARK_COL_WIDTH }]} numberOfLines={1}>
+                            {name}
+                          </Text>
+                        ))}
+                        <Text style={[styles.colHeader, { width: MARK_COL_WIDTH }]}>
+                          {t('grades.total')}
+                        </Text>
                       </View>
-                    );
-                  })}
 
-                  {/* Term average row */}
-                  <View style={styles.avgRow}>
-                    <Text style={[styles.avgLabel, styles.subjectCol]}>{t('grades.term_average')}</Text>
-                    <View style={styles.cell} /><View style={styles.cell} /><View style={styles.cell} /><View style={styles.cell} />
-                    <View style={styles.cell}><MarkBadge value={termAvgs[ti] > 0 ? termAvgs[ti] : null} colors={colors} /></View>
-                  </View>
+                      {/* Subject rows */}
+                      {subjects.map((subject, si) => {
+                        const g = byYear[yr][term][subject];
+                        const total = g ? gradeTotal(g, markNames) : 0;
+                        return (
+                          <View key={subject} style={[styles.tableRow, si % 2 === 0 && styles.rowEven]}>
+                            <Text style={[styles.subjectCell, { width: SUBJECT_COL_WIDTH }]} numberOfLines={1}>{subject}</Text>
+                            {markNames.map(name => (
+                              <View key={name} style={[styles.cell, { width: MARK_COL_WIDTH }]}>
+                                <MarkBadge value={g ? getMarkValue(g, name) : null} colors={colors} />
+                              </View>
+                            ))}
+                            <View style={[styles.cell, { width: MARK_COL_WIDTH }]}>
+                              <MarkBadge value={total > 0 ? total : null} colors={colors} />
+                            </View>
+                          </View>
+                        );
+                      })}
+
+                      {/* Term average row */}
+                      <View style={styles.avgRow}>
+                        <Text style={[styles.avgLabel, { width: SUBJECT_COL_WIDTH + markNames.length * MARK_COL_WIDTH }]} numberOfLines={1}>
+                          {t('grades.term_average')}
+                        </Text>
+                        <View style={[styles.cell, { width: MARK_COL_WIDTH }]}>
+                          <MarkBadge value={termAvgs[ti] > 0 ? termAvgs[ti] : null} colors={colors} />
+                        </View>
+                      </View>
+                    </View>
+                  </ScrollView>
                 </View>
               ))}
 
@@ -191,12 +248,11 @@ const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').u
   termTitle: { fontSize: font.xs, fontWeight: '700', color: colors.primary, letterSpacing: 0.5 },
   tableRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: spacing.sm },
   rowEven: { backgroundColor: colors.bg + '80' },
-  subjectCol: { flex: 2, paddingRight: spacing.sm },
-  colHeader: { flex: 1, fontSize: 10, fontWeight: '600', color: colors.textMuted, textAlign: 'center', textTransform: 'uppercase', letterSpacing: 0.3 },
-  subjectCell: { fontSize: font.sm, fontWeight: '600', color: colors.text },
-  cell: { flex: 1, alignItems: 'center' },
+  colHeader: { fontSize: 10, fontWeight: '600', color: colors.textMuted, textAlign: 'center', textTransform: 'uppercase', letterSpacing: 0.3 },
+  subjectCell: { fontSize: font.sm, fontWeight: '600', color: colors.text, paddingRight: spacing.sm },
+  cell: { alignItems: 'center' },
   avgRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: spacing.sm, backgroundColor: colors.bg, borderTopWidth: 2, borderTopColor: colors.border },
-  avgLabel: { fontSize: font.xs, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.3 },
+  avgLabel: { fontSize: font.xs, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.3, paddingRight: spacing.sm },
   yearAvgRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.md, paddingVertical: 10, backgroundColor: colors.bg, borderTopWidth: 2, borderTopColor: colors.border },
   yearAvgLabel: { fontSize: font.sm, fontWeight: '700', color: colors.textSecondary },
 });

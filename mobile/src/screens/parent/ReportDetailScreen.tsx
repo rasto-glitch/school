@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { FileText } from 'lucide-react-native';
 import { useColors } from '../../store/themeStore';
 import { spacing, radius, shadow, font } from '../../theme';
-import type { Report } from './ReportsScreen';
+import type { Report, ReportMark } from './ReportsScreen';
 
 export default function ReportDetailScreen() {
   const route = useRoute<any>();
@@ -20,12 +20,18 @@ export default function ReportDetailScreen() {
     ? new Date(report.reportDate).toLocaleDateString()
     : new Date(report.createdAt).toLocaleDateString();
 
-  const sections: { label: string; value: string | number }[] = [];
+  const marks: ReportMark[] = report.marks && report.marks.length > 0
+    ? report.marks
+    : [
+        ...(report.quizMarks != null ? [{ name: 'Quiz', value: report.quizMarks }] : []),
+        ...(report.examMarks != null ? [{ name: 'Exam', value: report.examMarks }] : []),
+      ];
+  const marksTotal = marks.reduce((s, m) => s + (Number(m.value) || 0), 0);
+
+  const sections: { label: string; value: string }[] = [];
   if (report.attendanceNotes) sections.push({ label: t('reports.attendance_notes'), value: report.attendanceNotes });
   if (report.behaviorNotes) sections.push({ label: t('reports.behavior_notes'), value: report.behaviorNotes });
   if (report.teacherNotes) sections.push({ label: t('reports.teacher_notes'), value: report.teacherNotes });
-  if (report.quizMarks != null) sections.push({ label: t('reports.quiz_marks'), value: report.quizMarks });
-  if (report.examMarks != null) sections.push({ label: t('reports.exam_marks'), value: report.examMarks });
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -48,8 +54,32 @@ export default function ReportDetailScreen() {
         <Text style={styles.metaValue}>{dateStr}</Text>
       </View>
 
+      {/* Marks */}
+      {marks.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>{t('reports.marks', { defaultValue: 'Marks' })}</Text>
+          <View style={styles.marksTable}>
+            {marks.map((m, i) => (
+              <View
+                key={`${m.name}-${i}`}
+                style={[styles.markRow, i < marks.length - 1 && styles.markRowBorder]}
+              >
+                <Text style={styles.markName}>{m.name}</Text>
+                <Text style={styles.markValue}>{Number(m.value)}</Text>
+              </View>
+            ))}
+            <View style={[styles.markRow, styles.markTotalRow]}>
+              <Text style={styles.markTotalLabel}>
+                {t('reports.total', { defaultValue: 'Total' })}
+              </Text>
+              <Text style={styles.markTotalValue}>{marksTotal}</Text>
+            </View>
+          </View>
+        </View>
+      )}
+
       {/* Content sections */}
-      {sections.length === 0 ? (
+      {sections.length === 0 && marks.length === 0 ? (
         <View style={styles.emptyCard}>
           <Text style={styles.emptyText}>{t('reports.no_reports')}</Text>
         </View>
@@ -57,7 +87,7 @@ export default function ReportDetailScreen() {
         sections.map(({ label, value }) => (
           <View key={label} style={styles.section}>
             <Text style={styles.sectionLabel}>{label}</Text>
-            <Text style={styles.sectionValue}>{String(value)}</Text>
+            <Text style={styles.sectionValue}>{value}</Text>
           </View>
         ))
       )}
@@ -90,4 +120,12 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   emptyCard: { backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.lg, alignItems: 'center', ...shadow.sm },
   emptyText: { fontSize: font.md, color: colors.textMuted, fontStyle: 'italic' },
   teacher: { fontSize: font.sm, color: colors.textMuted, textAlign: 'right', marginTop: spacing.sm },
+  marksTable: { marginTop: spacing.xs },
+  markRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10 },
+  markRowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
+  markName: { fontSize: font.sm, fontWeight: '600', color: colors.text },
+  markValue: { fontSize: font.md, fontWeight: '700', color: colors.text },
+  markTotalRow: { marginTop: 4, borderTopWidth: 2, borderTopColor: colors.border, paddingTop: 10 },
+  markTotalLabel: { fontSize: font.xs, fontWeight: '700', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
+  markTotalValue: { fontSize: font.lg, fontWeight: '800', color: colors.primary },
 });
