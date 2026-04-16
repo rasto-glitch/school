@@ -16,7 +16,7 @@ import type { Student, Class } from '../../types';
 interface Parent { id: string; fullName: string; phoneNumber?: string; }
 
 export default function StudentsManagement() {
-  const [activeTab, setActiveTab] = useState<'active' | 'graduated' | 'archived'>('active');
+  const [activeTab, setActiveTab] = useState<'active' | 'new' | 'graduated' | 'archived'>('active');
   const [students, setStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
   const [parents, setParents] = useState<Parent[]>([]);
@@ -209,6 +209,12 @@ export default function StudentsManagement() {
           Active Students
         </button>
         <button
+          onClick={() => setActiveTab('new')}
+          className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${activeTab === 'new' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+        >
+          New Student
+        </button>
+        <button
           onClick={() => setActiveTab('graduated')}
           className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${activeTab === 'graduated' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
         >
@@ -224,6 +230,65 @@ export default function StudentsManagement() {
 
       {activeTab === 'graduated' && <GraduatedStudentsTab />}
       {activeTab === 'archived' && <ArchivedStudentsTab />}
+
+      {activeTab === 'new' && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card>
+            <h2 className="font-bold text-gray-900 mb-4 text-center">Add Student</h2>
+            <form onSubmit={addForm.handleSubmit(onAdd)} className="space-y-3">
+              <Input placeholder="Full Name" {...addForm.register('fullName', { required: true })} />
+              <Select options={parents.map(p => ({ value: p.id, label: p.fullName }))} placeholder="Select Parent / Guardian" {...addForm.register('parentId')} />
+              <Input placeholder="Primary Phone Number" {...addForm.register('phoneNumber')} />
+              <Input placeholder="Emergency Contact" {...addForm.register('emergencyContact')} />
+              <Input placeholder="Address" {...addForm.register('homeAddress')} />
+              <Select
+                options={[{ value: 'house', label: 'House / Villa' }, { value: 'apartment', label: 'Apartment' }]}
+                placeholder="Residence Type (optional)"
+                {...addForm.register('residenceType')}
+              />
+              <Input placeholder="Block / Building Number (optional)" {...addForm.register('blockNumber')} />
+              <Input label="Date of Birth" type="date" {...addForm.register('dateOfBirth')} />
+              <Select options={classes.map(c => ({ value: c.id, label: c.name }))} placeholder="Select Class" {...addForm.register('classId')} />
+              <Button type="submit" loading={addSubmitting} fullWidth>Send</Button>
+            </form>
+          </Card>
+
+          <Card>
+            <h2 className="font-bold text-gray-900 mb-3 text-center">Upload Students</h2>
+            <p className="text-xs text-gray-500 mb-1">Excel columns: <span className="font-medium text-gray-700">Full Name, Primary Phone Number, Parent Phone, Emergency Contact, Date of Birth, Grade, Address, Residence Type, Block Number</span></p>
+            <p className="text-xs text-gray-400 mb-3">Optional: Parent Phone, Address, Residence Type (house/apartment), Block Number. New classes created automatically.</p>
+            <label className="flex items-center gap-2 cursor-pointer border-2 border-dashed border-gray-300 rounded-xl p-3 hover:border-primary-400 transition-colors">
+              <Paperclip className="w-4 h-4 text-gray-400" />
+              <span className="text-sm text-gray-500 truncate">{uploadFile ? uploadFile.name : 'Choose .xlsx or .xls file'}</span>
+              <input
+                type="file"
+                className="hidden"
+                accept=".xlsx,.xls"
+                onChange={e => { setUploadFile(e.target.files?.[0] || null); setUploadResult(null); }}
+              />
+            </label>
+            <Button className="mt-3" fullWidth loading={uploadLoading} onClick={onBulkUpload}>Upload</Button>
+            {uploadResult && (
+              <div className="mt-3 text-sm space-y-1">
+                <p className="text-green-700 font-medium">{uploadResult.created} added · {uploadResult.skipped} skipped (already exist) · {uploadResult.total} total in file</p>
+                {uploadResult.parentAccountsCreated > 0 && (
+                  <p className="text-green-600 text-xs">{uploadResult.parentAccountsCreated} parent account{uploadResult.parentAccountsCreated !== 1 ? 's' : ''} created — default password: <span className="font-mono font-semibold">Parent@123</span></p>
+                )}
+                {uploadResult.autoCreatedClasses.length > 0 && (
+                  <p className="text-blue-600 text-xs">Auto-created classes: {uploadResult.autoCreatedClasses.join(', ')}</p>
+                )}
+                {uploadResult.errors.length > 0 && (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-2 max-h-32 overflow-y-auto">
+                    {uploadResult.errors.map((e, i) => (
+                      <p key={i} className="text-red-600 text-xs">{e}</p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </Card>
+        </div>
+      )}
 
       {activeTab === 'active' && <div className="space-y-8">
         {/* Search bar */}
@@ -276,30 +341,9 @@ export default function StudentsManagement() {
           )}
         </div>
 
-        {/* Add & Remove + Upload */}
+        {/* Remove + Archive */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card>
-            <h2 className="font-bold text-gray-900 mb-4 text-center">Add Student</h2>
-            <form onSubmit={addForm.handleSubmit(onAdd)} className="space-y-3">
-              <Input placeholder="Full Name" {...addForm.register('fullName', { required: true })} />
-              <Select options={parents.map(p => ({ value: p.id, label: p.fullName }))} placeholder="Select Parent / Guardian" {...addForm.register('parentId')} />
-              <Input placeholder="Primary Phone Number" {...addForm.register('phoneNumber')} />
-              <Input placeholder="Emergency Contact" {...addForm.register('emergencyContact')} />
-              <Input placeholder="Address" {...addForm.register('homeAddress')} />
-              <Select
-                options={[{ value: 'house', label: 'House / Villa' }, { value: 'apartment', label: 'Apartment' }]}
-                placeholder="Residence Type (optional)"
-                {...addForm.register('residenceType')}
-              />
-              <Input placeholder="Block / Building Number (optional)" {...addForm.register('blockNumber')} />
-              <Input label="Date of Birth" type="date" {...addForm.register('dateOfBirth')} />
-              <Select options={classes.map(c => ({ value: c.id, label: c.name }))} placeholder="Select Class" {...addForm.register('classId')} />
-              <Button type="submit" loading={addSubmitting} fullWidth>Send</Button>
-            </form>
-          </Card>
-
-          <div className="space-y-6">
-            <Card>
               <h2 className="font-bold text-gray-900 mb-4 text-center">Remove Students</h2>
               <div className="space-y-3">
                 <Select
@@ -407,42 +451,6 @@ export default function StudentsManagement() {
                 </Button>
               </div>
             </Card>
-
-            <Card>
-              <h2 className="font-bold text-gray-900 mb-3 text-center">Upload Students</h2>
-              <p className="text-xs text-gray-500 mb-1">Excel columns: <span className="font-medium text-gray-700">Full Name, Primary Phone Number, Parent Phone, Emergency Contact, Date of Birth, Grade, Address, Residence Type, Block Number</span></p>
-              <p className="text-xs text-gray-400 mb-3">Optional: Parent Phone, Address, Residence Type (house/apartment), Block Number. New classes created automatically.</p>
-              <label className="flex items-center gap-2 cursor-pointer border-2 border-dashed border-gray-300 rounded-xl p-3 hover:border-primary-400 transition-colors">
-                <Paperclip className="w-4 h-4 text-gray-400" />
-                <span className="text-sm text-gray-500 truncate">{uploadFile ? uploadFile.name : 'Choose .xlsx or .xls file'}</span>
-                <input
-                  type="file"
-                  className="hidden"
-                  accept=".xlsx,.xls"
-                  onChange={e => { setUploadFile(e.target.files?.[0] || null); setUploadResult(null); }}
-                />
-              </label>
-              <Button className="mt-3" fullWidth loading={uploadLoading} onClick={onBulkUpload}>Upload</Button>
-              {uploadResult && (
-                <div className="mt-3 text-sm space-y-1">
-                  <p className="text-green-700 font-medium">{uploadResult.created} added · {uploadResult.skipped} skipped (already exist) · {uploadResult.total} total in file</p>
-                  {uploadResult.parentAccountsCreated > 0 && (
-                    <p className="text-green-600 text-xs">{uploadResult.parentAccountsCreated} parent account{uploadResult.parentAccountsCreated !== 1 ? 's' : ''} created — default password: <span className="font-mono font-semibold">Parent@123</span></p>
-                  )}
-                  {uploadResult.autoCreatedClasses.length > 0 && (
-                    <p className="text-blue-600 text-xs">Auto-created classes: {uploadResult.autoCreatedClasses.join(', ')}</p>
-                  )}
-                  {uploadResult.errors.length > 0 && (
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-2 max-h-32 overflow-y-auto">
-                      {uploadResult.errors.map((e, i) => (
-                        <p key={i} className="text-red-600 text-xs">{e}</p>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </Card>
-          </div>
         </div>
 
         {/* Edit Student */}
