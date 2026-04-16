@@ -111,3 +111,74 @@ export const deleteSchool = (id: string) =>
 
 export const resetAdminPassword = (id: string, password: string) =>
   api.patch(`/schools/${id}/admin-password`, { password });
+
+// ── Chat audit ──────────────────────────────────────────────────────────────
+
+export interface AuditUser {
+  firstName: string;
+  lastName: string;
+  role: string;
+}
+
+export interface AuditConversation {
+  id: string;
+  parent: AuditUser | null;
+  staff: AuditUser | null;
+  staffRole: string;
+  lastMessageAt: string | null;
+  lastMessagePreview: string | null;
+  createdAt: string;
+  messageCount: number;
+}
+
+export interface AuditEdit {
+  previousContent: string | null;
+  editedAt: string;
+}
+
+export interface AuditMessage {
+  id: string;
+  sender: AuditUser | null;
+  senderId: string;
+  content: string | null;
+  type: 'text' | 'image' | 'file';
+  attachmentUrl: string | null;
+  attachmentName: string | null;
+  attachmentSize: number | null;
+  isDeleted: boolean;
+  editedAt: string | null;
+  deletedContent: string | null;
+  deletedAttachmentUrl: string | null;
+  deletedAttachmentName: string | null;
+  createdAt: string;
+  edits: AuditEdit[];
+}
+
+export interface AccessLogEntry {
+  id: string;
+  school_id: string;
+  conversation_id: string | null;
+  action: 'view' | 'export';
+  reason: string;
+  accessed_at: string;
+}
+
+export const getAuditConversations = (schoolId: string) =>
+  api.get<AuditConversation[]>(`/chat-audit/schools/${schoolId}/conversations`);
+
+export const getAuditMessages = (conversationId: string, reason: string) =>
+  api.get<{ messages: AuditMessage[] }>(
+    `/chat-audit/conversations/${conversationId}/messages`,
+    { params: { reason } },
+  );
+
+export const exportAuditConversation = (conversationId: string, reason: string) =>
+  api.get(`/chat-audit/conversations/${conversationId}/export`, {
+    params: { reason },
+    responseType: 'blob',
+  });
+
+export const getAccessLog = (schoolId?: string) =>
+  api.get<AccessLogEntry[]>('/chat-audit/access-log', {
+    params: schoolId ? { schoolId } : undefined,
+  });

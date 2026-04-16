@@ -1,9 +1,13 @@
 import { useState, useEffect } from 'react';
 import LoginPage from './pages/LoginPage';
 import SchoolsPage from './pages/SchoolsPage';
+import ChatAuditPage from './pages/ChatAuditPage';
+
+export type MasterView = 'schools' | 'audit';
 
 export default function App() {
   const [token, setToken] = useState<string | null>(null);
+  const [view, setView] = useState<MasterView>('schools');
 
   useEffect(() => {
     const stored = localStorage.getItem('master_token');
@@ -21,5 +25,9 @@ export default function App() {
   };
 
   if (!token) return <LoginPage onLogin={handleLogin} />;
-  return <SchoolsPage onLogout={handleLogout} />;
+
+  if (view === 'audit') {
+    return <ChatAuditPage onLogout={handleLogout} currentView={view} onNavigate={setView} />;
+  }
+  return <SchoolsPage onLogout={handleLogout} currentView={view} onNavigate={setView} />;
 }

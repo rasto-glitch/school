@@ -406,10 +406,10 @@ export async function editMessage(req: AuthRequest, res: Response): Promise<void
 
   if (!content?.trim()) { res.status(400).json({ error: 'content is required' }); return; }
 
-  // Fetch message + conversation
+  // Fetch message + conversation (include current content so we can snapshot it)
   const { data: msg } = await supabase
     .from('messages')
-    .select('id, sender_id, conversation_id, type')
+    .select('id, sender_id, conversation_id, type, content')
     .eq('id', msgId).single();
 
   if (!msg || msg.sender_id !== userId || msg.type !== 'text') {
@@ -422,6 +422,14 @@ export async function editMessage(req: AuthRequest, res: Response): Promise<void
     .eq('id', msg.conversation_id).eq('school_id', schoolId).single();
 
   if (!conv) { res.status(403).json({ error: 'Forbidden' }); return; }
+
+  // Preserve the prior version for audit before overwriting
+  if (msg.content != null) {
+    await supabase.from('message_edits').insert({
+      message_id: msgId,
+      previous_content: msg.content,
+    });
+  }
 
   const { data: updated } = await supabase
     .from('messages')
@@ -445,7 +453,7 @@ export async function deleteMessage(req: AuthRequest, res: Response): Promise<vo
   const { msgId } = req.params;
 
   const { data: msg } = await supabase
-    .from('messages').select('sender_id, conversation_id').eq('id', msgId).single();
+    .from('messages').select('sender_id, conversation_id, content, attachment_url, attachment_name').eq('id', msgId).single();
 
   if (!msg || msg.sender_id !== userId) { res.status(403).json({ error: 'Forbidden' }); return; }
 
@@ -454,8 +462,19 @@ export async function deleteMessage(req: AuthRequest, res: Response): Promise<vo
     .eq('id', msg.conversation_id).eq('school_id', schoolId).single();
   if (!conv) { res.status(403).json({ error: 'Forbidden' }); return; }
 
+  // Snapshot pre-deletion state into the audit-only columns, then null the
+  // user-facing fields so existing clients still render "message deleted".
   await supabase.from('messages')
-    .update({ is_deleted: true, content: null, attachment_url: null, attachment_name: null, attachment_size: null })
+    .update({
+      is_deleted: true,
+      content: null,
+      attachment_url: null,
+      attachment_name: null,
+      attachment_size: null,
+      deleted_content: msg.content ?? null,
+      deleted_attachment_url: msg.attachment_url ?? null,
+      deleted_attachment_name: msg.attachment_name ?? null,
+    })
     .eq('id', msgId);
 
   const eventPayload = { id: msgId, conversationId: msg.conversation_id };

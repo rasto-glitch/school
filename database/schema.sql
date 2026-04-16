@@ -555,8 +555,17 @@ CREATE TABLE IF NOT EXISTS messages (
   attachment_size INTEGER,
   is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
   edited_at TIMESTAMPTZ,
+  -- Audit snapshot: the content at the time of deletion. Never exposed by the
+  -- regular chat API (content is nulled there); only the master portal reads it.
+  deleted_content TEXT,
+  deleted_attachment_url TEXT,
+  deleted_attachment_name TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+-- For existing deployments
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS deleted_content TEXT;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS deleted_attachment_url TEXT;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS deleted_attachment_name TEXT;
 CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS conversation_reads (
@@ -565,6 +574,28 @@ CREATE TABLE IF NOT EXISTS conversation_reads (
   last_read_at TIMESTAMPTZ DEFAULT NOW(),
   PRIMARY KEY (conversation_id, user_id)
 );
+
+-- Prior versions of edited messages, preserved for audit / legal review.
+-- Rows are appended on every edit; the current content still lives on messages.content.
+CREATE TABLE IF NOT EXISTS message_edits (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  message_id UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+  previous_content TEXT,
+  edited_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_message_edits_message ON message_edits(message_id, edited_at DESC);
+
+-- Every master-portal chat-audit view is recorded here for defensibility.
+-- Written only by the master portal (local-only, MASTER_SECRET-gated).
+CREATE TABLE IF NOT EXISTS chat_access_log (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  conversation_id UUID REFERENCES conversations(id) ON DELETE SET NULL,
+  action TEXT NOT NULL CHECK (action IN ('view', 'export')),
+  reason TEXT NOT NULL,
+  accessed_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_chat_access_log_school ON chat_access_log(school_id, accessed_at DESC);
 
 -- ============================================================
 -- DEMO SCHOOL SEED

@@ -3,12 +3,16 @@ import { getSchools, toggleSchoolStatus, deleteSchool, School } from '../api';
 import CreateSchoolModal from '../components/CreateSchoolModal';
 import EditSchoolModal from '../components/EditSchoolModal';
 import DeleteConfirmModal from '../components/DeleteConfirmModal';
+import MasterHeader from '../components/MasterHeader';
+import type { MasterView } from '../App';
 
 interface Props {
   onLogout: () => void;
+  currentView: MasterView;
+  onNavigate: (view: MasterView) => void;
 }
 
-export default function SchoolsPage({ onLogout }: Props) {
+export default function SchoolsPage({ onLogout, currentView, onNavigate }: Props) {
   const [schools, setSchools] = useState<School[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -67,31 +71,7 @@ export default function SchoolsPage({ onLogout }: Props) {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Header */}
-      <header className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center">
-            <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-            </svg>
-          </div>
-          <div>
-            <h1 className="font-bold text-slate-900 text-lg leading-none">Master Portal</h1>
-            <p className="text-xs text-slate-400 mt-0.5">Local access only</p>
-          </div>
-        </div>
-        <button
-          onClick={onLogout}
-          className="text-sm text-slate-500 hover:text-slate-800 flex items-center gap-1.5 transition-colors"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-          </svg>
-          Logout
-        </button>
-      </header>
+      <MasterHeader currentView={currentView} onNavigate={onNavigate} onLogout={onLogout} />
 
       <main className="max-w-6xl mx-auto px-6 py-8">
         {/* Stats + action */}
