@@ -9,9 +9,9 @@ interface NotificationState {
   teacherUnreadCount: number;
   setTeacherUnreadCount: (count: number) => void;
   incrementTeacherUnreadCount: () => void;
-  adminNotificationCount: number;
-  setAdminNotificationCount: (count: number) => void;
-  incrementAdminNotificationCount: () => void;
+  adminResetRequestCount: number;
+  setAdminResetRequestCount: (count: number) => void;
+  incrementAdminResetRequestCount: () => void;
   chatUnreadCount: number;
   setChatUnreadCount: (count: number) => void;
   incrementChatUnreadCount: () => void;
@@ -26,9 +26,9 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
   teacherUnreadCount: 0,
   setTeacherUnreadCount: (teacherUnreadCount) => set({ teacherUnreadCount }),
   incrementTeacherUnreadCount: () => set({ teacherUnreadCount: get().teacherUnreadCount + 1 }),
-  adminNotificationCount: 0,
-  setAdminNotificationCount: (adminNotificationCount) => set({ adminNotificationCount }),
-  incrementAdminNotificationCount: () => set({ adminNotificationCount: get().adminNotificationCount + 1 }),
+  adminResetRequestCount: 0,
+  setAdminResetRequestCount: (adminResetRequestCount) => set({ adminResetRequestCount }),
+  incrementAdminResetRequestCount: () => set({ adminResetRequestCount: get().adminResetRequestCount + 1 }),
   chatUnreadCount: 0,
   setChatUnreadCount: (chatUnreadCount) => set({ chatUnreadCount }),
   incrementChatUnreadCount: () => set({ chatUnreadCount: get().chatUnreadCount + 1 }),

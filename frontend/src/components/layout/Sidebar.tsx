@@ -93,7 +93,7 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
     unreadCount, setUnreadCount,
     pendingAppointmentCount, setPendingAppointmentCount, incrementPendingAppointmentCount,
     teacherUnreadCount, setTeacherUnreadCount, incrementTeacherUnreadCount,
-    adminNotificationCount, setAdminNotificationCount, incrementAdminNotificationCount,
+    adminResetRequestCount, setAdminResetRequestCount, incrementAdminResetRequestCount,
     chatUnreadCount, setChatUnreadCount, incrementChatUnreadCount,
   } = useNotificationStore();
   const { socket } = useSocketStore();
@@ -108,7 +108,7 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
       teacherApi.getUnreadCount().then(r => setTeacherUnreadCount(r.data?.count ?? 0)).catch(() => {});
     }
     if (user?.role === 'admin') {
-      adminApi.getUnreadNotificationCount().then(r => setAdminNotificationCount(r.data?.count ?? 0)).catch(() => {});
+      adminApi.getResetRequests().then(r => setAdminResetRequestCount(r.data?.length ?? 0)).catch(() => {});
     }
     const chatRoles = ['parent', 'teacher', 'supervisor'];
     if (user?.role && chatRoles.includes(user.role)) {
@@ -147,8 +147,11 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
       if (user.role === 'teacher' && window.location.pathname !== '/teacher/notifications') {
         incrementTeacherUnreadCount();
       }
-      if (user.role === 'admin' && window.location.pathname !== '/admin/notifications') {
-        incrementAdminNotificationCount();
+    };
+
+    const onResetRequest = () => {
+      if (user.role === 'admin' && window.location.pathname !== '/admin/accounts') {
+        incrementAdminResetRequestCount();
       }
     };
 
@@ -163,11 +166,13 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
 
     socket.on('new_appointment', onAppointment);
     socket.on('notification', onNotification);
+    socket.on('password_reset_request', onResetRequest);
     socket.on('chat:message', onChatMessage);
 
     return () => {
       socket.off('new_appointment', onAppointment);
       socket.off('notification', onNotification);
+      socket.off('password_reset_request', onResetRequest);
       socket.off('chat:message', onChatMessage);
     };
   }, [socket, user]);
@@ -175,7 +180,7 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
   // Auto-clear badges on navigation
   useEffect(() => {
     if (location.pathname === '/teacher/notifications' && teacherUnreadCount > 0) setTeacherUnreadCount(0);
-    if (location.pathname === '/admin/notifications' && adminNotificationCount > 0) setAdminNotificationCount(0);
+    if (location.pathname === '/admin/accounts' && adminResetRequestCount > 0) setAdminResetRequestCount(0);
     if ((location.pathname === '/admin/appointments' || location.pathname === '/reception/appointments') && pendingAppointmentCount > 0) setPendingAppointmentCount(0);
     if (location.pathname === '/chat' && chatUnreadCount > 0) setChatUnreadCount(0);
   }, [location.pathname]);
@@ -236,14 +241,14 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
             (to === '/admin/appointments' && user?.role === 'admin') ||
             (to === '/reception/appointments' && user?.role === 'reception')
           ) && pendingAppointmentCount > 0;
-          const showAdminNotifBadge = to === '/admin/notifications' && user?.role === 'admin' && adminNotificationCount > 0;
+          const showAdminResetBadge = to === '/admin/accounts' && user?.role === 'admin' && adminResetRequestCount > 0;
           const showChatBadge = to === '/chat' && chatUnreadCount > 0;
-          const showBadge = showNotifBadge || showTeacherNotifBadge || showApptBadge || showAdminNotifBadge || showChatBadge;
+          const showBadge = showNotifBadge || showTeacherNotifBadge || showApptBadge || showAdminResetBadge || showChatBadge;
           const badgeCount = showNotifBadge ? unreadCount
             : showTeacherNotifBadge ? teacherUnreadCount
             : showApptBadge ? pendingAppointmentCount
             : showChatBadge ? chatUnreadCount
-            : adminNotificationCount;
+            : adminResetRequestCount;
           return (
             <NavLink
               key={to}
@@ -252,7 +257,7 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
                 setMobileOpen(false);
                 if (showApptBadge) setPendingAppointmentCount(0);
                 if (showTeacherNotifBadge) setTeacherUnreadCount(0);
-                if (showAdminNotifBadge) setAdminNotificationCount(0);
+                if (showAdminResetBadge) setAdminResetRequestCount(0);
                 if (showChatBadge) setChatUnreadCount(0);
               }}
               className={({ isActive }) => `

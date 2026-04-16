@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { supabase } from '../config/supabase';
 import { toCC } from '../utils/transform';
+import { emitToAdmins } from '../utils/notify';
 import type { AuthRequest } from '../middleware/auth';
 
 export async function getSchools(_req: Request, res: Response): Promise<void> {
@@ -138,6 +139,7 @@ export async function forgotPassword(req: Request, res: Response): Promise<void>
       full_name: `${user.first_name} ${user.last_name}`.trim(),
       status: 'pending',
     });
+    emitToAdmins(school.id, 'password_reset_request', { userId: user.id, username });
   }
 
   res.json({ message: 'If this username exists, a reset request has been submitted to your school administrator.' });
