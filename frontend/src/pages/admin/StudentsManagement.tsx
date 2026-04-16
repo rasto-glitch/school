@@ -29,6 +29,8 @@ export default function StudentsManagement() {
   const [removeClassId, setRemoveClassId] = useState('');
   const [removeStudentIds, setRemoveStudentIds] = useState<Set<string>>(new Set());
   const [editStudentId, setEditStudentId] = useState('');
+  const [editFilterClassId, setEditFilterClassId] = useState('');
+  const [archiveFilterClassId, setArchiveFilterClassId] = useState('');
   const [assignCurrentClassId, setAssignCurrentClassId] = useState('');
 
   const addForm = useForm<{ fullName: string; parentId: string; phoneNumber: string; emergencyContact: string; homeAddress: string; classId: string; dateOfBirth: string; residenceType: string; blockNumber: string }>();
@@ -420,7 +422,13 @@ export default function StudentsManagement() {
               <p className="text-xs text-gray-400 mb-3 text-center">Saves grades &amp; parent info, then removes from active roster</p>
               <div className="space-y-3">
                 <Select
-                  options={students.map(s => ({ value: s.id, label: s.fullName }))}
+                  options={classes.map(c => ({ value: c.id, label: c.name }))}
+                  placeholder="Filter by Class (optional)"
+                  value={archiveFilterClassId}
+                  onChange={e => { setArchiveFilterClassId(e.target.value); setArchiveStudentId(''); }}
+                />
+                <Select
+                  options={(archiveFilterClassId ? students.filter(s => s.classId === archiveFilterClassId) : students).map(s => ({ value: s.id, label: s.fullName }))}
                   placeholder="Select Student"
                   value={archiveStudentId}
                   onChange={e => setArchiveStudentId(e.target.value)}
@@ -457,7 +465,18 @@ export default function StudentsManagement() {
         <Card className="max-w-xl" id="edit-student-section" style={{ scrollMarginTop: '80px' } as React.CSSProperties}>
           <h2 className="font-bold text-gray-900 mb-4 text-center">Edit Student</h2>
           <div className="space-y-3">
-            <Select options={students.map(s => ({ value: s.id, label: s.fullName }))} placeholder="Select Student" value={editStudentId} onChange={e => setEditStudentId(e.target.value)} />
+            <Select
+              options={classes.map(c => ({ value: c.id, label: c.name }))}
+              placeholder="Filter by Class (optional)"
+              value={editFilterClassId}
+              onChange={e => { setEditFilterClassId(e.target.value); setEditStudentId(''); }}
+            />
+            <Select
+              options={(editFilterClassId ? students.filter(s => s.classId === editFilterClassId) : students).map(s => ({ value: s.id, label: s.fullName }))}
+              placeholder="Select Student"
+              value={editStudentId}
+              onChange={e => setEditStudentId(e.target.value)}
+            />
             {editStudentId && (
               <form onSubmit={editForm.handleSubmit(onEdit)} className="space-y-3 pt-2">
                 <Input placeholder="Full Name" {...editForm.register('fullName')} />
