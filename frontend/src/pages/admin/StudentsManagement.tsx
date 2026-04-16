@@ -37,7 +37,7 @@ export default function StudentsManagement() {
   const debouncedSearch = useDebounce(search, 400);
 
   const load = () => {
-    const params: Record<string, string> = {};
+    const params: Record<string, string> = { limit: '1000' };
     if (debouncedSearch) params.search = debouncedSearch;
     if (classFilter) params.classId = classFilter;
     adminApi.getStudents(params).then(r => setStudents(r.data?.students || []));
