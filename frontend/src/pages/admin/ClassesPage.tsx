@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'react-toastify';
-import { BookOpen, Plus, Tag, Trash2 } from 'lucide-react';
+import { BookOpen, Plus, Search, Tag, Trash2 } from 'lucide-react';
 import { adminApi } from '../../services/api';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
@@ -23,6 +23,7 @@ export default function ClassesPage() {
   const [creatingSubject, setCreatingSubject] = useState(false);
   const [newSubjectName, setNewSubjectName] = useState('');
   const [newSubjectTeacherId, setNewSubjectTeacherId] = useState('');
+  const [assignStudentSearch, setAssignStudentSearch] = useState('');
 
   const { register, handleSubmit, reset } = useForm<{ name: string; gradeLevel: string; academicYear: string; assignStudents: string }>();
 
@@ -109,12 +110,26 @@ export default function ClassesPage() {
                 <Input label="Grade Level" placeholder="e.g. Grade 5" {...register('gradeLevel')} />
                 <Input label="Academic Year" placeholder="e.g. 2024-2025" {...register('academicYear')} />
               </div>
-              <Select
-                label="Assign Students to Class"
-                options={students.map(s => ({ value: s.id, label: s.fullName }))}
-                placeholder="Select students (assign later)"
-                {...register('assignStudents')}
-              />
+              <div className="space-y-1.5">
+                <label className="block text-sm font-medium text-gray-700">Assign Students to Class</label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={assignStudentSearch}
+                    onChange={e => setAssignStudentSearch(e.target.value)}
+                    placeholder="Search students..."
+                    className="w-full border border-gray-300 rounded-xl pl-9 pr-4 py-2.5 text-gray-900 bg-white min-h-[44px] focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  />
+                </div>
+                <Select
+                  options={students
+                    .filter(s => !assignStudentSearch || s.fullName.toLowerCase().includes(assignStudentSearch.toLowerCase()))
+                    .map(s => ({ value: s.id, label: s.fullName }))}
+                  placeholder="Select students (assign later)"
+                  {...register('assignStudents')}
+                />
+              </div>
               <Button type="submit" loading={creating} fullWidth icon={<BookOpen className="w-4 h-4" />}>
                 Create Class
               </Button>
