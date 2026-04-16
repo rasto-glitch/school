@@ -14,6 +14,7 @@ interface Subject { id: string; name: string; teacherId?: string; teachers?: { f
 
 
 export default function ClassesPage() {
+  const [activeTab, setActiveTab] = useState<'classes' | 'subjects'>('classes');
   const [classes, setClasses] = useState<Class[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
@@ -78,9 +79,24 @@ export default function ClassesPage() {
 
   return (
     <PageLayout title="Class Management">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-        {/* Left column — Classes */}
-        <div className="space-y-6">
+      {/* Tab switcher */}
+      <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit mb-6">
+        <button
+          onClick={() => setActiveTab('classes')}
+          className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${activeTab === 'classes' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+        >
+          Classes
+        </button>
+        <button
+          onClick={() => setActiveTab('subjects')}
+          className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${activeTab === 'subjects' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+        >
+          Subjects
+        </button>
+      </div>
+
+      {activeTab === 'classes' && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
           {/* Create Class */}
           <Card>
             <div className="flex items-center gap-2 mb-4">
@@ -106,12 +122,14 @@ export default function ClassesPage() {
           </Card>
 
           {/* Existing classes */}
-          {classes.length > 0 && (
-            <div>
-              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
-                Existing Classes ({classes.length})
-              </h2>
-              <div className="space-y-2">
+          <Card>
+            <h2 className="font-semibold text-gray-900 mb-3">
+              Existing Classes ({classes.length})
+            </h2>
+            {classes.length === 0 ? (
+              <p className="text-sm text-gray-500 text-center py-4">No classes yet</p>
+            ) : (
+              <div className="space-y-2 max-h-[32rem] overflow-y-auto">
                 {classes.map(c => (
                   <div key={c.id} className="flex items-center gap-3 px-4 py-3 bg-gray-50 rounded-xl">
                     <div className="flex-1 min-w-0">
@@ -157,12 +175,13 @@ export default function ClassesPage() {
                   </div>
                 ))}
               </div>
-            </div>
-          )}
+            )}
+          </Card>
         </div>
+      )}
 
-        {/* Right column — Subjects */}
-        <div className="space-y-6">
+      {activeTab === 'subjects' && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
           {/* Create subject */}
           <Card>
             <div className="flex items-center gap-2 mb-3">
@@ -170,8 +189,9 @@ export default function ClassesPage() {
               <h3 className="font-semibold text-gray-900">Create Subject</h3>
             </div>
             <div className="space-y-3">
-              <Input placeholder="Subject name (e.g. Mathematics)" value={newSubjectName} onChange={e => setNewSubjectName(e.target.value)} />
+              <Input label="Subject Name" placeholder="Subject name (e.g. Mathematics)" value={newSubjectName} onChange={e => setNewSubjectName(e.target.value)} />
               <Select
+                label="Assign Teacher"
                 options={teachers.map(t => ({ value: t.id, label: t.fullName || '' }))}
                 placeholder="Assign teacher (optional)"
                 value={newSubjectTeacherId}
@@ -187,7 +207,7 @@ export default function ClassesPage() {
             {subjects.length === 0 ? (
               <p className="text-sm text-gray-500 text-center py-4">No subjects yet</p>
             ) : (
-              <div className="space-y-2 max-h-96 overflow-y-auto">
+              <div className="space-y-2 max-h-[32rem] overflow-y-auto">
                 {subjects.map(s => (
                   <div key={s.id} className="flex items-center gap-2 p-2 bg-gray-50 rounded-xl">
                     <span className="flex-1 text-sm font-medium text-gray-900">{s.name}</span>
@@ -212,7 +232,7 @@ export default function ClassesPage() {
             )}
           </Card>
         </div>
-      </div>
+      )}
     </PageLayout>
   );
 }
