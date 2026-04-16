@@ -83,20 +83,23 @@ export async function createHomework(req: AuthRequest, res: Response): Promise<v
 
   if (error) { res.status(500).json({ error: error.message }); return; }
 
-  // Notify all parents of students in this class
+  // Notify all parents of students in this class (dedupe: one notification per parent, even with multiple children in the class)
   if (classId) {
     const { data: students } = await supabase
       .from('students')
-      .select('full_name, parents(user_id)')
+      .select('parents(user_id)')
       .eq('class_id', classId)
       .eq('school_id', schoolId);
     if (students) {
-      const payloads = students.flatMap((s: any) => {
+      const uniqueParentIds = new Set<string>();
+      for (const s of students as any[]) {
         const uids: string[] = Array.isArray(s.parents)
           ? s.parents.map((p: any) => p.user_id)
           : s.parents?.user_id ? [s.parents.user_id] : [];
-        return uids.map(uid => ({ schoolId, userId: uid, title: 'New Homework', message: `${title}${subject ? ` (${subject})` : ''}${dueDate ? ` — due ${dueDate}` : ''}`, type: 'homework', relatedId: data.id }));
-      });
+        for (const uid of uids) if (uid) uniqueParentIds.add(uid);
+      }
+      const message = `${title}${subject ? ` (${subject})` : ''}${dueDate ? ` — due ${dueDate}` : ''}`;
+      const payloads = Array.from(uniqueParentIds).map(uid => ({ schoolId, userId: uid, title: 'New Homework', message, type: 'homework', relatedId: data.id }));
       notifyMany(payloads).catch(() => {});
     }
   }
@@ -167,17 +170,20 @@ export async function createAssignment(req: AuthRequest, res: Response): Promise
 
   if (error) { res.status(500).json({ error: error.message }); return; }
 
-  // Notify parent(s)
+  // Notify parent(s) — dedupe so a parent with multiple children in the class only gets one push
   const targetId = studentId || null;
   const studentsQuery = targetId
-    ? supabase.from('students').select('full_name, parents(user_id)').eq('id', targetId)
-    : supabase.from('students').select('full_name, parents(user_id)').eq('class_id', classId).eq('school_id', schoolId);
+    ? supabase.from('students').select('parents(user_id)').eq('id', targetId)
+    : supabase.from('students').select('parents(user_id)').eq('class_id', classId).eq('school_id', schoolId);
   const { data: assignedStudents } = await studentsQuery;
   if (assignedStudents) {
-    const payloads = (assignedStudents as any[]).flatMap((s: any) => {
+    const uniqueParentIds = new Set<string>();
+    for (const s of assignedStudents as any[]) {
       const uids: string[] = Array.isArray(s.parents) ? s.parents.map((p: any) => p.user_id) : s.parents?.user_id ? [s.parents.user_id] : [];
-      return uids.map(uid => ({ schoolId, userId: uid, title: 'New Assignment', message: `${title}${subject ? ` (${subject})` : ''}${dueDate ? ` — due ${dueDate}` : ''}`, type: 'assignment', relatedId: data.id }));
-    });
+      for (const uid of uids) if (uid) uniqueParentIds.add(uid);
+    }
+    const message = `${title}${subject ? ` (${subject})` : ''}${dueDate ? ` — due ${dueDate}` : ''}`;
+    const payloads = Array.from(uniqueParentIds).map(uid => ({ schoolId, userId: uid, title: 'New Assignment', message, type: 'assignment', relatedId: data.id }));
     notifyMany(payloads).catch(() => {});
   }
 
