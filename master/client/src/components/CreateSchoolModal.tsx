@@ -1,5 +1,6 @@
 import { useState, FormEvent } from 'react';
-import { createSchool, School, DEFAULT_FEATURES, SchoolFeatures } from '../api';
+import { createSchool, School, SchoolFeatures } from '../api';
+import { PLANS, PLAN_IDS, PlanId, getPlan } from '../plans';
 
 interface Props {
   onClose: () => void;
@@ -14,17 +15,25 @@ export default function CreateSchoolModal({ onClose, onCreated }: Props) {
     primaryColor: '#4F46E5',
     secondaryColor: '#06B6D4',
     domain: '',
-    subscriptionPlan: 'basic',
+    subscriptionPlan: 'basic' as PlanId,
     adminFirstName: '',
     adminLastName: '',
     adminUsername: '',
     adminPassword: '',
     adminEmail: '',
   });
-  const [features, setFeatures] = useState<SchoolFeatures>({ ...DEFAULT_FEATURES });
+  const [features, setFeatures] = useState<SchoolFeatures>({ ...PLANS.basic.features });
 
   const toggleFeature = (key: keyof SchoolFeatures) =>
     setFeatures(f => ({ ...f, [key]: !f[key] }));
+
+  const handlePlanChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const plan = getPlan(e.target.value);
+    setForm(f => ({ ...f, subscriptionPlan: plan.id }));
+    setFeatures({ ...plan.features });
+  };
+
+  const currentPlan = getPlan(form.subscriptionPlan);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -99,11 +108,13 @@ export default function CreateSchoolModal({ onClose, onCreated }: Props) {
                 <input type="text" value={form.secondaryColor} onChange={set('secondaryColor')} className={`${inputCls} font-mono text-xs`} />
               </div>
             </Field>
-            <Field label="Plan">
-              <select value={form.subscriptionPlan} onChange={set('subscriptionPlan')} className={inputCls}>
-                <option value="basic">Basic</option>
-                <option value="pro">Pro</option>
-                <option value="enterprise">Enterprise</option>
+            <Field label="Plan" hint={`$${currentPlan.pricePerStudent}/student/mo`}>
+              <select value={form.subscriptionPlan} onChange={handlePlanChange} className={inputCls}>
+                {PLAN_IDS.map(id => (
+                  <option key={id} value={id}>
+                    {PLANS[id].label} — ${PLANS[id].pricePerStudent}/student/mo
+                  </option>
+                ))}
               </select>
             </Field>
           </div>

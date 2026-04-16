@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getSchools, toggleSchoolStatus, deleteSchool, School } from '../api';
+import { getPlan, formatMonthlyCost } from '../plans';
 import CreateSchoolModal from '../components/CreateSchoolModal';
 import EditSchoolModal from '../components/EditSchoolModal';
 import DeleteConfirmModal from '../components/DeleteConfirmModal';
@@ -62,6 +63,9 @@ export default function SchoolsPage({ onLogout, currentView, onNavigate }: Props
 
   const totalStudents = schools.reduce((acc, s) => acc + s.studentCount, 0);
   const activeCount = schools.filter((s) => s.is_active).length;
+  const monthlyRevenue = schools
+    .filter((s) => s.is_active)
+    .reduce((acc, s) => acc + getPlan(s.subscription_plan).pricePerStudent * s.studentCount, 0);
   const filtered = query.trim()
     ? schools.filter((s) =>
         s.name.toLowerCase().includes(query.toLowerCase()) ||
@@ -81,6 +85,7 @@ export default function SchoolsPage({ onLogout, currentView, onNavigate }: Props
             <StatCard label="Active" value={activeCount} color="bg-emerald-50 text-emerald-700" />
             <StatCard label="Inactive" value={schools.length - activeCount} color="bg-red-50 text-red-700" />
             <StatCard label="Total Students" value={totalStudents} color="bg-sky-50 text-sky-700" />
+            <StatCard label="Monthly Revenue" value={`$${monthlyRevenue.toLocaleString()}`} color="bg-violet-50 text-violet-700" />
           </div>
           <button
             onClick={() => setShowCreate(true)}
@@ -172,7 +177,7 @@ export default function SchoolsPage({ onLogout, currentView, onNavigate }: Props
   );
 }
 
-function StatCard({ label, value, color }: { label: string; value: number; color: string }) {
+function StatCard({ label, value, color }: { label: string; value: number | string; color: string }) {
   return (
     <div className={`rounded-xl px-4 py-3 ${color}`}>
       <div className="text-xl font-bold">{value}</div>
@@ -219,16 +224,25 @@ function SchoolCard({
         </div>
 
         {/* Meta */}
-        {(school.domain || school.subscription_plan) && (
-          <div className="flex gap-2 mb-3 flex-wrap">
-            {school.subscription_plan && (
-              <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded">{school.subscription_plan}</span>
-            )}
-            {school.domain && (
-              <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-mono">{school.domain}</span>
-            )}
-          </div>
-        )}
+        <div className="flex items-center gap-2 mb-3 flex-wrap">
+          {(() => {
+            const plan = getPlan(school.subscription_plan);
+            return (
+              <>
+                <span className={`text-xs px-2 py-0.5 rounded font-medium ${planBadgeCls(plan.id)}`}>{plan.label}</span>
+                <span className="text-xs text-slate-600 font-medium">
+                  {formatMonthlyCost(plan, school.studentCount)}
+                </span>
+                <span className="text-xs text-slate-400">
+                  ({school.studentCount} × ${plan.pricePerStudent})
+                </span>
+              </>
+            );
+          })()}
+          {school.domain && (
+            <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-mono ml-auto">{school.domain}</span>
+          )}
+        </div>
 
         {/* Colors */}
         <div className="flex items-center gap-2 mb-4">
@@ -269,6 +283,12 @@ function SchoolCard({
       </div>
     </div>
   );
+}
+
+function planBadgeCls(plan: 'basic' | 'pro' | 'premium'): string {
+  if (plan === 'premium') return 'bg-violet-100 text-violet-700';
+  if (plan === 'pro') return 'bg-indigo-100 text-indigo-700';
+  return 'bg-slate-100 text-slate-600';
 }
 
 function Stat({ icon, label }: { icon: string; label: string }) {

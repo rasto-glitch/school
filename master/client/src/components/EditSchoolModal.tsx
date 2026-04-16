@@ -1,5 +1,6 @@
 import { useState, FormEvent } from 'react';
 import { updateSchool, resetAdminPassword, School, DEFAULT_FEATURES, SchoolFeatures } from '../api';
+import { PLANS, PLAN_IDS, PlanId, getPlan, formatMonthlyCost } from '../plans';
 
 interface Props {
   school: School;
@@ -8,6 +9,7 @@ interface Props {
 }
 
 export default function EditSchoolModal({ school, onClose, onUpdated }: Props) {
+  const initialPlan = getPlan(school.subscription_plan).id;
   const [form, setForm] = useState({
     name: school.name,
     slug: school.slug,
@@ -15,12 +17,21 @@ export default function EditSchoolModal({ school, onClose, onUpdated }: Props) {
     primaryColor: school.primary_color,
     secondaryColor: school.secondary_color,
     domain: school.domain || '',
-    subscriptionPlan: school.subscription_plan || 'basic',
+    subscriptionPlan: initialPlan as PlanId,
   });
   const [features, setFeatures] = useState<SchoolFeatures>({ ...DEFAULT_FEATURES, ...school.features });
 
   const toggleFeature = (key: keyof SchoolFeatures) =>
     setFeatures(f => ({ ...f, [key]: !f[key] }));
+
+  const handlePlanChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const plan = getPlan(e.target.value);
+    setForm(f => ({ ...f, subscriptionPlan: plan.id }));
+    setFeatures({ ...plan.features });
+  };
+
+  const currentPlan = getPlan(form.subscriptionPlan);
+  const monthlyCost = formatMonthlyCost(currentPlan, school.studentCount);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -125,13 +136,24 @@ export default function EditSchoolModal({ school, onClose, onUpdated }: Props) {
               <input type="text" value={form.domain} onChange={set('domain')} className={inputCls} placeholder="school.example.com" />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">Plan</label>
-              <select value={form.subscriptionPlan} onChange={set('subscriptionPlan')} className={inputCls}>
-                <option value="basic">Basic</option>
-                <option value="pro">Pro</option>
-                <option value="enterprise">Enterprise</option>
+              <label className="block text-xs font-medium text-slate-700 mb-1">
+                Plan <span className="text-slate-400 font-normal">(${currentPlan.pricePerStudent}/student/mo)</span>
+              </label>
+              <select value={form.subscriptionPlan} onChange={handlePlanChange} className={inputCls}>
+                {PLAN_IDS.map(id => (
+                  <option key={id} value={id}>
+                    {PLANS[id].label} — ${PLANS[id].pricePerStudent}/student/mo
+                  </option>
+                ))}
               </select>
             </div>
+          </div>
+
+          <div className="rounded-lg bg-indigo-50 border border-indigo-100 px-3 py-2 flex items-center justify-between">
+            <span className="text-xs text-indigo-700">
+              {school.studentCount} student{school.studentCount === 1 ? '' : 's'} × ${currentPlan.pricePerStudent}
+            </span>
+            <span className="text-sm font-semibold text-indigo-700">{monthlyCost}</span>
           </div>
 
           {/* Features */}
