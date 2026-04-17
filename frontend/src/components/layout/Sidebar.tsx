@@ -9,7 +9,7 @@ import {
   Home, BookOpen, ClipboardList, Megaphone, BarChart2,
   MapPin, Bell, User, Users, GraduationCap, Bus,
   Calendar, Settings, UserCog, LogOut, ChevronLeft, ChevronRight,
-  FileText, Star, Clock, X, ClipboardCheck, MessageSquare
+  FileText, Star, Clock, X, ClipboardCheck, MessageSquare, Archive
 } from 'lucide-react';
 import type { Dispatch, SetStateAction } from 'react';
 import type { Role } from '../../types';
@@ -46,6 +46,7 @@ const navItems: Record<Role, NavItem[]> = {
   admin: [
     { to: '/admin/dashboard', icon: Home, label: 'Dashboard' },
     { to: '/admin/students', icon: GraduationCap, label: 'Students' },
+    { to: '/admin/archive', icon: Archive, label: 'Archive', feature: 'archive' },
     { to: '/admin/classes', icon: BookOpen, label: 'Classes' },
     { to: '/admin/teachers', icon: Users, label: 'Teachers' },
     { to: '/admin/drivers', icon: Bus, label: 'Drivers', feature: 'bus_tracking' },

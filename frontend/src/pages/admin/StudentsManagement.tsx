@@ -9,14 +9,12 @@ import Card from '../../components/common/Card';
 import Input from '../../components/common/Input';
 import Select from '../../components/common/Select';
 import Button from '../../components/common/Button';
-import GraduatedStudentsTab from './GraduatedStudentsTab';
-import ArchivedStudentsTab from './ArchivedStudentsTab';
 import type { Student, Class } from '../../types';
 
 interface Parent { id: string; fullName: string; phoneNumber?: string; }
 
 export default function StudentsManagement() {
-  const [activeTab, setActiveTab] = useState<'active' | 'new' | 'graduated' | 'archived'>('active');
+  const [activeTab, setActiveTab] = useState<'active' | 'new'>('active');
   const [students, setStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
   const [parents, setParents] = useState<Parent[]>([]);
@@ -216,22 +214,7 @@ export default function StudentsManagement() {
         >
           New Student
         </button>
-        <button
-          onClick={() => setActiveTab('graduated')}
-          className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${activeTab === 'graduated' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-        >
-          Graduated
-        </button>
-        <button
-          onClick={() => setActiveTab('archived')}
-          className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${activeTab === 'archived' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-        >
-          Archived
-        </button>
       </div>
-
-      {activeTab === 'graduated' && <GraduatedStudentsTab />}
-      {activeTab === 'archived' && <ArchivedStudentsTab />}
 
       {activeTab === 'new' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

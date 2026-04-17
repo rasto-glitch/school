@@ -36,6 +36,7 @@ import TeacherNotificationsPage from './pages/teacher/TeacherNotificationsPage';
 // Admin
 import AdminDashboard from './pages/admin/AdminDashboard';
 import StudentsManagement from './pages/admin/StudentsManagement';
+import ArchiveManagement from './pages/admin/ArchiveManagement';
 import TeachersManagement from './pages/admin/TeachersManagement';
 import DriversManagement from './pages/admin/DriversManagement';
 import AppointmentsPage from './pages/admin/AppointmentsPage';
@@ -169,6 +170,7 @@ export default function App() {
         <Route path="/admin/list/teachers" element={<ProtectedRoute allowedRoles={['admin']}><AdminTeachersListPage /></ProtectedRoute>} />
         <Route path="/admin/list/drivers" element={<ProtectedRoute allowedRoles={['admin']}><AdminDriversListPage /></ProtectedRoute>} />
         <Route path="/admin/students" element={<ProtectedRoute allowedRoles={['admin']}><StudentsManagement /></ProtectedRoute>} />
+        <Route path="/admin/archive" element={<ProtectedRoute allowedRoles={['admin']}><ArchiveManagement /></ProtectedRoute>} />
         <Route path="/admin/classes" element={<ProtectedRoute allowedRoles={['admin']}><ClassesPage /></ProtectedRoute>} />
         <Route path="/admin/teachers" element={<ProtectedRoute allowedRoles={['admin']}><TeachersManagement /></ProtectedRoute>} />
         <Route path="/admin/drivers" element={<ProtectedRoute allowedRoles={['admin']}><DriversManagement /></ProtectedRoute>} />
