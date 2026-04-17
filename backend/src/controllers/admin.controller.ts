@@ -605,7 +605,7 @@ export async function getArchivedStudents(req: AuthRequest, res: Response): Prom
 
   let query = supabase
     .from('archived_students')
-    .select('id, full_name, date_of_birth, enrollment_date, departure_date, reason, parent_full_name, parent_phone, created_at')
+    .select('id, full_name, date_of_birth, enrollment_date, departure_date, reason, parent_full_name, parent_phone, classes_attended, created_at')
     .eq('school_id', schoolId)
     .order('created_at', { ascending: false });
 
@@ -1369,7 +1369,7 @@ export async function getGraduatedStudents(req: AuthRequest, res: Response): Pro
 
   let query = supabase
     .from('students')
-    .select('id, full_name, profile_picture, classes(name), parents(full_name, phone_number)')
+    .select('id, full_name, profile_picture, class_id, classes(name), parents(full_name, phone_number)')
     .eq('school_id', schoolId)
     .eq('is_graduated', true)
     .order('full_name');

@@ -4,8 +4,10 @@ import { adminApi } from '../../services/api';
 import { useDebounce } from '../../hooks/useDebounce';
 import Card from '../../components/common/Card';
 import Input from '../../components/common/Input';
+import Select from '../../components/common/Select';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import Modal from '../../components/common/Modal';
+import type { Class } from '../../types';
 
 // 3-level map: { academicYear → { gradingPeriod → { subjectName → gradeRecord } } }
 function buildGradeMap(grades: any[]): Record<string, Record<string, Record<string, any>>> {
@@ -22,6 +24,8 @@ function buildGradeMap(grades: any[]): Record<string, Record<string, Record<stri
 
 export default function GraduatedStudentsTab() {
   const [students, setStudents] = useState<any[]>([]);
+  const [classes, setClasses] = useState<Class[]>([]);
+  const [classFilter, setClassFilter] = useState('');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
   const [subjects, setSubjects] = useState<{ id: string; name: string }[]>([]);
@@ -33,6 +37,7 @@ export default function GraduatedStudentsTab() {
 
   useEffect(() => {
     adminApi.getSubjects().then(r => setSubjects(r.data || []));
+    adminApi.getClasses().then(r => setClasses(r.data || []));
   }, []);
 
   const load = useCallback(() => {
@@ -43,6 +48,8 @@ export default function GraduatedStudentsTab() {
   }, [debouncedSearch]);
 
   useEffect(() => { load(); }, [load]);
+
+  const filtered = classFilter ? students.filter(s => s.classId === classFilter) : students;
 
   const openTranscript = async (id: string) => {
     setTranscriptOpen(true);
@@ -71,9 +78,17 @@ export default function GraduatedStudentsTab() {
             onChange={e => setSearch(e.target.value)}
           />
         </div>
+        <div className="w-48">
+          <Select
+            options={classes.map(c => ({ value: c.id, label: c.name }))}
+            placeholder="All Classes"
+            value={classFilter}
+            onChange={e => setClassFilter(e.target.value)}
+          />
+        </div>
         {!loading && (
           <span className="text-sm text-gray-400">
-            {students.length} student{students.length !== 1 ? 's' : ''}
+            {filtered.length} student{filtered.length !== 1 ? 's' : ''}
           </span>
         )}
       </div>
@@ -81,15 +96,17 @@ export default function GraduatedStudentsTab() {
       {/* Student grid */}
       {loading ? (
         <div className="flex justify-center py-16"><LoadingSpinner /></div>
-      ) : students.length === 0 ? (
+      ) : filtered.length === 0 ? (
         <Card className="text-center py-16">
           <GraduationCap className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-          <p className="text-sm text-gray-500">No graduated students yet</p>
+          <p className="text-sm text-gray-500">
+            {classFilter ? 'No graduated students in this class' : 'No graduated students yet'}
+          </p>
           <p className="text-xs text-gray-400 mt-1">Use "Assign Students" to mark a class as graduated</p>
         </Card>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {students.map(s => (
+          {filtered.map(s => (
             <button key={s.id} onClick={() => openTranscript(s.id)} className="text-left w-full">
               <Card className="hover:shadow-md hover:border-primary-200 transition-all cursor-pointer h-full">
                 <div className="flex items-center gap-3">
