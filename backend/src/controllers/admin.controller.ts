@@ -527,40 +527,44 @@ export async function archiveStudent(req: AuthRequest, res: Response): Promise<v
     return;
   }
 
-  // Fetch grades + class name
+  // Fetch grades + class name (include marks[] — the current source of truth)
   const { data: grades } = await supabase
     .from('grades')
-    .select('academic_year, grading_period, subject, daily_grade, quiz_grade, monthly_exam_grade, term_exam_grade, classes(name)')
+    .select('academic_year, grading_period, subject, marks, daily_grade, quiz_grade, monthly_exam_grade, term_exam_grade, class_id, classes(name)')
     .eq('student_id', id)
     .eq('school_id', schoolId)
     .order('academic_year');
 
-  // Fetch attendance records with class name (to build classes-attended-per-year)
+  // Fetch attendance records with class id+name (to build classes-attended-per-year)
   const { data: attendanceRows } = await supabase
     .from('attendance')
-    .select('date, classes(name)')
+    .select('date, class_id, classes(name)')
     .eq('student_id', id)
     .eq('school_id', schoolId);
 
-  // Build classes attended: { academicYear → Set<className> }
-  const classYearMap = new Map<string, Set<string>>();
+  // Build classes attended: { academicYear → Map<classId, className> }
+  const classYearMap = new Map<string, Map<string, string>>();
   for (const row of (attendanceRows || [])) {
+    const classId = (row as any).class_id;
     const className = (row as any).classes?.name;
-    if (!className) continue;
+    if (!classId || !className) continue;
     const yr = toAcademicYear(row.date);
-    if (!classYearMap.has(yr)) classYearMap.set(yr, new Set());
-    classYearMap.get(yr)!.add(className);
+    if (!classYearMap.has(yr)) classYearMap.set(yr, new Map());
+    classYearMap.get(yr)!.set(classId, className);
   }
   const classesAttended = Array.from(classYearMap.entries())
     .sort(([a], [b]) => a.localeCompare(b))
-    .flatMap(([year, names]) => Array.from(names).map((className) => ({ year, className })));
+    .flatMap(([year, idToName]) =>
+      Array.from(idToName.entries()).map(([classId, className]) => ({ year, classId, className })));
 
-  // Build grades snapshot
+  // Build grades snapshot — preserve marks[] (current schema) + legacy columns for old records
   const gradesSnapshot = (grades || []).map((g) => ({
     academicYear: g.academic_year,
     gradingPeriod: g.grading_period,
     subject: g.subject,
+    classId: (g as any).class_id ?? null,
     className: (g as any).classes?.name ?? null,
+    marks: (g as any).marks ?? [],
     dailyGrade: g.daily_grade,
     quizGrade: g.quiz_grade,
     monthlyExamGrade: g.monthly_exam_grade,

@@ -8,6 +8,7 @@ import Select from '../../components/common/Select';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import Modal from '../../components/common/Modal';
 import type { Class } from '../../types';
+import { getMarkValue, gradeTotal, collectMarkNames, type GradeLike } from '../../utils/marks';
 
 // 3-level map: { academicYear → { gradingPeriod → { subjectName → gradeRecord } } }
 function buildGradeMap(grades: any[]): Record<string, Record<string, Record<string, any>>> {
@@ -28,7 +29,6 @@ export default function GraduatedStudentsTab() {
   const [classFilter, setClassFilter] = useState('');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
-  const [subjects, setSubjects] = useState<{ id: string; name: string }[]>([]);
   const [transcriptOpen, setTranscriptOpen] = useState(false);
   const [transcriptLoading, setTranscriptLoading] = useState(false);
   const [transcript, setTranscript] = useState<{ student: any; grades: any[] } | null>(null);
@@ -36,7 +36,6 @@ export default function GraduatedStudentsTab() {
   const debouncedSearch = useDebounce(search, 400);
 
   useEffect(() => {
-    adminApi.getSubjects().then(r => setSubjects(r.data || []));
     adminApi.getClasses().then(r => setClasses(r.data || []));
   }, []);
 
@@ -164,62 +163,70 @@ export default function GraduatedStudentsTab() {
                     const periodMap = gradeMap[year];
                     const periods = Object.keys(periodMap).sort();
 
-                    // Full Year Mark for this academic year:
-                    // average of each term's total (sum of all subjects' components in that term)
-                    const termTotals = periods.map(period =>
-                      subjects.reduce((sum, subj) => {
-                        const g = periodMap[period]?.[subj.name];
-                        if (!g) return sum;
-                        return sum + (g.dailyGrade || 0) + (g.quizGrade || 0) + (g.monthlyExamGrade || 0) + (g.termExamGrade || 0);
-                      }, 0)
-                    );
-                    const yearMark = (termTotals.reduce((a, b) => a + b, 0) / periods.length).toFixed(1);
+                    const termTotals = periods.map(period => {
+                      const termGrades = Object.values(periodMap[period] || {}) as GradeLike[];
+                      const markNames = collectMarkNames(termGrades);
+                      return termGrades.reduce((sum, g) => sum + gradeTotal(g, markNames), 0);
+                    });
+                    const yearMark = periods.length
+                      ? (termTotals.reduce((a, b) => a + b, 0) / periods.length).toFixed(1)
+                      : '—';
 
                     return (
                       <div key={year}>
-                        {/* Academic year heading */}
                         <div className="flex items-center gap-2 mb-3">
                           <span className="text-sm font-bold text-gray-800">{year}</span>
                           <div className="flex-1 h-px bg-gray-200" />
                         </div>
 
-                        {/* One table per term */}
                         <div className="space-y-4">
-                          {periods.map(period => (
-                            <div key={period}>
-                              <p className="text-xs font-semibold text-gray-500 mb-2">{period}</p>
-                              <div className="overflow-x-auto">
-                                <table className="w-full text-xs border-collapse">
-                                  <thead>
-                                    <tr className="bg-gray-50">
-                                      <th className="text-left px-3 py-2 font-medium text-gray-500 border border-gray-200">Subjects</th>
-                                      <th className="text-center px-3 py-2 font-medium text-gray-500 border border-gray-200">Daily</th>
-                                      <th className="text-center px-3 py-2 font-medium text-gray-500 border border-gray-200">Quiz</th>
-                                      <th className="text-center px-3 py-2 font-medium text-gray-500 border border-gray-200">Monthly Exam</th>
-                                      <th className="text-center px-3 py-2 font-medium text-gray-500 border border-gray-200">Term Exam</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {subjects.map(subj => {
-                                      const g = periodMap[period]?.[subj.name];
-                                      return (
-                                        <tr key={subj.id} className="hover:bg-gray-50">
-                                          <td className="px-3 py-2 border border-gray-200 text-gray-700">{subj.name}</td>
-                                          <td className="px-3 py-2 border border-gray-200 text-center font-medium">{g?.dailyGrade ?? '—'}</td>
-                                          <td className="px-3 py-2 border border-gray-200 text-center font-medium">{g?.quizGrade ?? '—'}</td>
-                                          <td className="px-3 py-2 border border-gray-200 text-center font-medium">{g?.monthlyExamGrade ?? '—'}</td>
-                                          <td className="px-3 py-2 border border-gray-200 text-center font-medium">{g?.termExamGrade ?? '—'}</td>
+                          {periods.map(period => {
+                            const termBySubject = periodMap[period] || {};
+                            const termGrades = Object.values(termBySubject) as GradeLike[];
+                            const markNames = collectMarkNames(termGrades);
+                            const subjectNames = Object.keys(termBySubject).sort();
+                            return (
+                              <div key={period}>
+                                <p className="text-xs font-semibold text-gray-500 mb-2">{period}</p>
+                                <div className="overflow-x-auto">
+                                  <table className="w-full text-xs border-collapse">
+                                    <thead>
+                                      <tr className="bg-gray-50">
+                                        <th className="text-left px-3 py-2 font-medium text-gray-500 border border-gray-200">Subject</th>
+                                        {markNames.map(n => (
+                                          <th key={n} className="text-center px-3 py-2 font-medium text-gray-500 border border-gray-200">{n}</th>
+                                        ))}
+                                        <th className="text-center px-3 py-2 font-semibold text-indigo-600 border border-gray-200">Total</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {subjectNames.length === 0 ? (
+                                        <tr>
+                                          <td colSpan={Math.max(2, markNames.length + 2)} className="px-3 py-3 border border-gray-200 text-center text-gray-400">No grades</td>
                                         </tr>
-                                      );
-                                    })}
-                                  </tbody>
-                                </table>
+                                      ) : subjectNames.map(subjectName => {
+                                        const g = termBySubject[subjectName] as GradeLike;
+                                        return (
+                                          <tr key={subjectName} className="hover:bg-gray-50">
+                                            <td className="px-3 py-2 border border-gray-200 text-gray-700">{subjectName}</td>
+                                            {markNames.map(n => {
+                                              const v = getMarkValue(g, n);
+                                              return (
+                                                <td key={n} className="px-3 py-2 border border-gray-200 text-center font-medium">{v ?? '—'}</td>
+                                              );
+                                            })}
+                                            <td className="px-3 py-2 border border-gray-200 text-center font-semibold text-indigo-600">{gradeTotal(g, markNames)}</td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
                               </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
 
-                        {/* Full Year Mark for this academic year */}
                         <div className="mt-3 flex items-center justify-between bg-indigo-50 rounded-xl px-4 py-3">
                           <span className="text-sm text-gray-600">
                             Full Year Mark — {year} ({periods.length} term{periods.length !== 1 ? 's' : ''})
