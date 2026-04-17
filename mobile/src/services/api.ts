@@ -192,6 +192,23 @@ export const chatApi = {
   },
 };
 
+// ---- ACADEMIC / LEARN ----
+export const academicApi = {
+  getPosts: (classId?: string) => api.get('/academic/posts', { params: classId ? { classId } : {} }),
+  getPost: (id: string) => api.get(`/academic/posts/${id}`),
+  toggleLike: (postId: string) => api.post(`/academic/posts/${postId}/like`),
+  toggleSave: (postId: string) => api.post(`/academic/posts/${postId}/save`),
+  getSavedPosts: () => api.get('/academic/saved'),
+  getComments: (postId: string) => api.get(`/academic/posts/${postId}/comments`),
+  createComment: (postId: string, body: string) => api.post(`/academic/posts/${postId}/comments`, { body }),
+  deleteComment: (commentId: string) => api.delete(`/academic/comments/${commentId}`),
+  getEbooks: () => api.get('/academic/ebooks'),
+  getEbookProgress: (params?: { ebookId?: string; studentId?: string }) =>
+    api.get('/academic/ebook-progress', { params }),
+  upsertEbookProgress: (data: { ebookId: string; studentId: string; currentPage: number; totalPages?: number }) =>
+    api.post('/academic/ebook-progress', data),
+};
+
 // ---- DRIVER ----
 export const driverApi = {
   getProfile: () => api.get('/driver/me'),

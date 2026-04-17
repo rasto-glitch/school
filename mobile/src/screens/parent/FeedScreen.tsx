@@ -7,7 +7,7 @@ import { DashboardSkeleton } from '../../components/Skeleton';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { Megaphone, FileText, FileBadge, Calendar } from 'lucide-react-native';
+import { Megaphone, FileText, FileBadge, Calendar, BookOpen, ClipboardList } from 'lucide-react-native';
 import { useAuthStore } from '../../store/authStore';
 import { parentApi } from '../../services/api';
 import { spacing, radius, shadow, font } from '../../theme';
@@ -40,7 +40,7 @@ export default function FeedScreen() {
   const navigation = useNavigation<any>();
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const { reportCount, bookingCount } = useBadgeStore();
+  const { reportCount, bookingCount, homeworkCount, assignmentCount } = useBadgeStore();
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [grades, setGrades] = useState<Grade[]>([]);
   const [loading, setLoading] = useState(true);
@@ -68,6 +68,8 @@ export default function FeedScreen() {
     feat('reports') && { label: t('dashboard.quick_reports', 'Reports'), icon: FileText, bg: '#FAF5FF', iconColor: '#9333EA', tab: 'Reports', count: reportCount },
     feat('grades') && { label: t('dashboard.quick_grades', 'Grades'), icon: FileBadge, bg: '#EEF2FF', iconColor: '#4F46E5', tab: 'Grades', count: 0 },
     feat('appointments') && { label: t('dashboard.quick_bookings', 'Bookings'), icon: Calendar, bg: '#F0FDFA', iconColor: '#0D9488', tab: 'Appointments', count: bookingCount },
+    feat('homework') && { label: t('nav.homework', 'Homework'), icon: BookOpen, bg: '#ECFDF5', iconColor: '#059669', tab: 'Homework', count: homeworkCount },
+    feat('assignments') && { label: t('nav.assignments', 'Assignments'), icon: ClipboardList, bg: '#FEF3C7', iconColor: '#D97706', tab: 'Assignments', count: assignmentCount },
   ].filter(Boolean) as { label: string; icon: any; bg: string; iconColor: string; tab: string; count: number }[];
 
   return (

@@ -15,6 +15,8 @@
     "attendance": "Attendance",
     "content": "Content",
     "me": "Me",
+    "learn": "Learn",
+    "chat": "Chat",
     "logout": "Logout"
   },
   "common": {
@@ -34,7 +36,22 @@
     "address": "Address",
     "call": "Call",
     "absent": "Absent",
+    "error": "Error",
+    "delete": "Delete",
     "portal": "{{role}} Portal"
+  },
+  "learn": {
+    "tab_ebooks": "E-Books",
+    "tab_posts": "Posts",
+    "tab_saved": "Saved",
+    "no_posts": "No posts yet",
+    "no_saved": "No saved posts",
+    "no_ebooks": "No e-books yet",
+    "comments": "Comments",
+    "no_comments": "No comments yet",
+    "write_comment": "Write a comment...",
+    "comment_failed": "Failed to post comment",
+    "delete_comment": "Delete comment?"
   },
   "dashboard": {
     "title": "Feed",

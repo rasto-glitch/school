@@ -195,15 +195,25 @@ export function createRouter(io: SocketServer) {
   const academicRoles = ['parent', 'teacher', 'admin', 'supervisor'] as const;
   router.get('/academic/posts', authenticate, authorize(...academicRoles), (req, res) => academic.getPosts(req as AuthRequest, res));
   router.get('/academic/posts/:id', authenticate, authorize(...academicRoles), (req, res) => academic.getPost(req as AuthRequest, res));
-  router.post('/academic/posts', authenticate, authorize('teacher'), (req, res) => academic.createPost(req as AuthRequest, res));
-  router.put('/academic/posts/:id', authenticate, authorize('teacher'), (req, res) => academic.updatePost(req as AuthRequest, res));
-  router.delete('/academic/posts/:id', authenticate, authorize('teacher', 'admin'), (req, res) => academic.deletePost(req as AuthRequest, res));
-  router.post('/academic/posts/upload', authenticate, authorize('teacher'), upload.single('file'), (req, res) => academic.uploadPostFile(req as AuthRequest, res));
+  router.post('/academic/posts', authenticate, authorize('teacher', 'supervisor'), (req, res) => academic.createPost(req as AuthRequest, res));
+  router.put('/academic/posts/:id', authenticate, authorize('teacher', 'supervisor'), (req, res) => academic.updatePost(req as AuthRequest, res));
+  router.delete('/academic/posts/:id', authenticate, authorize('teacher', 'supervisor', 'admin'), (req, res) => academic.deletePost(req as AuthRequest, res));
+  router.post('/academic/posts/upload', authenticate, authorize('teacher', 'supervisor'), upload.single('file'), (req, res) => academic.uploadPostFile(req as AuthRequest, res));
   router.get('/academic/classes', authenticate, authorize(...academicRoles), (req, res) => academic.getClasses(req as AuthRequest, res));
+
+  // Social: likes / saves / comments
+  router.post('/academic/posts/:id/like', authenticate, authorize(...academicRoles), (req, res) => academic.toggleLike(req as AuthRequest, res));
+  router.post('/academic/posts/:id/save', authenticate, authorize(...academicRoles), (req, res) => academic.toggleSave(req as AuthRequest, res));
+  router.get('/academic/saved', authenticate, authorize(...academicRoles), (req, res) => academic.getSavedPosts(req as AuthRequest, res));
+  router.get('/academic/posts/:id/comments', authenticate, authorize(...academicRoles), (req, res) => academic.getComments(req as AuthRequest, res));
+  router.post('/academic/posts/:id/comments', authenticate, authorize(...academicRoles), (req, res) => academic.createComment(req as AuthRequest, res));
+  router.delete('/academic/comments/:commentId', authenticate, authorize(...academicRoles), (req, res) => academic.deleteComment(req as AuthRequest, res));
 
   router.get('/academic/ebooks', authenticate, authorize(...academicRoles), (req, res) => academic.getEbooks(req as AuthRequest, res));
   router.post('/academic/ebooks', authenticate, authorize('admin'), upload.single('file'), (req, res) => academic.uploadEbook(req as AuthRequest, res));
   router.delete('/academic/ebooks/:id', authenticate, authorize('admin'), (req, res) => academic.deleteEbook(req as AuthRequest, res));
+  router.get('/academic/ebook-progress', authenticate, authorize(...academicRoles), (req, res) => academic.getEbookProgress(req as AuthRequest, res));
+  router.post('/academic/ebook-progress', authenticate, authorize(...academicRoles), (req, res) => academic.upsertEbookProgress(req as AuthRequest, res));
 
   // ---- CHAT ----
   const chatRoles = ['parent', 'teacher', 'supervisor'] as const;

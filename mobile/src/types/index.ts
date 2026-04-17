@@ -1,4 +1,65 @@
-export type Role = 'parent' | 'teacher' | 'admin' | 'driver' | 'supervisor';
+export type Role = 'parent' | 'teacher' | 'admin' | 'driver' | 'supervisor' | 'reception';
+
+export interface AcademicPost {
+  id: string;
+  title: string;
+  subject?: string;
+  body?: string;
+  content?: string;
+  content_type: 'richtext' | 'plaintext' | 'file';
+  attachment_url?: string;
+  attachment_name?: string;
+  image_url?: string;
+  is_published: boolean;
+  created_at: string;
+  updated_at: string;
+  class_id?: string | null;
+  teacher_id?: string | null;
+  author_user_id?: string | null;
+  author_role?: 'teacher' | 'supervisor';
+  author_name?: string;
+  author_subject?: string | null;
+  likes_count?: number;
+  saves_count?: number;
+  comments_count?: number;
+  liked_by_me?: boolean;
+  saved_by_me?: boolean;
+  classes?: { name: string } | null;
+  teachers?: { full_name: string; subject?: string; user_id?: string } | null;
+}
+
+export interface PostComment {
+  id: string;
+  post_id: string;
+  user_id: string;
+  body: string;
+  created_at: string;
+  users?: { first_name: string; last_name: string; role: string; profile_picture?: string };
+}
+
+export interface Ebook {
+  id: string;
+  title: string;
+  subject?: string;
+  author?: string;
+  cover_url?: string;
+  file_url: string;
+  description?: string;
+  class_id?: string;
+  created_at: string;
+  classes?: { name: string };
+}
+
+export interface EbookProgress {
+  id: string;
+  ebook_id: string;
+  student_id: string;
+  current_page: number;
+  total_pages?: number;
+  percent: number;
+  updated_at: string;
+  students?: { full_name: string };
+}
 
 export interface School {
   id: string;

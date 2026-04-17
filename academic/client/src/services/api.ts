@@ -33,13 +33,13 @@ export const academicApi = {
     api.get('/academic/posts', { params: classId ? { classId } : {} }),
   getPost: (id: string) => api.get(`/academic/posts/${id}`),
   createPost: (data: {
-    title: string; subject?: string; classId: string;
-    content?: string; contentType: string; isPublished: boolean;
+    title: string; subject?: string; classId?: string;
+    content?: string; body?: string; contentType: string; isPublished: boolean;
     imageUrl?: string;
   }) => api.post('/academic/posts', data),
   updatePost: (id: string, data: Partial<{
     title: string; subject: string; classId: string;
-    content: string; contentType: string; isPublished: boolean;
+    content: string; body: string; contentType: string; isPublished: boolean;
     imageUrl: string;
   }>) => api.put(`/academic/posts/${id}`, data),
   deletePost: (id: string) => api.delete(`/academic/posts/${id}`),
@@ -49,6 +49,20 @@ export const academicApi = {
     return api.post('/academic/posts/upload', form, { headers: { 'Content-Type': 'multipart/form-data' } });
   },
   getClasses: () => api.get('/academic/classes'),
+
+  // Social
+  toggleLike: (postId: string) => api.post(`/academic/posts/${postId}/like`),
+  toggleSave: (postId: string) => api.post(`/academic/posts/${postId}/save`),
+  getSavedPosts: () => api.get('/academic/saved'),
+  getComments: (postId: string) => api.get(`/academic/posts/${postId}/comments`),
+  createComment: (postId: string, body: string) => api.post(`/academic/posts/${postId}/comments`, { body }),
+  deleteComment: (commentId: string) => api.delete(`/academic/comments/${commentId}`),
+
+  // Ebook progress
+  getEbookProgress: (params?: { ebookId?: string; studentId?: string }) =>
+    api.get('/academic/ebook-progress', { params }),
+  upsertEbookProgress: (data: { ebookId: string; studentId: string; currentPage: number; totalPages?: number }) =>
+    api.post('/academic/ebook-progress', data),
 
   // E-books
   getEbooks: () => api.get('/academic/ebooks'),

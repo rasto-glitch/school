@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { format } from 'date-fns';
-import { ArrowLeft, Pencil, Trash2, Paperclip, Download } from 'lucide-react';
+import { ArrowLeft, Pencil, Trash2, Paperclip, Download, Heart, MessageCircle, Bookmark, Send } from 'lucide-react';
 import { academicApi } from '../services/api';
 import { useAuthStore } from '../store/authStore';
 import Navbar from '../components/layout/Navbar';
-import type { AcademicPost } from '../types';
+import type { AcademicPost, PostComment } from '../types';
 import { toast } from 'react-toastify';
 
 export default function PostDetailPage() {
@@ -15,17 +15,70 @@ export default function PostDetailPage() {
   const [post, setPost] = useState<AcademicPost | null>(null);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
+  const [comments, setComments] = useState<PostComment[]>([]);
+  const [commentText, setCommentText] = useState('');
+  const [posting, setPosting] = useState(false);
 
   useEffect(() => {
     if (!id) return;
-    academicApi.getPost(id)
-      .then(r => setPost(r.data))
-      .catch(() => navigate('/feed'))
+    Promise.all([
+      academicApi.getPost(id),
+      academicApi.getComments(id),
+    ]).then(([postRes, commentsRes]) => {
+      setPost(postRes.data);
+      setComments(commentsRes.data ?? []);
+    }).catch(() => navigate('/feed'))
       .finally(() => setLoading(false));
   }, [id]);
 
-  const isOwner = user?.role === 'teacher' && post?.teachers?.user_id === user?.id;
+  const isOwner = post?.author_user_id === user?.id;
   const canDelete = isOwner || user?.role === 'admin';
+
+  const authorLabel = post?.author_role === 'supervisor'
+    ? `${post.author_name ?? ''} — Principal`
+    : `${post?.author_name ?? post?.teachers?.full_name ?? 'Teacher'}${post?.author_subject ? ` — ${post.author_subject}` : ''}`;
+
+  const handleToggleLike = async () => {
+    if (!post) return;
+    setPost({
+      ...post,
+      liked_by_me: !post.liked_by_me,
+      likes_count: (post.likes_count ?? 0) + (post.liked_by_me ? -1 : 1),
+    });
+    try { await academicApi.toggleLike(post.id); } catch {}
+  };
+
+  const handleToggleSave = async () => {
+    if (!post) return;
+    setPost({ ...post, saved_by_me: !post.saved_by_me });
+    try { await academicApi.toggleSave(post.id); } catch {}
+  };
+
+  const handlePostComment = async () => {
+    if (!post || !commentText.trim()) return;
+    setPosting(true);
+    try {
+      const r = await academicApi.createComment(post.id, commentText.trim());
+      setComments(prev => [...prev, r.data]);
+      setCommentText('');
+      setPost({ ...post, comments_count: (post.comments_count ?? 0) + 1 });
+    } catch {
+      toast.error('Failed to post comment');
+    } finally {
+      setPosting(false);
+    }
+  };
+
+  const handleDeleteComment = async (commentId: string) => {
+    if (!confirm('Delete this comment?')) return;
+    try {
+      await academicApi.deleteComment(commentId);
+      setComments(prev => prev.filter(c => c.id !== commentId));
+      if (post) setPost({ ...post, comments_count: Math.max(0, (post.comments_count ?? 1) - 1) });
+    } catch {
+      toast.error('Failed to delete comment');
+    }
+  };
 
   const handleDelete = async () => {
     if (!id || !confirm('Delete this post?')) return;
@@ -80,7 +133,7 @@ export default function PostDetailPage() {
                 </div>
                 <h1 className="text-2xl font-bold text-gray-900 leading-snug">{post.title}</h1>
                 <div className="flex items-center gap-2 mt-3 text-sm text-gray-400">
-                  <span>by <span className="text-gray-600 font-medium">{post.teachers?.full_name ?? 'Teacher'}</span></span>
+                  <span className="text-gray-600 font-medium">{authorLabel}</span>
                   <span>·</span>
                   <time>{format(new Date(post.created_at), 'MMMM d, yyyy')}</time>
                 </div>
@@ -147,7 +200,78 @@ export default function PostDetailPage() {
               </div>
             )}
           </div>
+
+          {/* Social actions */}
+          <div className="px-8 py-4 border-t border-gray-100 flex items-center gap-5">
+            <button
+              onClick={handleToggleLike}
+              className={`flex items-center gap-1.5 text-sm font-medium ${post.liked_by_me ? 'text-rose-600' : 'text-gray-500 hover:text-rose-600'}`}
+            >
+              <Heart className={`w-5 h-5 ${post.liked_by_me ? 'fill-rose-600' : ''}`} />
+              {post.likes_count ?? 0}
+            </button>
+            <span className="flex items-center gap-1.5 text-sm text-gray-500">
+              <MessageCircle className="w-5 h-5" />
+              {post.comments_count ?? 0}
+            </span>
+            <button
+              onClick={handleToggleSave}
+              className={`ml-auto flex items-center gap-1.5 text-sm font-medium ${post.saved_by_me ? 'text-primary-600' : 'text-gray-500 hover:text-primary-600'}`}
+            >
+              <Bookmark className={`w-5 h-5 ${post.saved_by_me ? 'fill-primary-600' : ''}`} />
+              {post.saved_by_me ? 'Saved' : 'Save'}
+            </button>
+          </div>
         </article>
+
+        {/* Comments */}
+        <section className="mt-6 bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+          <h2 className="text-sm font-semibold text-gray-700 mb-4">Comments ({post.comments_count ?? 0})</h2>
+          <div className="flex gap-2 mb-5">
+            <input
+              type="text"
+              value={commentText}
+              onChange={e => setCommentText(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && !posting) handlePostComment(); }}
+              placeholder="Write a comment..."
+              className="flex-1 border border-gray-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+            <button
+              onClick={handlePostComment}
+              disabled={posting || !commentText.trim()}
+              className="inline-flex items-center gap-1.5 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white text-sm font-semibold px-4 rounded-xl transition-colors"
+            >
+              <Send className="w-4 h-4" />
+            </button>
+          </div>
+          {comments.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-6">No comments yet. Be the first.</p>
+          ) : (
+            <ul className="space-y-3">
+              {comments.map(c => (
+                <li key={c.id} className="flex items-start gap-3 p-3 bg-gray-50 rounded-xl">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-gray-800">
+                        {c.users?.first_name} {c.users?.last_name}
+                      </span>
+                      <span className="text-xs text-gray-400">{format(new Date(c.created_at), 'MMM d, HH:mm')}</span>
+                    </div>
+                    <p className="text-sm text-gray-700 mt-0.5 whitespace-pre-wrap break-words">{c.body}</p>
+                  </div>
+                  {(c.user_id === user?.id || user?.role === 'admin') && (
+                    <button
+                      onClick={() => handleDeleteComment(c.id)}
+                      className="text-xs text-gray-400 hover:text-red-500"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       </div>
     </div>
   );

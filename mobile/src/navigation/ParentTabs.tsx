@@ -4,12 +4,11 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { TouchableOpacity, View, Text, StyleSheet } from 'react-native';
-import { Home, BookOpen, ClipboardList, Bus, Bell, User, Settings, MessageSquare } from 'lucide-react-native';
+import { Home, GraduationCap, Bus, Bell, User, Settings, MessageSquare } from 'lucide-react-native';
 import FeedScreen from '../screens/parent/FeedScreen';
-import HomeworkScreen from '../screens/parent/HomeworkScreen';
-import AssignmentsScreen from '../screens/parent/AssignmentsScreen';
 import BusTrackingScreen from '../screens/parent/BusTrackingScreen';
 import MeScreen from '../screens/parent/MeScreen';
+import LearnScreen from '../screens/parent/LearnScreen';
 import ChatListScreen from '../screens/chat/ChatListScreen';
 import { useColors } from '../store/themeStore';
 import { useBadgeStore } from '../store/badgeStore';
@@ -36,10 +35,8 @@ export default function ParentTabs() {
   const navigation = useNavigation<any>();
   const { school } = useAuthStore();
   const { socket } = useSocketStore();
-  const [homeworkCount, setHomeworkCount] = useState(0);
-  const [assignmentCount, setAssignmentCount] = useState(0);
   const [chatCount, setChatCount] = useState(0);
-  const { unreadCount, setUnreadCount, setReportCount, setBookingCount } = useBadgeStore();
+  const { unreadCount, setUnreadCount, setReportCount, setBookingCount, setHomeworkCount, setAssignmentCount } = useBadgeStore();
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const chatListActive = useRef(false);
 
@@ -60,7 +57,7 @@ export default function ParentTabs() {
     chatApi.getUnreadCount()
       .then(r => { if (!chatListActive.current) setChatCount(r.data?.count ?? 0); })
       .catch(() => {});
-  }, [setUnreadCount, setReportCount, setBookingCount]);
+  }, [setUnreadCount, setReportCount, setBookingCount, setHomeworkCount, setAssignmentCount]);
 
   useEffect(() => {
     fetchCounts();
@@ -77,20 +74,6 @@ export default function ParentTabs() {
     socket.on('chat:message', onMessage);
     return () => { socket.off('chat:message', onMessage); };
   }, [socket]);
-
-  const handleHomeworkPress = () => {
-    if (homeworkCount > 0) {
-      parentApi.markTypeRead('homework').catch(() => {});
-      setHomeworkCount(0);
-    }
-  };
-
-  const handleAssignmentPress = () => {
-    if (assignmentCount > 0) {
-      parentApi.markTypeRead('assignment').catch(() => {});
-      setAssignmentCount(0);
-    }
-  };
 
   // Notification bell — shown in header for all tabs except Me
   const NotificationBell = () => (
@@ -150,37 +133,14 @@ export default function ParentTabs() {
           tabBarIcon: ({ color }) => <Home size={22} color={color} />,
         }}
       />
-      {feat('homework') ? (
+      {feat('academic_portal') ? (
         <Tab.Screen
-          name="Homework"
-          component={HomeworkScreen}
-          listeners={{ tabPress: handleHomeworkPress }}
+          name="Learn"
+          component={LearnScreen}
           options={{
-            headerTitle: t('nav.homework'),
-            tabBarLabel: t('nav.homework'),
-            tabBarIcon: ({ color }) => (
-              <View>
-                <BookOpen size={22} color={color} />
-                <TabBadge count={homeworkCount} />
-              </View>
-            ),
-          }}
-        />
-      ) : null}
-      {feat('assignments') ? (
-        <Tab.Screen
-          name="Assignments"
-          component={AssignmentsScreen}
-          listeners={{ tabPress: handleAssignmentPress }}
-          options={{
-            headerTitle: t('nav.assignments', 'Assignments'),
-            tabBarLabel: t('nav.assignments', 'Assignments'),
-            tabBarIcon: ({ color }) => (
-              <View>
-                <ClipboardList size={22} color={color} />
-                <TabBadge count={assignmentCount} />
-              </View>
-            ),
+            headerTitle: t('nav.learn', 'Learn'),
+            tabBarLabel: t('nav.learn', 'Learn'),
+            tabBarIcon: ({ color }) => <GraduationCap size={22} color={color} />,
           }}
         />
       ) : null}

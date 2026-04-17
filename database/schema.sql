@@ -610,3 +610,84 @@ VALUES (
   '#06B6D4',
   TRUE
 ) ON CONFLICT (slug) DO NOTHING;
+
+-- ============================================================
+-- LEARN: generalize academic_posts + social (likes/comments/saves) + ebook progress
+-- ============================================================
+
+-- Generalize academic_posts: support supervisor (school-wide) authors in addition to teachers.
+ALTER TABLE academic_posts ADD COLUMN IF NOT EXISTS author_user_id UUID REFERENCES users(id) ON DELETE CASCADE;
+ALTER TABLE academic_posts ADD COLUMN IF NOT EXISTS author_role TEXT;
+ALTER TABLE academic_posts ADD COLUMN IF NOT EXISTS body TEXT;
+
+-- Backfill author_user_id and author_role for existing teacher rows
+UPDATE academic_posts ap
+SET author_user_id = t.user_id,
+    author_role = 'teacher'
+FROM teachers t
+WHERE ap.teacher_id = t.id
+  AND ap.author_user_id IS NULL;
+
+-- Make teacher_id and class_id nullable (supervisor posts are school-wide, no class)
+ALTER TABLE academic_posts ALTER COLUMN teacher_id DROP NOT NULL;
+ALTER TABLE academic_posts ALTER COLUMN class_id DROP NOT NULL;
+
+-- Enforce author_role values
+DO $$ BEGIN
+  ALTER TABLE academic_posts ADD CONSTRAINT academic_posts_author_role_chk
+    CHECK (author_role IN ('teacher', 'supervisor'));
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE INDEX IF NOT EXISTS idx_academic_posts_author ON academic_posts(author_user_id);
+
+-- Post likes
+CREATE TABLE IF NOT EXISTS post_likes (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  post_id UUID NOT NULL REFERENCES academic_posts(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(post_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_post_likes_post ON post_likes(post_id);
+CREATE INDEX IF NOT EXISTS idx_post_likes_user ON post_likes(user_id);
+
+-- Post saves (bookmarks)
+CREATE TABLE IF NOT EXISTS post_saves (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  post_id UUID NOT NULL REFERENCES academic_posts(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(post_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_post_saves_user ON post_saves(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_post_saves_post ON post_saves(post_id);
+
+-- Post comments
+CREATE TABLE IF NOT EXISTS post_comments (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  post_id UUID NOT NULL REFERENCES academic_posts(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  body TEXT NOT NULL,
+  is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_post_comments_post ON post_comments(post_id, created_at ASC);
+
+-- Ebook reading progress per student (not per parent)
+CREATE TABLE IF NOT EXISTS ebook_progress (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  ebook_id UUID NOT NULL REFERENCES ebooks(id) ON DELETE CASCADE,
+  current_page INTEGER NOT NULL DEFAULT 0,
+  total_pages INTEGER,
+  percent NUMERIC(5,2) NOT NULL DEFAULT 0,
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(student_id, ebook_id)
+);
+CREATE INDEX IF NOT EXISTS idx_ebook_progress_student ON ebook_progress(student_id);
+CREATE INDEX IF NOT EXISTS idx_ebook_progress_ebook ON ebook_progress(ebook_id);

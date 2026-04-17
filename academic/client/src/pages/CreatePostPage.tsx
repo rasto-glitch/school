@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Upload, Loader2, ImagePlus, X } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { academicApi } from '../services/api';
+import { useAuthStore } from '../store/authStore';
 import Navbar from '../components/layout/Navbar';
 import RichTextEditor from '../components/editor/RichTextEditor';
 import type { AcademicClass } from '../types';
@@ -11,10 +12,13 @@ type ContentType = 'richtext' | 'plaintext' | 'file';
 
 export default function CreatePostPage() {
   const navigate = useNavigate();
+  const { user } = useAuthStore();
+  const isSupervisor = user?.role === 'supervisor';
   const [classes, setClasses] = useState<AcademicClass[]>([]);
   const [title, setTitle] = useState('');
   const [subject, setSubject] = useState('');
   const [classId, setClassId] = useState('');
+  const [body, setBody] = useState('');
   const [contentType, setContentType] = useState<ContentType>('richtext');
   const [content, setContent] = useState('');
   const [file, setFile] = useState<File | null>(null);
@@ -23,11 +27,12 @@ export default function CreatePostPage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    if (isSupervisor) return;
     academicApi.getClasses().then(r => {
       setClasses(r.data ?? []);
       if (r.data?.[0]?.id) setClassId(r.data[0].id);
     });
-  }, []);
+  }, [isSupervisor]);
 
   const uploadImage = async (file: File): Promise<string> => {
     const res = await academicApi.uploadFile(file);
@@ -36,7 +41,7 @@ export default function CreatePostPage() {
 
   const handleSave = async (publish: boolean) => {
     if (!title.trim()) { toast.error('Title is required'); return; }
-    if (!classId) { toast.error('Please select a class'); return; }
+    if (!isSupervisor && !classId) { toast.error('Please select a class'); return; }
     if (contentType !== 'file' && !content.trim()) { toast.error('Content is required'); return; }
     if (contentType === 'file' && !file) { toast.error('Please select a file'); return; }
 
@@ -60,8 +65,9 @@ export default function CreatePostPage() {
       const res = await academicApi.createPost({
         title: title.trim(),
         subject: subject.trim() || undefined,
-        classId,
+        classId: isSupervisor ? undefined : classId,
         content: contentType !== 'file' ? content : undefined,
+        body: body.trim() || undefined,
         contentType,
         isPublished: publish,
         imageUrl,
@@ -101,28 +107,50 @@ export default function CreatePostPage() {
               />
             </div>
 
-            {/* Class + Subject */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Class <span className="text-red-500">*</span></label>
-                <select
-                  value={classId}
-                  onChange={e => setClassId(e.target.value)}
-                  className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-                >
-                  {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
+            {/* Class + Subject (class hidden for supervisor — posts are school-wide) */}
+            {isSupervisor ? (
+              <div className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                This post will be published <strong>school-wide</strong> to all parents.
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1.5">Subject</label>
-                <input
-                  type="text"
-                  value={subject}
-                  onChange={e => setSubject(e.target.value)}
-                  placeholder="e.g. Physics"
-                  className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                />
+            ) : (
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1.5">Class <span className="text-red-500">*</span></label>
+                  <select
+                    value={classId}
+                    onChange={e => setClassId(e.target.value)}
+                    className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                  >
+                    {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1.5">Subject</label>
+                  <input
+                    type="text"
+                    value={subject}
+                    onChange={e => setSubject(e.target.value)}
+                    placeholder="e.g. Physics"
+                    className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                </div>
               </div>
+            )}
+
+            {/* Short body (200-char teaser shown in feed) */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                Short description <span className="text-gray-400 font-normal">(optional — shown as teaser in feed, 200 char max)</span>
+              </label>
+              <textarea
+                value={body}
+                onChange={e => setBody(e.target.value.slice(0, 200))}
+                placeholder="One-sentence summary..."
+                rows={2}
+                maxLength={200}
+                className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+              />
+              <div className="text-right text-xs text-gray-400 mt-1">{body.length}/200</div>
             </div>
 
             {/* Post Image — thumbnail */}

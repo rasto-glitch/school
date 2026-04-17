@@ -28,7 +28,7 @@ export default function EditPostPage() {
       setPost(p);
       setTitle(p.title);
       setSubject(p.subject ?? '');
-      setClassId(p.class_id);
+      setClassId(p.class_id ?? '');
       setContent(p.content ?? '');
       if (p.image_url) setImagePreview(p.image_url);
       setClasses(classRes.data ?? []);

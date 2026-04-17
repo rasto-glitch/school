@@ -5,7 +5,7 @@ import { supabase } from '../config/supabase';
 export interface AuthPayload {
   userId: string;
   schoolId: string;
-  role: 'parent' | 'teacher' | 'admin' | 'driver';
+  role: 'parent' | 'teacher' | 'admin' | 'driver' | 'supervisor' | 'reception';
   username: string;
   featuresVersion?: number;
 }

@@ -15,6 +15,8 @@
     "attendance": "الحضور",
     "content": "المحتوى",
     "me": "أنا",
+    "learn": "التعلم",
+    "chat": "الدردشة",
     "logout": "تسجيل الخروج"
   },
   "common": {
@@ -34,7 +36,22 @@
     "address": "العنوان",
     "call": "اتصال",
     "absent": "غائب",
+    "error": "خطأ",
+    "delete": "حذف",
     "portal": "بوابة {{role}}"
+  },
+  "learn": {
+    "tab_ebooks": "الكتب الإلكترونية",
+    "tab_posts": "المنشورات",
+    "tab_saved": "المحفوظة",
+    "no_posts": "لا توجد منشورات بعد",
+    "no_saved": "لا توجد منشورات محفوظة",
+    "no_ebooks": "لا توجد كتب إلكترونية بعد",
+    "comments": "التعليقات",
+    "no_comments": "لا توجد تعليقات بعد",
+    "write_comment": "اكتب تعليقاً...",
+    "comment_failed": "فشل نشر التعليق",
+    "delete_comment": "حذف التعليق؟"
   },
   "dashboard": {
     "title": "آخر الأخبار",

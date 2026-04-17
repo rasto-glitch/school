@@ -18,9 +18,12 @@ import NotificationsScreen from '../screens/parent/NotificationsScreen';
 import AppointmentsScreen from '../screens/parent/AppointmentsScreen';
 import GradesScreen from '../screens/parent/GradesScreen';
 import ReportDetailScreen from '../screens/parent/ReportDetailScreen';
+import HomeworkScreen from '../screens/parent/HomeworkScreen';
 import HomeworkDetailScreen from '../screens/parent/HomeworkDetailScreen';
+import AssignmentsScreen from '../screens/parent/AssignmentsScreen';
 import AssignmentDetailScreen from '../screens/parent/AssignmentDetailScreen';
 import AnnouncementDetailScreen from '../screens/parent/AnnouncementDetailScreen';
+import PostDetailScreen from '../screens/parent/PostDetailScreen';
 import ChatScreen from '../screens/chat/ChatScreen';
 import type { Homework, Announcement, Conversation } from '../types';
 
@@ -41,9 +44,12 @@ export type RootStackParamList = {
   ReportDetail: { report: { id: string; subject: string; attendanceNotes?: string; behaviorNotes?: string; teacherNotes?: string; quizMarks?: number; examMarks?: number; reportDate?: string; createdAt: string; students?: { fullName: string }; teachers?: { fullName: string } } };
   Appointments: undefined;
   Grades: undefined;
+  Homework: undefined;
   HomeworkDetail: { homework: Homework };
+  Assignments: undefined;
   AssignmentDetail: { assignment: { id: string; title: string; description?: string; subject?: string; dueDate?: string; submissionStatus?: string; grade?: number | null; createdAt: string; classes?: { name: string }; students?: { fullName: string } } };
   AnnouncementDetail: { announcement: Announcement };
+  PostDetail: { postId: string };
   Chat: { conversation: Conversation };
 };
 
@@ -145,9 +151,19 @@ export default function Navigation() {
               options={{ headerShown: true, headerTitle: 'Grades', headerBackTitle: 'Back' }}
             />
             <Stack.Screen
+              name="Homework"
+              component={HomeworkScreen}
+              options={{ headerShown: true, headerTitle: 'Homework', headerBackTitle: 'Back' }}
+            />
+            <Stack.Screen
               name="HomeworkDetail"
               component={HomeworkDetailScreen}
               options={{ headerShown: true, headerTitle: 'Homework', headerBackTitle: 'Back' }}
+            />
+            <Stack.Screen
+              name="Assignments"
+              component={AssignmentsScreen}
+              options={{ headerShown: true, headerTitle: 'Assignments', headerBackTitle: 'Back' }}
             />
             <Stack.Screen
               name="AssignmentDetail"
@@ -158,6 +174,11 @@ export default function Navigation() {
               name="AnnouncementDetail"
               component={AnnouncementDetailScreen}
               options={{ headerShown: true, headerTitle: 'Announcement', headerBackTitle: 'Back' }}
+            />
+            <Stack.Screen
+              name="PostDetail"
+              component={PostDetailScreen}
+              options={{ headerShown: true, headerTitle: 'Post', headerBackTitle: 'Back' }}
             />
             <Stack.Screen
               name="Chat"

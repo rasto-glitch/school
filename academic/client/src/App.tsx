@@ -9,16 +9,17 @@ import EditPostPage from './pages/EditPostPage';
 import MyPostsPage from './pages/MyPostsPage';
 import EBooksPage from './pages/EBooksPage';
 import EBookReaderPage from './pages/EBookReaderPage';
+import SavedPostsPage from './pages/SavedPostsPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore();
   return isAuthenticated() ? <>{children}</> : <Navigate to="/login" replace />;
 }
 
-function TeacherRoute({ children }: { children: React.ReactNode }) {
+function AuthorRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, user } = useAuthStore();
   if (!isAuthenticated()) return <Navigate to="/login" replace />;
-  if (user?.role !== 'teacher') return <Navigate to="/feed" replace />;
+  if (user?.role !== 'teacher' && user?.role !== 'supervisor') return <Navigate to="/feed" replace />;
   return <>{children}</>;
 }
 
@@ -33,10 +34,11 @@ export default function App() {
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<PublicOnlyRoute><LoginPage /></PublicOnlyRoute>} />
       <Route path="/feed" element={<ProtectedRoute><FeedPage /></ProtectedRoute>} />
-      <Route path="/posts/new" element={<TeacherRoute><CreatePostPage /></TeacherRoute>} />
+      <Route path="/saved" element={<ProtectedRoute><SavedPostsPage /></ProtectedRoute>} />
+      <Route path="/posts/new" element={<AuthorRoute><CreatePostPage /></AuthorRoute>} />
       <Route path="/posts/:id" element={<ProtectedRoute><PostDetailPage /></ProtectedRoute>} />
-      <Route path="/posts/:id/edit" element={<TeacherRoute><EditPostPage /></TeacherRoute>} />
-      <Route path="/my-posts" element={<TeacherRoute><MyPostsPage /></TeacherRoute>} />
+      <Route path="/posts/:id/edit" element={<AuthorRoute><EditPostPage /></AuthorRoute>} />
+      <Route path="/my-posts" element={<AuthorRoute><MyPostsPage /></AuthorRoute>} />
       <Route path="/ebooks" element={<ProtectedRoute><EBooksPage /></ProtectedRoute>} />
       <Route path="/ebooks/:id/read" element={<ProtectedRoute><EBookReaderPage /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />

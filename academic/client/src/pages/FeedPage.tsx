@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
-import { Plus, FileText, Paperclip, AlignLeft, Search, Filter } from 'lucide-react';
+import { Plus, FileText, Paperclip, AlignLeft, Search, Filter, Heart, MessageCircle, Bookmark } from 'lucide-react';
 import { academicApi } from '../services/api';
 import { useAuthStore } from '../store/authStore';
 import Navbar from '../components/layout/Navbar';
@@ -15,16 +15,32 @@ const typeColor = {
   file: 'bg-amber-50 text-amber-600',
 };
 
-function PostCard({ post }: { post: AcademicPost }) {
+function PostCard({ post, onToggleLike, onToggleSave }: {
+  post: AcademicPost;
+  onToggleLike: (id: string) => void;
+  onToggleSave: (id: string) => void;
+}) {
   const Icon = typeIcon[post.content_type];
-  const preview = post.content_type !== 'file' && post.content
+  const bodyPreview = post.body && post.body.length > 200
+    ? post.body.slice(0, 200) + '…'
+    : post.body;
+  const preview = bodyPreview ?? (post.content_type !== 'file' && post.content
     ? post.content.replace(/<[^>]+>/g, '').slice(0, 150)
-    : null;
+    : null);
+
+  const authorLabel = post.author_role === 'supervisor'
+    ? `${post.author_name ?? ''} — Principal`
+    : `${post.author_name ?? post.teachers?.full_name ?? 'Teacher'}${post.author_subject ? ` — ${post.author_subject}` : ''}`;
+
+  const handleAction = (e: React.MouseEvent, fn: () => void) => {
+    e.preventDefault();
+    e.stopPropagation();
+    fn();
+  };
 
   return (
     <Link to={`/posts/${post.id}`} className="block group">
       <article className={`bg-white border border-gray-100 rounded-2xl hover:shadow-md hover:border-primary-100 transition-all overflow-hidden ${post.image_url ? 'flex' : 'p-5'}`}>
-        {/* Thumbnail */}
         {post.image_url && (
           <div className="w-40 sm:w-48 flex-shrink-0">
             <img src={post.image_url} alt="" className="w-full h-full object-cover" />
@@ -39,8 +55,8 @@ function PostCard({ post }: { post: AcademicPost }) {
               {post.classes?.name && (
                 <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{post.classes.name}</span>
               )}
-              {post.subject && (
-                <span className="text-xs bg-primary-50 text-primary-700 px-2 py-0.5 rounded-full">{post.subject}</span>
+              {post.author_role === 'supervisor' && (
+                <span className="text-xs bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full">School-wide</span>
               )}
             </div>
             <time className="text-xs text-gray-400 flex-shrink-0">
@@ -56,7 +72,27 @@ function PostCard({ post }: { post: AcademicPost }) {
               <Paperclip className="w-3.5 h-3.5" /> {post.attachment_name}
             </p>
           )}
-          <p className="text-xs text-gray-400 mt-3">by {post.teachers?.full_name ?? 'Teacher'}</p>
+          <p className="text-xs text-gray-400 mt-3">{authorLabel}</p>
+
+          <div className="flex items-center gap-4 mt-3 pt-3 border-t border-gray-100">
+            <button
+              onClick={(e) => handleAction(e, () => onToggleLike(post.id))}
+              className={`flex items-center gap-1 text-xs ${post.liked_by_me ? 'text-rose-600' : 'text-gray-500 hover:text-rose-600'}`}
+            >
+              <Heart className={`w-4 h-4 ${post.liked_by_me ? 'fill-rose-600' : ''}`} />
+              {post.likes_count ?? 0}
+            </button>
+            <span className="flex items-center gap-1 text-xs text-gray-500">
+              <MessageCircle className="w-4 h-4" />
+              {post.comments_count ?? 0}
+            </span>
+            <button
+              onClick={(e) => handleAction(e, () => onToggleSave(post.id))}
+              className={`ml-auto flex items-center gap-1 text-xs ${post.saved_by_me ? 'text-primary-600' : 'text-gray-500 hover:text-primary-600'}`}
+            >
+              <Bookmark className={`w-4 h-4 ${post.saved_by_me ? 'fill-primary-600' : ''}`} />
+            </button>
+          </div>
         </div>
       </article>
     </Link>
@@ -84,8 +120,31 @@ export default function FeedPage() {
   const filtered = posts.filter(p =>
     p.title.toLowerCase().includes(search.toLowerCase()) ||
     p.subject?.toLowerCase().includes(search.toLowerCase()) ||
+    p.author_name?.toLowerCase().includes(search.toLowerCase()) ||
     p.teachers?.full_name?.toLowerCase().includes(search.toLowerCase())
   );
+
+  const handleToggleLike = async (postId: string) => {
+    const prev = posts;
+    setPosts(prev.map(p => p.id === postId
+      ? { ...p, liked_by_me: !p.liked_by_me, likes_count: (p.likes_count ?? 0) + (p.liked_by_me ? -1 : 1) }
+      : p));
+    try {
+      await academicApi.toggleLike(postId);
+    } catch {
+      setPosts(prev);
+    }
+  };
+
+  const handleToggleSave = async (postId: string) => {
+    const prev = posts;
+    setPosts(prev.map(p => p.id === postId ? { ...p, saved_by_me: !p.saved_by_me } : p));
+    try {
+      await academicApi.toggleSave(postId);
+    } catch {
+      setPosts(prev);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -99,7 +158,7 @@ export default function FeedPage() {
               {user?.role === 'parent' ? "Posts from your child's classes" : 'All published posts'}
             </p>
           </div>
-          {user?.role === 'teacher' && (
+          {(user?.role === 'teacher' || user?.role === 'supervisor') && (
             <Link
               to="/posts/new"
               className="inline-flex items-center gap-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors"
@@ -151,7 +210,9 @@ export default function FeedPage() {
           </div>
         ) : (
           <div className="grid gap-4">
-            {filtered.map(post => <PostCard key={post.id} post={post} />)}
+            {filtered.map(post => (
+              <PostCard key={post.id} post={post} onToggleLike={handleToggleLike} onToggleSave={handleToggleSave} />
+            ))}
           </div>
         )}
       </div>
