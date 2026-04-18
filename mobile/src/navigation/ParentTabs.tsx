@@ -36,7 +36,10 @@ export default function ParentTabs() {
   const { school } = useAuthStore();
   const { socket } = useSocketStore();
   const [chatCount, setChatCount] = useState(0);
-  const { unreadCount, setUnreadCount, setReportCount, setBookingCount, setHomeworkCount, setAssignmentCount } = useBadgeStore();
+  const {
+    unreadCount, setUnreadCount,
+    setReportCount, setBookingCount, setHomeworkCount, setAssignmentCount,
+  } = useBadgeStore();
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const chatListActive = useRef(false);
 
@@ -74,6 +77,30 @@ export default function ParentTabs() {
     socket.on('chat:message', onMessage);
     return () => { socket.off('chat:message', onMessage); };
   }, [socket]);
+
+  // Real-time: bump the right badge the moment the server emits a notification
+  useEffect(() => {
+    if (!socket) return;
+    const onNotif = (payload: { type?: string } = {}) => {
+      setUnreadCount(useBadgeStore.getState().unreadCount + 1);
+      switch (payload.type) {
+        case 'homework':
+          setHomeworkCount(useBadgeStore.getState().homeworkCount + 1);
+          break;
+        case 'assignment':
+          setAssignmentCount(useBadgeStore.getState().assignmentCount + 1);
+          break;
+        case 'report':
+          setReportCount(useBadgeStore.getState().reportCount + 1);
+          break;
+        case 'appointment':
+          setBookingCount(useBadgeStore.getState().bookingCount + 1);
+          break;
+      }
+    };
+    socket.on('notification', onNotif);
+    return () => { socket.off('notification', onNotif); };
+  }, [socket, setUnreadCount, setHomeworkCount, setAssignmentCount, setReportCount, setBookingCount]);
 
   // Notification bell — shown in header for all tabs except Me
   const NotificationBell = () => (
