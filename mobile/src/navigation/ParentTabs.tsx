@@ -3,7 +3,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { TouchableOpacity, View, Text, StyleSheet } from 'react-native';
+import { TouchableOpacity, View, Text, StyleSheet, Animated, useWindowDimensions } from 'react-native';
 import { GraduationCap, Bell, User, Settings, MessageSquare } from 'lucide-react-native';
 import HouseIcon from '../components/HouseIcon';
 import BusIcon from '../components/BusIcon';
@@ -30,14 +30,7 @@ function TabBadge({ count }: { count: number }) {
   );
 }
 
-function TabIconWrap({ focused, isDark, children }: { focused: boolean; isDark: boolean; children: React.ReactNode }) {
-  return (
-    <View style={styles.iconWrap}>
-      {focused && isDark && <View style={styles.activeTopLine} />}
-      {children}
-    </View>
-  );
-}
+const INDICATOR_WIDTH = 32;
 
 export default function ParentTabs() {
   const { t } = useTranslation();
@@ -54,8 +47,28 @@ export default function ParentTabs() {
   } = useBadgeStore();
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const chatListActive = useRef(false);
+  const { width: screenWidth } = useWindowDimensions();
+  const [activeIndex, setActiveIndex] = useState(0);
+  const indicatorX = useRef(new Animated.Value(0)).current;
 
   const feat = (key: string) => school?.features?.[key] !== false;
+
+  const tabCount = 2
+    + (feat('academic_portal') ? 1 : 0)
+    + (feat('bus_tracking') ? 1 : 0)
+    + (feat('chat') ? 1 : 0);
+
+  useEffect(() => {
+    if (!screenWidth || !isDark) return;
+    const tabW = screenWidth / tabCount;
+    const target = activeIndex * tabW + (tabW - INDICATOR_WIDTH) / 2;
+    Animated.spring(indicatorX, {
+      toValue: target,
+      useNativeDriver: true,
+      tension: 140,
+      friction: 16,
+    }).start();
+  }, [activeIndex, screenWidth, tabCount, indicatorX, isDark]);
 
   const fetchCounts = useCallback(() => {
     parentApi.getUnreadCount()
@@ -145,116 +158,124 @@ export default function ParentTabs() {
   );
 
   return (
-    <Tab.Navigator
-      screenOptions={{
-        headerShown: true,
-        headerStyle: { backgroundColor: colors.card, direction: 'ltr' } as any,
-        headerTitleStyle: { fontSize: font.lg, fontWeight: '700', color: colors.text },
-        headerShadowVisible: false,
-        headerRight: () => <NotificationBell />,
-        tabBarActiveTintColor: isDark ? '#FFFFFF' : colors.primary,
-        tabBarInactiveTintColor: isDark ? '#FFFFFF' : colors.textMuted,
-        tabBarStyle: {
-          backgroundColor: colors.card,
-          borderTopColor: colors.border,
-          borderTopWidth: 1,
-          height: 60 + insets.bottom,
-          paddingBottom: insets.bottom + 6,
-          paddingTop: 6,
-          direction: 'ltr',
-        } as any,
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '500' },
-      }}
-    >
-      <Tab.Screen
-        name="Feed"
-        component={FeedScreen}
-        options={{
-          headerTitle: t('dashboard.title'),
-          tabBarLabel: t('dashboard.title'),
-          tabBarIcon: ({ color, focused }) => (
-            <TabIconWrap focused={focused} isDark={isDark}>
+    <View style={{ flex: 1 }}>
+      <Tab.Navigator
+        screenListeners={{
+          state: (e) => {
+            const s: any = (e.data as any)?.state;
+            if (s && typeof s.index === 'number') setActiveIndex(s.index);
+          },
+        }}
+        screenOptions={{
+          headerShown: true,
+          headerStyle: { backgroundColor: colors.card, direction: 'ltr' } as any,
+          headerTitleStyle: { fontSize: font.lg, fontWeight: '700', color: colors.text },
+          headerShadowVisible: false,
+          headerRight: () => <NotificationBell />,
+          tabBarActiveTintColor: isDark ? '#FFFFFF' : colors.primary,
+          tabBarInactiveTintColor: isDark ? '#FFFFFF' : colors.textMuted,
+          tabBarStyle: {
+            backgroundColor: colors.card,
+            borderTopColor: colors.border,
+            borderTopWidth: 1,
+            height: 60 + insets.bottom,
+            paddingBottom: insets.bottom + 6,
+            paddingTop: 6,
+            direction: 'ltr',
+          } as any,
+          tabBarLabelStyle: { fontSize: 11, fontWeight: '500' },
+        }}
+      >
+        <Tab.Screen
+          name="Feed"
+          component={FeedScreen}
+          options={{
+            headerTitle: t('dashboard.title'),
+            tabBarLabel: t('dashboard.title'),
+            tabBarIcon: ({ color, focused }) => (
               <HouseIcon
                 size={22}
                 color={color}
                 fillColor={focused && isDark ? '#FFFFFF' : 'none'}
                 doorColor={focused && isDark ? '#000000' : 'none'}
               />
-            </TabIconWrap>
-          ),
-        }}
-      />
-      {feat('academic_portal') ? (
-        <Tab.Screen
-          name="Learn"
-          component={LearnScreen}
-          options={{
-            headerTitle: t('nav.learn', 'Learn'),
-            tabBarLabel: t('nav.learn', 'Learn'),
-            tabBarIcon: ({ color, focused }) => (
-              <TabIconWrap focused={focused} isDark={isDark}>
-                <GraduationCap size={22} color={color} fill={focused && isDark ? '#FFFFFF' : 'transparent'} />
-              </TabIconWrap>
             ),
           }}
         />
-      ) : null}
-      {feat('bus_tracking') ? (
-        <Tab.Screen
-          name="BusTracking"
-          component={BusTrackingScreen}
-          options={{
-            headerTitle: t('nav.track_bus'),
-            tabBarLabel: t('nav.track_bus'),
-            tabBarIcon: ({ color, focused }) => {
-              const strokeColor = focused && isDark ? '#000000' : color;
-              return (
-                <TabIconWrap focused={focused} isDark={isDark}>
-                  <BusIcon size={22} color={strokeColor} fillColor={focused && isDark ? '#FFFFFF' : 'none'} />
-                </TabIconWrap>
-              );
-            },
-          }}
-        />
-      ) : null}
-      {feat('chat') ? (
-        <Tab.Screen
-          name="ChatList"
-          component={ChatListScreen}
-          listeners={{
-            tabPress: () => { setChatCount(0); chatListActive.current = true; },
-            focus: () => { setChatCount(0); chatListActive.current = true; },
-            blur: () => { chatListActive.current = false; },
-          }}
-          options={{
-            headerTitle: t('nav.chat', 'Chat'),
-            tabBarLabel: t('nav.chat', 'Chat'),
-            tabBarIcon: ({ color, focused }) => (
-              <TabIconWrap focused={focused} isDark={isDark}>
+        {feat('academic_portal') ? (
+          <Tab.Screen
+            name="Learn"
+            component={LearnScreen}
+            options={{
+              headerTitle: t('nav.learn', 'Learn'),
+              tabBarLabel: t('nav.learn', 'Learn'),
+              tabBarIcon: ({ color, focused }) => (
+                <GraduationCap size={22} color={color} fill={focused && isDark ? '#FFFFFF' : 'transparent'} />
+              ),
+            }}
+          />
+        ) : null}
+        {feat('bus_tracking') ? (
+          <Tab.Screen
+            name="BusTracking"
+            component={BusTrackingScreen}
+            options={{
+              headerTitle: t('nav.track_bus'),
+              tabBarLabel: t('nav.track_bus'),
+              tabBarIcon: ({ color, focused }) => {
+                const strokeColor = focused && isDark ? 'transparent' : color;
+                return <BusIcon size={22} color={strokeColor} fillColor={focused && isDark ? '#FFFFFF' : 'none'} />;
+              },
+            }}
+          />
+        ) : null}
+        {feat('chat') ? (
+          <Tab.Screen
+            name="ChatList"
+            component={ChatListScreen}
+            listeners={{
+              tabPress: () => { setChatCount(0); chatListActive.current = true; },
+              focus: () => { setChatCount(0); chatListActive.current = true; },
+              blur: () => { chatListActive.current = false; },
+            }}
+            options={{
+              headerTitle: t('nav.chat', 'Chat'),
+              tabBarLabel: t('nav.chat', 'Chat'),
+              tabBarIcon: ({ color, focused }) => (
                 <View>
                   <MessageSquare size={22} color={color} fill={focused && isDark ? '#FFFFFF' : 'transparent'} />
                   <TabBadge count={chatCount} />
                 </View>
-              </TabIconWrap>
+              ),
+            }}
+          />
+        ) : null}
+        <Tab.Screen
+          name="Me"
+          component={MeScreen}
+          options={{
+            headerTitle: t('nav.me', 'Me'),
+            tabBarLabel: t('nav.me', 'Me'),
+            tabBarIcon: ({ color, focused }) => (
+              <User size={22} color={color} fill={focused && isDark ? '#FFFFFF' : 'transparent'} />
             ),
+            headerRight: () => <SettingsButton />,
           }}
         />
-      ) : null}
-      <Tab.Screen
-        name="Me"
-        component={MeScreen}
-        options={{
-          headerTitle: t('nav.me', 'Me'),
-          tabBarLabel: t('nav.me', 'Me'),
-          tabBarIcon: ({ color, focused }) => (
-            <TabIconWrap focused={focused} isDark={isDark}>
-              <User size={22} color={color} fill={focused && isDark ? '#FFFFFF' : 'transparent'} />
-            </TabIconWrap>
-          ),
-          headerRight: () => <SettingsButton />,
-        }}
-      />
-    </Tab.Navigator>
+      </Tab.Navigator>
+      {isDark && (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.activeTopLine,
+            {
+              bottom: 60 + insets.bottom - 1,
+              transform: [{ translateX: indicatorX }],
+            },
+          ]}
+        />
+      )}
+    </View>
   );
 }
 
@@ -280,10 +301,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 3,
   },
   badgeText: { fontSize: 9, fontWeight: '800', color: '#fff' },
-  iconWrap: { alignItems: 'center', justifyContent: 'center' },
   activeTopLine: {
     position: 'absolute',
-    top: -8,
+    left: 0,
     width: 32, height: 2,
     backgroundColor: '#FFFFFF',
     borderRadius: 1,
