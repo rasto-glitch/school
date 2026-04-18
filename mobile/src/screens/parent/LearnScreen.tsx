@@ -238,36 +238,37 @@ export default function LearnScreen() {
 
       {/* Child selector — only shown on the E-Books tab */}
       {tab === 'ebooks' && children.length > 0 && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={[styles.childStrip, { backgroundColor: colors.card, borderBottomColor: colors.border }]}
-          contentContainerStyle={styles.childStripContent}
-        >
-          {children.map(c => {
-            const active = c.id === selectedChildId;
-            return (
-              <TouchableOpacity
-                key={c.id}
-                onPress={() => setSelectedChildId(c.id)}
-                activeOpacity={0.7}
-                style={[
-                  styles.childChip,
-                  { borderColor: active ? colors.primary : colors.border, backgroundColor: active ? colors.primaryLight : 'transparent' },
-                ]}
-              >
-                <Text style={[styles.childChipName, { color: active ? colors.primary : colors.text }]} numberOfLines={1}>
-                  {c.fullName}
-                </Text>
-                {c.classes?.name && (
-                  <Text style={[styles.childChipClass, { color: active ? colors.primary : colors.textMuted }]} numberOfLines={1}>
-                    {c.classes.name}
+        <View style={[styles.childStrip, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.childStripContent}
+          >
+            {children.map(c => {
+              const active = c.id === selectedChildId;
+              return (
+                <TouchableOpacity
+                  key={c.id}
+                  onPress={() => setSelectedChildId(c.id)}
+                  activeOpacity={0.7}
+                  style={[
+                    styles.childChip,
+                    { borderColor: active ? colors.primary : colors.border, backgroundColor: active ? colors.primaryLight : 'transparent' },
+                  ]}
+                >
+                  <Text style={[styles.childChipName, { color: active ? colors.primary : colors.text }]} numberOfLines={1}>
+                    {c.fullName}
                   </Text>
-                )}
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+                  {c.classes?.name && (
+                    <Text style={[styles.childChipClass, { color: active ? colors.primary : colors.textMuted }]} numberOfLines={1}>
+                      {c.classes.name}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
       )}
 
       <ScrollView
@@ -337,8 +338,8 @@ const styles = StyleSheet.create({
   ebookCoverImage: { width: '100%', height: '100%' },
 
   childStrip: { borderBottomWidth: 1 },
-  childStripContent: { paddingHorizontal: spacing.md, paddingVertical: 10, gap: 8 },
-  childChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: radius.full, borderWidth: 1.5, minWidth: 100 },
+  childStripContent: { paddingHorizontal: spacing.md, paddingVertical: 10, gap: 8, alignItems: 'center' },
+  childChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: radius.md, borderWidth: 1.5, minWidth: 100 },
   childChipName: { fontSize: font.sm, fontWeight: '700' },
   childChipClass: { fontSize: font.xs, marginTop: 2 },
   ebookBody: { flex: 1, justifyContent: 'center' },
