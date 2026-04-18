@@ -56,7 +56,9 @@ export async function notify(payload: NotifyPayload): Promise<void> {
   if (tokens && tokens.length > 0) {
     const messages = tokens.map((t: { token: string; language: string | null }) => {
       const { title: tTitle, body: tBody } = translatePush(title, message, type, t.language ?? 'en');
-      return { to: t.token, title: tTitle, body: tBody, data: { type }, sound: 'default', channelId: 'default', priority: 'high' };
+      const data: Record<string, string> = { type };
+      if (relatedId) data.relatedId = relatedId;
+      return { to: t.token, title: tTitle, body: tBody, data, sound: 'default', channelId: 'default', priority: 'high' };
     });
 
     try {
@@ -92,7 +94,7 @@ export async function notifyMany(payloads: NotifyPayload[]): Promise<void> {
   // Socket + push per user
   await Promise.all(payloads.map(p => {
     if (_io) _io.to(`school:${p.schoolId}:user:${p.userId}`).emit('notification', { title: p.title, message: p.message, type: p.type });
-    return sendPush(p.userId, p.title, p.message, p.type ?? 'general');
+    return sendPush(p.userId, p.title, p.message, p.type ?? 'general', p.relatedId ? { relatedId: p.relatedId } : undefined);
   }));
 }
 

@@ -1,7 +1,7 @@
 import './src/i18n';
 import './src/tasks/locationTask'; // register background task before anything renders
 import { useEffect, useRef, useState } from 'react';
-import { Alert, Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Notifications from 'expo-notifications';
@@ -10,10 +10,13 @@ import { usePushNotifications } from './src/hooks/usePushNotifications';
 import { useRTL } from './src/hooks/useRTL';
 import { useAuthStore } from './src/store/authStore';
 import { useSocketStore } from './src/store/socketStore';
+import { getNotifEmoji, openNotificationTarget } from './src/utils/notificationNav';
 
 interface BannerInfo {
   title: string;
   body: string;
+  type?: string;
+  relatedId?: string;
   conversationId?: string;
 }
 
@@ -40,7 +43,7 @@ function NotificationBanner({ info, onDismiss, onPress }: { info: BannerInfo; on
     <Animated.View style={[styles.banner, { top: insets.top + 8, transform: [{ translateY: anim }] }]}>
       <TouchableOpacity style={styles.bannerInner} onPress={handlePress} activeOpacity={0.92}>
         <View style={styles.bannerIcon}>
-          <Text style={{ fontSize: 20 }}>💬</Text>
+          <Text style={{ fontSize: 20 }}>{getNotifEmoji(info.type)}</Text>
         </View>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={styles.bannerTitle} numberOfLines={1}>{info.title}</Text>
@@ -54,7 +57,7 @@ function NotificationBanner({ info, onDismiss, onPress }: { info: BannerInfo; on
 function AppInner() {
   usePushNotifications();
   const isRTL = useRTL();
-  const { user, token } = useAuthStore();
+  const { token } = useAuthStore();
   const { connect, disconnect } = useSocketStore();
 
   useEffect(() => {
@@ -68,38 +71,48 @@ function AppInner() {
     const listener = Notifications.addNotificationReceivedListener(notification => {
       const { title, body, data } = notification.request.content;
       const type = (data as any)?.type as string | undefined;
-      const convId = (data as any)?.conversationId as string | undefined;
+      const relatedId = (data as any)?.relatedId as string | undefined;
+      const conversationId = (data as any)?.conversationId as string | undefined;
 
-      if (type === 'chat') {
-        if (!navigationRef.isReady()) return;
+      // Chat: suppress banner if user is already viewing this conversation or the chat list
+      if (type === 'chat' && navigationRef.isReady()) {
         const route = navigationRef.getCurrentRoute();
-        const routeName = route?.name;
+        const routeName = route?.name as string | undefined;
         const routeParams = route?.params as any;
-
-        // Already viewing this exact conversation — socket shows the message
+        const convId = conversationId || relatedId;
         if (routeName === 'Chat' && convId && routeParams?.conversation?.id === convId) return;
-        // In the chat list — sound already plays, no banner needed
-        if ((routeName as string) === 'ChatList') return;
+        if (routeName === 'ChatList') return;
+      }
 
-        if (title) {
-          bannerKey.current += 1;
-          setBanner({ title, body: body ?? '', conversationId: convId });
-        }
-      } else {
-        // Non-chat notifications keep the original Alert behaviour
-        if (title) Alert.alert(title, body ?? '');
+      if (title) {
+        bannerKey.current += 1;
+        setBanner({ title, body: body ?? '', type, relatedId, conversationId });
       }
     });
 
-    return () => listener.remove();
+    // Tapping a system notification (app backgrounded) — same deep-link behaviour
+    const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
+      const data = response.notification.request.content.data as any;
+      openNotificationTarget({
+        type: data?.type,
+        relatedId: data?.relatedId,
+        conversationId: data?.conversationId,
+      });
+    });
+
+    return () => {
+      listener.remove();
+      responseListener.remove();
+    };
   }, []);
 
   const handleBannerPress = () => {
-    if (!navigationRef.isReady()) return;
-    const tabScreen = user?.role === 'supervisor' ? 'SupervisorTabs' : user?.role === 'teacher' ? 'TeacherTabs' : 'ParentTabs';
-    try {
-      (navigationRef as any).navigate(tabScreen, { screen: 'ChatList' });
-    } catch {}
+    if (!banner) return;
+    openNotificationTarget({
+      type: banner.type,
+      relatedId: banner.relatedId,
+      conversationId: banner.conversationId,
+    });
   };
 
   return (

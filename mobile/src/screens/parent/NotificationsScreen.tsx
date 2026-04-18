@@ -3,14 +3,16 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-nati
 import { CardListSkeleton } from '../../components/Skeleton';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import {
+  BookOpen, ClipboardList, Megaphone, FileText, Calendar,
+  FileBadge, Bus, MessageSquare, Settings as SettingsIcon, Bell,
+} from 'lucide-react-native';
 import { parentApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
 import { useBadgeStore } from '../../store/badgeStore';
 import { spacing, radius, shadow, font } from '../../theme';
+import { openNotificationTarget } from '../../utils/notificationNav';
 import type { Notification } from '../../types';
-import type { RootStackParamList } from '../../navigation';
 
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -42,6 +44,23 @@ interface Group {
   items: Notification[];
 }
 
+const TYPE_ICONS: Record<string, { Icon: any; bg: string; color: string }> = {
+  chat: { Icon: MessageSquare, bg: '#DBEAFE', color: '#2563EB' },
+  homework: { Icon: BookOpen, bg: '#ECFDF5', color: '#059669' },
+  assignment: { Icon: ClipboardList, bg: '#FEF3C7', color: '#D97706' },
+  announcement: { Icon: Megaphone, bg: '#F3E8FF', color: '#7C3AED' },
+  report: { Icon: FileText, bg: '#FAF5FF', color: '#9333EA' },
+  appointment: { Icon: Calendar, bg: '#F0FDFA', color: '#0D9488' },
+  grade: { Icon: FileBadge, bg: '#EEF2FF', color: '#4F46E5' },
+  bus: { Icon: Bus, bg: '#FEE2E2', color: '#DC2626' },
+  system: { Icon: SettingsIcon, bg: '#F3F4F6', color: '#6B7280' },
+  general: { Icon: Bell, bg: '#F3F4F6', color: '#6B7280' },
+};
+
+function getTypeIcon(type?: string) {
+  return (type && TYPE_ICONS[type]) || TYPE_ICONS.general;
+}
+
 function groupByDay(notifications: Notification[]): Group[] {
   const map = new Map<string, Group>();
   for (const n of notifications) {
@@ -59,7 +78,6 @@ export default function NotificationsScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [items, setItems] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [showPrevious, setShowPrevious] = useState(false);
@@ -79,26 +97,9 @@ export default function NotificationsScreen() {
     setItems(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
   };
 
-  const handlePress = async (item: Notification) => {
+  const handlePress = (item: Notification) => {
     if (!item.isRead) markRead(item.id);
-    if (!item.relatedId) return;
-    try {
-      if (item.notificationType === 'homework') {
-        const res = await parentApi.getHomeworkById(item.relatedId);
-        navigation.navigate('HomeworkDetail', { homework: res.data });
-      } else if (item.notificationType === 'assignment') {
-        const res = await parentApi.getAssignmentById(item.relatedId);
-        navigation.navigate('AssignmentDetail', { assignment: res.data });
-      } else if (item.notificationType === 'announcement') {
-        const res = await parentApi.getAnnouncementById(item.relatedId);
-        navigation.navigate('AnnouncementDetail', { announcement: res.data });
-      } else if (item.notificationType === 'report') {
-        const res = await parentApi.getReportById(item.relatedId);
-        navigation.navigate('ReportDetail', { report: res.data });
-      }
-    } catch {
-      // If fetch fails, do nothing
-    }
+    openNotificationTarget({ type: item.notificationType, relatedId: item.relatedId });
   };
 
   const groups = useMemo(() => groupByDay(items), [items]);
@@ -126,16 +127,28 @@ export default function NotificationsScreen() {
           {displayedGroups.map(group => (
             <View key={group.label}>
               <Text style={styles.dayLabel}>{group.label}</Text>
-              {group.items.map(item => (
-                <TouchableOpacity key={item.id} activeOpacity={0.75}
-                  style={[styles.card, !item.isRead && styles.cardUnread]}
-                  onPress={() => handlePress(item)}>
-                  {!item.isRead && <View style={styles.dot} />}
-                  <Text style={styles.cardTitle}>{item.title}</Text>
-                  <Text style={styles.cardMessage} numberOfLines={2}>{item.message}</Text>
-                  <Text style={[styles.cardTime, { marginTop: 10 }]}>{formatTime(item.createdAt)}</Text>
-                </TouchableOpacity>
-              ))}
+              {group.items.map(item => {
+                const { Icon, bg, color } = getTypeIcon(item.notificationType);
+                return (
+                  <TouchableOpacity key={item.id} activeOpacity={0.75}
+                    style={[styles.card, !item.isRead && styles.cardUnread]}
+                    onPress={() => handlePress(item)}>
+                    <View style={styles.cardRow}>
+                      <View style={[styles.iconBox, { backgroundColor: bg }]}>
+                        <Icon size={18} color={color} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <View style={styles.titleRow}>
+                          <Text style={styles.cardTitle} numberOfLines={1}>{item.title}</Text>
+                          {!item.isRead && <View style={styles.dot} />}
+                        </View>
+                        <Text style={styles.cardMessage} numberOfLines={2}>{item.message}</Text>
+                        <Text style={[styles.cardTime, { marginTop: 8 }]}>{formatTime(item.createdAt)}</Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           ))}
           {showingSplit && !showPrevious && (
@@ -163,8 +176,11 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   },
   card: { backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm, ...shadow.sm },
   cardUnread: { borderLeftWidth: 3, borderLeftColor: colors.primary },
-  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.primary, marginBottom: 6 },
-  cardTitle: { fontSize: font.md, fontWeight: '700', color: colors.text, marginBottom: 4 },
+  cardRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start' },
+  iconBox: { width: 36, height: 36, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
+  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.primary },
+  cardTitle: { flex: 1, fontSize: font.md, fontWeight: '700', color: colors.text },
   cardMessage: { fontSize: font.sm, color: colors.textSecondary, lineHeight: 18 },
   cardTime: { fontSize: font.xs, color: colors.textMuted },
   prevButton: {

@@ -36,6 +36,7 @@ export default function AssignmentsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const initialized = useRef(false);
   const setUnreadCount = useBadgeStore(s => s.setUnreadCount);
+  const clearAssignment = useBadgeStore(s => s.clearAssignment);
 
   const load = () => parentApi.getAssignments().then(r => setAssignments(r.data || []));
 
@@ -47,6 +48,7 @@ export default function AssignmentsScreen() {
       } else {
         load();
       }
+      clearAssignment();
       parentApi.markTypeRead('assignment').catch(() => {});
       parentApi.getUnreadCount().then(r => setUnreadCount(r.data?.count ?? 0)).catch(() => {});
     }, [])

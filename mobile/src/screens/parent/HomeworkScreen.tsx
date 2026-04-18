@@ -24,6 +24,7 @@ export default function HomeworkScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const initialized = useRef(false);
   const setUnreadCount = useBadgeStore(s => s.setUnreadCount);
+  const clearHomework = useBadgeStore(s => s.clearHomework);
 
   const load = () => parentApi.getHomework().then(r => setHomework(r.data || []));
 
@@ -35,6 +36,7 @@ export default function HomeworkScreen() {
       } else {
         load();
       }
+      clearHomework();
       parentApi.markTypeRead('homework').catch(() => {});
       parentApi.getUnreadCount().then(r => setUnreadCount(r.data?.count ?? 0)).catch(() => {});
     }, [])

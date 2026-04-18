@@ -173,7 +173,7 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   header: { marginBottom: spacing.md },
   greeting: { fontSize: font.sm, color: colors.textMuted, marginBottom: 2 },
   title: { fontSize: font.xxxl, fontWeight: '700', color: colors.text },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.md },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: spacing.sm, marginBottom: spacing.md },
   shortcut: { width: '30.5%', backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.sm, alignItems: 'center', gap: 6, ...shadow.sm },
   shortcutIcon: { width: 36, height: 36, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
   shortcutLabel: { fontSize: font.xs, fontWeight: '600', color: colors.text, textAlign: 'center' },
