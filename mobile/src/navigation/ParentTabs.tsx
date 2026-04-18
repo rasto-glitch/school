@@ -4,8 +4,9 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { TouchableOpacity, View, Text, StyleSheet } from 'react-native';
-import { GraduationCap, Bus, Bell, User, Settings, MessageSquare } from 'lucide-react-native';
+import { GraduationCap, Bell, User, Settings, MessageSquare } from 'lucide-react-native';
 import HouseIcon from '../components/HouseIcon';
+import BusIcon from '../components/BusIcon';
 import FeedScreen from '../screens/parent/FeedScreen';
 import BusTrackingScreen from '../screens/parent/BusTrackingScreen';
 import MeScreen from '../screens/parent/MeScreen';
@@ -25,6 +26,15 @@ function TabBadge({ count }: { count: number }) {
   return (
     <View style={styles.badge}>
       <Text style={styles.badgeText}>{count > 99 ? '99+' : count}</Text>
+    </View>
+  );
+}
+
+function TabIconWrap({ focused, isDark, children }: { focused: boolean; isDark: boolean; children: React.ReactNode }) {
+  return (
+    <View style={styles.iconWrap}>
+      {focused && isDark && <View style={styles.activeTopLine} />}
+      {children}
     </View>
   );
 }
@@ -163,12 +173,14 @@ export default function ParentTabs() {
           headerTitle: t('dashboard.title'),
           tabBarLabel: t('dashboard.title'),
           tabBarIcon: ({ color, focused }) => (
-            <HouseIcon
-              size={22}
-              color={color}
-              fillColor={focused && isDark ? '#FFFFFF' : 'none'}
-              doorColor={focused && isDark ? '#000000' : 'none'}
-            />
+            <TabIconWrap focused={focused} isDark={isDark}>
+              <HouseIcon
+                size={22}
+                color={color}
+                fillColor={focused && isDark ? '#FFFFFF' : 'none'}
+                doorColor={focused && isDark ? '#000000' : 'none'}
+              />
+            </TabIconWrap>
           ),
         }}
       />
@@ -180,7 +192,9 @@ export default function ParentTabs() {
             headerTitle: t('nav.learn', 'Learn'),
             tabBarLabel: t('nav.learn', 'Learn'),
             tabBarIcon: ({ color, focused }) => (
-              <GraduationCap size={22} color={color} fill={focused && isDark ? '#FFFFFF' : 'transparent'} />
+              <TabIconWrap focused={focused} isDark={isDark}>
+                <GraduationCap size={22} color={color} fill={focused && isDark ? '#FFFFFF' : 'transparent'} />
+              </TabIconWrap>
             ),
           }}
         />
@@ -194,7 +208,11 @@ export default function ParentTabs() {
             tabBarLabel: t('nav.track_bus'),
             tabBarIcon: ({ color, focused }) => {
               const strokeColor = focused && isDark ? '#000000' : color;
-              return <Bus size={22} color={strokeColor} fill={focused && isDark ? '#FFFFFF' : 'transparent'} />;
+              return (
+                <TabIconWrap focused={focused} isDark={isDark}>
+                  <BusIcon size={22} color={strokeColor} fillColor={focused && isDark ? '#FFFFFF' : 'none'} />
+                </TabIconWrap>
+              );
             },
           }}
         />
@@ -212,10 +230,12 @@ export default function ParentTabs() {
             headerTitle: t('nav.chat', 'Chat'),
             tabBarLabel: t('nav.chat', 'Chat'),
             tabBarIcon: ({ color, focused }) => (
-              <View>
-                <MessageSquare size={22} color={color} fill={focused && isDark ? '#FFFFFF' : 'transparent'} />
-                <TabBadge count={chatCount} />
-              </View>
+              <TabIconWrap focused={focused} isDark={isDark}>
+                <View>
+                  <MessageSquare size={22} color={color} fill={focused && isDark ? '#FFFFFF' : 'transparent'} />
+                  <TabBadge count={chatCount} />
+                </View>
+              </TabIconWrap>
             ),
           }}
         />
@@ -227,7 +247,9 @@ export default function ParentTabs() {
           headerTitle: t('nav.me', 'Me'),
           tabBarLabel: t('nav.me', 'Me'),
           tabBarIcon: ({ color, focused }) => (
-            <User size={22} color={color} fill={focused && isDark ? '#FFFFFF' : 'transparent'} />
+            <TabIconWrap focused={focused} isDark={isDark}>
+              <User size={22} color={color} fill={focused && isDark ? '#FFFFFF' : 'transparent'} />
+            </TabIconWrap>
           ),
           headerRight: () => <SettingsButton />,
         }}
@@ -258,4 +280,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 3,
   },
   badgeText: { fontSize: 9, fontWeight: '800', color: '#fff' },
+  iconWrap: { alignItems: 'center', justifyContent: 'center' },
+  activeTopLine: {
+    position: 'absolute',
+    top: -8,
+    width: 32, height: 2,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 1,
+  },
 });
