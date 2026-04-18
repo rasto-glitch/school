@@ -8,6 +8,7 @@ import dotenv from 'dotenv';
 import jwt from 'jsonwebtoken';
 import { createRouter } from './routes/index';
 import { setIo } from './utils/notify';
+import { logger } from './utils/logger';
 
 dotenv.config();
 
@@ -96,8 +97,8 @@ app.get('/health', (_req, res) => {
 
 // Global error handler — catches any unhandled errors from route handlers
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
-  console.error('Unhandled error:', err);
+app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
+  logger.error('Unhandled error', { err, path: req.path, method: req.method });
   res.status(500).json({ error: 'An unexpected error occurred. Please try again.' });
 });
 
