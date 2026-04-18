@@ -59,7 +59,7 @@ export default function ParentTabs() {
     + (feat('chat') ? 1 : 0);
 
   useEffect(() => {
-    if (!screenWidth || !isDark) return;
+    if (!screenWidth) return;
     const tabW = screenWidth / tabCount;
     const target = activeIndex * tabW + (tabW - INDICATOR_WIDTH) / 2;
     Animated.spring(indicatorX, {
@@ -68,7 +68,7 @@ export default function ParentTabs() {
       tension: 140,
       friction: 16,
     }).start();
-  }, [activeIndex, screenWidth, tabCount, indicatorX, isDark]);
+  }, [activeIndex, screenWidth, tabCount, indicatorX]);
 
   const fetchCounts = useCallback(() => {
     parentApi.getUnreadCount()
@@ -196,8 +196,8 @@ export default function ParentTabs() {
               <HouseIcon
                 size={22}
                 color={color}
-                fillColor={focused && isDark ? '#FFFFFF' : 'none'}
-                doorColor={focused && isDark ? '#000000' : 'none'}
+                fillColor={focused ? (isDark ? '#FFFFFF' : colors.primary) : 'none'}
+                doorColor={focused ? (isDark ? '#000000' : colors.card) : 'none'}
               />
             ),
           }}
@@ -210,7 +210,7 @@ export default function ParentTabs() {
               headerTitle: t('nav.learn', 'Learn'),
               tabBarLabel: t('nav.learn', 'Learn'),
               tabBarIcon: ({ color, focused }) => (
-                <GraduationCap size={22} color={color} fill={focused && isDark ? '#FFFFFF' : 'transparent'} />
+                <GraduationCap size={22} color={color} fill={focused ? (isDark ? '#FFFFFF' : colors.primary) : 'transparent'} />
               ),
             }}
           />
@@ -223,8 +223,8 @@ export default function ParentTabs() {
               headerTitle: t('nav.track_bus'),
               tabBarLabel: t('nav.track_bus'),
               tabBarIcon: ({ color, focused }) => {
-                const strokeColor = focused && isDark ? 'transparent' : color;
-                return <BusIcon size={22} color={strokeColor} fillColor={focused && isDark ? '#FFFFFF' : 'none'} />;
+                const strokeColor = focused ? 'transparent' : color;
+                return <BusIcon size={22} color={strokeColor} fillColor={focused ? (isDark ? '#FFFFFF' : colors.primary) : 'none'} />;
               },
             }}
           />
@@ -243,7 +243,7 @@ export default function ParentTabs() {
               tabBarLabel: t('nav.chat', 'Chat'),
               tabBarIcon: ({ color, focused }) => (
                 <View>
-                  <MessageSquare size={22} color={color} fill={focused && isDark ? '#FFFFFF' : 'transparent'} />
+                  <MessageSquare size={22} color={color} fill={focused ? (isDark ? '#FFFFFF' : colors.primary) : 'transparent'} />
                   <TabBadge count={chatCount} />
                 </View>
               ),
@@ -257,24 +257,23 @@ export default function ParentTabs() {
             headerTitle: t('nav.me', 'Me'),
             tabBarLabel: t('nav.me', 'Me'),
             tabBarIcon: ({ color, focused }) => (
-              <User size={22} color={color} fill={focused && isDark ? '#FFFFFF' : 'transparent'} />
+              <User size={22} color={color} fill={focused ? (isDark ? '#FFFFFF' : colors.primary) : 'transparent'} />
             ),
             headerRight: () => <SettingsButton />,
           }}
         />
       </Tab.Navigator>
-      {isDark && (
-        <Animated.View
-          pointerEvents="none"
-          style={[
-            styles.activeTopLine,
-            {
-              bottom: 60 + insets.bottom - 1,
-              transform: [{ translateX: indicatorX }],
-            },
-          ]}
-        />
-      )}
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.activeTopLine,
+          {
+            bottom: 60 + insets.bottom - 1,
+            backgroundColor: isDark ? '#FFFFFF' : colors.primary,
+            transform: [{ translateX: indicatorX }],
+          },
+        ]}
+      />
     </View>
   );
 }
