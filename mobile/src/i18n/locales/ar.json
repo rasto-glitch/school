@@ -52,7 +52,7 @@
     "write_comment": "اكتب تعليقاً...",
     "comment_failed": "فشل نشر التعليق",
     "delete_comment": "حذف التعليق؟",
-    "pick_student": "اقرأ هذا الكتاب باسم:",
+    "no_ebooks_for_class": "لا توجد كتب إلكترونية لهذا الصف بعد",
     "no_children": "لا يوجد طلاب مرتبطون بهذا الحساب.",
     "reader_title": "القارئ",
     "reader_page": "صفحة",

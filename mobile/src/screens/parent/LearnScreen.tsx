@@ -1,11 +1,11 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Image,
-  RefreshControl, ActivityIndicator, Modal, Pressable, Alert,
+  RefreshControl, ActivityIndicator,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useNavigation } from '@react-navigation/native';
-import { Heart, MessageCircle, Bookmark, BookOpen, FileText, X } from 'lucide-react-native';
+import { Heart, MessageCircle, Bookmark, BookOpen, FileText } from 'lucide-react-native';
 import { academicApi, parentApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
 import { spacing, radius, font } from '../../theme';
@@ -129,9 +129,9 @@ export default function LearnScreen() {
   const [ebooks, setEbooks] = useState<Ebook[]>([]);
   const [progress, setProgress] = useState<EbookProgress[]>([]);
   const [children, setChildren] = useState<Student[]>([]);
+  const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [pickerEbook, setPickerEbook] = useState<Ebook | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -146,11 +146,26 @@ export default function LearnScreen() {
       if (s.status === 'fulfilled') setSaved(s.value.data ?? []);
       if (e.status === 'fulfilled') setEbooks(e.value.data ?? []);
       if (pr.status === 'fulfilled') setProgress(pr.value.data ?? []);
-      if (c.status === 'fulfilled') setChildren(c.value.data ?? []);
+      if (c.status === 'fulfilled') {
+        const kids: Student[] = c.value.data ?? [];
+        setChildren(kids);
+        setSelectedChildId(prev => prev && kids.some(k => k.id === prev) ? prev : (kids[0]?.id ?? null));
+      }
     } catch {}
   }, []);
 
   useEffect(() => { load().finally(() => setLoading(false)); }, [load]);
+
+  const selectedChild = useMemo(
+    () => children.find(c => c.id === selectedChildId) ?? null,
+    [children, selectedChildId],
+  );
+
+  const visibleEbooks = useMemo(() => {
+    if (!selectedChild) return [];
+    const classId = selectedChild.classId;
+    return ebooks.filter(e => !e.class_id || e.class_id === classId);
+  }, [ebooks, selectedChild]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -175,36 +190,33 @@ export default function LearnScreen() {
     try { await academicApi.toggleSave(postId); } catch { load(); }
   };
 
-  const openEbookForStudent = (ebook: Ebook, student: Student) => {
+  const openEbook = (ebook: Ebook) => {
+    if (!selectedChild) return;
     navigation.navigate('EbookReader', {
       ebook,
-      studentId: student.id,
-      studentName: student.fullName,
+      studentId: selectedChild.id,
+      studentName: selectedChild.fullName,
     });
   };
 
-  const openEbook = (ebook: Ebook) => {
-    if (children.length === 0) {
-      Alert.alert(
-        t('common.error', 'Error'),
-        t('learn.no_children', 'No students linked to this account.'),
-      );
-      return;
-    }
-    if (children.length === 1) {
-      openEbookForStudent(ebook, children[0]);
-      return;
-    }
-    setPickerEbook(ebook);
-  };
+  const progressByKey = useMemo(() => {
+    const map = new Map<string, EbookProgress>();
+    for (const p of progress) map.set(`${p.student_id}:${p.ebook_id}`, p);
+    return map;
+  }, [progress]);
 
-  const progressByEbook = new Map(progress.map(p => [p.ebook_id, p]));
-  const list = tab === 'posts' ? posts : tab === 'saved' ? saved : ebooks;
   const emptyLabel = tab === 'posts'
     ? t('learn.no_posts', 'No posts yet')
     : tab === 'saved'
       ? t('learn.no_saved', 'No saved posts')
-      : t('learn.no_ebooks', 'No e-books yet');
+      : !selectedChild
+        ? t('learn.no_children', 'No students linked to this account.')
+        : t('learn.no_ebooks_for_class', 'No e-books for this class yet');
+
+  const mainList =
+    tab === 'posts' ? posts :
+    tab === 'saved' ? saved :
+    visibleEbooks;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.bg }]}>
@@ -224,23 +236,57 @@ export default function LearnScreen() {
         ))}
       </View>
 
+      {/* Child selector — only shown on the E-Books tab */}
+      {tab === 'ebooks' && children.length > 0 && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={[styles.childStrip, { backgroundColor: colors.card, borderBottomColor: colors.border }]}
+          contentContainerStyle={styles.childStripContent}
+        >
+          {children.map(c => {
+            const active = c.id === selectedChildId;
+            return (
+              <TouchableOpacity
+                key={c.id}
+                onPress={() => setSelectedChildId(c.id)}
+                activeOpacity={0.7}
+                style={[
+                  styles.childChip,
+                  { borderColor: active ? colors.primary : colors.border, backgroundColor: active ? colors.primaryLight : 'transparent' },
+                ]}
+              >
+                <Text style={[styles.childChipName, { color: active ? colors.primary : colors.text }]} numberOfLines={1}>
+                  {c.fullName}
+                </Text>
+                {c.classes?.name && (
+                  <Text style={[styles.childChipClass, { color: active ? colors.primary : colors.textMuted }]} numberOfLines={1}>
+                    {c.classes.name}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      )}
+
       <ScrollView
         contentContainerStyle={{ padding: spacing.md, paddingBottom: spacing.xl }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
       >
         {loading ? (
           <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
-        ) : list.length === 0 ? (
+        ) : mainList.length === 0 ? (
           <View style={styles.empty}>
             <FileText size={40} color={colors.textMuted} />
             <Text style={[styles.emptyText, { color: colors.textMuted }]}>{emptyLabel}</Text>
           </View>
         ) : tab === 'ebooks' ? (
-          (ebooks).map(e => (
+          visibleEbooks.map(e => (
             <EbookCard
               key={e.id}
               ebook={e}
-              progress={progressByEbook.get(e.id)}
+              progress={selectedChild ? progressByKey.get(`${selectedChild.id}:${e.id}`) : undefined}
               onOpen={() => openEbook(e)}
             />
           ))
@@ -256,43 +302,6 @@ export default function LearnScreen() {
           ))
         )}
       </ScrollView>
-
-      <Modal
-        visible={pickerEbook != null}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setPickerEbook(null)}
-      >
-        <Pressable style={styles.modalBackdrop} onPress={() => setPickerEbook(null)}>
-          <Pressable style={[styles.modalSheet, { backgroundColor: colors.card }]} onPress={() => {}}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: colors.text }]}>
-                {t('learn.pick_student', 'Read this book as:')}
-              </Text>
-              <TouchableOpacity onPress={() => setPickerEbook(null)} hitSlop={8}>
-                <X size={18} color={colors.textMuted} />
-              </TouchableOpacity>
-            </View>
-            {children.map(c => (
-              <TouchableOpacity
-                key={c.id}
-                style={[styles.studentRow, { borderColor: colors.border }]}
-                activeOpacity={0.7}
-                onPress={() => {
-                  const e = pickerEbook;
-                  setPickerEbook(null);
-                  if (e) openEbookForStudent(e, c);
-                }}
-              >
-                <Text style={[styles.studentName, { color: colors.text }]} numberOfLines={1}>{c.fullName}</Text>
-                {c.classes?.name && (
-                  <Text style={[styles.studentClass, { color: colors.textMuted }]}>{c.classes.name}</Text>
-                )}
-              </TouchableOpacity>
-            ))}
-          </Pressable>
-        </Pressable>
-      </Modal>
     </View>
   );
 }
@@ -327,13 +336,11 @@ const styles = StyleSheet.create({
   ebookCover: { width: 72, height: 96, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   ebookCoverImage: { width: '100%', height: '100%' },
 
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
-  modalSheet: { borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, padding: spacing.md, paddingBottom: spacing.xl },
-  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
-  modalTitle: { fontSize: font.md, fontWeight: '700' },
-  studentRow: { paddingVertical: 14, borderTopWidth: 1 },
-  studentName: { fontSize: font.sm, fontWeight: '600' },
-  studentClass: { fontSize: font.xs, marginTop: 2 },
+  childStrip: { borderBottomWidth: 1 },
+  childStripContent: { paddingHorizontal: spacing.md, paddingVertical: 10, gap: 8 },
+  childChip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: radius.full, borderWidth: 1.5, minWidth: 100 },
+  childChipName: { fontSize: font.sm, fontWeight: '700' },
+  childChipClass: { fontSize: font.xs, marginTop: 2 },
   ebookBody: { flex: 1, justifyContent: 'center' },
   ebookTitle: { fontSize: font.sm, fontWeight: '700', marginBottom: 2 },
   ebookAuthor: { fontSize: font.xs, marginBottom: 10 },

@@ -52,7 +52,7 @@
     "write_comment": "Write a comment...",
     "comment_failed": "Failed to post comment",
     "delete_comment": "Delete comment?",
-    "pick_student": "Read this book as:",
+    "no_ebooks_for_class": "No e-books for this class yet",
     "no_children": "No students linked to this account.",
     "reader_title": "Reader",
     "reader_page": "Page",
