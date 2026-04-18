@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { io, type Socket } from 'socket.io-client';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5000/api';
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://school-production-3ccc.up.railway.app/api';
 const SOCKET_URL = API_URL.replace(/\/api$/, '');
 
 interface SocketState {

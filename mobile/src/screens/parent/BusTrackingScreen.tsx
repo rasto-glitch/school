@@ -13,7 +13,7 @@ import { useColors } from '../../store/themeStore';
 import { spacing, radius, shadow, font } from '../../theme';
 import type { Student } from '../../types';
 
-const SOCKET_URL = process.env.EXPO_PUBLIC_SOCKET_URL || 'http://localhost:5000';
+const SOCKET_URL = process.env.EXPO_PUBLIC_SOCKET_URL || 'https://school-production-3ccc.up.railway.app';
 
 interface BusData {
   location: {

@@ -22,7 +22,13 @@ export default function LoginScreen() {
       const res = await authApi.login(username, password);
       setAuth(res.data.token, res.data.user, res.data.school);
     } catch (err: any) {
-      Alert.alert('Sign In Failed', err.response?.data?.error || 'Invalid username or password');
+      const serverMsg = err.response?.data?.error;
+      const msg = serverMsg
+        ? serverMsg
+        : err.response
+          ? 'Invalid username or password'
+          : 'Could not reach the server. Check your connection and try again.';
+      Alert.alert('Sign In Failed', msg);
     } finally {
       setLoading(false);
     }
