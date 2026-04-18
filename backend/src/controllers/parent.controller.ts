@@ -16,7 +16,7 @@ export async function getChildren(req: AuthRequest, res: Response): Promise<void
   const { data: parent } = await supabase.from('parents').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
   if (!parent) { res.status(404).json({ error: 'Parent not found' }); return; }
 
-  const { data, error } = await supabase.from('students').select('id, full_name, profile_picture, classes(name), drivers(full_name, phone_number, license_number, buses(bus_number))').eq('parent_id', parent.id).eq('school_id', schoolId);
+  const { data, error } = await supabase.from('students').select('id, full_name, profile_picture, class_id, classes(name), drivers(full_name, phone_number, license_number, buses(bus_number))').eq('parent_id', parent.id).eq('school_id', schoolId);
   if (error) { res.status(500).json({ error: error.message }); return; }
   res.json(toCC(data));
 }
