@@ -10,7 +10,7 @@ import BusTrackingScreen from '../screens/parent/BusTrackingScreen';
 import MeScreen from '../screens/parent/MeScreen';
 import LearnScreen from '../screens/parent/LearnScreen';
 import ChatListScreen from '../screens/chat/ChatListScreen';
-import { useColors } from '../store/themeStore';
+import { useColors, useIsDark } from '../store/themeStore';
 import { useBadgeStore } from '../store/badgeStore';
 import { font } from '../theme';
 import { parentApi, chatApi } from '../services/api';
@@ -32,6 +32,7 @@ export default function ParentTabs() {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const colors = useColors();
+  const isDark = useIsDark();
   const navigation = useNavigation<any>();
   const { school } = useAuthStore();
   const { socket } = useSocketStore();
@@ -102,14 +103,17 @@ export default function ParentTabs() {
     return () => { socket.off('notification', onNotif); };
   }, [socket, setUnreadCount, setHomeworkCount, setAssignmentCount, setReportCount, setBookingCount]);
 
+  const headerIconBg = isDark ? 'rgba(255,255,255,0.12)' : colors.primaryLight;
+  const headerIconColor = isDark ? '#FFFFFF' : colors.primary;
+
   // Notification bell — shown in header for all tabs except Me
   const NotificationBell = () => (
     <TouchableOpacity
       onPress={() => navigation.navigate('Notifications')}
-      style={[styles.headerBtn, { backgroundColor: colors.primaryLight }]}
+      style={[styles.headerBtn, { backgroundColor: headerIconBg }]}
       activeOpacity={0.7}
     >
-      <Bell size={18} color={colors.primary} />
+      <Bell size={18} color={headerIconColor} />
       {unreadCount > 0 && (
         <View style={styles.bellBadge}>
           <Text style={styles.bellBadgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
@@ -122,10 +126,10 @@ export default function ParentTabs() {
   const SettingsButton = () => (
     <TouchableOpacity
       onPress={() => navigation.navigate('Settings')}
-      style={[styles.headerBtn, { backgroundColor: colors.primaryLight }]}
+      style={[styles.headerBtn, { backgroundColor: headerIconBg }]}
       activeOpacity={0.7}
     >
-      <Settings size={18} color={colors.primary} />
+      <Settings size={18} color={headerIconColor} />
     </TouchableOpacity>
   );
 
@@ -137,8 +141,8 @@ export default function ParentTabs() {
         headerTitleStyle: { fontSize: font.lg, fontWeight: '700', color: colors.text },
         headerShadowVisible: false,
         headerRight: () => <NotificationBell />,
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.textMuted,
+        tabBarActiveTintColor: isDark ? '#FFFFFF' : colors.primary,
+        tabBarInactiveTintColor: isDark ? '#FFFFFF' : colors.textMuted,
         tabBarStyle: {
           backgroundColor: colors.card,
           borderTopColor: colors.border,
@@ -157,7 +161,7 @@ export default function ParentTabs() {
         options={{
           headerTitle: t('dashboard.title'),
           tabBarLabel: t('dashboard.title'),
-          tabBarIcon: ({ color }) => <Home size={22} color={color} />,
+          tabBarIcon: ({ color, focused }) => <Home size={22} color={color} fill={focused && isDark ? '#FFFFFF' : 'transparent'} />,
         }}
       />
       {feat('academic_portal') ? (
@@ -167,7 +171,7 @@ export default function ParentTabs() {
           options={{
             headerTitle: t('nav.learn', 'Learn'),
             tabBarLabel: t('nav.learn', 'Learn'),
-            tabBarIcon: ({ color }) => <GraduationCap size={22} color={color} />,
+            tabBarIcon: ({ color, focused }) => <GraduationCap size={22} color={color} fill={focused && isDark ? '#FFFFFF' : 'transparent'} />,
           }}
         />
       ) : null}
@@ -178,7 +182,7 @@ export default function ParentTabs() {
           options={{
             headerTitle: t('nav.track_bus'),
             tabBarLabel: t('nav.track_bus'),
-            tabBarIcon: ({ color }) => <Bus size={22} color={color} />,
+            tabBarIcon: ({ color, focused }) => <Bus size={22} color={color} fill={focused && isDark ? '#FFFFFF' : 'transparent'} />,
           }}
         />
       ) : null}
@@ -194,9 +198,9 @@ export default function ParentTabs() {
           options={{
             headerTitle: t('nav.chat', 'Chat'),
             tabBarLabel: t('nav.chat', 'Chat'),
-            tabBarIcon: ({ color }) => (
+            tabBarIcon: ({ color, focused }) => (
               <View>
-                <MessageSquare size={22} color={color} />
+                <MessageSquare size={22} color={color} fill={focused && isDark ? '#FFFFFF' : 'transparent'} />
                 <TabBadge count={chatCount} />
               </View>
             ),
@@ -209,7 +213,7 @@ export default function ParentTabs() {
         options={{
           headerTitle: t('nav.me', 'Me'),
           tabBarLabel: t('nav.me', 'Me'),
-          tabBarIcon: ({ color }) => <User size={22} color={color} />,
+          tabBarIcon: ({ color, focused }) => <User size={22} color={color} fill={focused && isDark ? '#FFFFFF' : 'transparent'} />,
           headerRight: () => <SettingsButton />,
         }}
       />

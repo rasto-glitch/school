@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, TextInput, ScrollView } from 'react-native';
 import MapView, { Marker, PROVIDER_DEFAULT, Region } from 'react-native-maps';
 import * as Location from 'expo-location';
@@ -7,7 +7,8 @@ import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MapPin, Navigation, ChevronLeft, Building2, Home } from 'lucide-react-native';
 import { parentApi } from '../../services/api';
-import { colors, spacing, radius, font, shadow } from '../../theme';
+import { spacing, radius, font, shadow } from '../../theme';
+import { useColors, useIsDark } from '../../store/themeStore';
 
 type ResidenceType = 'apartment' | 'house';
 
@@ -15,6 +16,9 @@ export default function SetPickupLocationScreen() {
   const { t } = useTranslation();
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
+  const colors = useColors();
+  const isDark = useIsDark();
+  const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
 
   const [region, setRegion] = useState<Region | null>(null);
   const [pin, setPin] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -86,7 +90,7 @@ export default function SetPickupLocationScreen() {
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <ChevronLeft size={22} color={colors.text} />
+          <ChevronLeft size={22} color={isDark ? '#FFFFFF' : colors.text} />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={styles.title}>{t('pickup.title')}</Text>
@@ -140,7 +144,10 @@ export default function SetPickupLocationScreen() {
                 activeOpacity={0.7}
               >
                 <View style={[styles.residenceIconBox, selected && styles.residenceIconBoxSelected]}>
-                  <Icon size={22} color={selected ? colors.primary : colors.textMuted} />
+                  <Icon
+                    size={22}
+                    color={isDark ? (selected ? '#000000' : '#FFFFFF') : (selected ? colors.primary : colors.textMuted)}
+                  />
                 </View>
                 <Text style={[styles.residenceLabel, selected && styles.residenceLabelSelected]}>{label}</Text>
               </TouchableOpacity>
@@ -186,7 +193,7 @@ export default function SetPickupLocationScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ReturnType<typeof useColors>, isDark: boolean) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   header: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
@@ -217,29 +224,31 @@ const styles = StyleSheet.create({
     maxHeight: 320,
   },
   sectionLabel: {
-    fontSize: font.xs, fontWeight: '700', color: colors.textMuted,
+    fontSize: font.xs, fontWeight: '700', color: isDark ? '#FFFFFF' : colors.textMuted,
     textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.sm,
   },
   residenceRow: { flexDirection: 'row', gap: spacing.sm },
   residenceCard: {
     flex: 1, alignItems: 'center', gap: 6, paddingVertical: spacing.md,
-    borderRadius: radius.md, borderWidth: 2, borderColor: colors.border,
-    backgroundColor: colors.bg,
+    borderRadius: radius.md, borderWidth: 2,
+    borderColor: isDark ? '#FFFFFF' : colors.border,
+    backgroundColor: isDark ? 'transparent' : colors.bg,
   },
   residenceCardSelected: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primaryLight,
+    borderColor: isDark ? '#FFFFFF' : colors.primary,
+    backgroundColor: isDark ? '#FFFFFF' : colors.primaryLight,
   },
   residenceIconBox: {
     width: 44, height: 44, borderRadius: radius.sm,
-    backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: isDark ? 'transparent' : colors.card,
+    alignItems: 'center', justifyContent: 'center',
   },
-  residenceIconBoxSelected: { backgroundColor: 'rgba(79,70,229,0.12)' },
-  residenceLabel: { fontSize: font.sm, fontWeight: '600', color: colors.textMuted },
-  residenceLabelSelected: { color: colors.primary },
+  residenceIconBoxSelected: { backgroundColor: isDark ? 'transparent' : 'rgba(79,70,229,0.12)' },
+  residenceLabel: { fontSize: font.sm, fontWeight: '600', color: isDark ? '#FFFFFF' : colors.textMuted },
+  residenceLabelSelected: { color: isDark ? '#000000' : colors.primary },
   blockInput: {
     backgroundColor: colors.bg, borderRadius: radius.md,
-    borderWidth: 1.5, borderColor: colors.border,
+    borderWidth: 1.5, borderColor: isDark ? '#FFFFFF' : colors.border,
     paddingHorizontal: spacing.md, paddingVertical: 10,
     fontSize: font.sm, color: colors.text,
     marginBottom: spacing.md,

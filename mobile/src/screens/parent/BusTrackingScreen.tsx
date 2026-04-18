@@ -9,7 +9,7 @@ import { RefreshCw, User, AlertCircle, Bus, Car, MapPin, ChevronRight, Building2
 import { useNavigation } from '@react-navigation/native';
 import { parentApi } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
-import { useColors } from '../../store/themeStore';
+import { useColors, useIsDark } from '../../store/themeStore';
 import { spacing, radius, shadow, font } from '../../theme';
 import type { Student } from '../../types';
 
@@ -70,6 +70,7 @@ export default function BusTrackingScreen() {
   const { token } = useAuthStore();
   const navigation = useNavigation<any>();
   const colors = useColors();
+  const isDark = useIsDark();
 
   // Pickup location + residence state
   const [hasPickupLocation, setHasPickupLocation] = useState<boolean | null>(null);
@@ -214,7 +215,7 @@ export default function BusTrackingScreen() {
   } : undefined;
 
   const insets = useSafeAreaInsets();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
 
   return (
     <ScrollView
@@ -229,8 +230,8 @@ export default function BusTrackingScreen() {
         </View>
         <TouchableOpacity style={styles.refreshBtn} onPress={fetchBus} disabled={loading}>
           {loading
-            ? <ActivityIndicator size="small" color={colors.primary} />
-            : <RefreshCw size={18} color={colors.primary} />}
+            ? <ActivityIndicator size="small" color={isDark ? '#FFFFFF' : colors.primary} />
+            : <RefreshCw size={18} color={isDark ? '#FFFFFF' : colors.primary} />}
         </TouchableOpacity>
       </View>
 
@@ -362,8 +363,8 @@ export default function BusTrackingScreen() {
                 onPress={() => { setResidenceType(type); setResidenceDirty(true); }}
                 activeOpacity={0.7}
               >
-                <Icon size={20} color={selected ? colors.primary : colors.textMuted} />
-                <Text style={[styles.residenceOptionLabel, selected && { color: colors.primary }]}>{label}</Text>
+                <Icon size={20} color={isDark ? (selected ? '#000000' : '#FFFFFF') : (selected ? colors.primary : colors.textMuted)} />
+                <Text style={[styles.residenceOptionLabel, selected && { color: isDark ? '#000000' : colors.primary }]}>{label}</Text>
               </TouchableOpacity>
             );
           })}
@@ -392,17 +393,17 @@ export default function BusTrackingScreen() {
   );
 }
 
-const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').useColors>) => StyleSheet.create({
+const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').useColors>, isDark: boolean) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   content: { padding: spacing.md, paddingBottom: 40 },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing.md },
   title: { fontSize: font.xxl, fontWeight: '700', color: colors.text },
   subtitle: { fontSize: font.sm, color: colors.textMuted, marginTop: 2 },
-  refreshBtn: { width: 40, height: 40, borderRadius: radius.sm, backgroundColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center' },
-  chip: { borderWidth: 1.5, borderColor: colors.border, borderRadius: radius.full, paddingHorizontal: 14, paddingVertical: 8, marginRight: spacing.sm, backgroundColor: colors.card },
-  chipActive: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
-  chipText: { fontSize: font.sm, color: colors.textSecondary, fontWeight: '500' },
-  chipTextActive: { color: colors.primary, fontWeight: '700' },
+  refreshBtn: { width: 40, height: 40, borderRadius: radius.sm, backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : colors.primaryLight, alignItems: 'center', justifyContent: 'center' },
+  chip: { borderWidth: 1.5, borderColor: isDark ? '#FFFFFF' : colors.border, borderRadius: radius.full, paddingHorizontal: 14, paddingVertical: 8, marginRight: spacing.sm, backgroundColor: isDark ? 'transparent' : colors.card },
+  chipActive: { borderColor: isDark ? '#FFFFFF' : colors.primary, backgroundColor: isDark ? '#FFFFFF' : colors.primaryLight },
+  chipText: { fontSize: font.sm, color: isDark ? '#FFFFFF' : colors.textSecondary, fontWeight: '500' },
+  chipTextActive: { color: isDark ? '#000000' : colors.primary, fontWeight: '700' },
   driverCard: { backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm, ...shadow.sm },
   sectionLabel: { fontSize: font.xs, fontWeight: '700', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.sm },
   driverRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
@@ -435,10 +436,12 @@ const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').u
   residenceRow: { flexDirection: 'row', gap: spacing.sm },
   residenceOption: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
-    paddingVertical: 12, borderRadius: radius.md, borderWidth: 2, borderColor: colors.border,
+    paddingVertical: 12, borderRadius: radius.md, borderWidth: 2,
+    borderColor: isDark ? '#FFFFFF' : colors.border,
+    backgroundColor: isDark ? 'transparent' : undefined,
   },
-  residenceOptionSelected: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
-  residenceOptionLabel: { fontSize: font.sm, fontWeight: '600', color: colors.textMuted },
+  residenceOptionSelected: { borderColor: isDark ? '#FFFFFF' : colors.primary, backgroundColor: isDark ? '#FFFFFF' : colors.primaryLight },
+  residenceOptionLabel: { fontSize: font.sm, fontWeight: '600', color: isDark ? '#FFFFFF' : colors.textMuted },
   blockInput: {
     backgroundColor: colors.bg, borderRadius: radius.md,
     borderWidth: 1.5, borderColor: colors.border,

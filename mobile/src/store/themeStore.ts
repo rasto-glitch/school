@@ -63,3 +63,7 @@ export function useColors() {
   const isDark = useThemeStore(s => s.isDark);
   return isDark ? darkColors : lightColors;
 }
+
+export function useIsDark() {
+  return useThemeStore(s => s.isDark);
+}

@@ -1,13 +1,13 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Image,
-  RefreshControl, ActivityIndicator,
+  RefreshControl, ActivityIndicator, Animated,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useNavigation } from '@react-navigation/native';
 import { Heart, MessageCircle, Bookmark, BookOpen, FileText } from 'lucide-react-native';
 import { academicApi, parentApi } from '../../services/api';
-import { useColors } from '../../store/themeStore';
+import { useColors, useIsDark } from '../../store/themeStore';
 import { spacing, radius, font } from '../../theme';
 import type { AcademicPost, Ebook, EbookProgress, Student } from '../../types';
 
@@ -119,9 +119,12 @@ function EbookCard({ ebook, progress, onOpen }: {
   );
 }
 
+const TABS: Tab[] = ['ebooks', 'posts', 'saved'];
+
 export default function LearnScreen() {
   const { t } = useTranslation();
   const colors = useColors();
+  const isDark = useIsDark();
   const navigation = useNavigation<any>();
   const [tab, setTab] = useState<Tab>('ebooks');
   const [posts, setPosts] = useState<AcademicPost[]>([]);
@@ -132,6 +135,19 @@ export default function LearnScreen() {
   const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [segmentedWidth, setSegmentedWidth] = useState(0);
+  const underlineX = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!segmentedWidth) return;
+    const idx = TABS.indexOf(tab);
+    Animated.spring(underlineX, {
+      toValue: idx * (segmentedWidth / TABS.length),
+      useNativeDriver: true,
+      tension: 120,
+      friction: 14,
+    }).start();
+  }, [tab, segmentedWidth, underlineX]);
 
   const load = useCallback(async () => {
     try {
@@ -221,19 +237,40 @@ export default function LearnScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.bg }]}>
       {/* Segmented tabs */}
-      <View style={[styles.segmented, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
-        {(['ebooks', 'posts', 'saved'] as Tab[]).map(key => (
-          <TouchableOpacity
-            key={key}
-            onPress={() => setTab(key)}
-            style={[styles.segment, tab === key && { borderBottomColor: colors.primary, borderBottomWidth: 2 }]}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.segmentText, { color: tab === key ? colors.primary : colors.textMuted }]}>
-              {key === 'ebooks' ? t('learn.tab_ebooks', 'E-Books') : key === 'posts' ? t('learn.tab_posts', 'Posts') : t('learn.tab_saved', 'Saved')}
-            </Text>
-          </TouchableOpacity>
-        ))}
+      <View
+        style={[styles.segmented, { backgroundColor: colors.card, borderBottomColor: colors.border }]}
+        onLayout={e => setSegmentedWidth(e.nativeEvent.layout.width)}
+      >
+        {TABS.map(key => {
+          const active = tab === key;
+          const activeColor = isDark ? '#FFFFFF' : colors.primary;
+          const mutedColor = isDark ? 'rgba(255,255,255,0.6)' : colors.textMuted;
+          return (
+            <TouchableOpacity
+              key={key}
+              onPress={() => setTab(key)}
+              style={styles.segment}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.segmentText, { color: active ? activeColor : mutedColor }]}>
+                {key === 'ebooks' ? t('learn.tab_ebooks', 'E-Books') : key === 'posts' ? t('learn.tab_posts', 'Posts') : t('learn.tab_saved', 'Saved')}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+        {segmentedWidth > 0 && (
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.segmentUnderline,
+              {
+                width: segmentedWidth / TABS.length,
+                backgroundColor: isDark ? '#FFFFFF' : colors.primary,
+                transform: [{ translateX: underlineX }],
+              },
+            ]}
+          />
+        )}
       </View>
 
       {/* Child selector — only shown on the E-Books tab */}
@@ -246,6 +283,16 @@ export default function LearnScreen() {
           >
             {children.map(c => {
               const active = c.id === selectedChildId;
+              const chipBorder = isDark ? '#FFFFFF' : (active ? colors.primary : colors.border);
+              const chipBg = isDark
+                ? (active ? '#FFFFFF' : 'transparent')
+                : (active ? colors.primaryLight : 'transparent');
+              const nameColor = isDark
+                ? (active ? '#000000' : '#FFFFFF')
+                : (active ? colors.primary : colors.text);
+              const classColor = isDark
+                ? (active ? '#000000' : 'rgba(255,255,255,0.7)')
+                : (active ? colors.primary : colors.textMuted);
               return (
                 <TouchableOpacity
                   key={c.id}
@@ -253,14 +300,14 @@ export default function LearnScreen() {
                   activeOpacity={0.7}
                   style={[
                     styles.childChip,
-                    { borderColor: active ? colors.primary : colors.border, backgroundColor: active ? colors.primaryLight : 'transparent' },
+                    { borderColor: chipBorder, backgroundColor: chipBg },
                   ]}
                 >
-                  <Text style={[styles.childChipName, { color: active ? colors.primary : colors.text }]} numberOfLines={1}>
+                  <Text style={[styles.childChipName, { color: nameColor }]} numberOfLines={1}>
                     {c.fullName}
                   </Text>
                   {c.classes?.name && (
-                    <Text style={[styles.childChipClass, { color: active ? colors.primary : colors.textMuted }]} numberOfLines={1}>
+                    <Text style={[styles.childChipClass, { color: classColor }]} numberOfLines={1}>
                       {c.classes.name}
                     </Text>
                   )}
@@ -309,9 +356,10 @@ export default function LearnScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  segmented: { flexDirection: 'row', borderBottomWidth: 1 },
+  segmented: { flexDirection: 'row', borderBottomWidth: 1, position: 'relative' },
   segment: { flex: 1, paddingVertical: 12, alignItems: 'center' },
   segmentText: { fontSize: font.sm, fontWeight: '600' },
+  segmentUnderline: { position: 'absolute', bottom: 0, left: 0, height: 2 },
 
   empty: { alignItems: 'center', paddingTop: 60 },
   emptyText: { marginTop: 12, fontSize: font.sm },
