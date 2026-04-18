@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GraduationCap } from 'lucide-react-native';
 import { parentApi } from '../../services/api';
-import { useColors } from '../../store/themeStore';
+import { useColors, useIsDark } from '../../store/themeStore';
 import { spacing, radius, font, shadow } from '../../theme';
 import type { Grade, Student } from '../../types';
 
@@ -62,13 +62,14 @@ export default function GradesScreen() {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const colors = useColors();
+  const isDark = useIsDark();
   const [children, setChildren] = useState<Student[]>([]);
   const [selectedChild, setSelectedChild] = useState('');
   const [grades, setGrades] = useState<Grade[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
 
   useEffect(() => {
     parentApi.getChildren().then(r => {
@@ -228,16 +229,26 @@ export default function GradesScreen() {
   );
 }
 
-const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').useColors>) => StyleSheet.create({
+const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').useColors>, isDark: boolean) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   content: { padding: spacing.md },
   header: { marginBottom: spacing.lg },
   title: { fontSize: font.xxl, fontWeight: '700', color: colors.text },
   subtitle: { fontSize: font.sm, color: colors.textMuted, marginTop: 2 },
-  chip: { borderWidth: 1.5, borderColor: colors.border, borderRadius: radius.full, paddingHorizontal: 14, paddingVertical: 8, marginRight: spacing.sm, backgroundColor: colors.card },
-  chipActive: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
-  chipText: { fontSize: font.sm, color: colors.textSecondary, fontWeight: '500' },
-  chipTextActive: { color: colors.primary, fontWeight: '700' },
+  chip: {
+    borderWidth: 1.5,
+    borderColor: isDark ? '#FFFFFF' : colors.border,
+    borderRadius: radius.full,
+    paddingHorizontal: 14, paddingVertical: 8,
+    marginRight: spacing.sm,
+    backgroundColor: isDark ? 'transparent' : colors.card,
+  },
+  chipActive: {
+    borderColor: isDark ? '#FFFFFF' : colors.primary,
+    backgroundColor: isDark ? '#FFFFFF' : colors.primaryLight,
+  },
+  chipText: { fontSize: font.sm, color: isDark ? '#FFFFFF' : colors.textSecondary, fontWeight: '500' },
+  chipTextActive: { color: isDark ? '#000000' : colors.primary, fontWeight: '700' },
   emptyBox: { alignItems: 'center', marginTop: 60, gap: spacing.md },
   emptyText: { fontSize: font.md, color: colors.textMuted },
   yearCard: { backgroundColor: colors.card, borderRadius: radius.lg, marginBottom: spacing.md, overflow: 'hidden', ...shadow.sm },

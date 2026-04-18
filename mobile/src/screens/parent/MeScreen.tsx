@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { User, GraduationCap, Bus, Plus, Pencil } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuthStore } from '../../store/authStore';
-import { useColors } from '../../store/themeStore';
+import { useColors, useIsDark } from '../../store/themeStore';
 import { parentApi, authApi } from '../../services/api';
 import { spacing, radius, font, shadow } from '../../theme';
 import type { Student } from '../../types';
@@ -15,6 +15,7 @@ export default function MeScreen() {
   const { t } = useTranslation();
   const { user, school, setProfilePicture } = useAuthStore();
   const colors = useColors();
+  const isDark = useIsDark();
   const insets = useSafeAreaInsets();
   const [children, setChildren] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,7 +48,7 @@ export default function MeScreen() {
     }
   };
 
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
 
   return (
     <ScrollView
@@ -122,7 +123,7 @@ export default function MeScreen() {
         children.map(child => (
           <View key={child.id} style={styles.childCard}>
             <View style={styles.childAvatar}>
-              <GraduationCap size={20} color={colors.primary} />
+              <GraduationCap size={20} color={isDark ? '#FFFFFF' : colors.primary} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.childName}>{child.fullName}</Text>
@@ -143,7 +144,7 @@ export default function MeScreen() {
   );
 }
 
-const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').useColors>) => StyleSheet.create({
+const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').useColors>, isDark: boolean) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   content: { paddingHorizontal: spacing.md },
   profileCard: {
@@ -200,7 +201,9 @@ const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').u
   },
   childAvatar: {
     width: 40, height: 40, borderRadius: 20,
-    backgroundColor: colors.primaryLight,
+    backgroundColor: isDark ? 'transparent' : colors.primaryLight,
+    borderWidth: isDark ? 1.5 : 0,
+    borderColor: isDark ? '#FFFFFF' : 'transparent',
     alignItems: 'center', justifyContent: 'center',
   },
   childName: { fontSize: font.md, fontWeight: '600', color: colors.text },

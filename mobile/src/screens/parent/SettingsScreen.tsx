@@ -174,8 +174,13 @@ export default function SettingsScreen() {
         {/* Appearance */}
         <Text style={styles.sectionTitle}>{t('settings.appearance_section')}</Text>
         <View style={styles.row}>
-          <View style={[styles.iconBox, { backgroundColor: isDark ? '#1E1B4B' : '#F3F4F6' }]}>
-            <Moon size={18} color={isDark ? colors.primary : colors.textMuted} />
+          <View style={[
+            styles.iconBox,
+            isDark
+              ? { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: '#FFFFFF' }
+              : { backgroundColor: '#F3F4F6' },
+          ]}>
+            <Moon size={18} color={isDark ? '#FFFFFF' : colors.textMuted} />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.rowLabel}>{t('settings.dark_mode')}</Text>
@@ -193,8 +198,13 @@ export default function SettingsScreen() {
         <Text style={styles.sectionTitle}>{t('settings.language_section')}</Text>
         <View style={styles.card}>
           <View style={styles.row}>
-            <View style={[styles.iconBox, { backgroundColor: colors.primaryLight }]}>
-              <Globe size={18} color={colors.primary} />
+            <View style={[
+              styles.iconBox,
+              isDark
+                ? { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: '#FFFFFF' }
+                : { backgroundColor: colors.primaryLight },
+            ]}>
+              <Globe size={18} color={isDark ? '#FFFFFF' : colors.primary} />
             </View>
             <Text style={styles.rowLabel}>{t('settings.language_label')}</Text>
           </View>

@@ -7,7 +7,7 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { BookOpen, Calendar, ChevronRight } from 'lucide-react-native';
 import { parentApi } from '../../services/api';
-import { useColors } from '../../store/themeStore';
+import { useColors, useIsDark } from '../../store/themeStore';
 import { useBadgeStore } from '../../store/badgeStore';
 import { spacing, radius, shadow, font } from '../../theme';
 import type { Homework } from '../../types';
@@ -17,7 +17,8 @@ export default function HomeworkScreen() {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const isDark = useIsDark();
+  const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [homework, setHomework] = useState<Homework[]>([]);
   const [loading, setLoading] = useState(true);
@@ -74,7 +75,7 @@ export default function HomeworkScreen() {
             >
               <View style={styles.cardRow}>
                 <View style={styles.iconBox}>
-                  <BookOpen size={18} color={colors.primary} />
+                  <BookOpen size={18} color={isDark ? '#FFFFFF' : colors.primary} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <View style={styles.topRow}>
@@ -105,7 +106,7 @@ export default function HomeworkScreen() {
   );
 }
 
-const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
+const makeStyles = (colors: ReturnType<typeof useColors>, isDark: boolean) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   content: { padding: spacing.md, paddingBottom: 40 },
   header: { marginBottom: spacing.lg },
@@ -115,7 +116,13 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   emptyText: { fontSize: font.md, color: colors.textMuted },
   card: { backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm, ...shadow.sm },
   cardRow: { flexDirection: 'row', gap: spacing.sm },
-  iconBox: { width: 36, height: 36, borderRadius: radius.sm, backgroundColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  iconBox: {
+    width: 36, height: 36, borderRadius: radius.sm,
+    backgroundColor: isDark ? 'transparent' : colors.primaryLight,
+    borderWidth: isDark ? 1.5 : 0,
+    borderColor: isDark ? '#FFFFFF' : 'transparent',
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
   topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: spacing.sm, marginBottom: 4 },
   cardTitle: { flex: 1, fontSize: font.md, fontWeight: '600', color: colors.text },
   pill: { backgroundColor: colors.primaryLight, borderRadius: radius.full, paddingHorizontal: 10, paddingVertical: 3 },

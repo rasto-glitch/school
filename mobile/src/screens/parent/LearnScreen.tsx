@@ -89,15 +89,23 @@ function EbookCard({ ebook, progress, onOpen }: {
   onOpen: () => void;
 }) {
   const colors = useColors();
+  const isDark = useIsDark();
   const percent = progress?.percent ?? 0;
 
   return (
     <TouchableOpacity onPress={onOpen} activeOpacity={0.8} style={[styles.ebookCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-      <View style={[styles.ebookCover, { backgroundColor: colors.primaryLight }]}>
+      <View style={[
+        styles.ebookCover,
+        {
+          backgroundColor: isDark ? 'transparent' : colors.primaryLight,
+          borderWidth: isDark ? 1.5 : 0,
+          borderColor: isDark ? '#FFFFFF' : 'transparent',
+        },
+      ]}>
         {ebook.cover_url ? (
           <Image source={{ uri: ebook.cover_url }} style={styles.ebookCoverImage} />
         ) : (
-          <BookOpen size={32} color={colors.primary} />
+          <BookOpen size={32} color={isDark ? '#FFFFFF' : colors.primary} />
         )}
       </View>
       <View style={styles.ebookBody}>

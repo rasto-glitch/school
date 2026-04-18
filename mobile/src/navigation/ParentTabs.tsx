@@ -4,7 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { TouchableOpacity, View, Text, StyleSheet } from 'react-native';
-import { Home, GraduationCap, Bus, Bell, User, Settings, MessageSquare } from 'lucide-react-native';
+import { GraduationCap, Bus, Bell, User, Settings, MessageSquare } from 'lucide-react-native';
+import HouseIcon from '../components/HouseIcon';
 import FeedScreen from '../screens/parent/FeedScreen';
 import BusTrackingScreen from '../screens/parent/BusTrackingScreen';
 import MeScreen from '../screens/parent/MeScreen';
@@ -161,7 +162,17 @@ export default function ParentTabs() {
         options={{
           headerTitle: t('dashboard.title'),
           tabBarLabel: t('dashboard.title'),
-          tabBarIcon: ({ color, focused }) => <Home size={22} color={color} fill={focused && isDark ? '#FFFFFF' : 'transparent'} />,
+          tabBarIcon: ({ color, focused }) => {
+            const strokeColor = focused && isDark ? '#000000' : color;
+            return (
+              <HouseIcon
+                size={22}
+                color={strokeColor}
+                fillColor={focused && isDark ? '#FFFFFF' : 'none'}
+                doorColor={focused && isDark ? '#000000' : 'none'}
+              />
+            );
+          },
         }}
       />
       {feat('academic_portal') ? (
@@ -171,7 +182,10 @@ export default function ParentTabs() {
           options={{
             headerTitle: t('nav.learn', 'Learn'),
             tabBarLabel: t('nav.learn', 'Learn'),
-            tabBarIcon: ({ color, focused }) => <GraduationCap size={22} color={color} fill={focused && isDark ? '#FFFFFF' : 'transparent'} />,
+            tabBarIcon: ({ color, focused }) => {
+              const strokeColor = focused && isDark ? '#000000' : color;
+              return <GraduationCap size={22} color={strokeColor} fill={focused && isDark ? '#FFFFFF' : 'transparent'} />;
+            },
           }}
         />
       ) : null}
@@ -182,7 +196,10 @@ export default function ParentTabs() {
           options={{
             headerTitle: t('nav.track_bus'),
             tabBarLabel: t('nav.track_bus'),
-            tabBarIcon: ({ color, focused }) => <Bus size={22} color={color} fill={focused && isDark ? '#FFFFFF' : 'transparent'} />,
+            tabBarIcon: ({ color, focused }) => {
+              const strokeColor = focused && isDark ? '#000000' : color;
+              return <Bus size={22} color={strokeColor} fill={focused && isDark ? '#FFFFFF' : 'transparent'} />;
+            },
           }}
         />
       ) : null}
@@ -198,12 +215,15 @@ export default function ParentTabs() {
           options={{
             headerTitle: t('nav.chat', 'Chat'),
             tabBarLabel: t('nav.chat', 'Chat'),
-            tabBarIcon: ({ color, focused }) => (
-              <View>
-                <MessageSquare size={22} color={color} fill={focused && isDark ? '#FFFFFF' : 'transparent'} />
-                <TabBadge count={chatCount} />
-              </View>
-            ),
+            tabBarIcon: ({ color, focused }) => {
+              const strokeColor = focused && isDark ? '#000000' : color;
+              return (
+                <View>
+                  <MessageSquare size={22} color={strokeColor} fill={focused && isDark ? '#FFFFFF' : 'transparent'} />
+                  <TabBadge count={chatCount} />
+                </View>
+              );
+            },
           }}
         />
       ) : null}
@@ -213,7 +233,10 @@ export default function ParentTabs() {
         options={{
           headerTitle: t('nav.me', 'Me'),
           tabBarLabel: t('nav.me', 'Me'),
-          tabBarIcon: ({ color, focused }) => <User size={22} color={color} fill={focused && isDark ? '#FFFFFF' : 'transparent'} />,
+          tabBarIcon: ({ color, focused }) => {
+            const strokeColor = focused && isDark ? '#000000' : color;
+            return <User size={22} color={strokeColor} fill={focused && isDark ? '#FFFFFF' : 'transparent'} />;
+          },
           headerRight: () => <SettingsButton />,
         }}
       />
