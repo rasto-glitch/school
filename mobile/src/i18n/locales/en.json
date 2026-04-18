@@ -51,7 +51,12 @@
     "no_comments": "No comments yet",
     "write_comment": "Write a comment...",
     "comment_failed": "Failed to post comment",
-    "delete_comment": "Delete comment?"
+    "delete_comment": "Delete comment?",
+    "pick_student": "Read this book as:",
+    "no_children": "No students linked to this account.",
+    "reader_title": "Reader",
+    "reader_page": "Page",
+    "reader_load_failed": "Failed to open this book."
   },
   "dashboard": {
     "title": "Feed",

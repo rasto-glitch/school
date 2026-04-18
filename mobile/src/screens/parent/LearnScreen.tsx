@@ -1,15 +1,15 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Image,
-  RefreshControl, ActivityIndicator, Linking,
+  RefreshControl, ActivityIndicator, Modal, Pressable, Alert,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useNavigation } from '@react-navigation/native';
-import { Heart, MessageCircle, Bookmark, BookOpen, FileText } from 'lucide-react-native';
-import { academicApi } from '../../services/api';
+import { Heart, MessageCircle, Bookmark, BookOpen, FileText, X } from 'lucide-react-native';
+import { academicApi, parentApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
 import { spacing, radius, font } from '../../theme';
-import type { AcademicPost, Ebook, EbookProgress } from '../../types';
+import type { AcademicPost, Ebook, EbookProgress, Student } from '../../types';
 
 type Tab = 'ebooks' | 'posts' | 'saved';
 
@@ -95,7 +95,7 @@ function EbookCard({ ebook, progress, onOpen }: {
     <TouchableOpacity onPress={onOpen} activeOpacity={0.8} style={[styles.ebookCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
       <View style={[styles.ebookCover, { backgroundColor: colors.primaryLight }]}>
         {ebook.cover_url ? (
-          <Image source={{ uri: ebook.cover_url }} style={StyleSheet.absoluteFillObject} />
+          <Image source={{ uri: ebook.cover_url }} style={styles.ebookCoverImage} />
         ) : (
           <BookOpen size={32} color={colors.primary} />
         )}
@@ -128,21 +128,25 @@ export default function LearnScreen() {
   const [saved, setSaved] = useState<AcademicPost[]>([]);
   const [ebooks, setEbooks] = useState<Ebook[]>([]);
   const [progress, setProgress] = useState<EbookProgress[]>([]);
+  const [children, setChildren] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [pickerEbook, setPickerEbook] = useState<Ebook | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const [p, s, e, pr] = await Promise.allSettled([
+      const [p, s, e, pr, c] = await Promise.allSettled([
         academicApi.getPosts(),
         academicApi.getSavedPosts(),
         academicApi.getEbooks(),
         academicApi.getEbookProgress(),
+        parentApi.getChildren(),
       ]);
       if (p.status === 'fulfilled') setPosts(p.value.data ?? []);
       if (s.status === 'fulfilled') setSaved(s.value.data ?? []);
       if (e.status === 'fulfilled') setEbooks(e.value.data ?? []);
       if (pr.status === 'fulfilled') setProgress(pr.value.data ?? []);
+      if (c.status === 'fulfilled') setChildren(c.value.data ?? []);
     } catch {}
   }, []);
 
@@ -171,8 +175,27 @@ export default function LearnScreen() {
     try { await academicApi.toggleSave(postId); } catch { load(); }
   };
 
+  const openEbookForStudent = (ebook: Ebook, student: Student) => {
+    navigation.navigate('EbookReader', {
+      ebook,
+      studentId: student.id,
+      studentName: student.fullName,
+    });
+  };
+
   const openEbook = (ebook: Ebook) => {
-    Linking.openURL(ebook.file_url).catch(() => {});
+    if (children.length === 0) {
+      Alert.alert(
+        t('common.error', 'Error'),
+        t('learn.no_children', 'No students linked to this account.'),
+      );
+      return;
+    }
+    if (children.length === 1) {
+      openEbookForStudent(ebook, children[0]);
+      return;
+    }
+    setPickerEbook(ebook);
   };
 
   const progressByEbook = new Map(progress.map(p => [p.ebook_id, p]));
@@ -233,6 +256,43 @@ export default function LearnScreen() {
           ))
         )}
       </ScrollView>
+
+      <Modal
+        visible={pickerEbook != null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPickerEbook(null)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setPickerEbook(null)}>
+          <Pressable style={[styles.modalSheet, { backgroundColor: colors.card }]} onPress={() => {}}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.text }]}>
+                {t('learn.pick_student', 'Read this book as:')}
+              </Text>
+              <TouchableOpacity onPress={() => setPickerEbook(null)} hitSlop={8}>
+                <X size={18} color={colors.textMuted} />
+              </TouchableOpacity>
+            </View>
+            {children.map(c => (
+              <TouchableOpacity
+                key={c.id}
+                style={[styles.studentRow, { borderColor: colors.border }]}
+                activeOpacity={0.7}
+                onPress={() => {
+                  const e = pickerEbook;
+                  setPickerEbook(null);
+                  if (e) openEbookForStudent(e, c);
+                }}
+              >
+                <Text style={[styles.studentName, { color: colors.text }]} numberOfLines={1}>{c.fullName}</Text>
+                {c.classes?.name && (
+                  <Text style={[styles.studentClass, { color: colors.textMuted }]}>{c.classes.name}</Text>
+                )}
+              </TouchableOpacity>
+            ))}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -265,6 +325,15 @@ const styles = StyleSheet.create({
 
   ebookCard: { flexDirection: 'row', borderWidth: 1, borderRadius: radius.lg, padding: 12, marginBottom: spacing.md, gap: 12 },
   ebookCover: { width: 72, height: 96, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  ebookCoverImage: { width: '100%', height: '100%' },
+
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+  modalSheet: { borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, padding: spacing.md, paddingBottom: spacing.xl },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
+  modalTitle: { fontSize: font.md, fontWeight: '700' },
+  studentRow: { paddingVertical: 14, borderTopWidth: 1 },
+  studentName: { fontSize: font.sm, fontWeight: '600' },
+  studentClass: { fontSize: font.xs, marginTop: 2 },
   ebookBody: { flex: 1, justifyContent: 'center' },
   ebookTitle: { fontSize: font.sm, fontWeight: '700', marginBottom: 2 },
   ebookAuthor: { fontSize: font.xs, marginBottom: 10 },

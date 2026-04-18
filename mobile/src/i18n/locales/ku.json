@@ -51,7 +51,12 @@
     "no_comments": "هیچ لێدوانێک نییە",
     "write_comment": "لێدوانێک بنووسە...",
     "comment_failed": "نەتوانرا لێدوانەکە بنێردرێت",
-    "delete_comment": "لێدوانەکە بسڕدرێتەوە؟"
+    "delete_comment": "لێدوانەکە بسڕدرێتەوە؟",
+    "pick_student": "ئەم کتێبە بخوێنەوە وەک:",
+    "no_children": "هیچ خوێندکارێک بەم هەژمارەوە نەبەسترێتەوە.",
+    "reader_title": "خوێنەر",
+    "reader_page": "لاپەڕە",
+    "reader_load_failed": "نەتوانرا ئەم کتێبە بکرێتەوە."
   },
   "dashboard": {
     "title": "هەواڵەکان",

@@ -24,8 +24,9 @@ import AssignmentsScreen from '../screens/parent/AssignmentsScreen';
 import AssignmentDetailScreen from '../screens/parent/AssignmentDetailScreen';
 import AnnouncementDetailScreen from '../screens/parent/AnnouncementDetailScreen';
 import PostDetailScreen from '../screens/parent/PostDetailScreen';
+import EbookReaderScreen from '../screens/parent/EbookReaderScreen';
 import ChatScreen from '../screens/chat/ChatScreen';
-import type { Homework, Announcement, Conversation } from '../types';
+import type { Homework, Announcement, Conversation, Ebook } from '../types';
 
 export type RootStackParamList = {
   Login: undefined;
@@ -50,6 +51,7 @@ export type RootStackParamList = {
   AssignmentDetail: { assignment: { id: string; title: string; description?: string; subject?: string; dueDate?: string; submissionStatus?: string; grade?: number | null; createdAt: string; classes?: { name: string }; students?: { fullName: string } } };
   AnnouncementDetail: { announcement: Announcement };
   PostDetail: { postId: string };
+  EbookReader: { ebook: Ebook; studentId: string; studentName?: string };
   Chat: { conversation: Conversation };
 };
 
@@ -179,6 +181,11 @@ export default function Navigation() {
               name="PostDetail"
               component={PostDetailScreen}
               options={{ headerShown: true, headerTitle: 'Post', headerBackTitle: 'Back' }}
+            />
+            <Stack.Screen
+              name="EbookReader"
+              component={EbookReaderScreen}
+              options={{ headerShown: true, headerBackTitle: 'Back' }}
             />
             <Stack.Screen
               name="Chat"
