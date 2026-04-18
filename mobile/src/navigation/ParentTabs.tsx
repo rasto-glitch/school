@@ -162,17 +162,14 @@ export default function ParentTabs() {
         options={{
           headerTitle: t('dashboard.title'),
           tabBarLabel: t('dashboard.title'),
-          tabBarIcon: ({ color, focused }) => {
-            const strokeColor = focused && isDark ? '#000000' : color;
-            return (
-              <HouseIcon
-                size={22}
-                color={strokeColor}
-                fillColor={focused && isDark ? '#FFFFFF' : 'none'}
-                doorColor={focused && isDark ? '#000000' : 'none'}
-              />
-            );
-          },
+          tabBarIcon: ({ color, focused }) => (
+            <HouseIcon
+              size={22}
+              color={color}
+              fillColor={focused && isDark ? '#FFFFFF' : 'none'}
+              doorColor={focused && isDark ? '#000000' : 'none'}
+            />
+          ),
         }}
       />
       {feat('academic_portal') ? (
@@ -182,10 +179,9 @@ export default function ParentTabs() {
           options={{
             headerTitle: t('nav.learn', 'Learn'),
             tabBarLabel: t('nav.learn', 'Learn'),
-            tabBarIcon: ({ color, focused }) => {
-              const strokeColor = focused && isDark ? '#000000' : color;
-              return <GraduationCap size={22} color={strokeColor} fill={focused && isDark ? '#FFFFFF' : 'transparent'} />;
-            },
+            tabBarIcon: ({ color, focused }) => (
+              <GraduationCap size={22} color={color} fill={focused && isDark ? '#FFFFFF' : 'transparent'} />
+            ),
           }}
         />
       ) : null}
@@ -215,15 +211,12 @@ export default function ParentTabs() {
           options={{
             headerTitle: t('nav.chat', 'Chat'),
             tabBarLabel: t('nav.chat', 'Chat'),
-            tabBarIcon: ({ color, focused }) => {
-              const strokeColor = focused && isDark ? '#000000' : color;
-              return (
-                <View>
-                  <MessageSquare size={22} color={strokeColor} fill={focused && isDark ? '#FFFFFF' : 'transparent'} />
-                  <TabBadge count={chatCount} />
-                </View>
-              );
-            },
+            tabBarIcon: ({ color, focused }) => (
+              <View>
+                <MessageSquare size={22} color={color} fill={focused && isDark ? '#FFFFFF' : 'transparent'} />
+                <TabBadge count={chatCount} />
+              </View>
+            ),
           }}
         />
       ) : null}
@@ -233,10 +226,9 @@ export default function ParentTabs() {
         options={{
           headerTitle: t('nav.me', 'Me'),
           tabBarLabel: t('nav.me', 'Me'),
-          tabBarIcon: ({ color, focused }) => {
-            const strokeColor = focused && isDark ? '#000000' : color;
-            return <User size={22} color={strokeColor} fill={focused && isDark ? '#FFFFFF' : 'transparent'} />;
-          },
+          tabBarIcon: ({ color, focused }) => (
+            <User size={22} color={color} fill={focused && isDark ? '#FFFFFF' : 'transparent'} />
+          ),
           headerRight: () => <SettingsButton />,
         }}
       />
