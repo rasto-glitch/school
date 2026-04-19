@@ -1,18 +1,35 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, AlertCircle } from 'lucide-react';
+import { postPublic } from '../lib/api';
 
 type Status = 'idle' | 'sending' | 'success' | 'error';
 
 export default function RequestDemoPage() {
   const { t } = useTranslation();
   const [status, setStatus] = useState<Status>('idle');
+  const [errorMsg, setErrorMsg] = useState('');
 
-  const onSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const submit = async (fd: FormData) => {
+    const body = {
+      schoolName:  String(fd.get('schoolName') || ''),
+      contactName: String(fd.get('contactName') || ''),
+      role:        String(fd.get('role') || ''),
+      students:    String(fd.get('students') || ''),
+      email:       String(fd.get('email') || ''),
+      phone:       String(fd.get('phone') || ''),
+      message:     String(fd.get('message') || ''),
+      website:     String(fd.get('website') || ''), // honeypot
+    };
     setStatus('sending');
-    // Placeholder: wire to backend or email service later
-    setTimeout(() => setStatus('success'), 800);
+    setErrorMsg('');
+    try {
+      await postPublic('demo-request', body);
+      setStatus('success');
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : t('demo.form.error'));
+      setStatus('error');
+    }
   };
 
   const input = 'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-primary-400 focus:ring-4 focus:ring-primary-100 outline-none transition';
@@ -44,46 +61,63 @@ export default function RequestDemoPage() {
         </div>
 
         <form
-          onSubmit={onSubmit}
+          onSubmit={(e) => { e.preventDefault(); submit(new FormData(e.currentTarget)); }}
           className="rounded-3xl border border-slate-200 bg-white shadow-sm p-6 sm:p-10 space-y-5"
         >
+          {/* Honeypot — hidden from real users */}
+          <input
+            type="text"
+            name="website"
+            tabIndex={-1}
+            autoComplete="off"
+            aria-hidden="true"
+            style={{ position: 'absolute', left: '-10000px', width: 1, height: 1, opacity: 0 }}
+          />
+
           <div className="grid sm:grid-cols-2 gap-5">
             <div>
               <label className={label}>{t('demo.form.schoolName')}</label>
-              <input required className={input} />
+              <input name="schoolName" required className={input} />
             </div>
             <div>
               <label className={label}>{t('demo.form.contactName')}</label>
-              <input required className={input} />
+              <input name="contactName" required className={input} />
             </div>
           </div>
 
           <div className="grid sm:grid-cols-2 gap-5">
             <div>
               <label className={label}>{t('demo.form.role')}</label>
-              <input placeholder={t('demo.form.rolePlaceholder')} className={input} />
+              <input name="role" placeholder={t('demo.form.rolePlaceholder')} className={input} />
             </div>
             <div>
               <label className={label}>{t('demo.form.students')}</label>
-              <input type="number" className={input} />
+              <input name="students" type="number" className={input} />
             </div>
           </div>
 
           <div className="grid sm:grid-cols-2 gap-5">
             <div>
               <label className={label}>{t('demo.form.email')}</label>
-              <input required type="email" className={input} />
+              <input name="email" required type="email" className={input} />
             </div>
             <div>
               <label className={label}>{t('demo.form.phone')}</label>
-              <input type="tel" className={input} />
+              <input name="phone" type="tel" className={input} />
             </div>
           </div>
 
           <div>
             <label className={label}>{t('demo.form.message')}</label>
-            <textarea rows={4} className={input} />
+            <textarea name="message" rows={4} className={input} />
           </div>
+
+          {status === 'error' && (
+            <div className="flex items-start gap-2 rounded-xl bg-rose-50 border border-rose-200 p-3 text-sm text-rose-700">
+              <AlertCircle size={16} className="shrink-0 mt-0.5" />
+              <span>{errorMsg || t('demo.form.error')}</span>
+            </div>
+          )}
 
           <button
             type="submit"

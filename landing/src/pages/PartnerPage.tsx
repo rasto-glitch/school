@@ -1,18 +1,35 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { CheckCircle2, Globe2, Coins, Handshake } from 'lucide-react';
+import { CheckCircle2, Globe2, Coins, Handshake, AlertCircle } from 'lucide-react';
 import { Reveal } from '../components/Section';
+import { postPublic } from '../lib/api';
 
 type Status = 'idle' | 'sending' | 'success' | 'error';
 
 export default function PartnerPage() {
   const { t } = useTranslation();
   const [status, setStatus] = useState<Status>('idle');
+  const [errorMsg, setErrorMsg] = useState('');
 
-  const onSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const submit = async (fd: FormData) => {
+    const body = {
+      companyName: String(fd.get('companyName') || ''),
+      contactName: String(fd.get('contactName') || ''),
+      email:       String(fd.get('email') || ''),
+      phone:       String(fd.get('phone') || ''),
+      country:     String(fd.get('country') || ''),
+      about:       String(fd.get('about') || ''),
+      website:     String(fd.get('website') || ''), // honeypot
+    };
     setStatus('sending');
-    setTimeout(() => setStatus('success'), 800);
+    setErrorMsg('');
+    try {
+      await postPublic('partner-application', body);
+      setStatus('success');
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : t('partner.form.error'));
+      setStatus('error');
+    }
   };
 
   const input = 'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-primary-400 focus:ring-4 focus:ring-primary-100 outline-none transition';
@@ -78,40 +95,57 @@ export default function PartnerPage() {
       <section className="py-16">
         <div className="mx-auto max-w-2xl container-px">
           <form
-            onSubmit={onSubmit}
+            onSubmit={(e) => { e.preventDefault(); submit(new FormData(e.currentTarget)); }}
             className="rounded-3xl border border-slate-200 bg-white shadow-sm p-6 sm:p-10 space-y-5"
           >
+            {/* Honeypot */}
+            <input
+              type="text"
+              name="website"
+              tabIndex={-1}
+              autoComplete="off"
+              aria-hidden="true"
+              style={{ position: 'absolute', left: '-10000px', width: 1, height: 1, opacity: 0 }}
+            />
+
             <div className="grid sm:grid-cols-2 gap-5">
               <div>
                 <label className={label}>{t('partner.form.companyName')}</label>
-                <input required className={input} />
+                <input name="companyName" required className={input} />
               </div>
               <div>
                 <label className={label}>{t('partner.form.contactName')}</label>
-                <input required className={input} />
+                <input name="contactName" required className={input} />
               </div>
             </div>
 
             <div className="grid sm:grid-cols-2 gap-5">
               <div>
                 <label className={label}>{t('partner.form.email')}</label>
-                <input required type="email" className={input} />
+                <input name="email" required type="email" className={input} />
               </div>
               <div>
                 <label className={label}>{t('partner.form.phone')}</label>
-                <input type="tel" className={input} />
+                <input name="phone" type="tel" className={input} />
               </div>
             </div>
 
             <div>
               <label className={label}>{t('partner.form.country')}</label>
-              <input className={input} />
+              <input name="country" className={input} />
             </div>
 
             <div>
               <label className={label}>{t('partner.form.about')}</label>
-              <textarea rows={5} className={input} />
+              <textarea name="about" rows={5} className={input} />
             </div>
+
+            {status === 'error' && (
+              <div className="flex items-start gap-2 rounded-xl bg-rose-50 border border-rose-200 p-3 text-sm text-rose-700">
+                <AlertCircle size={16} className="shrink-0 mt-0.5" />
+                <span>{errorMsg || t('partner.form.error')}</span>
+              </div>
+            )}
 
             <button
               type="submit"

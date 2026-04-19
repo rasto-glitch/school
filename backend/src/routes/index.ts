@@ -9,6 +9,7 @@ import * as supervisor from '../controllers/supervisor.controller';
 import * as academic from '../controllers/academic.controller';
 import * as chat from '../controllers/chat.controller';
 import * as reception from '../controllers/reception.controller';
+import * as pub from '../controllers/public.controller';
 import { authenticate, authorize } from '../middleware/auth';
 import type { AuthRequest } from '../middleware/auth';
 import { Server as SocketServer } from 'socket.io';
@@ -22,6 +23,8 @@ export function createRouter(io: SocketServer) {
   // ---- PUBLIC ----
   router.get('/schools', getSchools);
   router.post('/auth/forgot-password', (req, res) => forgotPassword(req, res));
+  router.post('/public/demo-request', (req, res) => { pub.demoRequest(req, res); });
+  router.post('/public/partner-application', (req, res) => { pub.partnerApplication(req, res); });
 
   // ---- AUTH ----
   router.post('/auth/login', login);

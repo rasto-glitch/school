@@ -20,6 +20,7 @@ const httpServer = http.createServer(app);
 const allowedOrigins = [
   process.env.FRONTEND_URL || 'http://localhost:5173',
   process.env.ACADEMIC_URL || 'http://localhost:5174',
+  process.env.LANDING_URL || 'http://localhost:5175',
 ];
 
 const io = new SocketServer(httpServer, {
@@ -66,6 +67,16 @@ const forgotPasswordLimiter = rateLimit({
   message: { error: 'Too many password reset requests. Please wait 15 minutes before trying again.' },
 });
 app.use('/api/auth/forgot-password', forgotPasswordLimiter);
+
+// Strict limiter for landing-page submissions — 5 per 15 minutes per IP
+const publicFormLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many submissions. Please try again later.' },
+});
+app.use('/api/public/', publicFormLimiter);
 
 // Loose limiter for the public schools list — 60 requests per minute per IP
 const publicLimiter = rateLimit({
