@@ -1,10 +1,10 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, useWindowDimensions } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Home, CalendarCheck, BookOpen, Users, Bell, User, MessageSquare } from 'lucide-react-native';
-import { useColors } from '../store/themeStore';
+import { useColors, useIsDark } from '../store/themeStore';
 import { useAuthStore } from '../store/authStore';
 import { useSocketStore } from '../store/socketStore';
 import { teacherApi, chatApi } from '../services/api';
@@ -42,14 +42,36 @@ function HeaderBell({ count, onPress }: { count: number; onPress: () => void }) 
 
 const Tab = createBottomTabNavigator();
 const ICON_SIZE = 22;
+const INDICATOR_WIDTH = 32;
 
 export default function TeacherTabs() {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const colors = useColors();
+  const isDark = useIsDark();
   const { school } = useAuthStore();
   const feat = (key: string) => school?.features?.[key] !== false;
   const { socket } = useSocketStore();
+  const { width: screenWidth } = useWindowDimensions();
+  const [activeIndex, setActiveIndex] = useState(0);
+  const indicatorX = useRef(new Animated.Value(0)).current;
+
+  const tabCount = 3
+    + (feat('attendance') ? 1 : 0)
+    + (feat('chat') ? 1 : 0)
+    + 1; // Me tab
+
+  useEffect(() => {
+    if (!screenWidth) return;
+    const tabW = screenWidth / tabCount;
+    const target = activeIndex * tabW + (tabW - INDICATOR_WIDTH) / 2;
+    Animated.spring(indicatorX, {
+      toValue: target,
+      useNativeDriver: true,
+      tension: 140,
+      friction: 16,
+    }).start();
+  }, [activeIndex, screenWidth, tabCount, indicatorX]);
 
   // Notification count (for header bell)
   const [notifCount, setNotifCount] = useState(0);
@@ -112,101 +134,122 @@ export default function TeacherTabs() {
     headerRight: headerRight(navigation),
   });
 
+  const activeFill = isDark ? '#FFFFFF' : colors.primary;
+
   return (
-    <Tab.Navigator
-      screenOptions={{
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.textMuted,
-        tabBarStyle: {
-          backgroundColor: colors.card,
-          borderTopColor: colors.border,
-          borderTopWidth: 1,
-          height: 60 + insets.bottom,
-          paddingBottom: insets.bottom + 6,
-          paddingTop: 6,
-          direction: 'ltr',
-        } as any,
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '500' },
-      }}
-    >
-      <Tab.Screen
-        name="TeacherDashboard"
-        component={TeacherDashboardScreen}
-        options={({ navigation }) => ({
-          ...headerOptions(navigation),
-          headerTitle: t('nav.dashboard', 'Dashboard'),
-          tabBarLabel: t('nav.dashboard', 'Dashboard'),
-          tabBarIcon: ({ color }) => <Home size={ICON_SIZE} color={color} />,
-        })}
-      />
-      {feat('attendance') ? (
-        <Tab.Screen
-          name="TeacherAttendance"
-          component={TeacherAttendanceScreen}
-          options={({ navigation }) => ({
-            ...headerOptions(navigation),
-            headerTitle: t('nav.attendance', 'Attendance'),
-            tabBarLabel: t('nav.attendance', 'Attendance'),
-            tabBarIcon: ({ color }) => <CalendarCheck size={ICON_SIZE} color={color} />,
-          })}
-        />
-      ) : null}
-      <Tab.Screen
-        name="TeacherContent"
-        component={TeacherContentScreen}
-        options={({ navigation }) => ({
-          ...headerOptions(navigation),
-          headerTitle: 'Content',
-          tabBarLabel: 'Content',
-          tabBarIcon: ({ color }) => <BookOpen size={ICON_SIZE} color={color} />,
-        })}
-      />
-      <Tab.Screen
-        name="TeacherStudents"
-        component={TeacherStudentsScreen}
-        options={({ navigation }) => ({
-          ...headerOptions(navigation),
-          headerTitle: t('nav.students', 'Students'),
-          tabBarLabel: t('nav.students', 'Students'),
-          tabBarIcon: ({ color }) => <Users size={ICON_SIZE} color={color} />,
-        })}
-      />
-      {feat('chat') ? (
-        <Tab.Screen
-          name="ChatList"
-          component={ChatListScreen}
-          listeners={{
-            tabPress: () => { setChatCount(0); chatListActive.current = true; },
-            focus: () => { setChatCount(0); chatListActive.current = true; },
-            blur: () => { chatListActive.current = false; },
-          }}
-          options={({ navigation }) => ({
-            ...headerOptions(navigation),
-            headerTitle: t('nav.chat', 'Chat'),
-            tabBarLabel: t('nav.chat', 'Chat'),
-            tabBarIcon: ({ color }) => (
-              <View>
-                <MessageSquare size={ICON_SIZE} color={color} />
-                <TabBadge count={chatCount} />
-              </View>
-            ),
-          })}
-        />
-      ) : null}
-      <Tab.Screen
-        name="TeacherMe"
-        component={TeacherMeScreen}
-        options={{
-          tabBarLabel: t('nav.me', 'Me'),
-          tabBarIcon: ({ color }) => <User size={ICON_SIZE} color={color} />,
-          headerShown: true,
-          headerTitle: t('nav.me', 'Me'),
-          headerStyle: { backgroundColor: colors.card, direction: 'ltr' } as any,
-          headerTitleStyle: { color: colors.text },
-          headerTintColor: colors.primary,
+    <View style={{ flex: 1 }}>
+      <Tab.Navigator
+        screenListeners={{
+          state: (e) => {
+            const s: any = (e.data as any)?.state;
+            if (s && typeof s.index === 'number') setActiveIndex(s.index);
+          },
         }}
+        screenOptions={{
+          tabBarActiveTintColor: isDark ? '#FFFFFF' : colors.primary,
+          tabBarInactiveTintColor: isDark ? '#FFFFFF' : colors.textMuted,
+          tabBarStyle: {
+            backgroundColor: colors.card,
+            borderTopColor: colors.border,
+            borderTopWidth: 1,
+            height: 60 + insets.bottom,
+            paddingBottom: insets.bottom + 6,
+            paddingTop: 6,
+            direction: 'ltr',
+          } as any,
+          tabBarLabelStyle: { fontSize: 11, fontWeight: '500' },
+        }}
+      >
+        <Tab.Screen
+          name="TeacherDashboard"
+          component={TeacherDashboardScreen}
+          options={({ navigation }) => ({
+            ...headerOptions(navigation),
+            headerTitle: t('nav.dashboard', 'Dashboard'),
+            tabBarLabel: t('nav.dashboard', 'Dashboard'),
+            tabBarIcon: ({ color, focused }) => <Home size={ICON_SIZE} color={color} fill={focused ? activeFill : 'transparent'} />,
+          })}
+        />
+        {feat('attendance') ? (
+          <Tab.Screen
+            name="TeacherAttendance"
+            component={TeacherAttendanceScreen}
+            options={({ navigation }) => ({
+              ...headerOptions(navigation),
+              headerTitle: t('nav.attendance', 'Attendance'),
+              tabBarLabel: t('nav.attendance', 'Attendance'),
+              tabBarIcon: ({ color, focused }) => <CalendarCheck size={ICON_SIZE} color={color} fill={focused ? activeFill : 'transparent'} />,
+            })}
+          />
+        ) : null}
+        <Tab.Screen
+          name="TeacherContent"
+          component={TeacherContentScreen}
+          options={({ navigation }) => ({
+            ...headerOptions(navigation),
+            headerTitle: 'Content',
+            tabBarLabel: 'Content',
+            tabBarIcon: ({ color, focused }) => <BookOpen size={ICON_SIZE} color={color} fill={focused ? activeFill : 'transparent'} />,
+          })}
+        />
+        <Tab.Screen
+          name="TeacherStudents"
+          component={TeacherStudentsScreen}
+          options={({ navigation }) => ({
+            ...headerOptions(navigation),
+            headerTitle: t('nav.students', 'Students'),
+            tabBarLabel: t('nav.students', 'Students'),
+            tabBarIcon: ({ color, focused }) => <Users size={ICON_SIZE} color={color} fill={focused ? activeFill : 'transparent'} />,
+          })}
+        />
+        {feat('chat') ? (
+          <Tab.Screen
+            name="ChatList"
+            component={ChatListScreen}
+            listeners={{
+              tabPress: () => { setChatCount(0); chatListActive.current = true; },
+              focus: () => { setChatCount(0); chatListActive.current = true; },
+              blur: () => { chatListActive.current = false; },
+            }}
+            options={({ navigation }) => ({
+              ...headerOptions(navigation),
+              headerTitle: t('nav.chat', 'Chat'),
+              tabBarLabel: t('nav.chat', 'Chat'),
+              tabBarIcon: ({ color, focused }) => (
+                <View>
+                  <MessageSquare size={ICON_SIZE} color={color} fill={focused ? activeFill : 'transparent'} />
+                  <TabBadge count={chatCount} />
+                </View>
+              ),
+            })}
+          />
+        ) : null}
+        <Tab.Screen
+          name="TeacherMe"
+          component={TeacherMeScreen}
+          options={{
+            tabBarLabel: t('nav.me', 'Me'),
+            tabBarIcon: ({ color, focused }) => <User size={ICON_SIZE} color={color} fill={focused ? activeFill : 'transparent'} />,
+            headerShown: true,
+            headerTitle: t('nav.me', 'Me'),
+            headerStyle: { backgroundColor: colors.card, direction: 'ltr' } as any,
+            headerTitleStyle: { color: colors.text },
+            headerTintColor: colors.primary,
+          }}
+        />
+      </Tab.Navigator>
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.activeTopLine,
+          {
+            bottom: 60 + insets.bottom - 1,
+            backgroundColor: isDark ? '#FFFFFF' : colors.primary,
+            transform: [{ translateX: indicatorX }],
+          },
+        ]}
       />
-    </Tab.Navigator>
+    </View>
   );
 }
 
@@ -219,4 +262,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 3,
   },
   badgeText: { fontSize: 9, fontWeight: '800', color: '#fff' },
+  activeTopLine: {
+    position: 'absolute',
+    left: 0,
+    width: 32, height: 2,
+    borderRadius: 1,
+  },
 });
