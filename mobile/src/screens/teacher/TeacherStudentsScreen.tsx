@@ -6,7 +6,7 @@ import {
 import { CardListSkeleton } from '../../components/Skeleton';
 import { Search, User, X, Phone } from 'lucide-react-native';
 import { teacherApi } from '../../services/api';
-import { useColors } from '../../store/themeStore';
+import { useColors, useIsDark } from '../../store/themeStore';
 import { spacing, radius, font, shadow } from '../../theme';
 
 interface ClassItem { id: string; name: string }
@@ -18,7 +18,8 @@ interface StudentItem {
 
 export default function TeacherStudentsScreen() {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const isDark = useIsDark();
+  const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
 
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [selectedClass, setSelectedClass] = useState('');
@@ -150,16 +151,25 @@ export default function TeacherStudentsScreen() {
   );
 }
 
-const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').useColors>) => StyleSheet.create({
+const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').useColors>, isDark: boolean) => StyleSheet.create({
   container: { flex: 1 },
   header: { paddingHorizontal: spacing.md, paddingBottom: spacing.sm },
   title: { fontSize: font.xxxl, fontWeight: '800', color: colors.text, marginBottom: spacing.sm },
   searchBar: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.card, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderWidth: 1, borderColor: colors.border },
   searchInput: { flex: 1, fontSize: font.md, color: colors.text },
-  chip: { borderWidth: 1.5, borderColor: colors.border, borderRadius: radius.full, paddingHorizontal: 14, paddingVertical: 8, marginRight: spacing.sm, backgroundColor: colors.card },
-  chipActive: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
-  chipText: { fontSize: font.sm, color: colors.textSecondary, fontWeight: '500' },
-  chipTextActive: { color: colors.primary, fontWeight: '700' },
+  chip: {
+    borderWidth: 1.5,
+    borderColor: isDark ? '#FFFFFF' : colors.border,
+    borderRadius: radius.full,
+    paddingHorizontal: 14, paddingVertical: 8, marginRight: spacing.sm,
+    backgroundColor: isDark ? 'transparent' : colors.card,
+  },
+  chipActive: {
+    borderColor: isDark ? '#FFFFFF' : colors.primary,
+    backgroundColor: isDark ? '#FFFFFF' : colors.primaryLight,
+  },
+  chipText: { fontSize: font.sm, color: isDark ? '#FFFFFF' : colors.textSecondary, fontWeight: '500' },
+  chipTextActive: { color: isDark ? '#000000' : colors.primary, fontWeight: '700' },
   list: { padding: spacing.md, paddingBottom: 40 },
   empty: { alignItems: 'center', marginTop: 60, gap: spacing.md },
   emptyText: { fontSize: font.md, color: colors.textMuted },

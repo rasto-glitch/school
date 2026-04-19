@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { BookOpen, ClipboardList, Trash2, Clock, FileText } from 'lucide-react-native';
 import { supervisorApi } from '../../services/api';
-import { useColors } from '../../store/themeStore';
+import { useColors, useIsDark } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
 import { spacing, radius, font, shadow } from '../../theme';
 import SupervisorWeeklySummaryScreen from './SupervisorWeeklySummaryScreen';
@@ -31,8 +31,9 @@ interface ContentItem {
 export default function SupervisorContentScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
+  const isDark = useIsDark();
   const { t } = useTranslation();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
   const route = useRoute<RouteProp<{ params: { initialTab?: TabType } }, 'params'>>();
   const initialTab = (route.params as { initialTab?: TabType } | undefined)?.initialTab;
   const { school } = useAuthStore();
@@ -122,7 +123,7 @@ export default function SupervisorContentScreen() {
                 style={[styles.tabBtn, active && styles.tabBtnActive]}
                 onPress={() => setTab(key)}
               >
-                <Icon size={14} color={active ? colors.primary : colors.textMuted} />
+                <Icon size={14} color={active ? (isDark ? '#000000' : colors.primary) : (isDark ? '#FFFFFF' : colors.textMuted)} />
                 <Text style={[styles.tabBtnText, active && styles.tabBtnTextActive]}>
                   {label}
                 </Text>
@@ -200,15 +201,25 @@ export default function SupervisorContentScreen() {
   );
 }
 
-const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').useColors>) => StyleSheet.create({
+const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').useColors>, isDark: boolean) => StyleSheet.create({
   root: { flex: 1 },
   header: { backgroundColor: colors.bg, paddingHorizontal: spacing.md, paddingBottom: spacing.sm },
   title: { fontSize: font.xxxl, fontWeight: '800', color: colors.text, marginBottom: spacing.sm },
   tabBar: { flexDirection: 'row', gap: spacing.xs, paddingBottom: spacing.xs },
-  tabBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 8, paddingHorizontal: 12, borderRadius: radius.full, backgroundColor: colors.card, ...shadow.sm },
-  tabBtnActive: { backgroundColor: colors.primaryLight },
-  tabBtnText: { fontSize: font.xs, fontWeight: '600', color: colors.textMuted },
-  tabBtnTextActive: { color: colors.primary },
+  tabBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingVertical: 8, paddingHorizontal: 12, borderRadius: radius.full,
+    backgroundColor: isDark ? 'transparent' : colors.card,
+    borderWidth: isDark ? 1.5 : 0,
+    borderColor: isDark ? '#FFFFFF' : 'transparent',
+    ...(isDark ? {} : shadow.sm),
+  },
+  tabBtnActive: {
+    backgroundColor: isDark ? '#FFFFFF' : colors.primaryLight,
+    borderColor: isDark ? '#FFFFFF' : 'transparent',
+  },
+  tabBtnText: { fontSize: font.xs, fontWeight: '600', color: isDark ? '#FFFFFF' : colors.textMuted },
+  tabBtnTextActive: { color: isDark ? '#000000' : colors.primary },
   scroll: { flex: 1 },
   scrollContent: { padding: spacing.md, paddingBottom: 40 },
   emptyCard: { alignItems: 'center', marginTop: 60, gap: spacing.md },

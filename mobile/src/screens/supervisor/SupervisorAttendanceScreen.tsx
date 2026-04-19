@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { ChevronLeft, ChevronRight, CheckCircle, XCircle, Clock, Edit2, CalendarOff } from 'lucide-react-native';
 import { supervisorApi } from '../../services/api';
-import { useColors } from '../../store/themeStore';
+import { useColors, useIsDark } from '../../store/themeStore';
 import { spacing, radius, font, shadow } from '../../theme';
 
 interface ClassItem { id: string; name: string; gradeLevel?: string }
@@ -42,7 +42,8 @@ export default function SupervisorAttendanceScreen() {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const isDark = useIsDark();
+  const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
 
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [selectedClass, setSelectedClass] = useState<ClassItem | null>(null);
@@ -329,15 +330,24 @@ export default function SupervisorAttendanceScreen() {
   );
 }
 
-const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').useColors>) => StyleSheet.create({
+const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').useColors>, isDark: boolean) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   content: { padding: spacing.md, paddingBottom: 40 },
   title: { fontSize: font.xxxl, fontWeight: '800', color: colors.text, marginBottom: spacing.md },
   sectionLabel: { fontSize: font.xs, fontWeight: '700', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.sm },
-  chip: { borderWidth: 1.5, borderColor: colors.border, borderRadius: radius.full, paddingHorizontal: 14, paddingVertical: 8, marginRight: spacing.sm, backgroundColor: colors.card },
-  chipActive: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
-  chipText: { fontSize: font.sm, color: colors.textSecondary, fontWeight: '500' },
-  chipTextActive: { color: colors.primary, fontWeight: '700' },
+  chip: {
+    borderWidth: 1.5,
+    borderColor: isDark ? '#FFFFFF' : colors.border,
+    borderRadius: radius.full,
+    paddingHorizontal: 14, paddingVertical: 8, marginRight: spacing.sm,
+    backgroundColor: isDark ? 'transparent' : colors.card,
+  },
+  chipActive: {
+    borderColor: isDark ? '#FFFFFF' : colors.primary,
+    backgroundColor: isDark ? '#FFFFFF' : colors.primaryLight,
+  },
+  chipText: { fontSize: font.sm, color: isDark ? '#FFFFFF' : colors.textSecondary, fontWeight: '500' },
+  chipTextActive: { color: isDark ? '#000000' : colors.primary, fontWeight: '700' },
   dateBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm, borderWidth: 1, borderColor: colors.border },
   dateBtnText: { fontSize: font.sm, fontWeight: '600', color: colors.text },
   calendar: { backgroundColor: colors.card, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, padding: spacing.sm, marginBottom: spacing.md },

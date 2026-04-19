@@ -4,7 +4,7 @@ import { DashboardSkeleton } from '../../components/Skeleton';
 import { useNavigation } from '@react-navigation/native';
 import { Home, CalendarCheck, BookOpen, ClipboardList, Star, FileText, Clock, Users, ChevronRight } from 'lucide-react-native';
 import { teacherApi } from '../../services/api';
-import { useColors } from '../../store/themeStore';
+import { useColors, useIsDark } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
 import { spacing, radius, font, shadow } from '../../theme';
 
@@ -14,7 +14,8 @@ interface PeriodItem { id: string; weekStartDate: string; weekEndDate: string }
 
 export default function TeacherDashboardScreen() {
   const colors = useColors();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const isDark = useIsDark();
+  const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
   const navigation = useNavigation<any>();
   const { user, school } = useAuthStore();
   const feat = (key: string) => school?.features?.[key] !== false;
@@ -135,14 +136,18 @@ export default function TeacherDashboardScreen() {
   );
 }
 
-const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').useColors>) => StyleSheet.create({
+const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').useColors>, isDark: boolean) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   content: { padding: spacing.md, paddingBottom: 40 },
   title: { fontSize: font.xxxl, fontWeight: '800', color: colors.text },
   subtitle: { fontSize: font.sm, color: colors.textMuted, marginTop: 2 },
   greeting: { fontSize: font.md, color: colors.textSecondary, marginTop: 2, marginBottom: spacing.md },
-  classChip: { borderRadius: radius.full, backgroundColor: colors.primaryLight, paddingHorizontal: 14, paddingVertical: 7, marginRight: spacing.sm },
-  classChipText: { fontSize: font.xs, fontWeight: '700', color: colors.primary },
+  classChip: {
+    borderRadius: radius.full,
+    backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : colors.primaryLight,
+    paddingHorizontal: 14, paddingVertical: 7, marginRight: spacing.sm,
+  },
+  classChipText: { fontSize: font.xs, fontWeight: '700', color: isDark ? '#FFFFFF' : colors.primary },
   periodBanner: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.successLight, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.md },
   periodText: { fontSize: font.xs, fontWeight: '600', color: colors.success, flex: 1 },
   sectionLabel: { fontSize: font.xs, fontWeight: '700', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.sm },

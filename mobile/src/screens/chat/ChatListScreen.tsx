@@ -8,7 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MessageSquare, Plus, Search, X } from 'lucide-react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { formatDistanceToNow } from 'date-fns';
-import { useColors } from '../../store/themeStore';
+import { useColors, useIsDark } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
 import { useSocketStore } from '../../store/socketStore';
 import { chatApi } from '../../services/api';
@@ -38,6 +38,7 @@ function roleLabel(role: string, subject?: string) {
 export default function ChatListScreen() {
   const navigation = useNavigation<Nav>();
   const colors = useColors();
+  const isDark = useIsDark();
   const { user } = useAuthStore();
   const { socket } = useSocketStore();
   const [convs, setConvs] = useState<Conversation[]>([]);
@@ -129,8 +130,14 @@ export default function ChatListScreen() {
             </TouchableOpacity>
           )}
         </View>
-        <TouchableOpacity onPress={openNew} style={[s.newBtn, { backgroundColor: colors.primaryLight }]}>
-          <Plus size={18} color={colors.primary} />
+        <TouchableOpacity
+          onPress={openNew}
+          style={[
+            s.newBtn,
+            { backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : colors.primaryLight },
+          ]}
+        >
+          <Plus size={18} color={isDark ? '#FFFFFF' : colors.primary} />
         </TouchableOpacity>
       </View>
 
