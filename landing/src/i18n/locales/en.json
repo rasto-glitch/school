@@ -1,0 +1,142 @@
+{
+  "brand": "Scholify",
+  "nav": {
+    "features": "Features",
+    "portals": "Portals",
+    "mobile": "Mobile app",
+    "demo": "Request a demo",
+    "partner": "Become a partner"
+  },
+  "hero": {
+    "eyebrow": "Modern school management",
+    "title": "One platform for every part of the school day.",
+    "subtitle": "Scholify connects parents, teachers, supervisors, drivers, and administrators in real time — attendance, grades, bus GPS, homework, chat, and more.",
+    "ctaPrimary": "Request a demo",
+    "ctaSecondary": "Become a partner",
+    "stats": {
+      "tenants": "Multi-tenant",
+      "tenantsDesc": "Every school isolated",
+      "realtime": "Real-time",
+      "realtimeDesc": "Live bus & alerts",
+      "languages": "3 languages",
+      "languagesDesc": "English · العربية · کوردی"
+    }
+  },
+  "features": {
+    "eyebrow": "What you get",
+    "title": "Everything a school actually runs on.",
+    "subtitle": "Purpose-built for the daily reality of schools — not a generic CRM with a school skin.",
+    "items": {
+      "attendance": {
+        "title": "Attendance & reports",
+        "desc": "Daily roll, weekly summaries, student reports, and full history — all synced across roles."
+      },
+      "grades": {
+        "title": "Grades your way",
+        "desc": "Admin-defined mark types. Each school configures quizzes, exams, and daily marks to match their curriculum."
+      },
+      "bus": {
+        "title": "Live bus GPS",
+        "desc": "Drivers share location every 30 seconds. Parents get proximity alerts at 10, 5, 2 minutes, and on arrival."
+      },
+      "chat": {
+        "title": "Parent–teacher chat",
+        "desc": "Direct messaging between parents and teachers with typing indicators and real-time delivery."
+      },
+      "homework": {
+        "title": "Homework & assignments",
+        "desc": "Post, attach files, and track submissions. Parents see what's due tonight, not what was due yesterday."
+      },
+      "academic": {
+        "title": "Academic portal",
+        "desc": "A separate space for rich posts and ebooks. Teachers publish, families read, everything searchable."
+      }
+    }
+  },
+  "portals": {
+    "eyebrow": "Built for every role",
+    "title": "Six portals, one source of truth.",
+    "subtitle": "Each role sees only what they need — and everything they need.",
+    "items": {
+      "parent": { "title": "Parents", "desc": "Live bus tracking, attendance, grades, homework, and chat with teachers." },
+      "teacher": { "title": "Teachers", "desc": "Attendance, grading, homework, weekly summaries, and reports." },
+      "supervisor": { "title": "Supervisors", "desc": "Attendance oversight, student reports, weekly reviews." },
+      "driver": { "title": "Drivers", "desc": "Route, student list, start/stop trip, automatic location sharing." },
+      "admin": { "title": "Admins", "desc": "Schools, classes, users, features, announcements — all from one panel." },
+      "reception": { "title": "Reception", "desc": "Appointments, visitor check-in, internal announcements." }
+    }
+  },
+  "mobile": {
+    "eyebrow": "Take it everywhere",
+    "title": "Mobile app for parents, teachers, supervisors, and drivers.",
+    "subtitle": "Same data, same real-time updates — in your pocket. Dark mode, three languages, full RTL.",
+    "appStore": "Download on the App Store",
+    "playStore": "Get it on Google Play",
+    "comingSoon": "Coming soon"
+  },
+  "cta": {
+    "title": "Ready to see Scholify in your school?",
+    "subtitle": "Request a demo and we'll set up a personalized walkthrough for your team.",
+    "primary": "Request a demo",
+    "secondary": "Become a partner"
+  },
+  "footer": {
+    "tagline": "Modern school management for modern schools.",
+    "product": "Product",
+    "company": "Company",
+    "legal": "Legal",
+    "privacy": "Privacy",
+    "terms": "Terms",
+    "contact": "Contact",
+    "rights": "All rights reserved."
+  },
+  "demo": {
+    "title": "Request a demo",
+    "subtitle": "Tell us about your school and we'll reach out within 2 business days.",
+    "form": {
+      "schoolName": "School name",
+      "contactName": "Your name",
+      "role": "Your role",
+      "rolePlaceholder": "Principal, IT lead, operations…",
+      "email": "Email",
+      "phone": "Phone",
+      "students": "Approximate number of students",
+      "message": "Anything else we should know?",
+      "submit": "Request demo",
+      "sending": "Sending…",
+      "success": "Thanks! We'll be in touch shortly.",
+      "error": "Something went wrong. Please try again."
+    }
+  },
+  "partner": {
+    "title": "Become a partner",
+    "subtitle": "Resellers, integrators, and regional partners — let's build together.",
+    "whyTitle": "Why partner with Scholify?",
+    "why": {
+      "whitelabel": {
+        "title": "Localized rollout",
+        "desc": "Help schools in your region adopt a platform built with Arabic, Kurdish, and English from day one."
+      },
+      "revenue": {
+        "title": "Revenue share",
+        "desc": "Earn recurring revenue on every school you onboard and maintain."
+      },
+      "support": {
+        "title": "Training & support",
+        "desc": "We'll train your team, and you'll have a direct line to ours."
+      }
+    },
+    "form": {
+      "companyName": "Company name",
+      "contactName": "Your name",
+      "email": "Email",
+      "phone": "Phone",
+      "country": "Country / region",
+      "about": "Tell us about your company and what you'd like to do with Scholify",
+      "submit": "Submit application",
+      "sending": "Sending…",
+      "success": "Thanks! Our partnerships team will be in touch.",
+      "error": "Something went wrong. Please try again."
+    }
+  }
+}
