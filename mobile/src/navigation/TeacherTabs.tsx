@@ -3,7 +3,8 @@ import { View, Text, StyleSheet, TouchableOpacity, Animated, useWindowDimensions
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Users, Bell, User, MessageSquare } from 'lucide-react-native';
+import { useNavigation } from '@react-navigation/native';
+import { Users, Bell, User, MessageSquare, Settings } from 'lucide-react-native';
 import HouseIcon from '../components/HouseIcon';
 import CalendarCheckIcon from '../components/CalendarCheckIcon';
 import BookOpenIcon from '../components/BookOpenIcon';
@@ -27,22 +28,6 @@ function TabBadge({ count }: { count: number }) {
   );
 }
 
-function HeaderBell({ count, onPress }: { count: number; onPress: () => void }) {
-  const colors = useColors();
-  return (
-    <TouchableOpacity onPress={onPress} style={{ marginRight: 12, padding: 4 }}>
-      <View>
-        <Bell size={22} color={colors.text} />
-        {count > 0 && (
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>{count > 99 ? '99+' : count}</Text>
-          </View>
-        )}
-      </View>
-    </TouchableOpacity>
-  );
-}
-
 const Tab = createBottomTabNavigator();
 const ICON_SIZE = 22;
 const INDICATOR_WIDTH = 32;
@@ -52,6 +37,7 @@ export default function TeacherTabs() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const isDark = useIsDark();
+  const navigation = useNavigation<any>();
   const { school } = useAuthStore();
   const feat = (key: string) => school?.features?.[key] !== false;
   const { socket } = useSocketStore();
@@ -62,7 +48,7 @@ export default function TeacherTabs() {
   const tabCount = 3
     + (feat('attendance') ? 1 : 0)
     + (feat('chat') ? 1 : 0)
-    + 1; // Me tab
+    + 1;
 
   useEffect(() => {
     if (!screenWidth) return;
@@ -76,7 +62,6 @@ export default function TeacherTabs() {
     }).start();
   }, [activeIndex, screenWidth, tabCount, indicatorX]);
 
-  // Notification count (for header bell)
   const [notifCount, setNotifCount] = useState(0);
   const fetchNotifCount = useCallback(() => {
     teacherApi.getUnreadCount()
@@ -97,7 +82,6 @@ export default function TeacherTabs() {
     return () => { socket.off('notification', onNotif); };
   }, [socket]);
 
-  // Chat count (for chat tab badge)
   const [chatCount, setChatCount] = useState(0);
   const chatListActive = useRef(false);
   const fetchChatCount = useCallback(() => {
@@ -119,25 +103,34 @@ export default function TeacherTabs() {
     return () => { socket.off('chat:message', onMessage); };
   }, [socket]);
 
-  const headerRight = (navigation: any) => () => (
-    <HeaderBell
-      count={notifCount}
-      onPress={() => {
-        setNotifCount(0);
-        navigation.navigate('TeacherNotifications');
-      }}
-    />
+  const headerIconBg = isDark ? 'rgba(255,255,255,0.12)' : colors.primaryLight;
+  const headerIconColor = isDark ? '#FFFFFF' : colors.primary;
+  const activeFill = isDark ? '#FFFFFF' : colors.primary;
+
+  const NotificationBell = () => (
+    <TouchableOpacity
+      onPress={() => { setNotifCount(0); navigation.navigate('TeacherNotifications'); }}
+      style={[styles.headerBtn, { backgroundColor: headerIconBg }]}
+      activeOpacity={0.7}
+    >
+      <Bell size={18} color={headerIconColor} />
+      {notifCount > 0 && (
+        <View style={styles.bellBadge}>
+          <Text style={styles.bellBadgeText}>{notifCount > 99 ? '99+' : notifCount}</Text>
+        </View>
+      )}
+    </TouchableOpacity>
   );
 
-  const headerOptions = (navigation: any) => ({
-    headerShown: true,
-    headerStyle: { backgroundColor: colors.card, direction: 'ltr' } as any,
-    headerTitleStyle: { color: colors.text },
-    headerTintColor: colors.primary,
-    headerRight: headerRight(navigation),
-  });
-
-  const activeFill = isDark ? '#FFFFFF' : colors.primary;
+  const SettingsButton = () => (
+    <TouchableOpacity
+      onPress={() => navigation.navigate('TeacherSettings')}
+      style={[styles.headerBtn, { backgroundColor: headerIconBg }]}
+      activeOpacity={0.7}
+    >
+      <Settings size={18} color={headerIconColor} />
+    </TouchableOpacity>
+  );
 
   return (
     <View style={{ flex: 1 }}>
@@ -149,6 +142,11 @@ export default function TeacherTabs() {
           },
         }}
         screenOptions={{
+          headerShown: true,
+          headerStyle: { backgroundColor: colors.card, direction: 'ltr' } as any,
+          headerTitleStyle: { color: colors.text },
+          headerShadowVisible: false,
+          headerRight: () => <NotificationBell />,
           tabBarActiveTintColor: isDark ? '#FFFFFF' : colors.primary,
           tabBarInactiveTintColor: isDark ? '#FFFFFF' : colors.textMuted,
           tabBarStyle: {
@@ -166,8 +164,7 @@ export default function TeacherTabs() {
         <Tab.Screen
           name="TeacherDashboard"
           component={TeacherDashboardScreen}
-          options={({ navigation }) => ({
-            ...headerOptions(navigation),
+          options={{
             headerTitle: t('nav.dashboard', 'Dashboard'),
             tabBarLabel: t('nav.dashboard', 'Dashboard'),
             tabBarIcon: ({ color, focused }) => (
@@ -178,39 +175,36 @@ export default function TeacherTabs() {
                 doorColor={focused ? (isDark ? '#000000' : colors.card) : 'none'}
               />
             ),
-          })}
+          }}
         />
         {feat('attendance') ? (
           <Tab.Screen
             name="TeacherAttendance"
             component={TeacherAttendanceScreen}
-            options={({ navigation }) => ({
-              ...headerOptions(navigation),
+            options={{
               headerTitle: t('nav.attendance', 'Attendance'),
               tabBarLabel: t('nav.attendance', 'Attendance'),
               tabBarIcon: ({ color, focused }) => <CalendarCheckIcon size={ICON_SIZE} color={color} fillColor={focused ? activeFill : 'none'} />,
-            })}
+            }}
           />
         ) : null}
         <Tab.Screen
           name="TeacherContent"
           component={TeacherContentScreen}
-          options={({ navigation }) => ({
-            ...headerOptions(navigation),
+          options={{
             headerTitle: 'Content',
             tabBarLabel: 'Content',
             tabBarIcon: ({ color, focused }) => <BookOpenIcon size={ICON_SIZE} color={color} fillColor={focused ? activeFill : 'none'} />,
-          })}
+          }}
         />
         <Tab.Screen
           name="TeacherStudents"
           component={TeacherStudentsScreen}
-          options={({ navigation }) => ({
-            ...headerOptions(navigation),
+          options={{
             headerTitle: t('nav.students', 'Students'),
             tabBarLabel: t('nav.students', 'Students'),
             tabBarIcon: ({ color, focused }) => <Users size={ICON_SIZE} color={color} fill={focused ? activeFill : 'transparent'} />,
-          })}
+          }}
         />
         {feat('chat') ? (
           <Tab.Screen
@@ -221,8 +215,7 @@ export default function TeacherTabs() {
               focus: () => { setChatCount(0); chatListActive.current = true; },
               blur: () => { chatListActive.current = false; },
             }}
-            options={({ navigation }) => ({
-              ...headerOptions(navigation),
+            options={{
               headerTitle: t('nav.chat', 'Chat'),
               tabBarLabel: t('nav.chat', 'Chat'),
               tabBarIcon: ({ color, focused }) => (
@@ -231,7 +224,7 @@ export default function TeacherTabs() {
                   <TabBadge count={chatCount} />
                 </View>
               ),
-            })}
+            }}
           />
         ) : null}
         <Tab.Screen
@@ -240,11 +233,8 @@ export default function TeacherTabs() {
           options={{
             tabBarLabel: t('nav.me', 'Me'),
             tabBarIcon: ({ color, focused }) => <User size={ICON_SIZE} color={color} fill={focused ? activeFill : 'transparent'} />,
-            headerShown: true,
             headerTitle: t('nav.me', 'Me'),
-            headerStyle: { backgroundColor: colors.card, direction: 'ltr' } as any,
-            headerTitleStyle: { color: colors.text },
-            headerTintColor: colors.primary,
+            headerRight: () => <SettingsButton />,
           }}
         />
       </Tab.Navigator>
@@ -264,6 +254,19 @@ export default function TeacherTabs() {
 }
 
 const styles = StyleSheet.create({
+  headerBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    alignItems: 'center', justifyContent: 'center',
+    marginRight: 12,
+  },
+  bellBadge: {
+    position: 'absolute', top: -2, right: -2,
+    minWidth: 14, height: 14, borderRadius: 7,
+    backgroundColor: '#EF4444',
+    alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 2,
+  },
+  bellBadgeText: { fontSize: 8, fontWeight: '800', color: '#fff' },
   badge: {
     position: 'absolute', top: -4, right: -6,
     minWidth: 16, height: 16, borderRadius: 8,

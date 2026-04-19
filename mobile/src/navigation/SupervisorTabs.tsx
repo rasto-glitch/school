@@ -1,9 +1,10 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Animated, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, useWindowDimensions } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Users, User, MessageSquare } from 'lucide-react-native';
+import { useNavigation } from '@react-navigation/native';
+import { Users, User, MessageSquare, Settings } from 'lucide-react-native';
 import HouseIcon from '../components/HouseIcon';
 import CalendarCheckIcon from '../components/CalendarCheckIcon';
 import BookOpenIcon from '../components/BookOpenIcon';
@@ -36,6 +37,7 @@ export default function SupervisorTabs() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const isDark = useIsDark();
+  const navigation = useNavigation<any>();
   const { school } = useAuthStore();
   const feat = (key: string) => school?.features?.[key] !== false;
   const { socket } = useSocketStore();
@@ -81,7 +83,19 @@ export default function SupervisorTabs() {
     return () => { socket.off('chat:message', onMessage); };
   }, [socket]);
 
+  const headerIconBg = isDark ? 'rgba(255,255,255,0.12)' : colors.primaryLight;
+  const headerIconColor = isDark ? '#FFFFFF' : colors.primary;
   const activeFill = isDark ? '#FFFFFF' : colors.primary;
+
+  const SettingsButton = () => (
+    <TouchableOpacity
+      onPress={() => navigation.navigate('SupervisorSettings')}
+      style={[styles.headerBtn, { backgroundColor: headerIconBg }]}
+      activeOpacity={0.7}
+    >
+      <Settings size={18} color={headerIconColor} />
+    </TouchableOpacity>
+  );
 
   return (
     <View style={{ flex: 1 }}>
@@ -172,6 +186,8 @@ export default function SupervisorTabs() {
             headerStyle: { backgroundColor: colors.card, direction: 'ltr' } as any,
             headerTitleStyle: { color: colors.text },
             headerTintColor: colors.primary,
+            headerShadowVisible: false,
+            headerRight: () => <SettingsButton />,
           }}
         />
       </Tab.Navigator>
@@ -191,6 +207,11 @@ export default function SupervisorTabs() {
 }
 
 const styles = StyleSheet.create({
+  headerBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    alignItems: 'center', justifyContent: 'center',
+    marginRight: 12,
+  },
   badge: {
     position: 'absolute', top: -4, right: -6,
     minWidth: 16, height: 16, borderRadius: 8,

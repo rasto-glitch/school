@@ -45,7 +45,7 @@ export default function TeacherSettingsScreen() {
     return () => { i18n.off('languageChanged', handler); };
   }, []);
 
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
 
   const changeLang = (code: string) => {
     setLang(code);
@@ -148,8 +148,13 @@ export default function TeacherSettingsScreen() {
         {/* Appearance */}
         <Text style={styles.sectionTitle}>{t('settings.appearance_section')}</Text>
         <View style={styles.row}>
-          <View style={[styles.iconBox, { backgroundColor: isDark ? '#1E1B4B' : '#F3F4F6' }]}>
-            <Moon size={18} color={isDark ? colors.primary : colors.textMuted} />
+          <View style={[
+            styles.iconBox,
+            isDark
+              ? { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: '#FFFFFF' }
+              : { backgroundColor: '#F3F4F6' },
+          ]}>
+            <Moon size={18} color={isDark ? '#FFFFFF' : colors.textMuted} />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.rowLabel}>{t('settings.dark_mode')}</Text>
@@ -167,8 +172,13 @@ export default function TeacherSettingsScreen() {
         <Text style={styles.sectionTitle}>{t('settings.language_section')}</Text>
         <View style={styles.card}>
           <View style={styles.row}>
-            <View style={[styles.iconBox, { backgroundColor: colors.primaryLight }]}>
-              <Globe size={18} color={colors.primary} />
+            <View style={[
+              styles.iconBox,
+              isDark
+                ? { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: '#FFFFFF' }
+                : { backgroundColor: colors.primaryLight },
+            ]}>
+              <Globe size={18} color={isDark ? '#FFFFFF' : colors.primary} />
             </View>
             <Text style={styles.rowLabel}>{t('settings.language_label')}</Text>
           </View>
@@ -274,7 +284,7 @@ export default function TeacherSettingsScreen() {
   );
 }
 
-const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').useColors>) => StyleSheet.create({
+const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').useColors>, isDark: boolean) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   content: { padding: spacing.md },
   sectionTitle: {
@@ -300,12 +310,20 @@ const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').u
   langRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
   langBtn: {
     flex: 1, paddingVertical: 10, borderRadius: radius.sm,
-    borderWidth: 1.5, borderColor: colors.border,
-    alignItems: 'center', backgroundColor: colors.bg,
+    borderWidth: 1.5,
+    borderColor: isDark ? '#FFFFFF' : colors.border,
+    alignItems: 'center',
+    backgroundColor: isDark ? 'transparent' : colors.bg,
   },
-  langBtnActive: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
-  langBtnText: { fontSize: font.sm, fontWeight: '600', color: colors.textSecondary },
-  langBtnTextActive: { color: colors.primary },
+  langBtnActive: {
+    borderColor: isDark ? '#FFFFFF' : colors.primary,
+    backgroundColor: isDark ? '#FFFFFF' : colors.primaryLight,
+  },
+  langBtnText: {
+    fontSize: font.sm, fontWeight: '600',
+    color: isDark ? '#FFFFFF' : colors.textSecondary,
+  },
+  langBtnTextActive: { color: isDark ? '#000000' : colors.primary },
   logoutRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: spacing.sm, backgroundColor: colors.dangerLight,

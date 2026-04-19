@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { View, StyleSheet, Animated, useWindowDimensions } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Animated, useWindowDimensions } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Navigation, Users, User } from 'lucide-react-native';
+import { useNavigation } from '@react-navigation/native';
+import { Navigation, Users, User, Settings } from 'lucide-react-native';
 import HouseIcon from '../components/HouseIcon';
 import { useColors, useIsDark } from '../store/themeStore';
 import DriverDashboardScreen from '../screens/driver/DriverDashboardScreen';
@@ -22,6 +23,7 @@ export default function DriverTabs() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const isDark = useIsDark();
+  const navigation = useNavigation<any>();
   const { width: screenWidth } = useWindowDimensions();
   const [activeIndex, setActiveIndex] = useState(0);
   const indicatorX = useRef(new Animated.Value(0)).current;
@@ -38,7 +40,19 @@ export default function DriverTabs() {
     }).start();
   }, [activeIndex, screenWidth, indicatorX]);
 
+  const headerIconBg = isDark ? 'rgba(255,255,255,0.12)' : colors.primaryLight;
+  const headerIconColor = isDark ? '#FFFFFF' : colors.primary;
   const activeFill = isDark ? '#FFFFFF' : colors.primary;
+
+  const SettingsButton = () => (
+    <TouchableOpacity
+      onPress={() => navigation.navigate('DriverSettings')}
+      style={[styles.headerBtn, { backgroundColor: headerIconBg }]}
+      activeOpacity={0.7}
+    >
+      <Settings size={18} color={headerIconColor} />
+    </TouchableOpacity>
+  );
 
   return (
     <View style={{ flex: 1 }}>
@@ -98,6 +112,8 @@ export default function DriverTabs() {
             headerStyle: { backgroundColor: colors.card, direction: 'ltr' } as any,
             headerTitleStyle: { color: colors.text },
             headerTintColor: colors.primary,
+            headerShadowVisible: false,
+            headerRight: () => <SettingsButton />,
           }}
         />
       </Tab.Navigator>
@@ -117,6 +133,11 @@ export default function DriverTabs() {
 }
 
 const styles = StyleSheet.create({
+  headerBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    alignItems: 'center', justifyContent: 'center',
+    marginRight: 12,
+  },
   activeTopLine: {
     position: 'absolute',
     left: 0,
