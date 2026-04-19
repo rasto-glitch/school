@@ -80,6 +80,9 @@
     "primary": "Request a demo",
     "secondary": "Become a partner"
   },
+  "legal": {
+    "lastUpdated": "Last updated"
+  },
   "footer": {
     "tagline": "Modern school management for modern schools.",
     "product": "Product",

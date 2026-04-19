@@ -4,6 +4,8 @@ import Footer from './components/Footer';
 import HomePage from './pages/HomePage';
 import RequestDemoPage from './pages/RequestDemoPage';
 import PartnerPage from './pages/PartnerPage';
+import PrivacyPage from './pages/PrivacyPage';
+import TermsPage from './pages/TermsPage';
 
 export default function App() {
   return (
@@ -14,6 +16,8 @@ export default function App() {
           <Route path="/" element={<HomePage />} />
           <Route path="/demo" element={<RequestDemoPage />} />
           <Route path="/partner" element={<PartnerPage />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
+          <Route path="/terms" element={<TermsPage />} />
           <Route path="*" element={<HomePage />} />
         </Routes>
       </main>

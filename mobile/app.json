@@ -58,7 +58,8 @@
         {
           "color": "#4F46E5"
         }
-      ]
+      ],
+      "expo-web-browser"
     ],
     "updates": {
       "url": "https://u.expo.dev/41cd079b-7217-4df8-be77-3cce354e6f3f"

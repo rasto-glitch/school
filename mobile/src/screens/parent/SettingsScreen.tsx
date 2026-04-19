@@ -7,9 +7,10 @@ import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import {
-  Bell, MapPin, Globe, Lock, LogOut, FileText,
+  Bell, MapPin, Globe, Lock, LogOut, FileText, ShieldCheck,
   Moon, ChevronRight, CheckCircle, XCircle, AlertCircle, X,
 } from 'lucide-react-native';
+import { openLegalPage } from '../../utils/legal';
 import i18n, { changeLanguageAndApply } from '../../i18n';
 import { useAuthStore } from '../../store/authStore';
 import { useThemeStore, useColors } from '../../store/themeStore';
@@ -234,7 +235,16 @@ export default function SettingsScreen() {
           </View>
           <ChevronRight size={18} color={colors.textMuted} />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.row} onPress={() => Alert.alert(t('settings.terms'), t('settings.terms_body'))}>
+        <TouchableOpacity style={styles.row} onPress={() => openLegalPage('privacy')}>
+          <View style={[styles.iconBox, { backgroundColor: '#F3F4F6' }]}>
+            <ShieldCheck size={18} color={colors.textMuted} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.rowLabel}>{t('settings.privacy')}</Text>
+          </View>
+          <ChevronRight size={18} color={colors.textMuted} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.row} onPress={() => openLegalPage('terms')}>
           <View style={[styles.iconBox, { backgroundColor: '#F3F4F6' }]}>
             <FileText size={18} color={colors.textMuted} />
           </View>
