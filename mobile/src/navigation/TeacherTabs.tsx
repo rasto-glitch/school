@@ -3,7 +3,10 @@ import { View, Text, StyleSheet, TouchableOpacity, Animated, useWindowDimensions
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Home, CalendarCheck, BookOpen, Users, Bell, User, MessageSquare } from 'lucide-react-native';
+import { Users, Bell, User, MessageSquare } from 'lucide-react-native';
+import HouseIcon from '../components/HouseIcon';
+import CalendarCheckIcon from '../components/CalendarCheckIcon';
+import BookOpenIcon from '../components/BookOpenIcon';
 import { useColors, useIsDark } from '../store/themeStore';
 import { useAuthStore } from '../store/authStore';
 import { useSocketStore } from '../store/socketStore';
@@ -167,7 +170,14 @@ export default function TeacherTabs() {
             ...headerOptions(navigation),
             headerTitle: t('nav.dashboard', 'Dashboard'),
             tabBarLabel: t('nav.dashboard', 'Dashboard'),
-            tabBarIcon: ({ color, focused }) => <Home size={ICON_SIZE} color={color} fill={focused ? activeFill : 'transparent'} />,
+            tabBarIcon: ({ color, focused }) => (
+              <HouseIcon
+                size={ICON_SIZE}
+                color={color}
+                fillColor={focused ? activeFill : 'none'}
+                doorColor={focused ? (isDark ? '#000000' : colors.card) : 'none'}
+              />
+            ),
           })}
         />
         {feat('attendance') ? (
@@ -178,7 +188,7 @@ export default function TeacherTabs() {
               ...headerOptions(navigation),
               headerTitle: t('nav.attendance', 'Attendance'),
               tabBarLabel: t('nav.attendance', 'Attendance'),
-              tabBarIcon: ({ color, focused }) => <CalendarCheck size={ICON_SIZE} color={color} fill={focused ? activeFill : 'transparent'} />,
+              tabBarIcon: ({ color, focused }) => <CalendarCheckIcon size={ICON_SIZE} color={color} fillColor={focused ? activeFill : 'none'} />,
             })}
           />
         ) : null}
@@ -189,7 +199,7 @@ export default function TeacherTabs() {
             ...headerOptions(navigation),
             headerTitle: 'Content',
             tabBarLabel: 'Content',
-            tabBarIcon: ({ color, focused }) => <BookOpen size={ICON_SIZE} color={color} fill={focused ? activeFill : 'transparent'} />,
+            tabBarIcon: ({ color, focused }) => <BookOpenIcon size={ICON_SIZE} color={color} fillColor={focused ? activeFill : 'none'} />,
           })}
         />
         <Tab.Screen

@@ -3,7 +3,8 @@ import { View, StyleSheet, Animated, useWindowDimensions } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Home, Navigation, Users, User } from 'lucide-react-native';
+import { Navigation, Users, User } from 'lucide-react-native';
+import HouseIcon from '../components/HouseIcon';
 import { useColors, useIsDark } from '../store/themeStore';
 import DriverDashboardScreen from '../screens/driver/DriverDashboardScreen';
 import StartDriveScreen from '../screens/driver/StartDriveScreen';
@@ -67,7 +68,14 @@ export default function DriverTabs() {
         <Tab.Screen
           name="DriverDashboard"
           component={DriverDashboardScreen}
-          options={{ tabBarLabel: t('nav.dashboard'), tabBarIcon: ({ color, focused }) => <Home size={ICON_SIZE} color={color} fill={focused ? activeFill : 'transparent'} /> }}
+          options={{ tabBarLabel: t('nav.dashboard'), tabBarIcon: ({ color, focused }) => (
+            <HouseIcon
+              size={ICON_SIZE}
+              color={color}
+              fillColor={focused ? activeFill : 'none'}
+              doorColor={focused ? (isDark ? '#000000' : colors.card) : 'none'}
+            />
+          ) }}
         />
         <Tab.Screen
           name="StartDrive"

@@ -3,7 +3,10 @@ import { View, Text, StyleSheet, Animated, useWindowDimensions } from 'react-nat
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Home, CalendarCheck, BookOpen, Users, User, MessageSquare } from 'lucide-react-native';
+import { Users, User, MessageSquare } from 'lucide-react-native';
+import HouseIcon from '../components/HouseIcon';
+import CalendarCheckIcon from '../components/CalendarCheckIcon';
+import BookOpenIcon from '../components/BookOpenIcon';
 import { useColors, useIsDark } from '../store/themeStore';
 import { useAuthStore } from '../store/authStore';
 import SupervisorDashboardScreen from '../screens/supervisor/SupervisorDashboardScreen';
@@ -108,19 +111,26 @@ export default function SupervisorTabs() {
         <Tab.Screen
           name="SupervisorDashboard"
           component={SupervisorDashboardScreen}
-          options={{ tabBarLabel: t('nav.dashboard', 'Dashboard'), tabBarIcon: ({ color, focused }) => <Home size={ICON_SIZE} color={color} fill={focused ? activeFill : 'transparent'} /> }}
+          options={{ tabBarLabel: t('nav.dashboard', 'Dashboard'), tabBarIcon: ({ color, focused }) => (
+            <HouseIcon
+              size={ICON_SIZE}
+              color={color}
+              fillColor={focused ? activeFill : 'none'}
+              doorColor={focused ? (isDark ? '#000000' : colors.card) : 'none'}
+            />
+          ) }}
         />
         {feat('attendance') ? (
           <Tab.Screen
             name="SupervisorAttendance"
             component={SupervisorAttendanceScreen}
-            options={{ tabBarLabel: t('nav.attendance', 'Attendance'), tabBarIcon: ({ color, focused }) => <CalendarCheck size={ICON_SIZE} color={color} fill={focused ? activeFill : 'transparent'} /> }}
+            options={{ tabBarLabel: t('nav.attendance', 'Attendance'), tabBarIcon: ({ color, focused }) => <CalendarCheckIcon size={ICON_SIZE} color={color} fillColor={focused ? activeFill : 'none'} /> }}
           />
         ) : null}
         <Tab.Screen
           name="SupervisorContent"
           component={SupervisorContentScreen}
-          options={{ tabBarLabel: t('nav.content', 'Content'), tabBarIcon: ({ color, focused }) => <BookOpen size={ICON_SIZE} color={color} fill={focused ? activeFill : 'transparent'} /> }}
+          options={{ tabBarLabel: t('nav.content', 'Content'), tabBarIcon: ({ color, focused }) => <BookOpenIcon size={ICON_SIZE} color={color} fillColor={focused ? activeFill : 'none'} /> }}
         />
         <Tab.Screen
           name="SupervisorStudents"
