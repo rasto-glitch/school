@@ -17,10 +17,14 @@ app.set('trust proxy', 1); // Trust Railway's reverse proxy for accurate IP in r
 const httpServer = http.createServer(app);
 
 // Socket.io setup
+// Each *_URL env var may hold a comma-separated list (e.g. apex + www)
+const splitOrigins = (v: string | undefined, fallback: string) =>
+  (v || fallback).split(',').map(s => s.trim()).filter(Boolean);
+
 const allowedOrigins = [
-  process.env.FRONTEND_URL || 'http://localhost:5173',
-  process.env.ACADEMIC_URL || 'http://localhost:5174',
-  process.env.LANDING_URL || 'http://localhost:5175',
+  ...splitOrigins(process.env.FRONTEND_URL, 'http://localhost:5173'),
+  ...splitOrigins(process.env.ACADEMIC_URL, 'http://localhost:5174'),
+  ...splitOrigins(process.env.LANDING_URL, 'http://localhost:5175'),
 ];
 
 const io = new SocketServer(httpServer, {
