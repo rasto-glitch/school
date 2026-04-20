@@ -5,12 +5,14 @@ import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Notifications from 'expo-notifications';
+import { useFonts, ReadexPro_700Bold } from '@expo-google-fonts/readex-pro';
 import Navigation, { navigationRef } from './src/navigation';
 import { usePushNotifications } from './src/hooks/usePushNotifications';
 import { useRTL } from './src/hooks/useRTL';
 import { useAuthStore } from './src/store/authStore';
 import { useSocketStore } from './src/store/socketStore';
 import { getNotifEmoji, openNotificationTarget } from './src/utils/notificationNav';
+import AnimatedSplash from './src/components/AnimatedSplash';
 
 interface BannerInfo {
   title: string;
@@ -131,10 +133,18 @@ function AppInner() {
 }
 
 export default function App() {
+  const [fontsLoaded] = useFonts({ ReadexPro_700Bold });
+  const [splashDone, setSplashDone] = useState(false);
+
   return (
     <SafeAreaProvider>
       <StatusBar style="dark" />
-      <AppInner />
+      {fontsLoaded && <AppInner />}
+      {(!splashDone || !fontsLoaded) && (
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: '#4F46E5' }]}>
+          {fontsLoaded && <AnimatedSplash onFinish={() => setSplashDone(true)} />}
+        </View>
+      )}
     </SafeAreaProvider>
   );
 }
