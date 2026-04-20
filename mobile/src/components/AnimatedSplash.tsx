@@ -179,17 +179,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   sGlyph: {
-    width: 92,
-    height: 92,
-    // Small negative margin so the S visually tucks into the "c" of cholify,
-    // matching the logo mockup rather than leaving a readable gap.
-    marginRight: -8,
+    width: 116,
+    height: 116,
+    // Negative margin so the S tucks into the "c" of cholify to read as one word.
+    marginRight: -18,
   },
   text: {
     fontFamily: 'ReadexPro_700Bold',
-    fontSize: 52,
+    fontSize: 64,
     color: '#FFFFFF',
     includeFontPadding: false,
-    lineHeight: 58,
+    lineHeight: 72,
   },
 });
