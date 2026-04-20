@@ -13,6 +13,7 @@ import { useAuthStore } from './src/store/authStore';
 import { useSocketStore } from './src/store/socketStore';
 import { getNotifEmoji, openNotificationTarget } from './src/utils/notificationNav';
 import AnimatedSplash from './src/components/AnimatedSplash';
+import ConsentGate from './src/components/ConsentGate';
 
 interface BannerInfo {
   title: string;
@@ -119,7 +120,9 @@ function AppInner() {
 
   return (
     <View style={{ flex: 1, direction: isRTL ? 'rtl' : 'ltr' }}>
-      <Navigation />
+      <ConsentGate>
+        <Navigation />
+      </ConsentGate>
       {banner && (
         <NotificationBanner
           key={bannerKey.current}

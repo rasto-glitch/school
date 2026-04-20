@@ -220,6 +220,18 @@
     "forgot_sent_body": "Reset password request sent to school admin.",
     "logout_confirm": "Are you sure you want to sign out?"
   },
+  "consent": {
+    "title": "Terms & Privacy",
+    "description": "Before using Scholify, please review and accept our Terms of Service and Privacy Policy. These explain how we handle your information and the rules for using the app.",
+    "read_terms": "Read Terms of Service",
+    "read_privacy": "Read Privacy Policy",
+    "checkbox": "I have read and agree to the Terms of Service and Privacy Policy.",
+    "accept": "Accept and Continue",
+    "decline": "Decline",
+    "declined_title": "You must accept to use Scholify",
+    "declined_body": "Scholify requires acceptance of the Terms of Service and Privacy Policy. You can review and accept them to continue.",
+    "review_again": "Review Again"
+  },
   "profile": {
     "title": "Profile",
     "subtitle": "Your account information"
