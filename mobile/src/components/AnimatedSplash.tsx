@@ -1,72 +1,124 @@
 import { useEffect, useRef } from 'react';
-import { Animated, Dimensions, Easing, Image, StyleSheet, Text, View } from 'react-native';
+import { Animated, Dimensions, Easing, StyleSheet, View } from 'react-native';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
 const { width, height } = Dimensions.get('window');
 
-// How far the S travels to the right before swinging left to its final home
-const TRAVEL = Math.min(width * 0.28, 130);
-// Final offset of the S from center-x — sits just left of "cholify"
-const FINAL_X = -Math.min(width * 0.22, 95);
+// How far past screen-center the S travels on its rightward sweep
+const TRAVEL_RIGHT = Math.min(width * 0.22, 110);
+
+const BIG_SCALE = 1.35;   // Size while spotlit in the center
+const NORMAL_SCALE = 1.0; // Size when it finally sits next to "cholify"
 
 export default function AnimatedSplash({ onFinish }: { onFinish: () => void }) {
   const sOpacity = useRef(new Animated.Value(0)).current;
-  const sScale = useRef(new Animated.Value(0.6)).current;
+  const sScale = useRef(new Animated.Value(0.5)).current;
   const sTranslateX = useRef(new Animated.Value(0)).current;
   const textOpacity = useRef(new Animated.Value(0)).current;
-  const textTranslateX = useRef(new Animated.Value(-12)).current;
+  const textTranslateX = useRef(new Animated.Value(-14)).current;
   const rootOpacity = useRef(new Animated.Value(1)).current;
 
-  useEffect(() => {
-    const seq = Animated.sequence([
-      // 1) S fades in and pops to full size in the center (0 → 500ms)
+  // Guard so the sequence only kicks off on the first layout callback
+  const started = useRef(false);
+
+  const startSequence = (initialX: number) => {
+    sTranslateX.setValue(initialX);
+
+    const rightX = initialX + TRAVEL_RIGHT;
+    const finalX = 0; // Natural position in the row — flush against "cholify"
+
+    Animated.sequence([
+      // 1) S fades in at screen center, bigger than normal (pop-in)
       Animated.parallel([
-        Animated.timing(sOpacity, { toValue: 1, duration: 500, useNativeDriver: true }),
-        Animated.timing(sScale, {
+        Animated.timing(sOpacity, {
           toValue: 1,
           duration: 500,
-          easing: Easing.out(Easing.back(1.4)),
+          useNativeDriver: true,
+        }),
+        Animated.timing(sScale, {
+          toValue: BIG_SCALE,
+          duration: 600,
+          easing: Easing.out(Easing.back(1.6)),
           useNativeDriver: true,
         }),
       ]),
-      Animated.delay(200),
+      Animated.delay(250),
 
-      // 2) S glides right (500 → 1100ms)
-      Animated.timing(sTranslateX, {
-        toValue: TRAVEL,
-        duration: 600,
-        easing: Easing.inOut(Easing.cubic),
-        useNativeDriver: true,
-      }),
-      Animated.delay(150),
-
-      // 3) S glides all the way left to its final home next to "cholify"
-      Animated.timing(sTranslateX, {
-        toValue: FINAL_X,
-        duration: 650,
-        easing: Easing.inOut(Easing.cubic),
-        useNativeDriver: true,
-      }),
-
-      // 4) "cholify" slides in and fades in from the S's right edge
+      // 2) Glide right while shrinking down to normal size
       Animated.parallel([
-        Animated.timing(textOpacity, { toValue: 1, duration: 450, useNativeDriver: true }),
-        Animated.timing(textTranslateX, {
-          toValue: 0,
-          duration: 450,
-          easing: Easing.out(Easing.cubic),
+        Animated.timing(sTranslateX, {
+          toValue: rightX,
+          duration: 650,
+          easing: Easing.inOut(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(sScale, {
+          toValue: NORMAL_SCALE,
+          duration: 650,
+          easing: Easing.inOut(Easing.cubic),
           useNativeDriver: true,
         }),
       ]),
+      Animated.delay(180),
 
-      // 5) Hold the logo, then fade the whole splash out
-      Animated.delay(800),
-      Animated.timing(rootOpacity, { toValue: 0, duration: 450, useNativeDriver: true }),
-    ]);
+      // 3) Swing left to the final home while "cholify" reveals in parallel
+      Animated.parallel([
+        Animated.timing(sTranslateX, {
+          toValue: finalX,
+          duration: 700,
+          easing: Easing.inOut(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.sequence([
+          Animated.delay(250),
+          Animated.parallel([
+            Animated.timing(textOpacity, {
+              toValue: 1,
+              duration: 450,
+              useNativeDriver: true,
+            }),
+            Animated.timing(textTranslateX, {
+              toValue: 0,
+              duration: 450,
+              easing: Easing.out(Easing.cubic),
+              useNativeDriver: true,
+            }),
+          ]),
+        ]),
+      ]),
 
-    seq.start(({ finished }) => {
+      // 4) Hold the logo, then fade the splash out into the app
+      Animated.delay(900),
+      Animated.timing(rootOpacity, {
+        toValue: 0,
+        duration: 450,
+        useNativeDriver: true,
+      }),
+    ]).start(({ finished }) => {
       if (finished) onFinish();
     });
+  };
+
+  const onTextLayout = (e: { nativeEvent: { layout: { width: number } } }) => {
+    if (started.current) return;
+    started.current = true;
+    // Row layout is [S][cholify] centered on screen. S's *natural* center sits
+    // textWidth/2 to the left of screen-center, so we shift it right by that
+    // amount to start the animation at the true center of the screen.
+    const textWidth = e.nativeEvent.layout.width;
+    startSequence(textWidth / 2);
+  };
+
+  useEffect(() => {
+    // Fallback safety: if layout never fires for some reason, run with a
+    // best-guess starting offset after a beat so the splash still completes.
+    const t = setTimeout(() => {
+      if (!started.current) {
+        started.current = true;
+        startSequence(100);
+      }
+    }, 400);
+    return () => clearTimeout(t);
   }, []);
 
   return (
@@ -95,6 +147,7 @@ export default function AnimatedSplash({ onFinish }: { onFinish: () => void }) {
             ]}
           />
           <Animated.Text
+            onLayout={onTextLayout}
             style={[
               styles.text,
               {
@@ -113,7 +166,11 @@ export default function AnimatedSplash({ onFinish }: { onFinish: () => void }) {
 
 const styles = StyleSheet.create({
   center: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -122,16 +179,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   sGlyph: {
-    width: 110,
-    height: 110,
-    // Pull the text slightly into the S's negative space so "Scholify" reads as one word
-    marginRight: -18,
+    width: 92,
+    height: 92,
+    // Small negative margin so the S visually tucks into the "c" of cholify,
+    // matching the logo mockup rather than leaving a readable gap.
+    marginRight: -8,
   },
   text: {
     fontFamily: 'ReadexPro_700Bold',
-    fontSize: 56,
+    fontSize: 52,
     color: '#FFFFFF',
     includeFontPadding: false,
-    lineHeight: 64,
+    lineHeight: 58,
   },
 });
