@@ -87,6 +87,9 @@ function AppInner() {
         if (routeName === 'ChatList') return;
       }
 
+      // Learn posts: system + drop-down only, no in-app banner.
+      if (type === 'post') return;
+
       if (title) {
         bannerKey.current += 1;
         setBanner({ title, body: body ?? '', type, relatedId, conversationId });

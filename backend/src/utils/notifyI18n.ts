@@ -16,6 +16,7 @@ interface PushStrings {
   prefix_announcement: string;
   prefix_report: string;
   prefix_grade: string;
+  prefix_post: string;
   prefix_general: string;
   prefix_system: string;
 }
@@ -39,6 +40,7 @@ const T: Record<string, PushStrings> = {
     prefix_announcement: 'New Announcement',
     prefix_report: 'New Report',
     prefix_grade: 'Grades Updated',
+    prefix_post: 'New Post',
     prefix_general: 'Notification',
     prefix_system: 'System',
   },
@@ -60,6 +62,7 @@ const T: Record<string, PushStrings> = {
     prefix_announcement: 'ڕاگەیاندنی نوێ',
     prefix_report: 'ڕاپۆرتی نوێ',
     prefix_grade: 'نمرەکان نوێکرانەوە',
+    prefix_post: 'پۆستی نوێ',
     prefix_general: 'ئاگادارکردنەوە',
     prefix_system: 'سیستەم',
   },
@@ -81,6 +84,7 @@ const T: Record<string, PushStrings> = {
     prefix_announcement: 'إعلان جديد',
     prefix_report: 'تقرير جديد',
     prefix_grade: 'تحديث الدرجات',
+    prefix_post: 'منشور جديد',
     prefix_general: 'إشعار',
     prefix_system: 'النظام',
   },

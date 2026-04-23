@@ -17,6 +17,7 @@ const TYPE_META: Record<string, { emoji: string }> = {
   report: { emoji: '📊' },
   appointment: { emoji: '📅' },
   grade: { emoji: '💯' },
+  post: { emoji: '📰' },
   bus: { emoji: '🚌' },
   system: { emoji: '⚙️' },
   general: { emoji: '🔔' },
@@ -93,6 +94,10 @@ export async function openNotificationTarget(d: NotifDispatch): Promise<void> {
         return;
       case 'grade':
         (navigationRef as any).navigate('Grades');
+        return;
+      case 'post':
+        if (!d.relatedId) return goTab('Learn');
+        (navigationRef as any).navigate('PostDetail', { postId: d.relatedId });
         return;
       case 'bus':
         goTab('BusTracking');

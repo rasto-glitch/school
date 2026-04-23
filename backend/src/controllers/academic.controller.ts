@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { supabase } from '../config/supabase';
 import type { AuthRequest } from '../middleware/auth';
+import { notifyMany } from '../utils/notify';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -227,6 +228,32 @@ export async function createPost(req: AuthRequest, res: Response): Promise<void>
         .single();
 
       if (error) { res.status(400).json({ error: error.message }); return; }
+
+      // Notify parents of students in this class when the post is published.
+      if (data.is_published && classId) {
+        const { data: students } = await supabase
+          .from('students')
+          .select('parents(user_id)')
+          .eq('class_id', classId)
+          .eq('school_id', schoolId);
+        if (students) {
+          const uniqueParentIds = new Set<string>();
+          for (const s of students as any[]) {
+            const uid = s.parents?.user_id;
+            if (uid) uniqueParentIds.add(uid);
+          }
+          const payloads = Array.from(uniqueParentIds).map(uid => ({
+            schoolId,
+            userId: uid,
+            title: 'New Post',
+            message: title,
+            type: 'post',
+            relatedId: data.id,
+          }));
+          notifyMany(payloads).catch(() => {});
+        }
+      }
+
       const decorated = await decoratePosts([data], userId);
       res.status(201).json(decorated[0]);
       return;
@@ -254,6 +281,28 @@ export async function createPost(req: AuthRequest, res: Response): Promise<void>
         .single();
 
       if (error) { res.status(400).json({ error: error.message }); return; }
+
+      // Supervisor posts are school-wide; notify every parent in the school.
+      if (data.is_published) {
+        const { data: parentUsers } = await supabase
+          .from('users')
+          .select('id')
+          .eq('school_id', schoolId)
+          .eq('role', 'parent')
+          .eq('is_active', true);
+        if (parentUsers && parentUsers.length > 0) {
+          const payloads = parentUsers.map((u: { id: string }) => ({
+            schoolId,
+            userId: u.id,
+            title: 'New Post',
+            message: title,
+            type: 'post',
+            relatedId: data.id,
+          }));
+          notifyMany(payloads).catch(() => {});
+        }
+      }
+
       const decorated = await decoratePosts([data], userId);
       res.status(201).json(decorated[0]);
       return;
