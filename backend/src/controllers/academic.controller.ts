@@ -29,6 +29,53 @@ async function getUserName(userId: string): Promise<string> {
   return `${data.first_name ?? ''} ${data.last_name ?? ''}`.trim();
 }
 
+// Fires post-publish notifications for a newly visible post. Teacher posts
+// reach only parents of students in that class; supervisor posts reach every
+// parent in the school.
+async function notifyPostAudience(
+  schoolId: string,
+  post: { id: string; author_role: string | null; class_id: string | null },
+  title: string,
+): Promise<void> {
+  let userIds: string[] = [];
+
+  if (post.author_role === 'teacher') {
+    if (!post.class_id) return;
+    const { data: students } = await supabase
+      .from('students')
+      .select('parents(user_id)')
+      .eq('class_id', post.class_id)
+      .eq('school_id', schoolId);
+    const set = new Set<string>();
+    for (const s of (students ?? []) as any[]) {
+      const uid = s.parents?.user_id;
+      if (uid) set.add(uid);
+    }
+    userIds = Array.from(set);
+  } else if (post.author_role === 'supervisor') {
+    const { data: parentUsers } = await supabase
+      .from('users')
+      .select('id')
+      .eq('school_id', schoolId)
+      .eq('role', 'parent')
+      .eq('is_active', true);
+    userIds = (parentUsers ?? []).map((u: { id: string }) => u.id);
+  } else {
+    return;
+  }
+
+  if (userIds.length === 0) return;
+  const payloads = userIds.map(uid => ({
+    schoolId,
+    userId: uid,
+    title: 'New Post',
+    message: title,
+    type: 'post',
+    relatedId: post.id,
+  }));
+  notifyMany(payloads).catch(() => {});
+}
+
 async function decoratePosts(posts: any[], viewerUserId: string): Promise<any[]> {
   if (posts.length === 0) return [];
 
@@ -229,29 +276,8 @@ export async function createPost(req: AuthRequest, res: Response): Promise<void>
 
       if (error) { res.status(400).json({ error: error.message }); return; }
 
-      // Notify parents of students in this class when the post is published.
-      if (data.is_published && classId) {
-        const { data: students } = await supabase
-          .from('students')
-          .select('parents(user_id)')
-          .eq('class_id', classId)
-          .eq('school_id', schoolId);
-        if (students) {
-          const uniqueParentIds = new Set<string>();
-          for (const s of students as any[]) {
-            const uid = s.parents?.user_id;
-            if (uid) uniqueParentIds.add(uid);
-          }
-          const payloads = Array.from(uniqueParentIds).map(uid => ({
-            schoolId,
-            userId: uid,
-            title: 'New Post',
-            message: title,
-            type: 'post',
-            relatedId: data.id,
-          }));
-          notifyMany(payloads).catch(() => {});
-        }
+      if (data.is_published) {
+        notifyPostAudience(schoolId, data, title);
       }
 
       const decorated = await decoratePosts([data], userId);
@@ -282,25 +308,8 @@ export async function createPost(req: AuthRequest, res: Response): Promise<void>
 
       if (error) { res.status(400).json({ error: error.message }); return; }
 
-      // Supervisor posts are school-wide; notify every parent in the school.
       if (data.is_published) {
-        const { data: parentUsers } = await supabase
-          .from('users')
-          .select('id')
-          .eq('school_id', schoolId)
-          .eq('role', 'parent')
-          .eq('is_active', true);
-        if (parentUsers && parentUsers.length > 0) {
-          const payloads = parentUsers.map((u: { id: string }) => ({
-            schoolId,
-            userId: u.id,
-            title: 'New Post',
-            message: title,
-            type: 'post',
-            relatedId: data.id,
-          }));
-          notifyMany(payloads).catch(() => {});
-        }
+        notifyPostAudience(schoolId, data, title);
       }
 
       const decorated = await decoratePosts([data], userId);
@@ -322,7 +331,7 @@ export async function updatePost(req: AuthRequest, res: Response): Promise<void>
   try {
     const { data: existing } = await supabase
       .from('academic_posts')
-      .select('author_user_id, author_role')
+      .select('author_user_id, author_role, is_published')
       .eq('id', id)
       .eq('school_id', schoolId)
       .single();
@@ -350,6 +359,12 @@ export async function updatePost(req: AuthRequest, res: Response): Promise<void>
       .single();
 
     if (error) { res.status(400).json({ error: error.message }); return; }
+
+    // Notify when a draft becomes visible for the first time.
+    if (!existing.is_published && data.is_published) {
+      notifyPostAudience(schoolId, data, data.title);
+    }
+
     const decorated = await decoratePosts([data], userId);
     res.json(decorated[0]);
   } catch {
