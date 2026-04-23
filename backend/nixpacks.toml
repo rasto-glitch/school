@@ -1,0 +1,4 @@
+[phases.install]
+# Railway sets NODE_ENV=production, which makes npm ci skip devDependencies.
+# typescript lives there and is needed for the build phase (`tsc`), so force it.
+cmds = ["npm ci --include=dev"]
