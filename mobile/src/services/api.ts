@@ -34,6 +34,8 @@ export const authApi = {
     api.post('/auth/login', { username, password }),
   registerDeviceToken: (token: string, language: string) =>
     api.post('/auth/device-token', { token, language }),
+  removeDeviceToken: (token: string) =>
+    api.delete('/auth/device-token', { data: { token } }),
   updateDeviceLanguage: (language: string) =>
     api.put('/auth/device-language', { language }),
   changePassword: (currentPassword: string, newPassword: string) =>

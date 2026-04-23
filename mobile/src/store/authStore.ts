@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { AuthUser, School } from '../types';
+import { authApi } from '../services/api';
+import { getRegisteredPushToken } from '../hooks/usePushNotifications';
 
 interface AuthState {
   token: string | null;
@@ -25,7 +27,14 @@ export const useAuthStore = create<AuthState>()(
       setAuth: (token, user, school) => set({ token, user, school }),
       setSelectedSchool: (school) => set({ selectedSchool: school }),
       setProfilePicture: (url) => set(s => s.user ? { user: { ...s.user, profilePicture: url } } : {}),
-      logout: () => set({ token: null, user: null, school: null, selectedSchool: null }),
+      logout: () => {
+        // Unsubscribe this device from push before clearing auth. Fire and
+        // forget — the axios request picks up the auth header synchronously,
+        // so it goes out with the soon-to-be-cleared JWT still attached.
+        const pushToken = getRegisteredPushToken();
+        if (pushToken) authApi.removeDeviceToken(pushToken).catch(() => {});
+        set({ token: null, user: null, school: null, selectedSchool: null });
+      },
       isAuthenticated: () => !!get().token && !!get().user,
     }),
     {

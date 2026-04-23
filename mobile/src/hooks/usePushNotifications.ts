@@ -22,8 +22,10 @@ export type PushStatus = 'idle' | 'registered' | 'denied' | 'error';
 // Module-level so MeScreen can read it without prop drilling
 let _setStatus: ((s: PushStatus) => void) | null = null;
 let _currentStatus: PushStatus = 'idle';
+let _registeredToken: string | null = null;
 
 export function getPushStatus() { return _currentStatus; }
+export function getRegisteredPushToken() { return _registeredToken; }
 
 async function doRegister(): Promise<PushStatus> {
   if (Platform.OS === 'android') {
@@ -51,6 +53,7 @@ async function doRegister(): Promise<PushStatus> {
 
   const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
   await authApi.registerDeviceToken(tokenData.data, i18n.language || 'en');
+  _registeredToken = tokenData.data;
   return 'registered';
 }
 
@@ -63,7 +66,14 @@ export function usePushNotifications() {
   _setStatus = setStatus;
 
   useEffect(() => {
-    if (!authToken || registered.current) return;
+    // On logout, allow the next signed-in user to re-register their token.
+    if (!authToken) {
+      registered.current = false;
+      _currentStatus = 'idle';
+      setStatus('idle');
+      return;
+    }
+    if (registered.current) return;
     doRegister()
       .then(s => {
         _currentStatus = s;

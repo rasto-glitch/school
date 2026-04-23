@@ -150,6 +150,11 @@ export async function registerDeviceToken(req: AuthRequest, res: Response): Prom
   const { token, language = 'en' } = req.body;
   if (!token) { res.status(400).json({ error: 'token is required' }); return; }
 
+  // Enforce one device → one user: any prior rows for this token under a
+  // different account are stale and must be cleared so the previous user
+  // stops receiving pushes on this device.
+  await supabase.from('device_tokens').delete().eq('token', token).neq('user_id', userId);
+
   await supabase.from('device_tokens')
     .upsert({ user_id: userId, school_id: schoolId, token, language }, { onConflict: 'user_id,token' });
 
