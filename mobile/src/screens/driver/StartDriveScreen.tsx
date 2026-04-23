@@ -86,7 +86,7 @@ export default function StartDriveScreen() {
     if (bg !== 'granted') {
       Alert.alert(
         'Background Location',
-        'For continuous tracking when you lock your phone or switch apps, go to Settings → Apps → School Portal → Location and select "Allow all the time".',
+        'For continuous tracking when you lock your phone or switch apps, go to Settings → Apps → Scholify → Location and select "Allow all the time".',
         [{ text: 'Continue anyway' }, { text: 'Open Settings', onPress: () => Location.requestBackgroundPermissionsAsync() }]
       );
     }

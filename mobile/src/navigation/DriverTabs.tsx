@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Navigation, Users, User, Settings } from 'lucide-react-native';
 import HouseIcon from '../components/HouseIcon';
+import HeaderBrand from '../components/HeaderBrand';
 import { useColors, useIsDark } from '../store/themeStore';
 import DriverDashboardScreen from '../screens/driver/DriverDashboardScreen';
 import StartDriveScreen from '../screens/driver/StartDriveScreen';
@@ -108,9 +109,9 @@ export default function DriverTabs() {
             tabBarLabel: t('nav.me', 'Me'),
             tabBarIcon: ({ color, focused }) => <User size={ICON_SIZE} color={color} fill={focused ? activeFill : 'transparent'} />,
             headerShown: true,
-            headerTitle: t('nav.me', 'Me'),
+            headerTitle: '',
+            headerLeft: () => <HeaderBrand />,
             headerStyle: { backgroundColor: colors.card, direction: 'ltr' } as any,
-            headerTitleStyle: { color: colors.text },
             headerTintColor: colors.primary,
             headerShadowVisible: false,
             headerRight: () => <SettingsButton />,

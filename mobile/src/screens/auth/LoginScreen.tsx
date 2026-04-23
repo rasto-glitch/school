@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, ScrollView,
+  View, Text, TextInput, TouchableOpacity, ScrollView, Image,
   StyleSheet, ActivityIndicator, Alert, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -41,8 +41,8 @@ export default function LoginScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.brand}>
-          <View style={styles.logoBox}><Text style={styles.logoText}>S</Text></View>
-          <Text style={styles.brandTitle}>School Portal</Text>
+          <Image source={require('../../../assets/logo.png')} style={styles.logoImg} resizeMode="contain" />
+          <Text style={styles.brandTitle}>Scholify</Text>
           <Text style={styles.brandSub}>Sign in to your account</Text>
         </View>
 
@@ -86,8 +86,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   scroll: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: spacing.lg },
   brand: { alignItems: 'center', marginBottom: spacing.xl },
-  logoBox: { width: 64, height: 64, borderRadius: 18, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.md, ...shadow.md },
-  logoText: { fontSize: 28, fontWeight: '800', color: colors.textInverse },
+  logoImg: { width: 80, height: 80, marginBottom: spacing.md },
   brandTitle: { fontSize: font.xxl, fontWeight: '800', color: colors.text },
   brandSub: { fontSize: font.sm, color: colors.textSecondary, marginTop: 4 },
   card: { backgroundColor: colors.card, borderRadius: radius.xl, padding: spacing.lg, ...shadow.md },

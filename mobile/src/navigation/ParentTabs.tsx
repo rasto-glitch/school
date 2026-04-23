@@ -7,6 +7,7 @@ import { TouchableOpacity, View, Text, StyleSheet, Animated, useWindowDimensions
 import { GraduationCap, Bell, User, Settings, MessageSquare } from 'lucide-react-native';
 import HouseIcon from '../components/HouseIcon';
 import BusIcon from '../components/BusIcon';
+import HeaderBrand from '../components/HeaderBrand';
 import FeedScreen from '../screens/parent/FeedScreen';
 import BusTrackingScreen from '../screens/parent/BusTrackingScreen';
 import MeScreen from '../screens/parent/MeScreen';
@@ -169,7 +170,8 @@ export default function ParentTabs() {
         screenOptions={{
           headerShown: true,
           headerStyle: { backgroundColor: colors.card, direction: 'ltr' } as any,
-          headerTitleStyle: { fontSize: font.lg, fontWeight: '700', color: colors.text },
+          headerTitle: '',
+          headerLeft: () => <HeaderBrand />,
           headerShadowVisible: false,
           headerRight: () => <NotificationBell />,
           tabBarActiveTintColor: isDark ? '#FFFFFF' : colors.primary,
@@ -190,7 +192,6 @@ export default function ParentTabs() {
           name="Feed"
           component={FeedScreen}
           options={{
-            headerTitle: t('dashboard.title'),
             tabBarLabel: t('dashboard.title'),
             tabBarIcon: ({ color, focused }) => (
               <HouseIcon
@@ -207,7 +208,6 @@ export default function ParentTabs() {
             name="Learn"
             component={LearnScreen}
             options={{
-              headerTitle: t('nav.learn', 'Learn'),
               tabBarLabel: t('nav.learn', 'Learn'),
               tabBarIcon: ({ color, focused }) => (
                 <GraduationCap size={22} color={color} fill={focused ? (isDark ? '#FFFFFF' : colors.primary) : 'transparent'} />
@@ -220,7 +220,6 @@ export default function ParentTabs() {
             name="BusTracking"
             component={BusTrackingScreen}
             options={{
-              headerTitle: t('nav.track_bus'),
               tabBarLabel: t('nav.track_bus'),
               tabBarIcon: ({ color, focused }) => {
                 const strokeColor = focused ? 'transparent' : color;
@@ -239,7 +238,6 @@ export default function ParentTabs() {
               blur: () => { chatListActive.current = false; },
             }}
             options={{
-              headerTitle: t('nav.chat', 'Chat'),
               tabBarLabel: t('nav.chat', 'Chat'),
               tabBarIcon: ({ color, focused }) => (
                 <View>
@@ -254,7 +252,6 @@ export default function ParentTabs() {
           name="Me"
           component={MeScreen}
           options={{
-            headerTitle: t('nav.me', 'Me'),
             tabBarLabel: t('nav.me', 'Me'),
             tabBarIcon: ({ color, focused }) => (
               <User size={22} color={color} fill={focused ? (isDark ? '#FFFFFF' : colors.primary) : 'transparent'} />

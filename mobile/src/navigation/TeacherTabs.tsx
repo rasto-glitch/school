@@ -8,6 +8,7 @@ import { Users, Bell, User, MessageSquare, Settings } from 'lucide-react-native'
 import HouseIcon from '../components/HouseIcon';
 import CalendarCheckIcon from '../components/CalendarCheckIcon';
 import BookOpenIcon from '../components/BookOpenIcon';
+import HeaderBrand from '../components/HeaderBrand';
 import { useColors, useIsDark } from '../store/themeStore';
 import { useAuthStore } from '../store/authStore';
 import { useSocketStore } from '../store/socketStore';
@@ -144,7 +145,8 @@ export default function TeacherTabs() {
         screenOptions={{
           headerShown: true,
           headerStyle: { backgroundColor: colors.card, direction: 'ltr' } as any,
-          headerTitleStyle: { color: colors.text },
+          headerTitle: '',
+          headerLeft: () => <HeaderBrand />,
           headerShadowVisible: false,
           headerRight: () => <NotificationBell />,
           tabBarActiveTintColor: isDark ? '#FFFFFF' : colors.primary,
@@ -165,7 +167,6 @@ export default function TeacherTabs() {
           name="TeacherDashboard"
           component={TeacherDashboardScreen}
           options={{
-            headerTitle: t('nav.dashboard', 'Dashboard'),
             tabBarLabel: t('nav.dashboard', 'Dashboard'),
             tabBarIcon: ({ color, focused }) => (
               <HouseIcon
@@ -182,7 +183,6 @@ export default function TeacherTabs() {
             name="TeacherAttendance"
             component={TeacherAttendanceScreen}
             options={{
-              headerTitle: t('nav.attendance', 'Attendance'),
               tabBarLabel: t('nav.attendance', 'Attendance'),
               tabBarIcon: ({ color, focused }) => <CalendarCheckIcon size={ICON_SIZE} color={color} fillColor={focused ? activeFill : 'none'} />,
             }}
@@ -192,7 +192,6 @@ export default function TeacherTabs() {
           name="TeacherContent"
           component={TeacherContentScreen}
           options={{
-            headerTitle: 'Content',
             tabBarLabel: 'Content',
             tabBarIcon: ({ color, focused }) => <BookOpenIcon size={ICON_SIZE} color={color} fillColor={focused ? activeFill : 'none'} />,
           }}
@@ -201,7 +200,6 @@ export default function TeacherTabs() {
           name="TeacherStudents"
           component={TeacherStudentsScreen}
           options={{
-            headerTitle: t('nav.students', 'Students'),
             tabBarLabel: t('nav.students', 'Students'),
             tabBarIcon: ({ color, focused }) => <Users size={ICON_SIZE} color={color} fill={focused ? activeFill : 'transparent'} />,
           }}
@@ -216,7 +214,6 @@ export default function TeacherTabs() {
               blur: () => { chatListActive.current = false; },
             }}
             options={{
-              headerTitle: t('nav.chat', 'Chat'),
               tabBarLabel: t('nav.chat', 'Chat'),
               tabBarIcon: ({ color, focused }) => (
                 <View>
@@ -233,7 +230,6 @@ export default function TeacherTabs() {
           options={{
             tabBarLabel: t('nav.me', 'Me'),
             tabBarIcon: ({ color, focused }) => <User size={ICON_SIZE} color={color} fill={focused ? activeFill : 'transparent'} />,
-            headerTitle: t('nav.me', 'Me'),
             headerRight: () => <SettingsButton />,
           }}
         />

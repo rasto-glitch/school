@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { GraduationCap, Eye, EyeOff, LogIn } from 'lucide-react';
+import { Eye, EyeOff, LogIn } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { authApi } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
@@ -62,10 +62,8 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-white rounded-2xl shadow-lg mb-4">
-            <GraduationCap className="w-9 h-9 text-primary-600" />
-          </div>
-          <h1 className="text-3xl font-bold text-white">School Portal</h1>
+          <img src="/logo.png" alt="Scholify" className="w-20 h-20 mx-auto mb-4" />
+          <h1 className="text-3xl font-bold text-white">Scholify</h1>
           <p className="text-primary-200 mt-1">Sign in to your account</p>
         </div>
 

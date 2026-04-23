@@ -5,7 +5,6 @@ import {
 } from 'react-native';
 import { DashboardSkeleton } from '../../components/Skeleton';
 import { useTranslation } from 'react-i18next';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Megaphone, FileText, FileBadge, Calendar, BookOpen, ClipboardList } from 'lucide-react-native';
 import { useAuthStore } from '../../store/authStore';
@@ -36,7 +35,6 @@ export default function FeedScreen() {
   const { t } = useTranslation();
   const { user, school } = useAuthStore();
   const feat = (key: string) => school?.features?.[key] !== false;
-  const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -75,7 +73,7 @@ export default function FeedScreen() {
   return (
     <ScrollView
       style={styles.container}
-      contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.md }]}
+      contentContainerStyle={[styles.content, { paddingTop: spacing.md }]}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
     >
       {/* Header */}

@@ -118,7 +118,7 @@
     "by_teacher": "بقلم {{name}}"
   },
   "schoolpicker": {
-    "title": "بوابة المدرسة",
+    "title": "Scholify",
     "subtitle": "ابحث عن مدرستك واختارها للبدء",
     "card_title": "اختر مدرستك",
     "search": "البحث عن المدارس...",
@@ -185,7 +185,7 @@
     "push_ok_title": "مفعّلة",
     "push_ok_body": "تم تفعيل إشعارات الدفع.",
     "push_denied_title": "تم رفض الإذن",
-    "push_denied_body": "اذهب إلى الإعدادات ← التطبيقات ← بوابة المدرسة ← الإشعارات وفعّلها.",
+    "push_denied_body": "اذهب إلى الإعدادات ← التطبيقات ← Scholify ← الإشعارات وفعّلها.",
     "location_section": "الموقع",
     "pickup_label": "موقع التسليم",
     "pickup_sub": "حدد المكان الذي تريد التنبيه فيه",

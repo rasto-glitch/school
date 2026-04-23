@@ -118,7 +118,7 @@
     "by_teacher": "By {{name}}"
   },
   "schoolpicker": {
-    "title": "School Portal",
+    "title": "Scholify",
     "subtitle": "Find and select your school to get started",
     "card_title": "Select Your School",
     "search": "Search schools...",
@@ -185,7 +185,7 @@
     "push_ok_title": "Enabled",
     "push_ok_body": "Push notifications are now enabled.",
     "push_denied_title": "Permission denied",
-    "push_denied_body": "Go to Settings → Apps → School Portal → Notifications and enable them.",
+    "push_denied_body": "Go to Settings → Apps → Scholify → Notifications and enable them.",
     "location_section": "Location",
     "pickup_label": "Pickup Location",
     "pickup_sub": "Set where the bus should alert you",

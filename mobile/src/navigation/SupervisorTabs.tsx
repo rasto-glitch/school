@@ -8,6 +8,7 @@ import { Users, User, MessageSquare, Settings } from 'lucide-react-native';
 import HouseIcon from '../components/HouseIcon';
 import CalendarCheckIcon from '../components/CalendarCheckIcon';
 import BookOpenIcon from '../components/BookOpenIcon';
+import HeaderBrand from '../components/HeaderBrand';
 import { useColors, useIsDark } from '../store/themeStore';
 import { useAuthStore } from '../store/authStore';
 import SupervisorDashboardScreen from '../screens/supervisor/SupervisorDashboardScreen';
@@ -162,9 +163,10 @@ export default function SupervisorTabs() {
             }}
             options={{
               headerShown: true,
-              headerTitle: t('nav.chat', 'Chat'),
+              headerTitle: '',
+              headerLeft: () => <HeaderBrand />,
               headerStyle: { backgroundColor: colors.card, direction: 'ltr' } as any,
-              headerTitleStyle: { color: colors.text },
+              headerShadowVisible: false,
               tabBarLabel: t('nav.chat', 'Chat'),
               tabBarIcon: ({ color, focused }) => (
                 <View>
@@ -182,9 +184,9 @@ export default function SupervisorTabs() {
             tabBarLabel: t('nav.me', 'Me'),
             tabBarIcon: ({ color, focused }) => <User size={ICON_SIZE} color={color} fill={focused ? activeFill : 'transparent'} />,
             headerShown: true,
-            headerTitle: t('nav.me', 'Me'),
+            headerTitle: '',
+            headerLeft: () => <HeaderBrand />,
             headerStyle: { backgroundColor: colors.card, direction: 'ltr' } as any,
-            headerTitleStyle: { color: colors.text },
             headerTintColor: colors.primary,
             headerShadowVisible: false,
             headerRight: () => <SettingsButton />,
