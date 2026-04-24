@@ -15,7 +15,7 @@ export type LegalDoc = {
 
 export type Lang = 'en' | 'ar' | 'ku';
 
-const LAST_UPDATED = '2026-04-19';
+const LAST_UPDATED = '2026-04-24';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PRIVACY POLICY
@@ -29,6 +29,7 @@ const privacyEn: LegalDoc = {
       heading: '1. About this policy',
       paragraphs: [
         'This Privacy Policy explains how Scholify ("we", "us") handles information when a school uses our school-management platform. Scholify is operated as a service to schools in the Kurdistan Region of Iraq and partner regions. It applies to our web apps, mobile apps, and the academic portal.',
+        'Scholify is operated by Rast Naser as an individual developer based in the Kurdistan Region of Iraq. Questions, data-subject requests, and legal notices can be directed to the addresses in the Contact section below.',
       ],
     },
     {
@@ -166,6 +167,7 @@ const privacyAr: LegalDoc = {
       heading: '١. حول هذه السياسة',
       paragraphs: [
         'توضح سياسة الخصوصية هذه كيف تتعامل Scholify ("نحن") مع المعلومات عند استخدام مدرسة لمنصتنا لإدارة المدارس. تُقدَّم Scholify كخدمة للمدارس في إقليم كردستان العراق والمناطق الشريكة. وتنطبق على تطبيقات الويب وتطبيقات الهاتف والبوابة الأكاديمية.',
+        'تُشغَّل Scholify من قِبَل رست ناصر بصفته مطوّراً فردياً مقيماً في إقليم كردستان العراق. يمكن توجيه الاستفسارات وطلبات أصحاب البيانات والإشعارات القانونية إلى العناوين الواردة في قسم التواصل أدناه.',
       ],
     },
     {
@@ -302,6 +304,7 @@ const privacyKu: LegalDoc = {
       heading: '١. دەربارەی ئەم سیاسەتە',
       paragraphs: [
         'ئەم سیاسەتی تایبەتمەندییە ڕوون دەکاتەوە کە چۆن Scholify ("ئێمە") مامەڵە لەگەڵ زانیاریدا دەکات کاتێک قوتابخانەیەک پلاتفۆڕمی بەڕێوەبردنی قوتابخانەی ئێمە بەکار دەهێنێت. Scholify وەک خزمەتگوزارییەک پێشکەش بە قوتابخانەکانی هەرێمی کوردستانی عێراق و ناوچە هاوبەشەکان دەکرێت. ئەم سیاسەتە بۆ ئەپلیکەیشنی وێب، ئەپلیکەیشنی مۆبایل و دەرگای ئەکادیمی جێبەجێ دەبێت.',
+        'Scholify لەلایەن ڕست ناسرەوە وەک گەشەپێدەرێکی تاکەکەسی لە هەرێمی کوردستانی عێراق بەڕێوە دەبرێت. پرسیار، داواکاریەکانی خاوەنی داتا، و ئاگاداریە یاساییەکان دەکرێت بنێردرێن بۆ ئەو ناونیشانانەی لە بەشی پەیوەندی لە خوارەوە.',
       ],
     },
     {
