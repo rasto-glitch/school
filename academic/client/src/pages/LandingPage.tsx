@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import {
-  BookOpen, FileText, Users, ArrowRight, GraduationCap,
+  BookOpen, FileText, Users, ArrowRight,
   Lightbulb, Library, Sparkles, ChevronRight, PenTool,
   Globe, BookMarked,
 } from 'lucide-react';
@@ -48,9 +48,7 @@ export default function LandingPage() {
       <nav className="sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b border-gray-100">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 bg-gradient-to-br from-primary-600 to-primary-700 rounded-xl flex items-center justify-center shadow-md shadow-primary-200">
-              <GraduationCap className="w-5 h-5 text-white" />
-            </div>
+            <img src="/logo.png" alt="Scholify" className="w-9 h-9 rounded-xl shadow-md shadow-primary-200" />
             <div className="hidden sm:block">
               <span className="font-bold text-gray-900">Academic Portal</span>
               <span className="text-xs text-gray-400 block -mt-0.5">Knowledge Platform</span>
@@ -235,7 +233,7 @@ export default function LandingPage() {
       <footer className="border-t border-gray-100 px-6 py-8">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <GraduationCap className="w-4 h-4 text-gray-300" />
+            <img src="/logo.png" alt="Scholify" className="w-4 h-4 rounded opacity-60" />
             <span className="text-xs text-gray-400">Academic Portal</span>
           </div>
           <span className="text-xs text-gray-300">Part of your school management system</span>

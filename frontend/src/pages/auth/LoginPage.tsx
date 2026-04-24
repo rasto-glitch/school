@@ -62,7 +62,9 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         {/* Header */}
         <div className="text-center mb-8">
-          <img src="/logo.png" alt="Scholify" className="w-20 h-20 mx-auto mb-4" />
+          <div className="inline-flex items-center justify-center w-20 h-20 mx-auto mb-4 rounded-2xl bg-primary-700/60 ring-1 ring-white/20 shadow-[0_0_40px_rgba(255,255,255,0.35)] backdrop-blur-sm">
+            <img src="/splash-s.png" alt="Scholify" className="w-12 h-12" />
+          </div>
           <h1 className="text-3xl font-bold text-white">Scholify</h1>
           <p className="text-primary-200 mt-1">Sign in to your account</p>
         </div>

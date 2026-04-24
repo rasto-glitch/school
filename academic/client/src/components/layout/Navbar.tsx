@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { GraduationCap, LogOut, BookOpen, Library, FileText } from 'lucide-react';
+import { LogOut, BookOpen, Library, FileText } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 
 export default function Navbar() {
@@ -26,9 +26,8 @@ export default function Navbar() {
           {school?.logoUrl ? (
             <img src={school.logoUrl} alt={school.name} className="w-8 h-8 rounded-lg object-cover ring-2 ring-gray-100" />
           ) : (
-            <div className="w-8 h-8 bg-gradient-to-br from-primary-600 to-primary-700 rounded-lg flex items-center justify-center flex-shrink-0 shadow-md shadow-primary-200">
-              <GraduationCap className="w-4 h-4 text-white" />
-            </div>
+            <img src="/logo.png" alt="Scholify" className="w-8 h-8 rounded-lg flex-shrink-0 shadow-md shadow-primary-200" />
+
           )}
           <div className="hidden sm:block">
             <span className="font-bold text-gray-900 text-sm leading-tight block">

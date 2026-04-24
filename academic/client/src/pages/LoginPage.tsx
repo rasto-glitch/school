@@ -1,7 +1,7 @@
 import { useState, FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  GraduationCap, ArrowLeft, Eye, EyeOff, LogIn, ChevronRight,
+  ArrowLeft, Eye, EyeOff, LogIn, ChevronRight,
   Sparkles, BookOpen, FileText, Library, Shield,
 } from 'lucide-react';
 import { authApi } from '../services/api';
@@ -70,9 +70,7 @@ export default function LoginPage() {
           {/* Top: Logo */}
           <div>
             <div className="flex items-center gap-3 mb-2">
-              <div className="w-11 h-11 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center border border-white/20">
-                <GraduationCap className="w-6 h-6 text-white" />
-              </div>
+              <img src="/logo.png" alt="Scholify" className="w-11 h-11 rounded-xl border border-white/20" />
               <div>
                 <h2 className="text-white font-bold text-xl tracking-tight">Academic Portal</h2>
                 <p className="text-white/60 text-xs font-medium">Knowledge Platform</p>
@@ -144,9 +142,7 @@ export default function LoginPage() {
 
           {/* Mobile-only logo */}
           <div className="lg:hidden text-center mb-8">
-            <div className="inline-flex items-center justify-center w-14 h-14 bg-gradient-to-br from-primary-600 to-primary-700 rounded-2xl shadow-lg shadow-primary-200 mb-4">
-              <GraduationCap className="w-7 h-7 text-white" />
-            </div>
+            <img src="/logo.png" alt="Scholify" className="inline-block w-14 h-14 rounded-2xl shadow-lg shadow-primary-200 mb-4" />
             <h1 className="text-2xl font-bold text-gray-900">Academic Portal</h1>
             <p className="text-sm text-gray-500 mt-1">Knowledge Platform</p>
           </div>
@@ -230,7 +226,7 @@ export default function LoginPage() {
 
           {/* Bottom branding for desktop */}
           <div className="hidden lg:flex items-center justify-center gap-1.5 mt-12 text-xs text-gray-300">
-            <GraduationCap className="w-3.5 h-3.5" />
+            <img src="/logo.png" alt="Scholify" className="w-3.5 h-3.5 rounded" />
             <span>Academic Portal</span>
             <span className="text-gray-200">·</span>
             <span>Knowledge Platform</span>
