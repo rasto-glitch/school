@@ -7,7 +7,7 @@ Multi-tenant school management monorepo. Six workspaces share one Supabase datab
 | Folder | What it is | Where it runs |
 | --- | --- | --- |
 | `frontend/` | Main web app (parent, teacher, admin, driver, supervisor, reception) — Vite + React 19 | Deployed on **Vercel** |
-| `backend/` | Express 5 + Socket.io API | Deployed on **Railway** (entry `backend/dist/server.js`, config in `railway.json` + `nixpacks.toml`) |
+| `backend/` | Express 5 + Socket.io API | Deployed on **Railway** with **root directory = `backend`**. Entry is `dist/server.js` (relative to `backend/`, because root_dir rebases the build container at `backend/`). Build config: `railway.json` at the repo root + `backend/nixpacks.toml` — the nixpacks file **must** live inside `backend/` or Railway's root_dir filter skips it. `npm ci` runs under `NODE_ENV=production`, so devDeps (including `typescript`) are stripped unless the install step passes `--include=dev`. |
 | `mobile/` | Expo / React Native app | Shipped via **EAS** — OTA channel `preview` |
 | `master/` | Superadmin portal (`client/` + `server/`) for managing schools | **Local only. Bound to `127.0.0.1`, never deployed.** Security-sensitive — do not add deploy targets. |
 | `academic/` | Academic content portal (`client/` only) — rich-text posts & ebooks | Local for now; will go online later. Gated by `school.features.academic_portal`. |
