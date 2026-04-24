@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { AuthUser, School } from '../types';
 import { authApi } from '../services/api';
 import { getRegisteredPushToken } from '../hooks/usePushNotifications';
+import { useThemeStore } from './themeStore';
 
 interface AuthState {
   token: string | null;
@@ -33,6 +34,9 @@ export const useAuthStore = create<AuthState>()(
         // so it goes out with the soon-to-be-cleared JWT still attached.
         const pushToken = getRegisteredPushToken();
         if (pushToken) authApi.removeDeviceToken(pushToken).catch(() => {});
+        // Theme is device-persisted; reset it so the next person to sign in
+        // on this device doesn't inherit the previous user's dark-mode choice.
+        useThemeStore.getState().reset();
         set({ token: null, user: null, school: null, selectedSchool: null });
       },
       isAuthenticated: () => !!get().token && !!get().user,

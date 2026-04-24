@@ -19,7 +19,16 @@ api.interceptors.response.use(
   (error) => {
     const isLoginRequest = error.config?.url?.includes('/auth/login');
     if (error.response?.status === 401 && !isLoginRequest) {
-      useAuthStore.getState().logout();
+      // Only logout if the failing request used the *current* session's token.
+      // A 401 against a stale token (e.g. an in-flight request from a previous
+      // session that resolved after a fresh login) must not bounce the new
+      // session back to the login screen.
+      const usedAuth = error.config?.headers?.Authorization as string | undefined;
+      const usedToken = usedAuth?.startsWith('Bearer ') ? usedAuth.slice(7) : undefined;
+      const currentToken = useAuthStore.getState().token;
+      if (usedToken && currentToken && usedToken === currentToken) {
+        useAuthStore.getState().logout();
+      }
     }
     return Promise.reject(error);
   }

@@ -6,6 +6,7 @@ interface ThemeState {
   isDark: boolean;
   toggleTheme: () => void;
   setDark: (v: boolean) => void;
+  reset: () => void;
 }
 
 export const useThemeStore = create<ThemeState>()(
@@ -14,6 +15,10 @@ export const useThemeStore = create<ThemeState>()(
       isDark: false,
       toggleTheme: () => set(s => ({ isDark: !s.isDark })),
       setDark: (v) => set({ isDark: v }),
+      // Called from logout so the next person to sign in on this device
+      // starts with the default (light) theme instead of inheriting the
+      // previous user's preference.
+      reset: () => set({ isDark: false }),
     }),
     { name: 'school-theme', storage: createJSONStorage(() => AsyncStorage) }
   )
