@@ -13,14 +13,17 @@ export default function HeaderBrand() {
 
 const styles = StyleSheet.create({
   row: {
+    // paddingHorizontal + gap don't get auto-flipped under I18nManager.isRTL,
+    // so the spacing stays correct in Arabic/Kurdish (header is forced LTR).
     flexDirection: 'row',
     alignItems: 'center',
-    paddingLeft: 16,
+    paddingHorizontal: 16,
+    gap: 10,
   },
   logo: {
     width: 28,
     height: 28,
-    marginRight: 8,
+    borderRadius: 6,
   },
   name: {
     fontSize: 20,

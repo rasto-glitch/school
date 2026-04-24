@@ -86,7 +86,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   scroll: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: spacing.lg },
   brand: { alignItems: 'center', marginBottom: spacing.xl },
-  logoImg: { width: 80, height: 80, marginBottom: spacing.md },
+  logoImg: { width: 80, height: 80, borderRadius: 18, marginBottom: spacing.md },
   brandTitle: { fontSize: font.xxl, fontWeight: '800', color: colors.text },
   brandSub: { fontSize: font.sm, color: colors.textSecondary, marginTop: 4 },
   card: { backgroundColor: colors.card, borderRadius: radius.xl, padding: spacing.lg, ...shadow.md },

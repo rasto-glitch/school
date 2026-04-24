@@ -137,7 +137,7 @@ const styles = StyleSheet.create({
   headerBtn: {
     width: 36, height: 36, borderRadius: 18,
     alignItems: 'center', justifyContent: 'center',
-    marginRight: 12,
+    marginHorizontal: 12,
   },
   activeTopLine: {
     position: 'absolute',

@@ -182,7 +182,7 @@ const styles = StyleSheet.create({
     width: 116,
     height: 116,
     // Negative margin so the S tucks into the "c" of cholify to read as one word.
-    marginRight: -18,
+    marginRight: -30,
   },
   text: {
     fontFamily: 'ReadexPro_700Bold',
@@ -190,5 +190,8 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     includeFontPadding: false,
     lineHeight: 72,
+    // Drop the baseline a few px so "cholify" reads as a continuation of the
+    // S glyph instead of floating above it.
+    marginTop: 10,
   },
 });
