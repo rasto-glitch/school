@@ -9,7 +9,7 @@
     "ios": {
       "bundleIdentifier": "com.rastoelkurdi.schoolportal",
       "supportsTablet": false,
-      "icon": "./assets/logo.png",
+      "icon": "./assets/logo-ios.png",
       "infoPlist": {
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Your location is used for real-time bus route tracking so parents are notified when the bus is nearby.",
         "NSLocationWhenInUseUsageDescription": "Your location is used for real-time bus route tracking so parents are notified when the bus is nearby.",
@@ -22,7 +22,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/logo.png",
+        "foregroundImage": "./assets/logo-android.png",
         "backgroundColor": "#4F46E5"
       },
       "package": "com.rastoelkurdi.schoolportal",
