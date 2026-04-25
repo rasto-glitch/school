@@ -181,8 +181,9 @@ const styles = StyleSheet.create({
   sGlyph: {
     width: 116,
     height: 116,
-    // Negative margin so the S tucks into the "c" of cholify to read as one word.
-    marginRight: -30,
+    // 17px breathing room between the S and "cholify" — roughly the same
+    // visual rhythm as the h-to-o letter spacing in Readex Pro Bold.
+    marginRight: 17,
   },
   text: {
     fontFamily: 'ReadexPro_700Bold',
@@ -190,8 +191,8 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     includeFontPadding: false,
     lineHeight: 72,
-    // Drop the baseline a few px so "cholify" reads as a continuation of the
-    // S glyph instead of floating above it.
-    marginTop: 10,
+    // Push the baseline down so "cholify" sits with the bottom of the S
+    // glyph instead of floating above it; the row reads as one word.
+    marginTop: 32,
   },
 });
