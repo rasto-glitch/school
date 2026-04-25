@@ -177,6 +177,10 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
+    // splash-s.png has more transparent padding on the left than the right,
+    // so the visible glyph sits right of its image-bbox center. Nudge the
+    // whole row left a touch so the word reads as visually centered.
+    transform: [{ translateX: -10 }],
   },
   sGlyph: {
     width: 116,
