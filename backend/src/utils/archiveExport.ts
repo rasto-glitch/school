@@ -276,6 +276,10 @@ function writeStudentSection(
 export function buildXlsx(snapshot: ArchiveSnapshot): Buffer {
   const wb = XLSX.utils.book_new();
 
+  // Always emit the headers — XLSX.utils.json_to_sheet([]) yields a sheet
+  // with no header row, which some viewers render as missing/empty. Use
+  // aoa_to_sheet for the empty case so the columns are always visible.
+  const archivedHeaders = ['Full name', 'Date of birth', 'Enrolled', 'Departed', 'Reason', 'Parent name', 'Parent phone', 'Classes attended'];
   const archivedRows = snapshot.archived.map(s => ({
     'Full name': s.fullName,
     'Date of birth': s.dateOfBirth ?? '',
@@ -286,8 +290,12 @@ export function buildXlsx(snapshot: ArchiveSnapshot): Buffer {
     'Parent phone': s.parentPhone ?? '',
     'Classes attended': s.classesAttended.map(c => `${c.year}: ${c.className}`).join(' | '),
   }));
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(archivedRows), 'Archived');
+  const archivedSheet = archivedRows.length > 0
+    ? XLSX.utils.json_to_sheet(archivedRows, { header: archivedHeaders })
+    : XLSX.utils.aoa_to_sheet([archivedHeaders]);
+  XLSX.utils.book_append_sheet(wb, archivedSheet, 'Archived');
 
+  const graduatedHeaders = ['Full name', 'Date of birth', 'Enrolled', 'Graduated', 'Graduation year', 'Final class', 'Parent name', 'Parent phone', 'Classes attended'];
   const graduatedRows = snapshot.graduated.map(s => ({
     'Full name': s.fullName,
     'Date of birth': s.dateOfBirth ?? '',
@@ -299,7 +307,10 @@ export function buildXlsx(snapshot: ArchiveSnapshot): Buffer {
     'Parent phone': s.parentPhone ?? '',
     'Classes attended': s.classesAttended.map(c => `${c.year}: ${c.className}`).join(' | '),
   }));
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(graduatedRows), 'Graduated');
+  const graduatedSheet = graduatedRows.length > 0
+    ? XLSX.utils.json_to_sheet(graduatedRows, { header: graduatedHeaders })
+    : XLSX.utils.aoa_to_sheet([graduatedHeaders]);
+  XLSX.utils.book_append_sheet(wb, graduatedSheet, 'Graduated');
 
   // Flattened grades — one row per (student, year, period, subject)
   const gradeRows = [

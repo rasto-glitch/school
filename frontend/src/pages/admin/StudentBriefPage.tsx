@@ -7,7 +7,7 @@ import Card from '../../components/common/Card';
 import Select from '../../components/common/Select';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import EmptyState from '../../components/common/EmptyState';
-import type { Student, Report, Grade } from '../../types';
+import type { Student, Report, Grade, Mark } from '../../types';
 import { format, parseISO, differenceInYears } from 'date-fns';
 
 export default function StudentBriefPage() {
@@ -82,10 +82,17 @@ export default function StudentBriefPage() {
   // Subjects that appear in the filtered grades
   const gradeSubjects = [...new Set(filteredGrades.map(g => g.subject))].sort();
 
+  // Discover mark column names from the data — `marks[]` is the source of
+  // truth (CLAUDE.md). Fall back to legacy columns only if no marks exist.
+  const markNameSet = new Set<string>();
+  for (const g of filteredGrades) {
+    for (const n of getMarkNames(g)) markNameSet.add(n);
+  }
+  const markNames = Array.from(markNameSet);
+
   // Full Year Mark: average of each period's total
   const termTotals = gradePeriods.map(p =>
-    gradesByPeriod[p].reduce((sum, g) =>
-      sum + (g.dailyGrade || 0) + (g.quizGrade || 0) + (g.monthlyExamGrade || 0) + (g.termExamGrade || 0), 0)
+    gradesByPeriod[p].reduce((sum, g) => sum + gradeTotal(g, markNames), 0)
   );
   const yearMark = termTotals.length > 0
     ? (termTotals.reduce((a, b) => a + b, 0) / termTotals.length).toFixed(1)
@@ -249,10 +256,9 @@ export default function StudentBriefPage() {
                             <thead>
                               <tr className="bg-gray-50">
                                 <th className="text-left px-3 py-2 font-medium text-gray-500 border border-gray-200">Subject</th>
-                                <th className="text-center px-3 py-2 font-medium text-gray-500 border border-gray-200">Daily</th>
-                                <th className="text-center px-3 py-2 font-medium text-gray-500 border border-gray-200">Quiz</th>
-                                <th className="text-center px-3 py-2 font-medium text-gray-500 border border-gray-200">Monthly Exam</th>
-                                <th className="text-center px-3 py-2 font-medium text-gray-500 border border-gray-200">Term Exam</th>
+                                {markNames.map(n => (
+                                  <th key={n} className="text-center px-3 py-2 font-medium text-gray-500 border border-gray-200">{n}</th>
+                                ))}
                                 <th className="text-center px-3 py-2 font-medium text-gray-500 border border-gray-200">Total</th>
                               </tr>
                             </thead>
@@ -260,14 +266,16 @@ export default function StudentBriefPage() {
                               {gradeSubjects.map(subj => {
                                 const g = gradesByPeriod[period]?.find(r => r.subject === subj);
                                 if (!g) return null;
-                                const total = (g.dailyGrade || 0) + (g.quizGrade || 0) + (g.monthlyExamGrade || 0) + (g.termExamGrade || 0);
+                                const total = gradeTotal(g, markNames);
                                 return (
                                   <tr key={subj} className="hover:bg-gray-50">
                                     <td className="px-3 py-2 border border-gray-200 text-gray-700 font-medium">{subj}</td>
-                                    <td className="px-3 py-2 border border-gray-200 text-center">{g.dailyGrade ?? '—'}</td>
-                                    <td className="px-3 py-2 border border-gray-200 text-center">{g.quizGrade ?? '—'}</td>
-                                    <td className="px-3 py-2 border border-gray-200 text-center">{g.monthlyExamGrade ?? '—'}</td>
-                                    <td className="px-3 py-2 border border-gray-200 text-center">{g.termExamGrade ?? '—'}</td>
+                                    {markNames.map(n => {
+                                      const v = getMarkValue(g, n);
+                                      return (
+                                        <td key={n} className="px-3 py-2 border border-gray-200 text-center">{v ?? '—'}</td>
+                                      );
+                                    })}
                                     <td className="px-3 py-2 border border-gray-200 text-center font-semibold text-primary-700">{total.toFixed(1)}</td>
                                   </tr>
                                 );
@@ -362,4 +370,35 @@ export default function StudentBriefPage() {
       </div>
     </PageLayout>
   );
+}
+
+// Mark helpers — `marks[]` is the source of truth (CLAUDE.md). Legacy columns
+// are read only as a fallback for records written before the migration.
+function getMarkNames(g: Grade): string[] {
+  if (g.marks && g.marks.length > 0) return g.marks.map(m => m.name);
+  const legacy: string[] = [];
+  if (g.dailyGrade) legacy.push('Daily');
+  if (g.quizGrade) legacy.push('Quiz');
+  if (g.monthlyExamGrade) legacy.push('Monthly');
+  if (g.termExamGrade) legacy.push('Term Exam');
+  return legacy;
+}
+
+function getMarkValue(g: Grade, name: string): number | null {
+  if (g.marks && g.marks.length > 0) {
+    const m = g.marks.find((m: Mark) => m.name === name);
+    return m ? m.value : null;
+  }
+  if (name === 'Daily') return g.dailyGrade ?? null;
+  if (name === 'Quiz') return g.quizGrade ?? null;
+  if (name === 'Monthly') return g.monthlyExamGrade ?? null;
+  if (name === 'Term Exam') return g.termExamGrade ?? null;
+  return null;
+}
+
+function gradeTotal(g: Grade, markNames: string[]): number {
+  if (g.marks && g.marks.length > 0) {
+    return g.marks.reduce((s, m) => s + m.value, 0);
+  }
+  return markNames.reduce((s, name) => s + (getMarkValue(g, name) || 0), 0);
 }
