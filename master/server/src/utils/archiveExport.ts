@@ -276,7 +276,7 @@ export function buildXlsx(snapshot: ArchiveSnapshot): Buffer {
     'Classes attended': s.classesAttended.map(c => `${c.year}: ${c.className}`).join(' | '),
   }));
   const archivedSheet = archivedRows.length > 0
-    ? XLSX.utils.json_to_sheet(archivedRows, { header: archivedHeaders })
+    ? XLSX.utils.json_to_sheet(archivedRows)
     : XLSX.utils.aoa_to_sheet([archivedHeaders]);
   XLSX.utils.book_append_sheet(wb, archivedSheet, 'Archived');
 
@@ -293,7 +293,7 @@ export function buildXlsx(snapshot: ArchiveSnapshot): Buffer {
     'Classes attended': s.classesAttended.map(c => `${c.year}: ${c.className}`).join(' | '),
   }));
   const graduatedSheet = graduatedRows.length > 0
-    ? XLSX.utils.json_to_sheet(graduatedRows, { header: graduatedHeaders })
+    ? XLSX.utils.json_to_sheet(graduatedRows)
     : XLSX.utils.aoa_to_sheet([graduatedHeaders]);
   XLSX.utils.book_append_sheet(wb, graduatedSheet, 'Graduated');
 
