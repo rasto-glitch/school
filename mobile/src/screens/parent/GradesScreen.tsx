@@ -9,6 +9,11 @@ import { useColors, useIsDark } from '../../store/themeStore';
 import { spacing, radius, font, shadow } from '../../theme';
 import type { Grade, Student } from '../../types';
 
+function canonicalLabel(s: string | null | undefined): string {
+  if (!s) return '';
+  return s.trim().toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+}
+
 function getMarkNames(g: Grade): string[] {
   if (g.marks && g.marks.length > 0) return g.marks.map(m => m.name);
   const legacy: string[] = [];
@@ -89,13 +94,15 @@ export default function GradesScreen() {
 
   const onRefresh = () => { setRefreshing(true); load().finally(() => setRefreshing(false)); };
 
-  // Group: year → term → subject → Grade
+  // Group: year → term → subject → Grade. Canonical labels collapse case
+  // variations ("Term 1" vs "term 1") onto the same row.
   const byYear = useMemo(() => grades.reduce((acc, g) => {
-    const yr = g.academicYear || 'Current Year';
-    const term = g.gradingPeriod || 'Term 1';
+    const yr = canonicalLabel(g.academicYear) || 'Current Year';
+    const term = canonicalLabel(g.gradingPeriod) || 'Term 1';
+    const subj = canonicalLabel(g.subject);
     if (!acc[yr]) acc[yr] = {};
     if (!acc[yr][term]) acc[yr][term] = {};
-    acc[yr][term][g.subject] = g;
+    acc[yr][term][subj] = g;
     return acc;
   }, {} as Record<string, Record<string, Record<string, Grade>>>), [grades]);
 

@@ -64,23 +64,24 @@ export default function StudentBriefPage() {
 
   // ---- Grades data ----
   const allGrades = brief?.grades || [];
-  const gradeYears = [...new Set(allGrades.map(g => g.academicYear).filter(Boolean))].sort() as string[];
+  const gradeYears = [...new Set(allGrades.map(g => canonicalLabel(g.academicYear)).filter(Boolean))].sort();
 
   const filteredGrades = selectedYear
-    ? allGrades.filter(g => g.academicYear === selectedYear)
+    ? allGrades.filter(g => canonicalLabel(g.academicYear) === selectedYear)
     : allGrades;
 
-  // Group by gradingPeriod → grades list
+  // Group by gradingPeriod → grades list. Canonicalize so case variations
+  // ("Term 1" vs "term 1") collapse to a single section.
   const gradesByPeriod: Record<string, Grade[]> = {};
   for (const g of filteredGrades) {
-    const period = g.gradingPeriod || 'Unknown Term';
+    const period = canonicalLabel(g.gradingPeriod) || 'Unknown Term';
     if (!gradesByPeriod[period]) gradesByPeriod[period] = [];
     gradesByPeriod[period].push(g);
   }
   const gradePeriods = Object.keys(gradesByPeriod).sort();
 
   // Subjects that appear in the filtered grades
-  const gradeSubjects = [...new Set(filteredGrades.map(g => g.subject))].sort();
+  const gradeSubjects = [...new Set(filteredGrades.map(g => canonicalLabel(g.subject)).filter(Boolean))].sort();
 
   // Discover mark column names from the data — `marks[]` is the source of
   // truth (CLAUDE.md). Fall back to legacy columns only if no marks exist.
@@ -90,13 +91,25 @@ export default function StudentBriefPage() {
   }
   const markNames = Array.from(markNameSet);
 
-  // Full Year Mark: average of each period's total
-  const termTotals = gradePeriods.map(p =>
-    gradesByPeriod[p].reduce((sum, g) => sum + gradeTotal(g, markNames), 0)
-  );
-  const yearMark = termTotals.length > 0
-    ? (termTotals.reduce((a, b) => a + b, 0) / termTotals.length).toFixed(1)
-    : null;
+  // Per-term averages (mean of each subject's total within the term).
+  const termAverages: Record<string, number> = {};
+  for (const p of gradePeriods) {
+    const subjectTotals = gradeSubjects
+      .map(subj => {
+        const g = gradesByPeriod[p].find(r => canonicalLabel(r.subject) === subj);
+        return g ? gradeTotal(g, markNames) : 0;
+      })
+      .filter(t => t > 0);
+    termAverages[p] = subjectTotals.length === 0
+      ? 0
+      : Math.round((subjectTotals.reduce((a, b) => a + b, 0) / subjectTotals.length) * 10) / 10;
+  }
+
+  // Full Year Mark: mean of the term averages.
+  const validTermAvgs = gradePeriods.map(p => termAverages[p]).filter(a => a > 0);
+  const yearMark = validTermAvgs.length === 0
+    ? null
+    : (validTermAvgs.reduce((a, b) => a + b, 0) / validTermAvgs.length).toFixed(1);
 
   // ---- Reports data ----
   const subjects = [...new Set(brief?.reports?.map(r => r.subject) || [])];
@@ -264,7 +277,7 @@ export default function StudentBriefPage() {
                             </thead>
                             <tbody>
                               {gradeSubjects.map(subj => {
-                                const g = gradesByPeriod[period]?.find(r => r.subject === subj);
+                                const g = gradesByPeriod[period]?.find(r => canonicalLabel(r.subject) === subj);
                                 if (!g) return null;
                                 const total = gradeTotal(g, markNames);
                                 return (
@@ -281,6 +294,16 @@ export default function StudentBriefPage() {
                                 );
                               })}
                             </tbody>
+                            <tfoot>
+                              <tr className="bg-gray-50 border-t-2 border-gray-200">
+                                <td className="px-3 py-2 border border-gray-200 text-xs font-semibold text-gray-700 uppercase tracking-wide" colSpan={markNames.length + 1}>
+                                  Average
+                                </td>
+                                <td className="px-3 py-2 border border-gray-200 text-center font-bold text-indigo-600">
+                                  {termAverages[period] > 0 ? termAverages[period].toFixed(1) : '—'}
+                                </td>
+                              </tr>
+                            </tfoot>
                           </table>
                         </div>
                       </div>
@@ -370,6 +393,13 @@ export default function StudentBriefPage() {
       </div>
     </PageLayout>
   );
+}
+
+// Trim and title-case so "Term 1", "term 1", and "TERM 1" collapse to a
+// single canonical label.
+function canonicalLabel(s: string | null | undefined): string {
+  if (!s) return '';
+  return s.trim().toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
 }
 
 // Mark helpers — `marks[]` is the source of truth (CLAUDE.md). Legacy columns

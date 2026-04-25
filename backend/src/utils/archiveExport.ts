@@ -264,6 +264,14 @@ function gradeSum(g: GradeRow): number {
 // Reorganize a flat list of grade rows into a (year · period) → subject map.
 // Returns subjects in encountered order so the table matches the school's
 // natural subject ordering rather than alphabetical.
+// Trim and title-case so "Term 1", "term 1", and "TERM 1" all collapse to a
+// single canonical label. Without this, case-different period or subject
+// values produce duplicate pivot rows.
+function canonicalLabel(s: string | null | undefined): string {
+  if (!s) return '';
+  return s.trim().toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+}
+
 function pivotGrades(grades: GradeRow[]): { terms: string[]; subjects: string[]; cell: Map<string, Map<string, number>> } {
   const terms: string[] = [];
   const seenTerm = new Set<string>();
@@ -272,8 +280,10 @@ function pivotGrades(grades: GradeRow[]): { terms: string[]; subjects: string[];
   const cell = new Map<string, Map<string, number>>();
 
   for (const g of grades) {
-    const term = [g.academicYear, g.gradingPeriod].filter(Boolean).join(' · ') || '—';
-    const subject = g.subject || '—';
+    const year = canonicalLabel(g.academicYear);
+    const period = canonicalLabel(g.gradingPeriod);
+    const term = [year, period].filter(Boolean).join(' · ') || '—';
+    const subject = canonicalLabel(g.subject) || '—';
     if (!seenTerm.has(term)) { seenTerm.add(term); terms.push(term); }
     if (!seenSubject.has(subject)) { seenSubject.add(subject); subjects.push(subject); }
     let perSubject = cell.get(term);
@@ -377,8 +387,14 @@ export function buildXlsx(snapshot: ArchiveSnapshot): Buffer {
   // subjects are columns. With 8+ subjects this stays readable instead of
   // exploding into 8× as many rows.
   const allSubjectsSet = new Set<string>();
-  for (const s of snapshot.archived) for (const g of s.grades) if (g.subject) allSubjectsSet.add(g.subject);
-  for (const s of snapshot.graduated) for (const g of s.grades) if (g.subject) allSubjectsSet.add(g.subject);
+  for (const s of snapshot.archived) for (const g of s.grades) {
+    const subj = canonicalLabel(g.subject);
+    if (subj) allSubjectsSet.add(subj);
+  }
+  for (const s of snapshot.graduated) for (const g of s.grades) {
+    const subj = canonicalLabel(g.subject);
+    if (subj) allSubjectsSet.add(subj);
+  }
   const allSubjects = Array.from(allSubjectsSet).sort();
 
   const wideRows = [
@@ -405,10 +421,13 @@ function buildWideGradeRows(
     // Group this student's grades by (year, period) → subject → total
     const groups = new Map<string, Map<string, number>>();
     for (const g of s.grades) {
-      const key = `${g.academicYear ?? ''}|${g.gradingPeriod ?? ''}`;
+      const year = canonicalLabel(g.academicYear);
+      const period = canonicalLabel(g.gradingPeriod);
+      const subject = canonicalLabel(g.subject);
+      const key = `${year}|${period}`;
       let perSubject = groups.get(key);
       if (!perSubject) { perSubject = new Map(); groups.set(key, perSubject); }
-      if (g.subject) perSubject.set(g.subject, gradeSum(g));
+      if (subject) perSubject.set(subject, gradeSum(g));
     }
     for (const [key, perSubject] of Array.from(groups.entries()).sort()) {
       const [year, period] = key.split('|');
