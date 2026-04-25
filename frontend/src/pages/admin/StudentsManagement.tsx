@@ -4,6 +4,7 @@ import { toast } from 'react-toastify';
 import { Search, Paperclip } from 'lucide-react';
 import { adminApi } from '../../services/api';
 import { useDebounce } from '../../hooks/useDebounce';
+import { useAuthStore } from '../../store/authStore';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
 import Input from '../../components/common/Input';
@@ -14,6 +15,7 @@ import type { Student, Class } from '../../types';
 interface Parent { id: string; fullName: string; phoneNumber?: string; }
 
 export default function StudentsManagement() {
+  const archiveEnabled = useAuthStore(s => s.school?.features?.archive === true);
   const [activeTab, setActiveTab] = useState<'active' | 'new'>('active');
   const [students, setStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
@@ -400,48 +402,50 @@ export default function StudentsManagement() {
               </div>
             </Card>
 
-            <Card>
-              <h2 className="font-bold text-gray-900 mb-4 text-center">Archive Student</h2>
-              <p className="text-xs text-gray-400 mb-3 text-center">Saves grades &amp; parent info, then removes from active roster</p>
-              <div className="space-y-3">
-                <Select
-                  options={classes.map(c => ({ value: c.id, label: c.name }))}
-                  placeholder="Filter by Class (optional)"
-                  value={archiveFilterClassId}
-                  onChange={e => { setArchiveFilterClassId(e.target.value); setArchiveStudentId(''); }}
-                />
-                <Select
-                  options={(archiveFilterClassId ? students.filter(s => s.classId === archiveFilterClassId) : students).map(s => ({ value: s.id, label: s.fullName }))}
-                  placeholder="Select Student"
-                  value={archiveStudentId}
-                  onChange={e => setArchiveStudentId(e.target.value)}
-                />
-                <Select
-                  options={[
-                    { value: 'transferred', label: 'Transferred to another school' },
-                    { value: 'withdrew', label: 'Withdrew' },
-                  ]}
-                  placeholder="Reason for leaving"
-                  value={archiveReason}
-                  onChange={e => setArchiveReason(e.target.value)}
-                />
-                <Input
-                  label="Departure Date"
-                  type="date"
-                  value={archiveDepartureDate}
-                  onChange={e => setArchiveDepartureDate(e.target.value)}
-                />
-                <Button
-                  variant="secondary"
-                  fullWidth
-                  loading={archiveSubmitting}
-                  disabled={!archiveStudentId || !archiveReason}
-                  onClick={onArchive}
-                >
-                  Archive Student
-                </Button>
-              </div>
-            </Card>
+            {archiveEnabled && (
+              <Card>
+                <h2 className="font-bold text-gray-900 mb-4 text-center">Archive Student</h2>
+                <p className="text-xs text-gray-400 mb-3 text-center">Saves grades &amp; parent info, then removes from active roster</p>
+                <div className="space-y-3">
+                  <Select
+                    options={classes.map(c => ({ value: c.id, label: c.name }))}
+                    placeholder="Filter by Class (optional)"
+                    value={archiveFilterClassId}
+                    onChange={e => { setArchiveFilterClassId(e.target.value); setArchiveStudentId(''); }}
+                  />
+                  <Select
+                    options={(archiveFilterClassId ? students.filter(s => s.classId === archiveFilterClassId) : students).map(s => ({ value: s.id, label: s.fullName }))}
+                    placeholder="Select Student"
+                    value={archiveStudentId}
+                    onChange={e => setArchiveStudentId(e.target.value)}
+                  />
+                  <Select
+                    options={[
+                      { value: 'transferred', label: 'Transferred to another school' },
+                      { value: 'withdrew', label: 'Withdrew' },
+                    ]}
+                    placeholder="Reason for leaving"
+                    value={archiveReason}
+                    onChange={e => setArchiveReason(e.target.value)}
+                  />
+                  <Input
+                    label="Departure Date"
+                    type="date"
+                    value={archiveDepartureDate}
+                    onChange={e => setArchiveDepartureDate(e.target.value)}
+                  />
+                  <Button
+                    variant="secondary"
+                    fullWidth
+                    loading={archiveSubmitting}
+                    disabled={!archiveStudentId || !archiveReason}
+                    onClick={onArchive}
+                  >
+                    Archive Student
+                  </Button>
+                </div>
+              </Card>
+            )}
         </div>
 
         {/* Edit Student */}

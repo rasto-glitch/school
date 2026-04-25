@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { createClient } from '@supabase/supabase-js';
 import bcrypt from 'bcryptjs';
+import { loadArchiveSnapshot, streamPdf, buildXlsx } from '../utils/archiveExport';
 
 const router = Router();
 
@@ -8,6 +9,19 @@ const supabase = createClient(
   process.env.SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
+
+// Hard-delete every historical student record for a school. Triggered when an
+// operator turns the archive feature OFF — schools without the feature must
+// not retain any archived or graduated students. Irreversible.
+async function purgeArchive(schoolId: string): Promise<void> {
+  await supabase.from('archived_students').delete().eq('school_id', schoolId);
+  await supabase.from('students').delete()
+    .eq('school_id', schoolId).eq('is_graduated', true);
+}
+
+function safeFilename(s: string): string {
+  return s.replace(/[^a-z0-9-_]+/gi, '_');
+}
 
 // GET /api/schools — list all schools with counts
 router.get('/', async (_req: Request, res: Response) => {
@@ -89,10 +103,18 @@ router.post('/', async (req: Request, res: Response) => {
   res.status(201).json(school);
 });
 
-// PUT /api/schools/:id — edit school details
+// PUT /api/schools/:id — edit school details. If the archive feature flips
+// from ON to OFF, every historical student record for this school is purged.
 router.put('/:id', async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = req.params.id as string;
   const { name, slug, abbreviation, primaryColor, secondaryColor, domain, subscriptionPlan, features } = req.body;
+
+  let archiveWasOn = false;
+  if (features) {
+    const { data: prev } = await supabase
+      .from('schools').select('features').eq('id', id).single();
+    archiveWasOn = (prev?.features as Record<string, boolean> | null)?.archive === true;
+  }
 
   const { data, error } = await supabase
     .from('schools')
@@ -111,7 +133,40 @@ router.put('/:id', async (req: Request, res: Response) => {
     .single();
 
   if (error) { res.status(400).json({ error: error.message }); return; }
+
+  // Cleanup AFTER the update succeeds so we never wipe data and then fail.
+  if (features && archiveWasOn && features.archive !== true) {
+    await purgeArchive(id);
+  }
+
   res.json(data);
+});
+
+// GET /api/schools/:id/archive-export.pdf — operator-triggered backup before
+// turning archive off. Streams a PDF of every historical student record.
+router.get('/:id/archive-export.pdf', async (req: Request, res: Response) => {
+  const id = req.params.id as string;
+  try {
+    const snapshot = await loadArchiveSnapshot(supabase, id);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="archive-${safeFilename(snapshot.schoolName)}-${new Date().toISOString().split('T')[0]}.pdf"`);
+    streamPdf(snapshot, res);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Failed to build PDF' });
+  }
+});
+
+router.get('/:id/archive-export.xlsx', async (req: Request, res: Response) => {
+  const id = req.params.id as string;
+  try {
+    const snapshot = await loadArchiveSnapshot(supabase, id);
+    const buf = buildXlsx(snapshot);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="archive-${safeFilename(snapshot.schoolName)}-${new Date().toISOString().split('T')[0]}.xlsx"`);
+    res.send(buf);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Failed to build Excel' });
+  }
 });
 
 // PATCH /api/schools/:id/status — activate or deactivate

@@ -5,6 +5,16 @@ import { supabase } from '../config/supabase';
 import type { AuthRequest } from '../middleware/auth';
 import { toCC } from '../utils/transform';
 import { notify, notifyMany } from '../utils/notify';
+import { loadArchiveSnapshot, streamPdf, buildXlsx } from '../utils/archiveExport';
+
+// True iff this school has the historical-records feature enabled. When off,
+// no archived/graduated student record may be created, read, or persisted —
+// the corresponding actions become hard deletes.
+async function hasArchiveFeature(schoolId: string): Promise<boolean> {
+  const { data } = await supabase
+    .from('schools').select('features').eq('id', schoolId).single();
+  return (data?.features as Record<string, boolean> | null)?.archive === true;
+}
 
 // ---- STUDENTS ----
 export async function getStudents(req: AuthRequest, res: Response): Promise<void> {
@@ -81,6 +91,17 @@ export async function deleteStudent(req: AuthRequest, res: Response): Promise<vo
 export async function assignStudent(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
   const { studentId, newClassId, graduated } = req.body;
+
+  // If the school doesn't keep historical records, "graduating" a student is
+  // a hard delete — there's nowhere to retain them. Class reassignment can
+  // still ride along if the caller passed it, but the delete wins.
+  if (graduated && !(await hasArchiveFeature(schoolId))) {
+    const { error } = await supabase.from('students')
+      .delete().eq('id', studentId).eq('school_id', schoolId);
+    if (error) { res.status(500).json({ error: error.message }); return; }
+    res.json({ deleted: true });
+    return;
+  }
 
   const update: Record<string, unknown> = {};
   if (newClassId) update.class_id = newClassId;
@@ -509,6 +530,11 @@ export async function archiveStudent(req: AuthRequest, res: Response): Promise<v
   const { id } = req.params;
   const { reason, departureDate } = req.body;
 
+  if (!(await hasArchiveFeature(schoolId))) {
+    res.status(403).json({ error: 'Archive feature is not enabled for this school' });
+    return;
+  }
+
   if (!reason || !['transferred', 'withdrew'].includes(reason)) {
     res.status(400).json({ error: 'reason must be "transferred" or "withdrew"' });
     return;
@@ -607,6 +633,11 @@ export async function getArchivedStudents(req: AuthRequest, res: Response): Prom
   const { schoolId } = req.user!;
   const { search } = req.query as Record<string, string>;
 
+  if (!(await hasArchiveFeature(schoolId))) {
+    res.status(403).json({ error: 'Archive feature is not enabled for this school' });
+    return;
+  }
+
   let query = supabase
     .from('archived_students')
     .select('id, full_name, date_of_birth, enrollment_date, departure_date, reason, parent_full_name, parent_phone, classes_attended, created_at')
@@ -623,6 +654,11 @@ export async function getArchivedStudents(req: AuthRequest, res: Response): Prom
 export async function getArchivedStudent(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
   const { id } = req.params;
+
+  if (!(await hasArchiveFeature(schoolId))) {
+    res.status(403).json({ error: 'Archive feature is not enabled for this school' });
+    return;
+  }
 
   const { data, error } = await supabase
     .from('archived_students')
@@ -1371,6 +1407,11 @@ export async function getGraduatedStudents(req: AuthRequest, res: Response): Pro
   const { schoolId } = req.user!;
   const { search } = req.query as Record<string, string>;
 
+  if (!(await hasArchiveFeature(schoolId))) {
+    res.status(403).json({ error: 'Archive feature is not enabled for this school' });
+    return;
+  }
+
   let query = supabase
     .from('students')
     .select('id, full_name, profile_picture, class_id, classes(name), parents(full_name, phone_number)')
@@ -1383,6 +1424,33 @@ export async function getGraduatedStudents(req: AuthRequest, res: Response): Pro
   const { data, error } = await query;
   if (error) { res.status(500).json({ error: error.message }); return; }
   res.json(toCC(data));
+}
+
+// PDF export of archived + graduated student records. Admin self-serve.
+// Gated on the archive feature — returns 403 when off.
+export async function exportArchivePdf(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  if (!(await hasArchiveFeature(schoolId))) {
+    res.status(403).json({ error: 'Archive feature is not enabled for this school' });
+    return;
+  }
+  const snapshot = await loadArchiveSnapshot(schoolId);
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="archive-${snapshot.schoolName.replace(/[^a-z0-9-_]+/gi, '_')}-${new Date().toISOString().split('T')[0]}.pdf"`);
+  streamPdf(snapshot, res);
+}
+
+export async function exportArchiveXlsx(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  if (!(await hasArchiveFeature(schoolId))) {
+    res.status(403).json({ error: 'Archive feature is not enabled for this school' });
+    return;
+  }
+  const snapshot = await loadArchiveSnapshot(schoolId);
+  const buf = buildXlsx(snapshot);
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="archive-${snapshot.schoolName.replace(/[^a-z0-9-_]+/gi, '_')}-${new Date().toISOString().split('T')[0]}.xlsx"`);
+  res.send(buf);
 }
 
 // ---- YEAR TRANSITION ----
@@ -1416,13 +1484,21 @@ export async function yearTransition(req: AuthRequest, res: Response): Promise<v
     if (repErr) { res.status(500).json({ error: repErr.message }); return; }
   }
 
-  // 3. Graduate selected students
+  // 3. Graduate selected students. Schools without the archive feature can't
+  //    retain past students — delete them instead of marking graduated.
   if (studentIdsToGraduate.length > 0) {
-    const today = new Date().toISOString().split('T')[0];
-    const { error: gradErr } = await supabase.from('students')
-      .update({ is_graduated: true, graduated_at: today, graduation_year: currentYear })
-      .in('id', studentIdsToGraduate).eq('school_id', schoolId);
-    if (gradErr) { res.status(500).json({ error: gradErr.message }); return; }
+    const archiveOn = await hasArchiveFeature(schoolId);
+    if (archiveOn) {
+      const today = new Date().toISOString().split('T')[0];
+      const { error: gradErr } = await supabase.from('students')
+        .update({ is_graduated: true, graduated_at: today, graduation_year: currentYear })
+        .in('id', studentIdsToGraduate).eq('school_id', schoolId);
+      if (gradErr) { res.status(500).json({ error: gradErr.message }); return; }
+    } else {
+      const { error: delErr } = await supabase.from('students')
+        .delete().in('id', studentIdsToGraduate).eq('school_id', schoolId);
+      if (delErr) { res.status(500).json({ error: delErr.message }); return; }
+    }
   }
 
   // 4. Apply class assignments — grouped by target class for efficient bulk updates

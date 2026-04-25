@@ -1,5 +1,8 @@
 import { useState, FormEvent } from 'react';
-import { updateSchool, resetAdminPassword, School, DEFAULT_FEATURES, SchoolFeatures } from '../api';
+import {
+  updateSchool, resetAdminPassword, School, DEFAULT_FEATURES, SchoolFeatures,
+  exportSchoolArchivePdf, exportSchoolArchiveXlsx,
+} from '../api';
 import { PLANS, PLAN_IDS, PlanId, getPlan, formatMonthlyCost } from '../plans';
 
 interface Props {
@@ -34,6 +37,9 @@ export default function EditSchoolModal({ school, onClose, onUpdated }: Props) {
   const monthlyCost = formatMonthlyCost(currentPlan, school.studentCount);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showArchivePurgeConfirm, setShowArchivePurgeConfirm] = useState(false);
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [xlsxBusy, setXlsxBusy] = useState(false);
 
   const [newPassword, setNewPassword] = useState('');
   const [pwError, setPwError] = useState('');
@@ -43,8 +49,45 @@ export default function EditSchoolModal({ school, onClose, onUpdated }: Props) {
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
 
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
+  const archiveWasOn = school.features?.archive === true;
+  const archiveTurningOff = archiveWasOn && features.archive !== true;
+
+  const triggerDownload = (blob: Blob, ext: 'pdf' | 'xlsx') => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `archive-${school.slug}-${new Date().toISOString().split('T')[0]}.${ext}`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadPdf = async () => {
+    setPdfBusy(true);
+    try {
+      const res = await exportSchoolArchivePdf(school.id);
+      triggerDownload(res.data, 'pdf');
+    } catch {
+      setError('Failed to download PDF.');
+    } finally {
+      setPdfBusy(false);
+    }
+  };
+
+  const downloadXlsx = async () => {
+    setXlsxBusy(true);
+    try {
+      const res = await exportSchoolArchiveXlsx(school.id);
+      triggerDownload(res.data, 'xlsx');
+    } catch {
+      setError('Failed to download Excel.');
+    } finally {
+      setXlsxBusy(false);
+    }
+  };
+
+  const performUpdate = async () => {
     setError('');
     setLoading(true);
     try {
@@ -64,7 +107,17 @@ export default function EditSchoolModal({ school, onClose, onUpdated }: Props) {
       setError(msg);
     } finally {
       setLoading(false);
+      setShowArchivePurgeConfirm(false);
     }
+  };
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (archiveTurningOff) {
+      setShowArchivePurgeConfirm(true);
+      return;
+    }
+    await performUpdate();
   };
 
   const handleResetPassword = async () => {
@@ -210,6 +263,57 @@ export default function EditSchoolModal({ school, onClose, onUpdated }: Props) {
           </div>
         </form>
       </div>
+
+      {showArchivePurgeConfirm && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <h3 className="font-semibold text-slate-900 text-lg mb-2">Disable Archive — irreversible</h3>
+            <p className="text-sm text-slate-600 mb-4">
+              Turning off the archive feature for <span className="font-medium">{school.name}</span> will
+              <span className="font-semibold text-red-600"> permanently delete every archived and graduated student record</span> for this school.
+              This cannot be undone. Download a backup first if you might need it.
+            </p>
+
+            <div className="flex flex-col gap-2 mb-4">
+              <button
+                type="button"
+                onClick={downloadPdf}
+                disabled={pdfBusy || xlsxBusy || loading}
+                className="w-full py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-medium hover:bg-slate-50 disabled:opacity-60 transition-colors"
+              >
+                {pdfBusy ? 'Preparing PDF…' : 'Download PDF'}
+              </button>
+              <button
+                type="button"
+                onClick={downloadXlsx}
+                disabled={pdfBusy || xlsxBusy || loading}
+                className="w-full py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-medium hover:bg-slate-50 disabled:opacity-60 transition-colors"
+              >
+                {xlsxBusy ? 'Preparing Excel…' : 'Download Excel'}
+              </button>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowArchivePurgeConfirm(false)}
+                disabled={loading}
+                className="flex-1 py-2.5 rounded-lg border border-slate-300 text-slate-700 text-sm font-medium hover:bg-slate-50 disabled:opacity-60 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={performUpdate}
+                disabled={loading || pdfBusy || xlsxBusy}
+                className="flex-1 py-2.5 rounded-lg bg-red-600 hover:bg-red-500 disabled:bg-red-300 text-white text-sm font-medium transition-colors"
+              >
+                {loading ? 'Deleting…' : 'Confirm — I have a copy'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

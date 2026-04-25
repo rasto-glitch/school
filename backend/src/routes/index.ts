@@ -46,6 +46,8 @@ export function createRouter(io: SocketServer) {
   router.post('/admin/students/:id/archive', authenticate, authorize('admin'), (req, res) => admin.archiveStudent(req as AuthRequest, res));
   router.get('/admin/archived-students', authenticate, authorize('admin'), (req, res) => admin.getArchivedStudents(req as AuthRequest, res));
   router.get('/admin/archived-students/:id', authenticate, authorize('admin'), (req, res) => admin.getArchivedStudent(req as AuthRequest, res));
+  router.get('/admin/archive/export.pdf', authenticate, authorize('admin'), (req, res) => admin.exportArchivePdf(req as AuthRequest, res));
+  router.get('/admin/archive/export.xlsx', authenticate, authorize('admin'), (req, res) => admin.exportArchiveXlsx(req as AuthRequest, res));
 
   router.get('/admin/parents', authenticate, authorize('admin'), (req, res) => admin.getParents(req as AuthRequest, res));
   router.get('/admin/parents/:id/profile', authenticate, authorize('admin'), (req, res) => admin.getParentProfile(req as AuthRequest, res));

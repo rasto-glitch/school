@@ -114,6 +114,12 @@ export const deleteSchool = (id: string) =>
 export const resetAdminPassword = (id: string, password: string) =>
   api.patch(`/schools/${id}/admin-password`, { password });
 
+export const exportSchoolArchivePdf = (id: string) =>
+  api.get(`/schools/${id}/archive-export.pdf`, { responseType: 'blob' });
+
+export const exportSchoolArchiveXlsx = (id: string) =>
+  api.get(`/schools/${id}/archive-export.xlsx`, { responseType: 'blob' });
+
 // ── Chat audit ──────────────────────────────────────────────────────────────
 
 export interface AuditUser {
