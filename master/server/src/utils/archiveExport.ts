@@ -235,21 +235,81 @@ function writeStudentSection(
   if (s.grades.length > 0) {
     doc.moveDown(0.5);
     doc.fontSize(11).fillColor('black').text('Grades');
-    doc.fontSize(9).fillColor('#374151');
-    for (const g of s.grades) {
-      const head = [g.academicYear, g.gradingPeriod, g.subject, g.className].filter(Boolean).join(' · ');
-      doc.text(`  ${head || '—'}`);
-      const marks = g.marks.length > 0
-        ? g.marks.map(m => `${m.name}: ${m.value ?? '—'}`).join(', ')
-        : ['daily', 'quiz', 'monthly exam', 'term exam']
-            .map((label, i) => {
-              const v = [g.dailyGrade, g.quizGrade, g.monthlyExamGrade, g.termExamGrade][i];
-              return v != null ? `${label}: ${v}` : null;
-            })
-            .filter(Boolean)
-            .join(', ');
-      if (marks) doc.text(`    ${marks}`);
+    doc.moveDown(0.2);
+    drawGradeTable(doc, s.grades);
+  }
+
+  doc.fillColor('black');
+}
+
+function gradeSum(g: GradeRow): number {
+  if (g.marks.length > 0) return g.marks.reduce((s, m) => s + (m.value ?? 0), 0);
+  return (g.dailyGrade ?? 0) + (g.quizGrade ?? 0) + (g.monthlyExamGrade ?? 0) + (g.termExamGrade ?? 0);
+}
+
+function pivotGrades(grades: GradeRow[]): { terms: string[]; subjects: string[]; cell: Map<string, Map<string, number>> } {
+  const terms: string[] = [];
+  const seenTerm = new Set<string>();
+  const subjects: string[] = [];
+  const seenSubject = new Set<string>();
+  const cell = new Map<string, Map<string, number>>();
+
+  for (const g of grades) {
+    const term = [g.academicYear, g.gradingPeriod].filter(Boolean).join(' · ') || '—';
+    const subject = g.subject || '—';
+    if (!seenTerm.has(term)) { seenTerm.add(term); terms.push(term); }
+    if (!seenSubject.has(subject)) { seenSubject.add(subject); subjects.push(subject); }
+    let perSubject = cell.get(term);
+    if (!perSubject) { perSubject = new Map(); cell.set(term, perSubject); }
+    perSubject.set(subject, gradeSum(g));
+  }
+  terms.sort();
+  return { terms, subjects, cell };
+}
+
+function drawGradeTable(doc: PDFKit.PDFDocument, grades: GradeRow[]): void {
+  const { terms, subjects, cell } = pivotGrades(grades);
+  if (terms.length === 0) return;
+
+  const startX = doc.page.margins.left;
+  const usableWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  const termColWidth = Math.min(150, usableWidth * 0.35);
+  const subjectColWidth = Math.max(35, (usableWidth - termColWidth) / subjects.length);
+  const rowHeight = 18;
+  const bottom = doc.page.height - doc.page.margins.bottom;
+
+  const drawHeader = () => {
+    let y = doc.y;
+    doc.fontSize(8).fillColor('#111827');
+    doc.rect(startX, y, termColWidth, rowHeight).fillAndStroke('#F3F4F6', '#D1D5DB').fillColor('#111827');
+    doc.text('Term', startX + 4, y + 5, { width: termColWidth - 8, ellipsis: true });
+    for (let i = 0; i < subjects.length; i++) {
+      const x = startX + termColWidth + i * subjectColWidth;
+      doc.rect(x, y, subjectColWidth, rowHeight).fillAndStroke('#F3F4F6', '#D1D5DB').fillColor('#111827');
+      doc.text(subjects[i], x + 4, y + 5, { width: subjectColWidth - 8, ellipsis: true });
     }
+    doc.y = y + rowHeight;
+  };
+
+  drawHeader();
+
+  for (const term of terms) {
+    if (doc.y + rowHeight > bottom) {
+      doc.addPage();
+      drawHeader();
+    }
+    const y = doc.y;
+    doc.fontSize(8).fillColor('#374151');
+    doc.rect(startX, y, termColWidth, rowHeight).stroke('#E5E7EB');
+    doc.text(term, startX + 4, y + 5, { width: termColWidth - 8, ellipsis: true });
+    const perSubject = cell.get(term);
+    for (let i = 0; i < subjects.length; i++) {
+      const x = startX + termColWidth + i * subjectColWidth;
+      doc.rect(x, y, subjectColWidth, rowHeight).stroke('#E5E7EB');
+      const v = perSubject?.get(subjects[i]);
+      doc.text(v != null ? String(v) : '', x + 4, y + 5, { width: subjectColWidth - 8 });
+    }
+    doc.y = y + rowHeight;
   }
 
   doc.fillColor('black');
@@ -289,33 +349,53 @@ export function buildXlsx(snapshot: ArchiveSnapshot): Buffer {
     : XLSX.utils.aoa_to_sheet([graduatedHeaders]);
   XLSX.utils.book_append_sheet(wb, graduatedSheet, 'Graduated');
 
-  const gradeRows = [
-    ...snapshot.archived.flatMap(s => s.grades.map(g => ({
-      'Status': 'Archived',
-      'Student': s.fullName,
-      'Year': g.academicYear ?? '',
-      'Period': g.gradingPeriod ?? '',
-      'Subject': g.subject ?? '',
-      'Class': g.className ?? '',
-      'Marks': g.marks.length > 0
-        ? g.marks.map(m => `${m.name}: ${m.value ?? ''}`).join(' | ')
-        : `daily: ${g.dailyGrade ?? ''} | quiz: ${g.quizGrade ?? ''} | monthly: ${g.monthlyExamGrade ?? ''} | term: ${g.termExamGrade ?? ''}`,
-    }))),
-    ...snapshot.graduated.flatMap(s => s.grades.map(g => ({
-      'Status': 'Graduated',
-      'Student': s.fullName,
-      'Year': g.academicYear ?? '',
-      'Period': g.gradingPeriod ?? '',
-      'Subject': g.subject ?? '',
-      'Class': g.className ?? '',
-      'Marks': g.marks.length > 0
-        ? g.marks.map(m => `${m.name}: ${m.value ?? ''}`).join(' | ')
-        : `daily: ${g.dailyGrade ?? ''} | quiz: ${g.quizGrade ?? ''} | monthly: ${g.monthlyExamGrade ?? ''} | term: ${g.termExamGrade ?? ''}`,
-    }))),
+  const allSubjectsSet = new Set<string>();
+  for (const s of snapshot.archived) for (const g of s.grades) if (g.subject) allSubjectsSet.add(g.subject);
+  for (const s of snapshot.graduated) for (const g of s.grades) if (g.subject) allSubjectsSet.add(g.subject);
+  const allSubjects = Array.from(allSubjectsSet).sort();
+
+  const wideRows = [
+    ...buildWideGradeRows('Archived', snapshot.archived, allSubjects),
+    ...buildWideGradeRows('Graduated', snapshot.graduated, allSubjects),
   ];
-  if (gradeRows.length > 0) {
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(gradeRows), 'Grades');
-  }
+
+  const gradeHeaders = ['Status', 'Student', 'Year', 'Period', ...allSubjects];
+  const gradesSheet = wideRows.length > 0
+    ? XLSX.utils.json_to_sheet(wideRows)
+    : XLSX.utils.aoa_to_sheet([gradeHeaders]);
+  XLSX.utils.book_append_sheet(wb, gradesSheet, 'Grades');
 
   return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+}
+
+function buildWideGradeRows(
+  status: string,
+  students: { fullName: string; grades: GradeRow[] }[],
+  allSubjects: string[],
+): Record<string, string | number>[] {
+  const rows: Record<string, string | number>[] = [];
+  for (const s of students) {
+    const groups = new Map<string, Map<string, number>>();
+    for (const g of s.grades) {
+      const key = `${g.academicYear ?? ''}|${g.gradingPeriod ?? ''}`;
+      let perSubject = groups.get(key);
+      if (!perSubject) { perSubject = new Map(); groups.set(key, perSubject); }
+      if (g.subject) perSubject.set(g.subject, gradeSum(g));
+    }
+    for (const [key, perSubject] of Array.from(groups.entries()).sort()) {
+      const [year, period] = key.split('|');
+      const row: Record<string, string | number> = {
+        Status: status,
+        Student: s.fullName,
+        Year: year,
+        Period: period,
+      };
+      for (const subj of allSubjects) {
+        const v = perSubject.get(subj);
+        row[subj] = v != null ? v : '';
+      }
+      rows.push(row);
+    }
+  }
+  return rows;
 }
