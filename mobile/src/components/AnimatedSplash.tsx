@@ -184,7 +184,7 @@ const styles = StyleSheet.create({
     // The PNG has ~20px transparent padding on the right side of the S, so a
     // small negative margin makes the visible gap to "c" match the natural
     // inter-letter spacing of cholify, reading as one word.
-    marginRight: -15,
+    marginRight: -20,
   },
   text: {
     fontFamily: 'ReadexPro_700Bold',
