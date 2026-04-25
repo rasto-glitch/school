@@ -1467,10 +1467,6 @@ export async function yearTransition(req: AuthRequest, res: Response): Promise<v
     return;
   }
 
-  // Current year — stamped on graduating students' records
-  const { data: school } = await supabase.from('schools').select('current_academic_year').eq('id', schoolId).single();
-  const currentYear = school?.current_academic_year || null;
-
   // 1. Collect all currently active student IDs
   const { data: activeStudents, error: activeErr } = await supabase
     .from('students').select('id').eq('school_id', schoolId).eq('is_graduated', false);
@@ -1489,9 +1485,8 @@ export async function yearTransition(req: AuthRequest, res: Response): Promise<v
   if (studentIdsToGraduate.length > 0) {
     const archiveOn = await hasArchiveFeature(schoolId);
     if (archiveOn) {
-      const today = new Date().toISOString().split('T')[0];
       const { error: gradErr } = await supabase.from('students')
-        .update({ is_graduated: true, graduated_at: today, graduation_year: currentYear })
+        .update({ is_graduated: true })
         .in('id', studentIdsToGraduate).eq('school_id', schoolId);
       if (gradErr) { res.status(500).json({ error: gradErr.message }); return; }
     } else {

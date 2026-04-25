@@ -30,8 +30,6 @@ interface GraduatedRecord {
   fullName: string;
   dateOfBirth: string | null;
   enrollmentDate: string | null;
-  graduatedAt: string | null;
-  graduationYear: string | null;
   className: string | null;
   parentFullName: string | null;
   parentPhone: string | null;
@@ -83,10 +81,10 @@ export async function loadArchiveSnapshot(supabase: SupabaseClient, schoolId: st
 
   const { data: gradStudents } = await supabase
     .from('students')
-    .select('id, full_name, date_of_birth, created_at, graduated_at, graduation_year, classes(name), parents(full_name, phone_number)')
+    .select('id, full_name, date_of_birth, created_at, classes(name), parents(full_name, phone_number)')
     .eq('school_id', schoolId)
     .eq('is_graduated', true)
-    .order('graduated_at', { ascending: false });
+    .order('full_name');
 
   const gradIds = (gradStudents ?? []).map((s: any) => s.id);
   const gradesByStudent = new Map<string, GradeRow[]>();
@@ -148,8 +146,6 @@ export async function loadArchiveSnapshot(supabase: SupabaseClient, schoolId: st
       fullName: s.full_name,
       dateOfBirth: s.date_of_birth,
       enrollmentDate: s.created_at ? s.created_at.split('T')[0] : null,
-      graduatedAt: s.graduated_at,
-      graduationYear: s.graduation_year,
       className: s.classes?.name ?? null,
       parentFullName: s.parents?.full_name ?? null,
       parentPhone: s.parents?.phone_number ?? null,
@@ -223,8 +219,6 @@ function writeStudentSection(
     if (a.reason) doc.text(`Reason: ${a.reason}`);
   } else {
     const g = s as GraduatedRecord;
-    if (g.graduatedAt) doc.text(`Graduated: ${g.graduatedAt}`);
-    if (g.graduationYear) doc.text(`Graduation year: ${g.graduationYear}`);
     if (g.className) doc.text(`Final class: ${g.className}`);
   }
   if (s.parentFullName) doc.text(`Parent: ${s.parentFullName}${s.parentPhone ? ` (${s.parentPhone})` : ''}`);
@@ -280,13 +274,11 @@ export function buildXlsx(snapshot: ArchiveSnapshot): Buffer {
     : XLSX.utils.aoa_to_sheet([archivedHeaders]);
   XLSX.utils.book_append_sheet(wb, archivedSheet, 'Archived');
 
-  const graduatedHeaders = ['Full name', 'Date of birth', 'Enrolled', 'Graduated', 'Graduation year', 'Final class', 'Parent name', 'Parent phone', 'Classes attended'];
+  const graduatedHeaders = ['Full name', 'Date of birth', 'Enrolled', 'Final class', 'Parent name', 'Parent phone', 'Classes attended'];
   const graduatedRows = snapshot.graduated.map(s => ({
     'Full name': s.fullName,
     'Date of birth': s.dateOfBirth ?? '',
     'Enrolled': s.enrollmentDate ?? '',
-    'Graduated': s.graduatedAt ?? '',
-    'Graduation year': s.graduationYear ?? '',
     'Final class': s.className ?? '',
     'Parent name': s.parentFullName ?? '',
     'Parent phone': s.parentPhone ?? '',
