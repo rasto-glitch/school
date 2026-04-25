@@ -181,9 +181,10 @@ const styles = StyleSheet.create({
   sGlyph: {
     width: 116,
     height: 116,
-    // 17px breathing room between the S and "cholify" — roughly the same
-    // visual rhythm as the h-to-o letter spacing in Readex Pro Bold.
-    marginRight: 17,
+    // The PNG has ~20px transparent padding on the right side of the S, so a
+    // small negative margin makes the visible gap to "c" match the natural
+    // inter-letter spacing of cholify, reading as one word.
+    marginRight: -15,
   },
   text: {
     fontFamily: 'ReadexPro_700Bold',
