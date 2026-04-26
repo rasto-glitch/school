@@ -18,7 +18,11 @@
     },
     "production": {
       "autoIncrement": true,
-      "channel": "production"
+      "channel": "production",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://school-production-3ccc.up.railway.app/api",
+        "EXPO_PUBLIC_SOCKET_URL": "https://school-production-3ccc.up.railway.app"
+      }
     }
   },
   "submit": {

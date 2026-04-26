@@ -14,7 +14,6 @@
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Your location is used for real-time bus route tracking so parents are notified when the bus is nearby.",
         "NSLocationWhenInUseUsageDescription": "Your location is used for real-time bus route tracking so parents are notified when the bus is nearby.",
         "UIBackgroundModes": [
-          "location",
           "location"
         ],
         "ITSAppUsesNonExemptEncryption": false
@@ -39,12 +38,7 @@
         "FOREGROUND_SERVICE",
         "FOREGROUND_SERVICE_LOCATION",
         "RECEIVE_BOOT_COMPLETED",
-        "VIBRATE",
-        "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.ACCESS_BACKGROUND_LOCATION",
-        "android.permission.FOREGROUND_SERVICE",
-        "android.permission.FOREGROUND_SERVICE_LOCATION"
+        "VIBRATE"
       ]
     },
     "plugins": [
