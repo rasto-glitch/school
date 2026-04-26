@@ -56,6 +56,10 @@ export default function TeacherGradingScreen({ subject, classes, academicYear }:
 
   const total = marks.reduce((s, m) => s + (parseFloat(m.value) || 0), 0);
 
+  // Only show history for the current academic year. Past years are not deleted —
+  // they remain in the DB and are still visible to admins, parents, and exports.
+  const visibleHistory = academicYear ? history.filter(g => g.academicYear === academicYear) : history;
+
   const addMark = () => setMarks(prev => [...prev, { name: '', value: '' }]);
   const removeMark = (i: number) => setMarks(prev => prev.filter((_, idx) => idx !== i));
   const updateMark = (i: number, field: 'name' | 'value', val: string) =>
@@ -176,11 +180,12 @@ export default function TeacherGradingScreen({ subject, classes, academicYear }:
         {saving ? <ActivityIndicator color="#fff" size="small" /> : <><Send size={16} color="#fff" /><Text style={styles.saveBtnText}>Save Grade</Text></>}
       </TouchableOpacity>
 
-      {/* Grade history */}
-      {history.length > 0 && (
+      {/* Grade history — current academic year only.
+          Past years are kept in the DB; admins/parents/exports still see them. */}
+      {visibleHistory.length > 0 && (
         <>
           <Text style={[styles.label, { marginTop: spacing.lg }]}>Grade History</Text>
-          {history.map(g => (
+          {visibleHistory.map(g => (
             <View key={g.id} style={styles.historyCard}>
               <View style={styles.historyTop}>
                 <Text style={styles.historyPeriod}>{g.gradingPeriod || '—'}</Text>

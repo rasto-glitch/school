@@ -84,9 +84,13 @@ export default function GradingPage() {
     }
   };
 
-  // Group history by academic year
+  // Only show history for the current academic year. Past years are not deleted —
+  // they remain in the DB and are still visible to admins, parents, and exports.
+  const visibleHistory = academicYear
+    ? gradeSummary.filter(g => g.academicYear === academicYear)
+    : gradeSummary;
   const summaryByYear: Record<string, Grade[]> = {};
-  for (const g of gradeSummary) {
+  for (const g of visibleHistory) {
     const year = g.academicYear || 'No Year';
     if (!summaryByYear[year]) summaryByYear[year] = [];
     summaryByYear[year].push(g);
