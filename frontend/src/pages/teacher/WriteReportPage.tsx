@@ -33,6 +33,13 @@ export default function WriteReportPage() {
     teacherApi.getStudents({ classId: selectedClass }).then(r => setStudents(r.data || []));
   }, [selectedClass]);
 
+  useEffect(() => {
+    setMarks([]);
+    setAttendanceNotes('');
+    setBehaviorNotes('');
+    setTeacherNotes('');
+  }, [selectedStudent]);
+
   const addMark = () => {
     const defaultName = markTypes[0]?.name || '';
     setMarks(prev => [...prev, { name: defaultName, value: 0 }]);

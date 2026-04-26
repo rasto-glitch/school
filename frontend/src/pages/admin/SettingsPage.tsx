@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'react-toastify';
-import { CalendarDays, Settings, Tag, Trash2, Plus } from 'lucide-react';
+import { CalendarDays, Settings, Tag, Trash2, Plus, Layers } from 'lucide-react';
 import { adminApi } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import PageLayout from '../../components/layout/PageLayout';
@@ -8,7 +8,7 @@ import Card from '../../components/common/Card';
 import Input from '../../components/common/Input';
 import Button from '../../components/common/Button';
 import YearTransitionModal from './YearTransitionModal';
-import type { MarkType } from '../../types';
+import type { MarkType, Term } from '../../types';
 
 const APPLIES_OPTIONS = [
   { value: 'both', label: 'Reports & Grades' },
@@ -43,6 +43,12 @@ export default function SettingsPage() {
   const [newAppliesTo, setNewAppliesTo] = useState<'report' | 'grade' | 'both'>('both');
   const [addingMark, setAddingMark] = useState(false);
 
+  // terms state
+  const [terms, setTerms] = useState<Term[]>([]);
+  const [termsLoading, setTermsLoading] = useState(false);
+  const [newTermName, setNewTermName] = useState('');
+  const [addingTerm, setAddingTerm] = useState(false);
+
   useEffect(() => {
     setLoading(true);
     adminApi.getSettings()
@@ -60,6 +66,10 @@ export default function SettingsPage() {
     adminApi.getMarkTypes()
       .then(r => setMarkTypes(r.data || []))
       .finally(() => setMarkTypesLoading(false));
+    setTermsLoading(true);
+    adminApi.getTerms()
+      .then(r => setTerms(r.data || []))
+      .finally(() => setTermsLoading(false));
   }, []);
 
   const saveCorrection = async () => {
@@ -98,7 +108,31 @@ export default function SettingsPage() {
     }
   };
 
+  const addTerm = async () => {
+    if (!newTermName.trim()) return;
+    setAddingTerm(true);
+    try {
+      const r = await adminApi.createTerm({ name: newTermName.trim() });
+      setTerms(prev => [...prev, r.data]);
+      setNewTermName('');
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to add term');
+    } finally {
+      setAddingTerm(false);
+    }
+  };
+
+  const deleteTerm = async (id: string) => {
+    try {
+      await adminApi.deleteTerm(id);
+      setTerms(prev => prev.filter(t => t.id !== id));
+    } catch {
+      toast.error('Failed to delete');
+    }
+  };
+
   const showMarkTypes = feat('grades') || feat('reports');
+  const showTerms = feat('grades') || feat('reports');
 
   return (
     <PageLayout title="Settings" subtitle="School-wide configuration">
@@ -153,6 +187,62 @@ export default function SettingsPage() {
             Begin Year Transition
           </Button>
         </Card>
+
+        {/* Terms */}
+        {showTerms && (
+          <Card>
+            <div className="flex items-center gap-2 mb-1">
+              <Layers className="w-5 h-5 text-sky-600" />
+              <h2 className="font-semibold text-gray-900">Terms</h2>
+            </div>
+            <p className="text-sm text-gray-500 mb-4">
+              Define the grading terms used by teachers when entering grades. Teachers select from this list as the grading period.
+            </p>
+
+            {/* Add new */}
+            <div className="flex gap-2 mb-4">
+              <div className="flex-1">
+                <Input
+                  placeholder="e.g. Term 1, Mid-term, Q1…"
+                  value={newTermName}
+                  onChange={e => setNewTermName(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') addTerm(); }}
+                />
+              </div>
+              <Button
+                onClick={addTerm}
+                loading={addingTerm}
+                disabled={!newTermName.trim()}
+                icon={<Plus className="w-4 h-4" />}
+              >
+                Add
+              </Button>
+            </div>
+
+            {/* List */}
+            {termsLoading ? (
+              <div className="space-y-2">
+                {[1, 2, 3].map(i => <div key={i} className="h-10 bg-gray-100 rounded-xl animate-pulse" />)}
+              </div>
+            ) : terms.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-4">No terms yet. Add one above.</p>
+            ) : (
+              <div className="space-y-2">
+                {terms.map(t => (
+                  <div key={t.id} className="flex items-center justify-between gap-3 px-3 py-2.5 bg-gray-50 rounded-xl">
+                    <span className="text-sm font-medium text-gray-800">{t.name}</span>
+                    <button
+                      onClick={() => deleteTerm(t.id)}
+                      className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+        )}
 
         {/* Mark Types */}
         {showMarkTypes && (

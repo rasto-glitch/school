@@ -106,6 +106,12 @@ export interface MarkType {
   orderIndex: number;
 }
 
+export interface Term {
+  id: string;
+  name: string;
+  orderIndex: number;
+}
+
 export interface Grade {
   id: string;
   subject: string;

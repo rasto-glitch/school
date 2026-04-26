@@ -49,6 +49,7 @@ export const academicApi = {
     return api.post('/academic/posts/upload', form, { headers: { 'Content-Type': 'multipart/form-data' } });
   },
   getClasses: () => api.get('/academic/classes'),
+  getMe: () => api.get('/academic/me'),
 
   // Social
   toggleLike: (postId: string) => api.post(`/academic/posts/${postId}/like`),

@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Loader2, ImagePlus, X } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { academicApi } from '../services/api';
+import { useAuthStore } from '../store/authStore';
 import Navbar from '../components/layout/Navbar';
 import RichTextEditor from '../components/editor/RichTextEditor';
 import type { AcademicClass, AcademicPost } from '../types';
@@ -10,10 +11,13 @@ import type { AcademicClass, AcademicPost } from '../types';
 export default function EditPostPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useAuthStore();
+  const isTeacher = user?.role === 'teacher';
   const [classes, setClasses] = useState<AcademicClass[]>([]);
   const [post, setPost] = useState<AcademicPost | null>(null);
   const [title, setTitle] = useState('');
   const [subject, setSubject] = useState('');
+  const [teacherSubject, setTeacherSubject] = useState<string | null>(null);
   const [classId, setClassId] = useState('');
   const [content, setContent] = useState('');
   const [image, setImage] = useState<File | null>(null);
@@ -23,17 +27,21 @@ export default function EditPostPage() {
 
   useEffect(() => {
     if (!id) return;
-    Promise.all([academicApi.getPost(id), academicApi.getClasses()]).then(([postRes, classRes]) => {
+    const meReq = isTeacher ? academicApi.getMe() : Promise.resolve({ data: null });
+    Promise.all([academicApi.getPost(id), academicApi.getClasses(), meReq]).then(([postRes, classRes, meRes]) => {
       const p: AcademicPost = postRes.data;
       setPost(p);
       setTitle(p.title);
-      setSubject(p.subject ?? '');
+      const me = (meRes as any)?.data;
+      const ts = me?.subject ?? null;
+      setTeacherSubject(ts);
+      setSubject(isTeacher && ts ? ts : (p.subject ?? ''));
       setClassId(p.class_id ?? '');
       setContent(p.content ?? '');
       if (p.image_url) setImagePreview(p.image_url);
       setClasses(classRes.data ?? []);
     }).catch(() => navigate('/feed')).finally(() => setLoading(false));
-  }, [id]);
+  }, [id, isTeacher]);
 
   const uploadImage = async (file: File): Promise<string> => {
     const res = await academicApi.uploadFile(file);
@@ -116,12 +124,18 @@ export default function EditPostPage() {
               </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1.5">Subject</label>
-                <input
-                  type="text"
-                  value={subject}
-                  onChange={e => setSubject(e.target.value)}
-                  className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                />
+                {isTeacher && teacherSubject ? (
+                  <div className="w-full border border-gray-200 bg-gray-50 rounded-xl px-3.5 py-2.5 text-sm text-gray-700">
+                    {teacherSubject}
+                  </div>
+                ) : (
+                  <input
+                    type="text"
+                    value={subject}
+                    onChange={e => setSubject(e.target.value)}
+                    className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                )}
               </div>
             </div>
 

@@ -1774,3 +1774,42 @@ export async function deleteMarkType(req: AuthRequest, res: Response): Promise<v
   if (error) { res.status(500).json({ error: error.message }); return; }
   res.json({ message: 'Deleted' });
 }
+
+// ---- TERMS ----
+export async function getTerms(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { data, error } = await supabase
+    .from('terms').select('*').eq('school_id', schoolId)
+    .order('order_index').order('created_at');
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json(toCC(data));
+}
+
+export async function createTerm(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { name } = req.body;
+  if (!name?.trim()) { res.status(400).json({ error: 'name is required' }); return; }
+  const { data: existing } = await supabase
+    .from('terms').select('order_index').eq('school_id', schoolId)
+    .order('order_index', { ascending: false }).limit(1).maybeSingle();
+  const nextOrder = (existing?.order_index ?? -1) + 1;
+  const { data, error } = await supabase.from('terms').insert({
+    school_id: schoolId,
+    name: name.trim(),
+    order_index: nextOrder,
+  }).select().single();
+  if (error) {
+    res.status(error.message.includes('unique') || error.code === '23505' ? 409 : 500)
+      .json({ error: error.message });
+    return;
+  }
+  res.status(201).json(toCC(data));
+}
+
+export async function deleteTerm(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { id } = req.params;
+  const { error } = await supabase.from('terms').delete().eq('id', id).eq('school_id', schoolId);
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json({ message: 'Deleted' });
+}

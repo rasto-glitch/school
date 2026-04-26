@@ -43,6 +43,13 @@ export default function TeacherReportScreen({ subject, classes }: Props) {
     setSelectedStudent('');
   }, [selectedClass]);
 
+  useEffect(() => {
+    setMarks([{ name: '', value: '' }]);
+    setAttendanceNotes('');
+    setBehaviorNotes('');
+    setTeacherNotes('');
+  }, [selectedStudent]);
+
   const total = marks.reduce((s, m) => s + (parseFloat(m.value) || 0), 0);
 
   const addMark = () => setMarks(prev => [...prev, { name: '', value: '' }]);

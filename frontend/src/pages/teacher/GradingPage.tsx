@@ -7,9 +7,8 @@ import SubjectBadge from '../../components/common/SubjectBadge';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
 import Select from '../../components/common/Select';
-import Input from '../../components/common/Input';
 import Button from '../../components/common/Button';
-import type { Class, Student, MarkType, Mark, Grade } from '../../types';
+import type { Class, Student, MarkType, Mark, Grade, Term } from '../../types';
 
 export default function GradingPage() {
   const { subject: teacherSubject, loading: subjectLoading } = useTeacherProfile();
@@ -21,12 +20,14 @@ export default function GradingPage() {
   const [gradingPeriod, setGradingPeriod] = useState('');
   const [marks, setMarks] = useState<Mark[]>([]);
   const [markTypes, setMarkTypes] = useState<MarkType[]>([]);
+  const [terms, setTerms] = useState<Term[]>([]);
   const [academicYear, setAcademicYear] = useState<string | null>(null);
   const [gradeSummary, setGradeSummary] = useState<Grade[]>([]);
 
   useEffect(() => {
     teacherApi.getClasses().then(r => setClasses(r.data || []));
     teacherApi.getMarkTypes('grade').then(r => setMarkTypes(r.data || []));
+    teacherApi.getTerms().then(r => setTerms(r.data || []));
     teacherApi.getSettings().then(r => setAcademicYear(r.data?.currentAcademicYear || null));
   }, []);
 
@@ -37,6 +38,8 @@ export default function GradingPage() {
 
   useEffect(() => {
     setGradeSummary([]);
+    setMarks([]);
+    setGradingPeriod('');
     if (selectedStudent) {
       teacherApi.getGrades(selectedStudent).then(r => setGradeSummary(r.data || []));
     }
@@ -124,9 +127,10 @@ export default function GradingPage() {
                   {academicYear || <span className="text-gray-400 italic">Not set</span>}
                 </div>
               </div>
-              <Input
-                label="Grading Period"
-                placeholder="e.g. Term 1"
+              <Select
+                label="Term"
+                options={terms.map(t => ({ value: t.name, label: t.name }))}
+                placeholder={terms.length ? 'Select term' : 'No terms configured'}
                 value={gradingPeriod}
                 onChange={e => setGradingPeriod(e.target.value)}
               />

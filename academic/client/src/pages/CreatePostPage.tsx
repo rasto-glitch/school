@@ -14,9 +14,11 @@ export default function CreatePostPage() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const isSupervisor = user?.role === 'supervisor';
+  const isTeacher = user?.role === 'teacher';
   const [classes, setClasses] = useState<AcademicClass[]>([]);
   const [title, setTitle] = useState('');
   const [subject, setSubject] = useState('');
+  const [teacherSubject, setTeacherSubject] = useState<string | null>(null);
   const [classId, setClassId] = useState('');
   const [body, setBody] = useState('');
   const [contentType, setContentType] = useState<ContentType>('richtext');
@@ -33,6 +35,15 @@ export default function CreatePostPage() {
       if (r.data?.[0]?.id) setClassId(r.data[0].id);
     });
   }, [isSupervisor]);
+
+  useEffect(() => {
+    if (!isTeacher) return;
+    academicApi.getMe().then(r => {
+      const s = r.data?.subject ?? null;
+      setTeacherSubject(s);
+      if (s) setSubject(s);
+    }).catch(() => {});
+  }, [isTeacher]);
 
   const uploadImage = async (file: File): Promise<string> => {
     const res = await academicApi.uploadFile(file);
@@ -126,13 +137,19 @@ export default function CreatePostPage() {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1.5">Subject</label>
-                  <input
-                    type="text"
-                    value={subject}
-                    onChange={e => setSubject(e.target.value)}
-                    placeholder="e.g. Physics"
-                    className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  />
+                  {isTeacher && teacherSubject ? (
+                    <div className="w-full border border-gray-200 bg-gray-50 rounded-xl px-3.5 py-2.5 text-sm text-gray-700">
+                      {teacherSubject}
+                    </div>
+                  ) : (
+                    <input
+                      type="text"
+                      value={subject}
+                      onChange={e => setSubject(e.target.value)}
+                      placeholder="e.g. Physics"
+                      className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    />
+                  )}
                 </div>
               </div>
             )}

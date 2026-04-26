@@ -107,6 +107,11 @@ export function createRouter(io: SocketServer) {
   router.delete('/admin/mark-types/:id', authenticate, authorize('admin'), (req, res) => admin.deleteMarkType(req as AuthRequest, res));
   router.get('/teacher/mark-types', authenticate, authorize('teacher'), (req, res) => admin.getMarkTypes(req as AuthRequest, res));
 
+  router.get('/admin/terms', authenticate, authorize('admin'), (req, res) => admin.getTerms(req as AuthRequest, res));
+  router.post('/admin/terms', authenticate, authorize('admin'), (req, res) => admin.createTerm(req as AuthRequest, res));
+  router.delete('/admin/terms/:id', authenticate, authorize('admin'), (req, res) => admin.deleteTerm(req as AuthRequest, res));
+  router.get('/teacher/terms', authenticate, authorize('teacher'), (req, res) => admin.getTerms(req as AuthRequest, res));
+
   // ---- TEACHER ----
   router.get('/teacher/profile-data', authenticate, authorize('teacher'), (req, res) => teacher.getProfileData(req as AuthRequest, res));
   router.get('/teacher/homework', authenticate, authorize('teacher'), (req, res) => teacher.getHomework(req as AuthRequest, res));
@@ -205,6 +210,7 @@ export function createRouter(io: SocketServer) {
   router.delete('/academic/posts/:id', authenticate, authorize('teacher', 'supervisor', 'admin'), (req, res) => academic.deletePost(req as AuthRequest, res));
   router.post('/academic/posts/upload', authenticate, authorize('teacher', 'supervisor'), upload.single('file'), (req, res) => academic.uploadPostFile(req as AuthRequest, res));
   router.get('/academic/classes', authenticate, authorize(...academicRoles), (req, res) => academic.getClasses(req as AuthRequest, res));
+  router.get('/academic/me', authenticate, authorize(...academicRoles), (req, res) => academic.getMe(req as AuthRequest, res));
 
   // Social: likes / saves / comments
   router.post('/academic/posts/:id/like', authenticate, authorize(...academicRoles), (req, res) => academic.toggleLike(req as AuthRequest, res));

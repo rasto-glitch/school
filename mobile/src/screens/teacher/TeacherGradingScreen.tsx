@@ -11,6 +11,7 @@ import { spacing, radius, font, shadow } from '../../theme';
 interface ClassItem { id: string; name: string }
 interface StudentItem { id: string; fullName: string }
 interface MarkType { id: string; name: string }
+interface TermItem { id: string; name: string }
 interface Mark { name: string; value: string }
 interface GradeRecord { id: string; gradingPeriod?: string; academicYear?: string; marks: Mark[]; createdAt: string }
 
@@ -24,16 +25,19 @@ export default function TeacherGradingScreen({ subject, classes, academicYear }:
   const [students, setStudents] = useState<StudentItem[]>([]);
   const [selectedStudent, setSelectedStudent] = useState('');
   const [markTypes, setMarkTypes] = useState<MarkType[]>([]);
+  const [terms, setTerms] = useState<TermItem[]>([]);
   const [gradingPeriod, setGradingPeriod] = useState('');
   const [marks, setMarks] = useState<Mark[]>([{ name: '', value: '' }]);
   const [history, setHistory] = useState<GradeRecord[]>([]);
   const [saving, setSaving] = useState(false);
 
-  // Mark type picker state
+  // Pickers
   const [pickerIndex, setPickerIndex] = useState<number | null>(null);
+  const [termPickerOpen, setTermPickerOpen] = useState(false);
 
   useEffect(() => {
     teacherApi.getMarkTypes('grade').then(r => setMarkTypes(r.data || [])).catch(() => {});
+    teacherApi.getTerms().then(r => setTerms(r.data || [])).catch(() => {});
     if (classes.length > 0) setSelectedClass(classes[0].id);
   }, [classes]);
 
@@ -44,7 +48,9 @@ export default function TeacherGradingScreen({ subject, classes, academicYear }:
   }, [selectedClass]);
 
   useEffect(() => {
-    if (!selectedStudent) return;
+    setMarks([{ name: '', value: '' }]);
+    setGradingPeriod('');
+    if (!selectedStudent) { setHistory([]); return; }
     teacherApi.getGrades(selectedStudent).then(r => setHistory(r.data || [])).catch(() => setHistory([]));
   }, [selectedStudent]);
 
@@ -110,8 +116,13 @@ export default function TeacherGradingScreen({ subject, classes, academicYear }:
         </View>
       )}
 
-      <Text style={styles.label}>Grading Period *</Text>
-      <TextInput style={styles.input} placeholder="e.g. Mid-term, Q1" placeholderTextColor={colors.textMuted} value={gradingPeriod} onChangeText={setGradingPeriod} />
+      <Text style={styles.label}>Term *</Text>
+      <TouchableOpacity style={[styles.input, styles.dropdownBtn]} onPress={() => setTermPickerOpen(true)}>
+        <Text style={[styles.dropdownText, !gradingPeriod && { color: colors.textMuted }]}>
+          {gradingPeriod || (terms.length ? 'Select term' : 'No terms configured')}
+        </Text>
+        <ChevronDown size={14} color={colors.textMuted} />
+      </TouchableOpacity>
 
       <Text style={styles.label}>Marks</Text>
       {marks.map((mark, i) => (
@@ -185,6 +196,32 @@ export default function TeacherGradingScreen({ subject, classes, academicYear }:
           ))}
         </>
       )}
+
+      {/* Term picker modal */}
+      <Modal visible={termPickerOpen} animationType="slide" presentationStyle="pageSheet" transparent>
+        <View style={styles.pickerOverlay}>
+          <View style={[styles.pickerBox, { backgroundColor: colors.card }]}>
+            <Text style={styles.pickerTitle}>Select Term</Text>
+            {terms.length === 0 ? (
+              <Text style={{ fontSize: font.sm, color: colors.textMuted, paddingVertical: 14 }}>
+                No terms configured. Ask your administrator to add terms in school settings.
+              </Text>
+            ) : terms.map(t => (
+              <TouchableOpacity
+                key={t.id}
+                style={styles.pickerOption}
+                onPress={() => { setGradingPeriod(t.name); setTermPickerOpen(false); }}
+              >
+                <Text style={styles.pickerOptionText}>{t.name}</Text>
+                {gradingPeriod === t.name && <Check size={16} color={colors.primary} />}
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity style={styles.pickerCancel} onPress={() => setTermPickerOpen(false)}>
+              <Text style={styles.pickerCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Mark type picker modal */}
       <Modal visible={pickerIndex !== null} animationType="slide" presentationStyle="pageSheet" transparent>

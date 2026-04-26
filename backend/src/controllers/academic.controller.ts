@@ -453,6 +453,36 @@ export async function getClasses(req: AuthRequest, res: Response): Promise<void>
   }
 }
 
+// Returns the logged-in author's display info for prefilling post forms.
+// For teachers, includes the resolved subject (subjects table > teachers.subject).
+export async function getMe(req: AuthRequest, res: Response): Promise<void> {
+  const { userId, role, schoolId } = req.user!;
+  try {
+    if (role !== 'teacher') {
+      res.json({ role, subject: null });
+      return;
+    }
+    const { data: teacher } = await supabase
+      .from('teachers')
+      .select('id, subject')
+      .eq('user_id', userId)
+      .eq('school_id', schoolId)
+      .single();
+    if (!teacher) { res.json({ role, subject: null }); return; }
+    const { data: subjectRow } = await supabase
+      .from('subjects')
+      .select('name')
+      .eq('teacher_id', teacher.id)
+      .eq('school_id', schoolId)
+      .limit(1)
+      .maybeSingle();
+    const resolvedSubject = subjectRow?.name || (teacher as any).subject || null;
+    res.json({ role, subject: resolvedSubject });
+  } catch {
+    res.status(500).json({ error: 'Failed to fetch profile' });
+  }
+}
+
 // ── LIKES ─────────────────────────────────────────────────────────────────────
 
 export async function toggleLike(req: AuthRequest, res: Response): Promise<void> {
