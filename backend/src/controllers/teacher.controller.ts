@@ -467,7 +467,7 @@ export async function getMyStudents(req: AuthRequest, res: Response): Promise<vo
 
   const classIds = (teacher as any).teacher_classes?.map((tc: any) => tc.class_id) ?? [];
 
-  let query = supabase.from('students').select('*, classes(name), reports(*), grades(*)').eq('school_id', schoolId).eq('is_graduated', false);
+  let query = supabase.from('students').select('id, full_name, profile_picture, class_id, classes(name)').eq('school_id', schoolId).eq('is_graduated', false);
 
   if (classId) {
     query = query.eq('class_id', classId);
@@ -480,4 +480,59 @@ export async function getMyStudents(req: AuthRequest, res: Response): Promise<vo
   const { data, error } = await query;
   if (error) { res.status(500).json({ error: error.message }); return; }
   res.json(toCC(data));
+}
+
+// Returns full student detail for the teacher's "students" tab modal:
+// student basics + reports authored by THIS teacher + grades for THIS teacher's subject.
+// Deliberately excludes parent contact info — teachers shouldn't see parent phones here.
+export async function getStudentBrief(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId, userId } = req.user!;
+  const { id: studentId } = req.params;
+
+  const { data: teacher } = await supabase
+    .from('teachers')
+    .select('id, teacher_classes(class_id)')
+    .eq('user_id', userId).eq('school_id', schoolId).single();
+  if (!teacher) { res.status(404).json({ error: 'Teacher not found' }); return; }
+  const teacherId = (teacher as any).id;
+  const teacherClassIds: string[] = (teacher as any).teacher_classes?.map((tc: any) => tc.class_id) ?? [];
+
+  const { data: student, error: stuErr } = await supabase
+    .from('students')
+    .select('id, full_name, profile_picture, class_id, date_of_birth, home_address, phone_number, emergency_contact, is_graduated, classes(name)')
+    .eq('id', studentId)
+    .eq('school_id', schoolId)
+    .single();
+  if (stuErr || !student) { res.status(404).json({ error: 'Student not found' }); return; }
+
+  // Authorisation: teacher can only see students in classes they teach.
+  if (teacherClassIds.length > 0 && (student as any).class_id && !teacherClassIds.includes((student as any).class_id)) {
+    res.status(403).json({ error: 'Forbidden' }); return;
+  }
+
+  const [reportsRes, gradesRes] = await Promise.all([
+    supabase
+      .from('reports')
+      .select('id, subject, attendance_notes, behavior_notes, marks, teacher_notes, report_date, created_at, quiz_marks, exam_marks')
+      .eq('school_id', schoolId)
+      .eq('student_id', studentId)
+      .eq('teacher_id', teacherId)
+      .order('created_at', { ascending: false }),
+    supabase
+      .from('grades')
+      .select('id, subject, marks, grading_period, academic_year, daily_grade, quiz_grade, monthly_exam_grade, term_exam_grade, created_at')
+      .eq('school_id', schoolId)
+      .eq('student_id', studentId)
+      .eq('teacher_id', teacherId)
+      .order('created_at', { ascending: false }),
+  ]);
+
+  if (reportsRes.error) { res.status(500).json({ error: reportsRes.error.message }); return; }
+  if (gradesRes.error) { res.status(500).json({ error: gradesRes.error.message }); return; }
+
+  res.json({
+    student: toCC(student),
+    reports: toCC(reportsRes.data || []),
+    grades: toCC(gradesRes.data || []),
+  });
 }

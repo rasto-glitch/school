@@ -115,6 +115,7 @@ export const teacherApi = {
   getWeeklySummary: (params?: Record<string, string>) => api.get('/teacher/weekly-summary', { params }),
   upsertWeeklySummary: (data: object) => api.post('/teacher/weekly-summary', data),
   getStudents: (params?: Record<string, string>) => api.get('/teacher/students', { params }),
+  getStudentBrief: (id: string) => api.get(`/teacher/students/${id}/brief`),
   getClasses: () => api.get('/teacher/classes'),
   getSettings: () => api.get('/teacher/settings'),
   getSchedule: () => api.get('/teacher/schedule'),

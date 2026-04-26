@@ -127,6 +127,7 @@ export function createRouter(io: SocketServer) {
   router.get('/teacher/weekly-summary', authenticate, authorize('teacher'), (req, res) => teacher.getWeeklySummary(req as AuthRequest, res));
   router.post('/teacher/weekly-summary', authenticate, authorize('teacher'), (req, res) => teacher.upsertWeeklySummary(req as AuthRequest, res));
   router.get('/teacher/students', authenticate, authorize('teacher'), (req, res) => teacher.getMyStudents(req as AuthRequest, res));
+  router.get('/teacher/students/:id/brief', authenticate, authorize('teacher'), (req, res) => teacher.getStudentBrief(req as AuthRequest, res));
   router.get('/teacher/classes', authenticate, authorize('teacher'), (req, res) => teacher.getMyClasses(req as AuthRequest, res));
   router.get('/teacher/notifications', authenticate, authorize('teacher'), (req, res) => parent.getNotifications(req as AuthRequest, res));
   router.get('/teacher/notifications/unread-count', authenticate, authorize('teacher'), (req, res) => parent.getUnreadCount(req as AuthRequest, res));

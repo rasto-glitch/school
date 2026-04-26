@@ -197,7 +197,7 @@ export default function YearTransitionModal({ currentYear, onClose, onDone }: Pr
                   {[
                     'Graduate the students you select and permanently record their completing year',
                     'Automatically promote passing students to their configured next class',
-                    'Clear all teacher reports — giving everyone a clean slate for next year',
+                    'Clear all teacher reports and grade history — giving everyone a clean slate for next year',
                     'Advance the school\'s academic year so new grades and reports are tagged correctly',
                   ].map((item, i) => (
                     <li key={i} className="flex items-start gap-2">
@@ -219,7 +219,7 @@ export default function YearTransitionModal({ currentYear, onClose, onDone }: Pr
                   </div>
                   <div className="bg-orange-50 rounded-xl p-3 text-center">
                     <p className="text-2xl font-bold text-orange-500">{students.length}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">Reports will be cleared</p>
+                    <p className="text-xs text-gray-500 mt-0.5">Reports & grades cleared</p>
                   </div>
                 </div>
               )}
@@ -411,7 +411,7 @@ export default function YearTransitionModal({ currentYear, onClose, onDone }: Pr
                     <span className="font-semibold text-green-600">{promoSelected.size}</span> student{promoSelected.size !== 1 ? 's' : ''} promoted to their next class
                   </li>
                   <li>
-                    <span className="font-semibold text-orange-500">{continuingStudents.length}</span> continuing student{continuingStudents.length !== 1 ? 's\'' : '\'s'} reports cleared
+                    <span className="font-semibold text-orange-500">{continuingStudents.length}</span> continuing student{continuingStudents.length !== 1 ? 's\'' : '\'s'} reports and grades cleared
                   </li>
                   <li>
                     School year will advance to <span className="font-semibold text-gray-900">{newYear.trim() || '—'}</span>
@@ -422,7 +422,7 @@ export default function YearTransitionModal({ currentYear, onClose, onDone }: Pr
               <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl p-4">
                 <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
                 <p className="text-sm text-red-700">
-                  <span className="font-semibold">This action cannot be undone.</span> Cleared reports and graduation records are permanent.
+                  <span className="font-semibold">This action cannot be undone.</span> Cleared reports, grades, and graduation records are permanent.
                 </p>
               </div>
             </div>

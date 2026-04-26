@@ -1,10 +1,10 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   View, Text, ScrollView, StyleSheet,
-  TouchableOpacity, TextInput, RefreshControl, Modal, Image,
+  TouchableOpacity, TextInput, RefreshControl, Modal, Image, ActivityIndicator,
 } from 'react-native';
 import { CardListSkeleton } from '../../components/Skeleton';
-import { Search, User, X, Phone } from 'lucide-react-native';
+import { Search, User, X, FileText, Star } from 'lucide-react-native';
 import { teacherApi } from '../../services/api';
 import { useColors, useIsDark } from '../../store/themeStore';
 import { spacing, radius, font, shadow } from '../../theme';
@@ -13,7 +13,26 @@ interface ClassItem { id: string; name: string }
 interface StudentItem {
   id: string; fullName: string; profilePicture?: string;
   classes?: { name: string };
-  parents?: { fullName: string; phoneNumber: string };
+}
+
+interface MarkRow { name: string; value: number }
+interface ReportItem {
+  id: string; subject: string;
+  attendanceNotes?: string; behaviorNotes?: string; teacherNotes?: string;
+  marks?: MarkRow[]; reportDate?: string; createdAt?: string;
+}
+interface GradeItem {
+  id: string; subject: string;
+  marks?: MarkRow[]; gradingPeriod?: string; academicYear?: string; createdAt?: string;
+}
+interface StudentBrief {
+  student: StudentItem & { phoneNumber?: string; emergencyContact?: string; homeAddress?: string };
+  reports: ReportItem[];
+  grades: GradeItem[];
+}
+
+function totalMarks(marks?: MarkRow[] | null): number {
+  return (marks || []).reduce((s, m) => s + (Number(m.value) || 0), 0);
 }
 
 export default function TeacherStudentsScreen() {
@@ -28,6 +47,18 @@ export default function TeacherStudentsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selected, setSelected] = useState<StudentItem | null>(null);
+  const [brief, setBrief] = useState<StudentBrief | null>(null);
+  const [briefLoading, setBriefLoading] = useState(false);
+
+  useEffect(() => {
+    if (!selected) { setBrief(null); return; }
+    setBriefLoading(true);
+    setBrief(null);
+    teacherApi.getStudentBrief(selected.id)
+      .then(r => setBrief(r.data))
+      .catch(() => setBrief(null))
+      .finally(() => setBriefLoading(false));
+  }, [selected]);
 
   useEffect(() => {
     teacherApi.getClasses().then(r => {
@@ -128,21 +159,97 @@ export default function TeacherStudentsScreen() {
                 <Text style={styles.modalBadgeText}>{selected.classes.name}</Text>
               </View>
             )}
-            {selected?.parents && (
-              <View style={styles.parentCard}>
-                <View style={styles.parentRow}>
-                  <User size={14} color={colors.textMuted} />
-                  <Text style={styles.parentLabel}>Parent:</Text>
-                  <Text style={styles.parentValue}>{selected.parents.fullName}</Text>
+            {briefLoading ? (
+              <ActivityIndicator color={colors.primary} style={{ marginVertical: spacing.lg }} />
+            ) : brief && (
+              <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 520 }}>
+                {/* Basic info — no parent phone */}
+                <View style={styles.infoCard}>
+                  {brief.student.phoneNumber ? (
+                    <View style={styles.infoRow}>
+                      <Text style={styles.infoLabel}>Phone</Text>
+                      <Text style={styles.infoValue}>{brief.student.phoneNumber}</Text>
+                    </View>
+                  ) : null}
+                  {brief.student.emergencyContact ? (
+                    <View style={styles.infoRow}>
+                      <Text style={styles.infoLabel}>Emergency</Text>
+                      <Text style={styles.infoValue}>{brief.student.emergencyContact}</Text>
+                    </View>
+                  ) : null}
+                  {brief.student.homeAddress ? (
+                    <View style={styles.infoRow}>
+                      <Text style={styles.infoLabel}>Address</Text>
+                      <Text style={styles.infoValue}>{brief.student.homeAddress}</Text>
+                    </View>
+                  ) : null}
                 </View>
-                {selected.parents.phoneNumber && (
-                  <View style={styles.parentRow}>
-                    <Phone size={14} color={colors.textMuted} />
-                    <Text style={styles.parentLabel}>Phone:</Text>
-                    <Text style={styles.parentValue}>{selected.parents.phoneNumber}</Text>
-                  </View>
+
+                {/* Grades — this teacher's only */}
+                <View style={styles.sectionHeader}>
+                  <Star size={14} color={colors.primary} />
+                  <Text style={styles.sectionTitle}>Grades</Text>
+                  <Text style={styles.sectionCount}>({brief.grades.length})</Text>
+                </View>
+                {brief.grades.length === 0 ? (
+                  <Text style={styles.emptyMini}>No grades recorded.</Text>
+                ) : (
+                  brief.grades.map(g => {
+                    const tot = totalMarks(g.marks);
+                    return (
+                      <View key={g.id} style={styles.recordCard}>
+                        <View style={styles.recordTop}>
+                          <Text style={styles.recordTitle}>
+                            {g.gradingPeriod || '—'}
+                            {g.academicYear ? <Text style={styles.recordYear}>  {g.academicYear}</Text> : null}
+                          </Text>
+                          {tot > 0 && <Text style={styles.recordTotal}>{tot.toFixed(1)}</Text>}
+                        </View>
+                        {(g.marks || []).length > 0 && (
+                          <View style={styles.markRow}>
+                            {(g.marks || []).map((m, i) => (
+                              <View key={i} style={styles.markPill}>
+                                <Text style={styles.markPillText}>{m.name}: <Text style={styles.markPillVal}>{m.value}</Text></Text>
+                              </View>
+                            ))}
+                          </View>
+                        )}
+                      </View>
+                    );
+                  })
                 )}
-              </View>
+
+                {/* Reports — this teacher's only */}
+                <View style={[styles.sectionHeader, { marginTop: spacing.md }]}>
+                  <FileText size={14} color={colors.primary} />
+                  <Text style={styles.sectionTitle}>Reports</Text>
+                  <Text style={styles.sectionCount}>({brief.reports.length})</Text>
+                </View>
+                {brief.reports.length === 0 ? (
+                  <Text style={styles.emptyMini}>No reports submitted.</Text>
+                ) : (
+                  brief.reports.map(r => (
+                    <View key={r.id} style={styles.recordCard}>
+                      <View style={styles.recordTop}>
+                        <Text style={styles.recordTitle}>{r.subject}</Text>
+                        <Text style={styles.recordYear}>{r.reportDate || (r.createdAt || '').slice(0, 10)}</Text>
+                      </View>
+                      {(r.marks || []).length > 0 && (
+                        <View style={styles.markRow}>
+                          {(r.marks || []).map((m, i) => (
+                            <View key={i} style={styles.markPill}>
+                              <Text style={styles.markPillText}>{m.name}: <Text style={styles.markPillVal}>{m.value}</Text></Text>
+                            </View>
+                          ))}
+                        </View>
+                      )}
+                      {r.attendanceNotes ? <Text style={styles.noteRow}><Text style={styles.noteLabel}>Attendance: </Text>{r.attendanceNotes}</Text> : null}
+                      {r.behaviorNotes ? <Text style={styles.noteRow}><Text style={styles.noteLabel}>Behavior: </Text>{r.behaviorNotes}</Text> : null}
+                      {r.teacherNotes ? <Text style={styles.noteRow}>{r.teacherNotes}</Text> : null}
+                    </View>
+                  ))
+                )}
+              </ScrollView>
             )}
           </View>
         </View>
@@ -189,4 +296,23 @@ const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').u
   parentRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   parentLabel: { fontSize: font.sm, color: colors.textMuted, fontWeight: '500' },
   parentValue: { fontSize: font.sm, color: colors.text, fontWeight: '600', flex: 1 },
+  infoCard: { backgroundColor: colors.bg, borderRadius: radius.md, padding: spacing.md, gap: spacing.xs, marginBottom: spacing.md },
+  infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.md },
+  infoLabel: { fontSize: font.xs, color: colors.textMuted, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
+  infoValue: { fontSize: font.sm, color: colors.text, fontWeight: '600', flexShrink: 1, textAlign: 'right' },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: spacing.sm },
+  sectionTitle: { fontSize: font.sm, fontWeight: '700', color: colors.text },
+  sectionCount: { fontSize: font.xs, color: colors.textMuted },
+  emptyMini: { fontSize: font.sm, color: colors.textMuted, paddingVertical: spacing.sm },
+  recordCard: { backgroundColor: colors.bg, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm },
+  recordTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+  recordTitle: { fontSize: font.sm, fontWeight: '700', color: colors.text, flex: 1 },
+  recordYear: { fontSize: font.xs, color: colors.textMuted, fontWeight: '500' },
+  recordTotal: { fontSize: font.md, fontWeight: '800', color: colors.primary },
+  markRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: 4 },
+  markPill: { backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, borderRadius: radius.full, paddingHorizontal: 8, paddingVertical: 2 },
+  markPillText: { fontSize: font.xs, color: colors.textSecondary },
+  markPillVal: { color: colors.text, fontWeight: '700' },
+  noteRow: { fontSize: font.xs, color: colors.textSecondary, marginTop: 4 },
+  noteLabel: { color: colors.textMuted, fontWeight: '600' },
 });
