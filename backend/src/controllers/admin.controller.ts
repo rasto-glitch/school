@@ -1473,15 +1473,11 @@ export async function yearTransition(req: AuthRequest, res: Response): Promise<v
   if (activeErr) { res.status(500).json({ error: activeErr.message }); return; }
   const activeIds = (activeStudents || []).map((s: any) => s.id);
 
-  // 2. Clear reports + grades for all active students — clean slate for new year
+  // 2. Clear reports for all active students — clean slate for new year
   if (activeIds.length > 0) {
     const { error: repErr } = await supabase.from('reports')
       .delete().in('student_id', activeIds).eq('school_id', schoolId);
     if (repErr) { res.status(500).json({ error: repErr.message }); return; }
-
-    const { error: gradeErr } = await supabase.from('grades')
-      .delete().in('student_id', activeIds).eq('school_id', schoolId);
-    if (gradeErr) { res.status(500).json({ error: gradeErr.message }); return; }
   }
 
   // 3. Graduate selected students. Schools without the archive feature can't
