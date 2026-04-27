@@ -4,6 +4,7 @@ import { logger } from '../utils/logger';
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 const TO_EMAIL = process.env.LANDING_INBOX || 'onboarding@scholify.krd';
+const CONTACT_TO_EMAIL = process.env.CONTACT_INBOX || 'contact@scholify.krd';
 const FROM_EMAIL = process.env.LANDING_FROM || 'Scholify <no-reply@scholify.krd>';
 
 const str = (v: unknown, max = 500) =>
@@ -31,14 +32,14 @@ const wrapper = (title: string, rows: string) => `
   </div>
 `;
 
-const send = async (subject: string, html: string, replyTo?: string) => {
+const send = async (subject: string, html: string, replyTo?: string, to: string = TO_EMAIL) => {
   if (!resend) {
     logger.warn('Resend API key missing; skipping send', { subject });
     return;
   }
   const { error } = await resend.emails.send({
     from: FROM_EMAIL,
-    to: TO_EMAIL,
+    to,
     replyTo,
     subject,
     html,
@@ -80,6 +81,41 @@ export const demoRequest = async (req: Request, res: Response) => {
 
   try {
     await send(`Demo request — ${schoolName}`, wrapper('New demo request', rows), email);
+    res.json({ ok: true });
+  } catch {
+    res.status(500).json({ error: 'Could not send. Please try again later.' });
+  }
+};
+
+export const contactRequest = async (req: Request, res: Response) => {
+  if (str(req.body?.website)) return res.status(200).json({ ok: true });
+
+  const name    = str(req.body?.name, 200);
+  const email   = str(req.body?.email, 200);
+  const subject = str(req.body?.subject, 200);
+  const message = str(req.body?.message, 4000);
+
+  if (!name || !email || !message) {
+    return res.status(400).json({ error: 'Missing required fields.' });
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ error: 'Invalid email.' });
+  }
+
+  const rows = [
+    row('Name', name),
+    row('Email', email),
+    row('Subject', subject),
+    row('Message', message),
+  ].join('');
+
+  try {
+    await send(
+      `Contact form — ${subject || name}`,
+      wrapper('New contact message', rows),
+      email,
+      CONTACT_TO_EMAIL,
+    );
     res.json({ ok: true });
   } catch {
     res.status(500).json({ error: 'Could not send. Please try again later.' });

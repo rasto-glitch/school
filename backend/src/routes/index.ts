@@ -25,6 +25,7 @@ export function createRouter(io: SocketServer) {
   router.post('/auth/forgot-password', (req, res) => forgotPassword(req, res));
   router.post('/public/demo-request', (req, res) => { pub.demoRequest(req, res); });
   router.post('/public/partner-application', (req, res) => { pub.partnerApplication(req, res); });
+  router.post('/public/contact-request', (req, res) => { pub.contactRequest(req, res); });
 
   // ---- AUTH ----
   router.post('/auth/login', login);

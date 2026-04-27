@@ -27,7 +27,7 @@ export default function Footer() {
           <ul className="space-y-2 text-sm text-slate-600">
             <li><Link to="/privacy" className="hover:text-primary-600">{t('footer.privacy')}</Link></li>
             <li><Link to="/terms" className="hover:text-primary-600">{t('footer.terms')}</Link></li>
-            <li><a href="mailto:hello@scholify.krd" className="hover:text-primary-600">{t('footer.contact')}</a></li>
+            <li><Link to="/contact" className="hover:text-primary-600">{t('footer.contact')}</Link></li>
           </ul>
         </div>
       </div>

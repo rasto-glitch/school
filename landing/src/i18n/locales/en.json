@@ -111,6 +111,20 @@
       "error": "Something went wrong. Please try again."
     }
   },
+  "contact": {
+    "title": "Contact us",
+    "subtitle": "Questions, feedback, or anything else — we'd love to hear from you.",
+    "form": {
+      "name": "Your name",
+      "email": "Email",
+      "subject": "Subject",
+      "message": "Message",
+      "submit": "Send message",
+      "sending": "Sending…",
+      "success": "Thanks! We'll get back to you shortly.",
+      "error": "Something went wrong. Please try again."
+    }
+  },
   "partner": {
     "title": "Become a partner",
     "subtitle": "Resellers, integrators, and regional partners — let's build together.",
