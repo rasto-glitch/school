@@ -44,7 +44,7 @@ export default function ParentTabs() {
   const [chatCount, setChatCount] = useState(0);
   const {
     unreadCount, setUnreadCount,
-    setReportCount, setBookingCount, setHomeworkCount, setAssignmentCount, setPostCount,
+    setReportCount, setBookingCount, setHomeworkCount, setAssignmentCount, setPostCount, setGradeCount,
     postCount,
   } = useBadgeStore();
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -83,12 +83,13 @@ export default function ParentTabs() {
         setReportCount(r.data?.report ?? 0);
         setBookingCount(r.data?.booking ?? 0);
         setPostCount(r.data?.post ?? 0);
+        setGradeCount(r.data?.grade ?? 0);
       })
       .catch(() => {});
     chatApi.getUnreadCount()
       .then(r => { if (!chatListActive.current) setChatCount(r.data?.count ?? 0); })
       .catch(() => {});
-  }, [setUnreadCount, setReportCount, setBookingCount, setHomeworkCount, setAssignmentCount, setPostCount]);
+  }, [setUnreadCount, setReportCount, setBookingCount, setHomeworkCount, setAssignmentCount, setPostCount, setGradeCount]);
 
   useEffect(() => {
     fetchCounts();
@@ -127,11 +128,14 @@ export default function ParentTabs() {
         case 'post':
           setPostCount(useBadgeStore.getState().postCount + 1);
           break;
+        case 'grade':
+          setGradeCount(useBadgeStore.getState().gradeCount + 1);
+          break;
       }
     };
     socket.on('notification', onNotif);
     return () => { socket.off('notification', onNotif); };
-  }, [socket, setUnreadCount, setHomeworkCount, setAssignmentCount, setReportCount, setBookingCount, setPostCount]);
+  }, [socket, setUnreadCount, setHomeworkCount, setAssignmentCount, setReportCount, setBookingCount, setPostCount, setGradeCount]);
 
   const headerIconBg = isDark ? 'rgba(255,255,255,0.12)' : colors.primaryLight;
   const headerIconColor = isDark ? '#FFFFFF' : colors.primary;

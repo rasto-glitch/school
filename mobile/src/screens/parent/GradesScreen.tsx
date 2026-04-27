@@ -1,11 +1,13 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, RefreshControl } from 'react-native';
 import { CardListSkeleton } from '../../components/Skeleton';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { GraduationCap } from 'lucide-react-native';
 import { parentApi } from '../../services/api';
 import { useColors, useIsDark } from '../../store/themeStore';
+import { useBadgeStore } from '../../store/badgeStore';
 import { spacing, radius, font, shadow } from '../../theme';
 import type { Grade, Student } from '../../types';
 
@@ -73,8 +75,18 @@ export default function GradesScreen() {
   const [grades, setGrades] = useState<Grade[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const clearGrade = useBadgeStore(s => s.clearGrade);
+  const setUnreadCount = useBadgeStore(s => s.setUnreadCount);
 
   const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
+
+  useFocusEffect(
+    useCallback(() => {
+      clearGrade();
+      parentApi.markTypeRead('grade').catch(() => {});
+      parentApi.getUnreadCount().then(r => setUnreadCount(r.data?.count ?? 0)).catch(() => {});
+    }, [clearGrade, setUnreadCount])
+  );
 
   useEffect(() => {
     parentApi.getChildren().then(r => {
