@@ -8,6 +8,7 @@ import { useNavigation } from '@react-navigation/native';
 import { Heart, MessageCircle, Bookmark, BookOpen, FileText } from 'lucide-react-native';
 import { academicApi, parentApi } from '../../services/api';
 import { useColors, useIsDark } from '../../store/themeStore';
+import { useBadgeStore } from '../../store/badgeStore';
 import { spacing, radius, font } from '../../theme';
 import type { AcademicPost, Ebook, EbookProgress, Student } from '../../types';
 
@@ -134,6 +135,7 @@ export default function LearnScreen() {
   const colors = useColors();
   const isDark = useIsDark();
   const navigation = useNavigation<any>();
+  const { postCount, clearPost } = useBadgeStore();
   const [tab, setTab] = useState<Tab>('ebooks');
   const [posts, setPosts] = useState<AcademicPost[]>([]);
   const [saved, setSaved] = useState<AcademicPost[]>([]);
@@ -179,6 +181,14 @@ export default function LearnScreen() {
   }, []);
 
   useEffect(() => { load().finally(() => setLoading(false)); }, [load]);
+
+  // When the user enters the Posts sub-tab, clear the post badge.
+  useEffect(() => {
+    if (tab !== 'posts') return;
+    if (postCount === 0) return;
+    clearPost();
+    parentApi.markTypeRead('post').catch(() => {});
+  }, [tab, postCount, clearPost]);
 
   const selectedChild = useMemo(
     () => children.find(c => c.id === selectedChildId) ?? null,
@@ -253,6 +263,7 @@ export default function LearnScreen() {
           const active = tab === key;
           const activeColor = isDark ? '#FFFFFF' : colors.primary;
           const mutedColor = isDark ? 'rgba(255,255,255,0.6)' : colors.textMuted;
+          const showPostBadge = key === 'posts' && postCount > 0;
           return (
             <TouchableOpacity
               key={key}
@@ -260,9 +271,16 @@ export default function LearnScreen() {
               style={styles.segment}
               activeOpacity={0.7}
             >
-              <Text style={[styles.segmentText, { color: active ? activeColor : mutedColor }]}>
-                {key === 'ebooks' ? t('learn.tab_ebooks', 'E-Books') : key === 'posts' ? t('learn.tab_posts', 'Posts') : t('learn.tab_saved', 'Saved')}
-              </Text>
+              <View style={styles.segmentInner}>
+                <Text style={[styles.segmentText, { color: active ? activeColor : mutedColor }]}>
+                  {key === 'ebooks' ? t('learn.tab_ebooks', 'E-Books') : key === 'posts' ? t('learn.tab_posts', 'Posts') : t('learn.tab_saved', 'Saved')}
+                </Text>
+                {showPostBadge && (
+                  <View style={styles.segmentBadge}>
+                    <Text style={styles.segmentBadgeText}>{postCount > 99 ? '99+' : postCount}</Text>
+                  </View>
+                )}
+              </View>
             </TouchableOpacity>
           );
         })}
@@ -366,7 +384,15 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   segmented: { flexDirection: 'row', borderBottomWidth: 1, position: 'relative' },
   segment: { flex: 1, paddingVertical: 12, alignItems: 'center' },
+  segmentInner: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   segmentText: { fontSize: font.sm, fontWeight: '600' },
+  segmentBadge: {
+    minWidth: 16, height: 16, borderRadius: 8,
+    backgroundColor: '#EF4444',
+    alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  segmentBadgeText: { fontSize: 9, fontWeight: '800', color: '#fff' },
   segmentUnderline: { position: 'absolute', bottom: 0, left: 0, height: 2 },
 
   empty: { alignItems: 'center', paddingTop: 60 },

@@ -44,7 +44,8 @@ export default function ParentTabs() {
   const [chatCount, setChatCount] = useState(0);
   const {
     unreadCount, setUnreadCount,
-    setReportCount, setBookingCount, setHomeworkCount, setAssignmentCount,
+    setReportCount, setBookingCount, setHomeworkCount, setAssignmentCount, setPostCount,
+    postCount,
   } = useBadgeStore();
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const chatListActive = useRef(false);
@@ -81,12 +82,13 @@ export default function ParentTabs() {
         setAssignmentCount(r.data?.assignment ?? 0);
         setReportCount(r.data?.report ?? 0);
         setBookingCount(r.data?.booking ?? 0);
+        setPostCount(r.data?.post ?? 0);
       })
       .catch(() => {});
     chatApi.getUnreadCount()
       .then(r => { if (!chatListActive.current) setChatCount(r.data?.count ?? 0); })
       .catch(() => {});
-  }, [setUnreadCount, setReportCount, setBookingCount, setHomeworkCount, setAssignmentCount]);
+  }, [setUnreadCount, setReportCount, setBookingCount, setHomeworkCount, setAssignmentCount, setPostCount]);
 
   useEffect(() => {
     fetchCounts();
@@ -122,11 +124,14 @@ export default function ParentTabs() {
         case 'appointment':
           setBookingCount(useBadgeStore.getState().bookingCount + 1);
           break;
+        case 'post':
+          setPostCount(useBadgeStore.getState().postCount + 1);
+          break;
       }
     };
     socket.on('notification', onNotif);
     return () => { socket.off('notification', onNotif); };
-  }, [socket, setUnreadCount, setHomeworkCount, setAssignmentCount, setReportCount, setBookingCount]);
+  }, [socket, setUnreadCount, setHomeworkCount, setAssignmentCount, setReportCount, setBookingCount, setPostCount]);
 
   const headerIconBg = isDark ? 'rgba(255,255,255,0.12)' : colors.primaryLight;
   const headerIconColor = isDark ? '#FFFFFF' : colors.primary;
@@ -210,7 +215,10 @@ export default function ParentTabs() {
             options={{
               tabBarLabel: t('nav.learn', 'Learn'),
               tabBarIcon: ({ color, focused }) => (
-                <GraduationCap size={22} color={color} fill={focused ? (isDark ? '#FFFFFF' : colors.primary) : 'transparent'} />
+                <View>
+                  <GraduationCap size={22} color={color} fill={focused ? (isDark ? '#FFFFFF' : colors.primary) : 'transparent'} />
+                  <TabBadge count={postCount} />
+                </View>
               ),
             }}
           />
