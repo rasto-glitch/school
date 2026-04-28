@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Image,
   TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { useRoute, useNavigation } from '@react-navigation/native';
+import { useHeaderHeight } from '@react-navigation/elements';
 import { Heart, MessageCircle, Bookmark, Send, Trash2 } from 'lucide-react-native';
 import { academicApi } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
@@ -28,12 +30,15 @@ export default function PostDetailScreen() {
   const navigation = useNavigation<any>();
   const { user } = useAuthStore();
   const postId: string = route.params?.postId;
+  const focusComment: boolean = route.params?.focusComment === true;
+  const headerHeight = useHeaderHeight();
 
   const [post, setPost] = useState<AcademicPost | null>(null);
   const [comments, setComments] = useState<PostComment[]>([]);
   const [loading, setLoading] = useState(true);
   const [commentText, setCommentText] = useState('');
   const [posting, setPosting] = useState(false);
+  const inputRef = useRef<TextInput>(null);
 
   useEffect(() => {
     if (!postId) return;
@@ -42,6 +47,13 @@ export default function PostDetailScreen() {
       .catch(() => navigation.goBack())
       .finally(() => setLoading(false));
   }, [postId]);
+
+  useEffect(() => {
+    if (!loading && focusComment) {
+      const timer = setTimeout(() => inputRef.current?.focus(), 250);
+      return () => clearTimeout(timer);
+    }
+  }, [loading, focusComment]);
 
   const handleToggleLike = async () => {
     if (!post) return;
@@ -100,11 +112,12 @@ export default function PostDetailScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: colors.bg }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={90}
-    >
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['bottom']}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={headerHeight}
+      >
       <ScrollView contentContainerStyle={{ padding: spacing.md, paddingBottom: spacing.xl }}>
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.header}>
@@ -139,10 +152,10 @@ export default function PostDetailScreen() {
                 {post.likes_count ?? 0}
               </Text>
             </TouchableOpacity>
-            <View style={styles.actionBtn}>
+            <TouchableOpacity onPress={() => inputRef.current?.focus()} style={styles.actionBtn} hitSlop={8}>
               <MessageCircle size={20} color={colors.textMuted} />
               <Text style={[styles.actionCount, { color: colors.textMuted }]}>{post.comments_count ?? 0}</Text>
-            </View>
+            </TouchableOpacity>
             <TouchableOpacity onPress={handleToggleSave} style={[styles.actionBtn, { marginLeft: 'auto' }]} hitSlop={8}>
               <Bookmark size={20} color={post.saved_by_me ? colors.primary : colors.textMuted} fill={post.saved_by_me ? colors.primary : 'transparent'} />
             </TouchableOpacity>
@@ -181,6 +194,7 @@ export default function PostDetailScreen() {
       {/* Comment input */}
       <View style={[styles.inputBar, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
         <TextInput
+          ref={inputRef}
           style={[styles.input, { backgroundColor: colors.bg, color: colors.text }]}
           value={commentText}
           onChangeText={setCommentText}
@@ -195,7 +209,8 @@ export default function PostDetailScreen() {
           <Send size={16} color="#fff" />
         </TouchableOpacity>
       </View>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 

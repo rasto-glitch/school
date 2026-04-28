@@ -23,11 +23,12 @@ function authorLabel(post: AcademicPost): string {
   return subject ? `${name} — ${subject}` : name;
 }
 
-function PostCard({ post, onPress, onToggleLike, onToggleSave }: {
+function PostCard({ post, onPress, onToggleLike, onToggleSave, onPressComment }: {
   post: AcademicPost;
   onPress: () => void;
   onToggleLike: () => void;
   onToggleSave: () => void;
+  onPressComment: () => void;
 }) {
   const colors = useColors();
   const body = post.body && post.body.length > 200 ? post.body.slice(0, 200) + '…' : post.body;
@@ -68,10 +69,10 @@ function PostCard({ post, onPress, onToggleLike, onToggleSave }: {
             {post.likes_count ?? 0}
           </Text>
         </TouchableOpacity>
-        <View style={styles.actionBtn}>
+        <TouchableOpacity onPress={onPressComment} style={styles.actionBtn} hitSlop={8}>
           <MessageCircle size={18} color={colors.textMuted} />
           <Text style={[styles.actionCount, { color: colors.textMuted }]}>{post.comments_count ?? 0}</Text>
-        </View>
+        </TouchableOpacity>
         <TouchableOpacity onPress={onToggleSave} style={[styles.actionBtn, { marginLeft: 'auto' }]} hitSlop={8}>
           <Bookmark
             size={18}
@@ -370,6 +371,7 @@ export default function LearnScreen() {
               key={p.id}
               post={p}
               onPress={() => navigation.navigate('PostDetail', { postId: p.id })}
+              onPressComment={() => navigation.navigate('PostDetail', { postId: p.id, focusComment: true })}
               onToggleLike={() => handleToggleLike(p.id)}
               onToggleSave={() => handleToggleSave(p.id)}
             />
