@@ -92,6 +92,17 @@ export const parentApi = {
   getLinkPreview: (url: string) => api.get('/link-preview', { params: { url } }),
 };
 
+// ---- ANNOUNCEMENTS (shared) ----
+export const announcementApi = {
+  toggleLike: (id: string) => api.post(`/announcements/${id}/like`),
+  getComments: (id: string) => api.get(`/announcements/${id}/comments`),
+  createComment: (id: string, body: string, parentId?: string) =>
+    api.post(`/announcements/${id}/comments`, parentId ? { body, parentId } : { body }),
+  deleteComment: (commentId: string) => api.delete(`/announcements/comments/${commentId}`),
+  toggleCommentLike: (commentId: string) => api.post(`/announcements/comments/${commentId}/like`),
+  getById: (id: string) => api.get(`/announcements/${id}`),
+};
+
 // ---- SUPERVISOR ----
 export const supervisorApi = {
   getClasses: () => api.get('/supervisor/classes'),

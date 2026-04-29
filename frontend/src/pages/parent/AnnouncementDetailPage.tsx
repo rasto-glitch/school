@@ -1,12 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Megaphone, ArrowLeft, Paperclip, ExternalLink } from 'lucide-react';
-import { parentApi } from '../../services/api';
+import { Megaphone, ArrowLeft, Paperclip, ExternalLink, Heart, MessageCircle, Send, CornerDownRight, X, Trash2 } from 'lucide-react';
+import { announcementApi, parentApi } from '../../services/api';
+import { useAuthStore } from '../../store/authStore';
 import PageLayout from '../../components/layout/PageLayout';
-import Badge from '../../components/common/Badge';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import Button from '../../components/common/Button';
-import type { Announcement } from '../../types';
+import { toast } from 'react-toastify';
+import type { Announcement, AnnouncementComment } from '../../types';
 import { format, parseISO } from 'date-fns';
 
 interface LinkPreview {
@@ -19,22 +20,171 @@ interface LinkPreview {
   siteName: string;
 }
 
+function commentInitials(c: AnnouncementComment): string {
+  const first = (c.users?.first_name ?? '').charAt(0);
+  const last = (c.users?.last_name ?? '').charAt(0);
+  return `${first}${last}`.toUpperCase() || '?';
+}
+
+interface CommentRowProps {
+  c: AnnouncementComment;
+  isReply: boolean;
+  canDelete: boolean;
+  displayName: string;
+  onLike: () => void;
+  onReply: () => void;
+  onDelete: () => void;
+}
+
+function CommentRow({ c, isReply, canDelete, displayName, onLike, onReply, onDelete }: CommentRowProps) {
+  const avatarUrl = c.users?.profile_picture;
+  return (
+    <div className={`flex items-start gap-3 p-3 bg-gray-50 rounded-xl ${isReply ? 'ml-10' : ''}`}>
+      {avatarUrl ? (
+        <img src={avatarUrl} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+      ) : (
+        <div className="w-8 h-8 rounded-full bg-primary-100 text-primary-700 text-xs font-bold flex items-center justify-center flex-shrink-0">
+          {commentInitials(c)}
+        </div>
+      )}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold text-gray-800">{displayName}</span>
+          <span className="text-xs text-gray-400">{format(new Date(c.created_at), 'MMM d, HH:mm')}</span>
+        </div>
+        <p className="text-sm text-gray-700 mt-0.5 whitespace-pre-wrap break-words">{c.body}</p>
+        <div className="flex items-center gap-4 mt-1.5">
+          <button
+            onClick={onLike}
+            className={`flex items-center gap-1 text-xs font-medium ${c.liked_by_me ? 'text-rose-600' : 'text-gray-500 hover:text-rose-600'}`}
+          >
+            <Heart className={`w-3.5 h-3.5 ${c.liked_by_me ? 'fill-rose-600' : ''}`} />
+            {(c.likes_count ?? 0) > 0 && <span>{c.likes_count}</span>}
+          </button>
+          <button
+            onClick={onReply}
+            className="flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-primary-600"
+          >
+            <CornerDownRight className="w-3.5 h-3.5" />
+            Reply
+          </button>
+        </div>
+      </div>
+      {canDelete && (
+        <button onClick={onDelete} className="text-xs text-gray-400 hover:text-red-500">
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function AnnouncementDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user, school } = useAuthStore();
   const [announcement, setAnnouncement] = useState<Announcement | null>(null);
+  const [comments, setComments] = useState<AnnouncementComment[]>([]);
   const [loading, setLoading] = useState(true);
   const [preview, setPreview] = useState<LinkPreview | null>(null);
+  const [commentText, setCommentText] = useState('');
+  const [posting, setPosting] = useState(false);
+  const [replyTo, setReplyTo] = useState<AnnouncementComment | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const threaded = useMemo(() => {
+    const tops = comments.filter(c => !c.parent_id);
+    const repliesByParent = new Map<string, AnnouncementComment[]>();
+    for (const c of comments) {
+      if (c.parent_id) {
+        const arr = repliesByParent.get(c.parent_id) ?? [];
+        arr.push(c);
+        repliesByParent.set(c.parent_id, arr);
+      }
+    }
+    return tops.map(top => ({ top, replies: repliesByParent.get(top.id) ?? [] }));
+  }, [comments]);
 
   useEffect(() => {
     if (!id) return;
-    parentApi.getAnnouncementById(id).then(r => setAnnouncement(r.data || null)).finally(() => setLoading(false));
+    Promise.all([
+      announcementApi.getById(id),
+      announcementApi.getComments(id),
+    ]).then(([a, c]) => {
+      setAnnouncement(a.data);
+      setComments(c.data ?? []);
+    }).catch(() => navigate(-1))
+      .finally(() => setLoading(false));
   }, [id]);
 
   useEffect(() => {
     if (!announcement?.linkUrl) return;
     parentApi.getLinkPreview(announcement.linkUrl).then(r => setPreview(r.data)).catch(() => {});
   }, [announcement?.linkUrl]);
+
+  const announcerName = (() => {
+    if (!announcement) return '';
+    return announcement.users?.role === 'admin'
+      ? (school?.name || 'School')
+      : (`${announcement.users?.first_name ?? ''} ${announcement.users?.last_name ?? ''}`.trim() || 'School');
+  })();
+  const announcerAvatar = announcement?.users?.profile_picture;
+
+  const commenterName = (c: AnnouncementComment) => c.users?.role === 'admin'
+    ? (school?.name || 'School')
+    : (`${c.users?.first_name ?? ''} ${c.users?.last_name ?? ''}`.trim() || 'User');
+
+  const handleToggleLike = async () => {
+    if (!announcement) return;
+    setAnnouncement({
+      ...announcement,
+      liked_by_me: !announcement.liked_by_me,
+      likes_count: (announcement.likes_count ?? 0) + (announcement.liked_by_me ? -1 : 1),
+    });
+    try { await announcementApi.toggleLike(announcement.id); } catch {}
+  };
+
+  const handlePostComment = async () => {
+    if (!announcement || !commentText.trim()) return;
+    setPosting(true);
+    try {
+      const r = await announcementApi.createComment(announcement.id, commentText.trim(), replyTo?.id);
+      setComments(prev => [...prev, r.data]);
+      setCommentText('');
+      setReplyTo(null);
+      setAnnouncement({ ...announcement, comments_count: (announcement.comments_count ?? 0) + 1 });
+    } catch {
+      toast.error('Failed to post comment');
+    } finally {
+      setPosting(false);
+    }
+  };
+
+  const handleStartReply = (c: AnnouncementComment) => {
+    setReplyTo(c);
+    setTimeout(() => inputRef.current?.focus(), 50);
+  };
+
+  const handleToggleCommentLike = async (c: AnnouncementComment) => {
+    setComments(prev => prev.map(x => x.id === c.id ? {
+      ...x,
+      liked_by_me: !x.liked_by_me,
+      likes_count: (x.likes_count ?? 0) + (x.liked_by_me ? -1 : 1),
+    } : x));
+    try { await announcementApi.toggleCommentLike(c.id); } catch {}
+  };
+
+  const handleDeleteComment = async (commentId: string) => {
+    if (!confirm('Delete this comment?')) return;
+    try {
+      await announcementApi.deleteComment(commentId);
+      const removed = comments.filter(c => c.id === commentId || c.parent_id === commentId).length;
+      setComments(prev => prev.filter(c => c.id !== commentId && c.parent_id !== commentId));
+      if (announcement) setAnnouncement({ ...announcement, comments_count: Math.max(0, (announcement.comments_count ?? removed) - removed) });
+    } catch {
+      toast.error('Failed to delete comment');
+    }
+  };
 
   if (loading) return <PageLayout title="Announcement"><LoadingSpinner /></PageLayout>;
   if (!announcement) return <PageLayout title="Announcement"><p className="text-gray-500">Announcement not found.</p></PageLayout>;
@@ -43,43 +193,39 @@ export default function AnnouncementDetailPage() {
     <PageLayout title="Announcement">
       <div className="max-w-2xl space-y-4">
         <Button variant="ghost" size="sm" icon={<ArrowLeft className="w-4 h-4" />} onClick={() => navigate(-1)}>Back</Button>
-        <div className="bg-gradient-to-r from-primary-600 to-secondary-500 rounded-2xl p-6 text-white">
-          <div className="flex items-center gap-2 mb-3 opacity-80">
-            <Megaphone className="w-5 h-5" />
-            <span className="text-sm font-medium">School Announcement</span>
-            <Badge color="gray">{announcement.targetAudience}</Badge>
+
+        <article className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="p-6">
+            <div className="flex items-center gap-3 mb-4">
+              {announcerAvatar ? (
+                <img src={announcerAvatar} alt="" className="w-11 h-11 rounded-full object-cover" />
+              ) : (
+                <div className="w-11 h-11 rounded-full bg-primary-50 flex items-center justify-center">
+                  <Megaphone className="w-5 h-5 text-primary-600" />
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-gray-900 truncate">{announcerName}</p>
+                <p className="text-xs text-gray-400">{format(parseISO(announcement.createdAt), 'MMMM d, yyyy · h:mm a')}</p>
+              </div>
+              {announcement.targetAudience && announcement.targetAudience !== 'all' && (
+                <span className="text-xs bg-purple-50 text-purple-700 px-2 py-0.5 rounded-full font-semibold capitalize">
+                  {announcement.targetAudience}
+                </span>
+              )}
+            </div>
+
+            <h1 className="text-2xl font-bold text-gray-900 mb-3">{announcement.title}</h1>
+            <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">{announcement.content}</p>
           </div>
-          <h1 className="text-2xl font-bold mb-3">{announcement.title}</h1>
-          <p className="text-white/90 leading-relaxed whitespace-pre-wrap">{announcement.content}</p>
-          <p className="text-white/60 text-xs mt-4">{format(parseISO(announcement.createdAt), 'MMMM d, yyyy · h:mm a')}</p>
-        </div>
-        {announcement.linkUrl && (
-          <div className="p-4 bg-white rounded-2xl border border-gray-200 space-y-3">
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Link</h2>
-            {preview?.type === 'instagram' ? (
-              <a href={announcement.linkUrl} target="_blank" rel="noopener noreferrer"
-                className="flex items-center gap-3 p-4 rounded-xl hover:opacity-90 transition-opacity"
-                style={{ background: 'linear-gradient(135deg, #F58529, #DD2A7B, #8134AF)' }}>
-                <span className="text-2xl">📸</span>
-                <div className="min-w-0">
-                  <p className="text-white font-bold text-sm">{preview.title}</p>
-                  <p className="text-white/80 text-xs">{preview.description}</p>
-                </div>
-                <ExternalLink className="w-4 h-4 text-white ml-auto flex-shrink-0" />
-              </a>
-            ) : preview?.type === 'facebook' ? (
-              <a href={announcement.linkUrl} target="_blank" rel="noopener noreferrer"
-                className="flex items-center gap-3 p-4 rounded-xl hover:opacity-90 transition-opacity"
-                style={{ backgroundColor: '#1877F2' }}>
-                <span className="text-2xl">👥</span>
-                <div className="min-w-0">
-                  <p className="text-white font-bold text-sm">{preview.title}</p>
-                  <p className="text-white/80 text-xs">{preview.description}</p>
-                </div>
-                <ExternalLink className="w-4 h-4 text-white ml-auto flex-shrink-0" />
-              </a>
-            ) : preview?.type === 'youtube' ? (
-              <div className="space-y-2">
+
+          {announcement.imageUrl && (
+            <img src={announcement.imageUrl} alt="" className="w-full h-auto block" />
+          )}
+
+          {announcement.linkUrl && (
+            <div className="px-6 pb-6">
+              {preview?.type === 'youtube' ? (
                 <iframe
                   src={`https://www.youtube.com/embed/${preview.videoId}`}
                   className="w-full rounded-xl border border-gray-200"
@@ -87,67 +233,124 @@ export default function AnnouncementDetailPage() {
                   allowFullScreen
                   title={preview.title}
                 />
+              ) : preview && (preview.title || preview.image) ? (
                 <a href={announcement.linkUrl} target="_blank" rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 text-sm text-primary-600 hover:underline">
-                  <ExternalLink className="w-3.5 h-3.5" /> Watch on YouTube
+                  className="flex gap-3 p-3 rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors group">
+                  {preview.image && (
+                    <img src={preview.image} alt="" className="w-20 h-20 object-cover rounded-lg flex-shrink-0" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    {preview.siteName && <p className="text-xs text-gray-400 mb-0.5">{preview.siteName}</p>}
+                    {preview.title && <p className="font-semibold text-gray-900 text-sm leading-snug line-clamp-2">{preview.title}</p>}
+                    {preview.description && <p className="text-xs text-gray-500 mt-1 line-clamp-2">{preview.description}</p>}
+                  </div>
                 </a>
-              </div>
-            ) : preview && (preview.title || preview.image) ? (
-              <a href={announcement.linkUrl} target="_blank" rel="noopener noreferrer"
-                className="flex gap-3 p-3 rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors group">
-                {preview.image && (
-                  <img src={preview.image} alt="" className="w-20 h-20 object-cover rounded-lg flex-shrink-0" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                )}
-                <div className="min-w-0 flex-1">
-                  {preview.siteName && <p className="text-xs text-gray-400 mb-0.5">{preview.siteName}</p>}
-                  {preview.title && <p className="font-semibold text-gray-900 text-sm leading-snug line-clamp-2">{preview.title}</p>}
-                  {preview.description && <p className="text-xs text-gray-500 mt-1 line-clamp-2">{preview.description}</p>}
-                  <span className="inline-flex items-center gap-1 text-xs text-primary-600 mt-1.5 group-hover:underline">
-                    <ExternalLink className="w-3 h-3" /> Open link
-                  </span>
-                </div>
-              </a>
-            ) : (
-              <a href={announcement.linkUrl} target="_blank" rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary-50 text-primary-700 rounded-xl hover:bg-primary-100 transition-colors font-medium text-sm">
-                <ExternalLink className="w-4 h-4" /> Open Link
-              </a>
-            )}
-          </div>
-        )}
-
-        {announcement.attachmentUrl && (() => {
-          const ext = announcement.attachmentUrl!.split('?')[0].split('.').pop()?.toLowerCase() ?? '';
-          const isImage = ['jpg','jpeg','png','gif','webp'].includes(ext);
-          const isPdf = ext === 'pdf';
-          return (
-            <div className="p-4 bg-white rounded-2xl border border-gray-200 space-y-2">
-              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Attachment</h2>
-              {isImage ? (
-                <>
-                  <img src={announcement.attachmentUrl} alt="Attachment" className="w-full max-h-72 object-contain rounded-xl border border-gray-200 bg-gray-50" />
-                  <a href={announcement.attachmentUrl} download target="_blank" rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-primary-50 text-primary-700 rounded-xl hover:bg-primary-100 transition-colors font-medium text-sm">
-                    <Paperclip className="w-4 h-4" /> Download
-                  </a>
-                </>
-              ) : isPdf ? (
-                <>
-                  <iframe src={announcement.attachmentUrl} className="w-full h-96 rounded-xl border border-gray-200" title="PDF Preview" />
-                  <a href={announcement.attachmentUrl} download target="_blank" rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-primary-50 text-primary-700 rounded-xl hover:bg-primary-100 transition-colors font-medium text-sm">
-                    <Paperclip className="w-4 h-4" /> Download PDF
-                  </a>
-                </>
               ) : (
-                <a href={announcement.attachmentUrl} download target="_blank" rel="noopener noreferrer"
+                <a href={announcement.linkUrl} target="_blank" rel="noopener noreferrer"
                   className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary-50 text-primary-700 rounded-xl hover:bg-primary-100 transition-colors font-medium text-sm">
-                  <Paperclip className="w-4 h-4" /> Download Attachment
+                  <ExternalLink className="w-4 h-4" /> Open Link
                 </a>
               )}
             </div>
-          );
-        })()}
+          )}
+
+          {announcement.attachmentUrl && (() => {
+            const ext = announcement.attachmentUrl!.split('?')[0].split('.').pop()?.toLowerCase() ?? '';
+            const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext);
+            const isPdf = ext === 'pdf';
+            return (
+              <div className="px-6 pb-6 space-y-2">
+                {isImage ? (
+                  <img src={announcement.attachmentUrl} alt="Attachment" className="w-full max-h-72 object-contain rounded-xl border border-gray-200 bg-gray-50" />
+                ) : isPdf ? (
+                  <iframe src={announcement.attachmentUrl} className="w-full h-96 rounded-xl border border-gray-200" title="PDF Preview" />
+                ) : null}
+                <a href={announcement.attachmentUrl} download target="_blank" rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-primary-50 text-primary-700 rounded-xl hover:bg-primary-100 transition-colors font-medium text-sm">
+                  <Paperclip className="w-4 h-4" /> Download
+                </a>
+              </div>
+            );
+          })()}
+
+          <div className="px-6 py-4 border-t border-gray-100 flex items-center gap-5">
+            <button
+              onClick={handleToggleLike}
+              className={`flex items-center gap-1.5 text-sm font-medium ${announcement.liked_by_me ? 'text-rose-600' : 'text-gray-500 hover:text-rose-600'}`}
+            >
+              <Heart className={`w-5 h-5 ${announcement.liked_by_me ? 'fill-rose-600' : ''}`} />
+              {announcement.likes_count ?? 0}
+            </button>
+            <span className="flex items-center gap-1.5 text-sm text-gray-500">
+              <MessageCircle className="w-5 h-5" />
+              {announcement.comments_count ?? 0}
+            </span>
+          </div>
+        </article>
+
+        <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+          <h2 className="text-sm font-semibold text-gray-700 mb-4">Comments ({announcement.comments_count ?? 0})</h2>
+          {replyTo && (
+            <div className="flex items-center gap-2 mb-2 px-3 py-2 bg-primary-50 border border-primary-100 rounded-lg text-xs text-gray-600">
+              <CornerDownRight className="w-3.5 h-3.5 text-gray-500" />
+              <span className="flex-1 truncate">
+                Replying to <span className="font-semibold text-gray-800">{commenterName(replyTo)}</span>
+              </span>
+              <button onClick={() => setReplyTo(null)} className="text-gray-500 hover:text-gray-800">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+          <div className="flex gap-2 mb-5">
+            <input
+              ref={inputRef}
+              type="text"
+              value={commentText}
+              onChange={e => setCommentText(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && !posting) handlePostComment(); }}
+              placeholder={replyTo ? 'Write a reply...' : 'Write a comment...'}
+              className="flex-1 border border-gray-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+            <button
+              onClick={handlePostComment}
+              disabled={posting || !commentText.trim()}
+              className="inline-flex items-center gap-1.5 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white text-sm font-semibold px-4 rounded-xl transition-colors"
+            >
+              <Send className="w-4 h-4" />
+            </button>
+          </div>
+          {comments.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-6">No comments yet. Be the first.</p>
+          ) : (
+            <ul className="space-y-3">
+              {threaded.map(({ top, replies }) => (
+                <li key={top.id} className="space-y-2">
+                  <CommentRow
+                    c={top}
+                    isReply={false}
+                    canDelete={top.user_id === user?.id || user?.role === 'admin'}
+                    displayName={commenterName(top)}
+                    onLike={() => handleToggleCommentLike(top)}
+                    onReply={() => handleStartReply(top)}
+                    onDelete={() => handleDeleteComment(top.id)}
+                  />
+                  {replies.map(r => (
+                    <CommentRow
+                      key={r.id}
+                      c={r}
+                      isReply
+                      canDelete={r.user_id === user?.id || user?.role === 'admin'}
+                      displayName={commenterName(r)}
+                      onLike={() => handleToggleCommentLike(r)}
+                      onReply={() => handleStartReply(top)}
+                      onDelete={() => handleDeleteComment(r.id)}
+                    />
+                  ))}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
       </div>
     </PageLayout>
   );

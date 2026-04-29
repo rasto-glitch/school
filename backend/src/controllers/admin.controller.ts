@@ -1112,23 +1112,83 @@ export async function sendNotification(req: AuthRequest, res: Response): Promise
 }
 
 // ---- ANNOUNCEMENTS ----
+
+// Attaches like/comment counts + viewer's like state + creator info (for the
+// "admin = school name + admin profile picture" display rule on the client).
+export async function decorateAnnouncements(rows: any[], viewerUserId: string): Promise<any[]> {
+  if (!rows || rows.length === 0) return [];
+  const ids = rows.map(r => r.id);
+
+  const [likesRes, commentsRes, myLikesRes] = await Promise.all([
+    supabase.from('announcement_likes').select('announcement_id').in('announcement_id', ids),
+    supabase.from('announcement_comments').select('announcement_id').in('announcement_id', ids).eq('is_deleted', false),
+    supabase.from('announcement_likes').select('announcement_id').in('announcement_id', ids).eq('user_id', viewerUserId),
+  ]);
+
+  const likes: Record<string, number> = {};
+  (likesRes.data ?? []).forEach((r: any) => { likes[r.announcement_id] = (likes[r.announcement_id] ?? 0) + 1; });
+  const comments: Record<string, number> = {};
+  (commentsRes.data ?? []).forEach((r: any) => { comments[r.announcement_id] = (comments[r.announcement_id] ?? 0) + 1; });
+  const liked = new Set((myLikesRes.data ?? []).map((r: any) => r.announcement_id));
+
+  return rows.map(r => ({
+    ...r,
+    likes_count: likes[r.id] ?? 0,
+    comments_count: comments[r.id] ?? 0,
+    liked_by_me: liked.has(r.id),
+  }));
+}
+
+const ANNOUNCEMENT_SELECT = '*, users:created_by(id, first_name, last_name, role, profile_picture)';
+
 export async function getAnnouncements(req: AuthRequest, res: Response): Promise<void> {
-  const { schoolId } = req.user!;
+  const { schoolId, userId } = req.user!;
   const cutoff = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
   const { data, error } = await supabase
     .from('announcements')
-    .select('*')
+    .select(ANNOUNCEMENT_SELECT)
     .eq('school_id', schoolId)
     .gte('created_at', cutoff)
     .order('created_at', { ascending: false });
   if (error) { res.status(500).json({ error: error.message }); return; }
-  res.json(toCC(data));
+  const decorated = await decorateAnnouncements(data ?? [], userId);
+  res.json(toCC(decorated));
+}
+
+export async function getAnnouncementById(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId, userId } = req.user!;
+  const { id } = req.params;
+  const { data, error } = await supabase
+    .from('announcements')
+    .select(ANNOUNCEMENT_SELECT)
+    .eq('id', id)
+    .eq('school_id', schoolId)
+    .single();
+  if (error || !data) { res.status(404).json({ error: 'Not found' }); return; }
+  const decorated = await decorateAnnouncements([data], userId);
+  res.json(toCC(decorated[0]));
+}
+
+export async function uploadAnnouncementFile(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const file = (req as any).file;
+  if (!file) { res.status(400).json({ error: 'No file provided' }); return; }
+  const ext = file.originalname.includes('.') ? '.' + file.originalname.split('.').pop() : '';
+  const path = `${schoolId}/announcements/${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`;
+  const bucket = process.env.SUPABASE_STORAGE_BUCKET || 'homework-attachments';
+  const { error } = await supabase.storage
+    .from(bucket)
+    .upload(path, file.buffer, { contentType: file.mimetype, upsert: false });
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  const { data: { publicUrl } } = supabase.storage.from(bucket).getPublicUrl(path);
+  res.json({ url: publicUrl, name: file.originalname });
 }
 
 export async function createAnnouncement(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId, userId } = req.user!;
-  const { title, content, targetAudience, linkUrl } = req.body;
+  const { title, content, targetAudience, linkUrl, imageUrl } = req.body;
 
+  // Legacy: multipart with `attachment` file is still supported.
   let attachmentUrl: string | null = null;
   const file = (req as any).file;
   if (file) {
@@ -1151,8 +1211,9 @@ export async function createAnnouncement(req: AuthRequest, res: Response): Promi
     target_audience: targetAudience || 'all',
     created_by: userId,
     attachment_url: attachmentUrl,
+    image_url: imageUrl || null,
     link_url: linkUrl || null,
-  }).select().single();
+  }).select(ANNOUNCEMENT_SELECT).single();
 
   if (error) { res.status(500).json({ error: error.message }); return; }
 
@@ -1167,7 +1228,8 @@ export async function createAnnouncement(req: AuthRequest, res: Response): Promi
     notifyMany(targets.map((u: any) => ({ schoolId, userId: u.id, title, message: preview, type: 'announcement', relatedId: data.id }))).catch(() => {});
   }
 
-  res.status(201).json(toCC(data));
+  const decorated = await decorateAnnouncements([data], userId);
+  res.status(201).json(toCC(decorated[0]));
 }
 
 export async function deleteAnnouncement(req: AuthRequest, res: Response): Promise<void> {
@@ -1176,6 +1238,162 @@ export async function deleteAnnouncement(req: AuthRequest, res: Response): Promi
   const { error } = await supabase.from('announcements').delete().eq('id', id).eq('school_id', schoolId);
   if (error) { res.status(500).json({ error: error.message }); return; }
   res.json({ message: 'Deleted' });
+}
+
+// ---- ANNOUNCEMENT LIKES / COMMENTS ----
+export async function toggleAnnouncementLike(req: AuthRequest, res: Response): Promise<void> {
+  const { userId, schoolId } = req.user!;
+  const { id: announcementId } = req.params;
+
+  const { data: existing } = await supabase
+    .from('announcement_likes')
+    .select('id')
+    .eq('announcement_id', announcementId)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (existing) {
+    await supabase.from('announcement_likes').delete().eq('id', existing.id);
+    const { count } = await supabase.from('announcement_likes').select('*', { count: 'exact', head: true }).eq('announcement_id', announcementId);
+    res.json({ liked: false, likesCount: count ?? 0 });
+    return;
+  }
+
+  const { error } = await supabase
+    .from('announcement_likes')
+    .insert({ school_id: schoolId, announcement_id: announcementId, user_id: userId });
+  if (error) { res.status(400).json({ error: error.message }); return; }
+
+  const { count } = await supabase.from('announcement_likes').select('*', { count: 'exact', head: true }).eq('announcement_id', announcementId);
+  res.json({ liked: true, likesCount: count ?? 0 });
+}
+
+export async function getAnnouncementComments(req: AuthRequest, res: Response): Promise<void> {
+  const { userId, schoolId } = req.user!;
+  const { id: announcementId } = req.params;
+
+  const { data, error } = await supabase
+    .from('announcement_comments')
+    .select('id, announcement_id, user_id, parent_id, body, created_at, users(first_name, last_name, role, profile_picture)')
+    .eq('announcement_id', announcementId)
+    .eq('school_id', schoolId)
+    .eq('is_deleted', false)
+    .order('created_at', { ascending: true });
+
+  if (error) { res.status(500).json({ error: error.message }); return; }
+
+  const comments = data ?? [];
+  if (comments.length === 0) { res.json([]); return; }
+
+  const ids = comments.map((c: any) => c.id);
+  const [likesRes, myLikesRes] = await Promise.all([
+    supabase.from('announcement_comment_likes').select('comment_id').in('comment_id', ids),
+    supabase.from('announcement_comment_likes').select('comment_id').in('comment_id', ids).eq('user_id', userId),
+  ]);
+  const counts: Record<string, number> = {};
+  (likesRes.data ?? []).forEach((r: any) => { counts[r.comment_id] = (counts[r.comment_id] ?? 0) + 1; });
+  const liked = new Set((myLikesRes.data ?? []).map((r: any) => r.comment_id));
+
+  res.json(comments.map((c: any) => ({
+    ...c,
+    likes_count: counts[c.id] ?? 0,
+    liked_by_me: liked.has(c.id),
+  })));
+}
+
+export async function createAnnouncementComment(req: AuthRequest, res: Response): Promise<void> {
+  const { userId, schoolId } = req.user!;
+  const { id: announcementId } = req.params;
+  const { body, parentId } = req.body;
+
+  if (!body || typeof body !== 'string' || body.trim().length === 0) {
+    res.status(400).json({ error: 'Comment body required' });
+    return;
+  }
+
+  let resolvedParentId: string | null = null;
+  if (parentId && typeof parentId === 'string') {
+    const { data: parent } = await supabase
+      .from('announcement_comments')
+      .select('id, announcement_id, parent_id')
+      .eq('id', parentId)
+      .eq('school_id', schoolId)
+      .maybeSingle();
+    if (!parent || parent.announcement_id !== announcementId) {
+      res.status(400).json({ error: 'Invalid parent comment' });
+      return;
+    }
+    // Flatten replies-to-replies onto the top-level parent
+    resolvedParentId = parent.parent_id ?? parent.id;
+  }
+
+  const { data, error } = await supabase
+    .from('announcement_comments')
+    .insert({
+      school_id: schoolId,
+      announcement_id: announcementId,
+      user_id: userId,
+      parent_id: resolvedParentId,
+      body: body.trim(),
+    })
+    .select('id, announcement_id, user_id, parent_id, body, created_at, users(first_name, last_name, role, profile_picture)')
+    .single();
+
+  if (error) { res.status(400).json({ error: error.message }); return; }
+  res.status(201).json({ ...data, likes_count: 0, liked_by_me: false });
+}
+
+export async function toggleAnnouncementCommentLike(req: AuthRequest, res: Response): Promise<void> {
+  const { userId, schoolId } = req.user!;
+  const { commentId } = req.params;
+
+  const { data: existing } = await supabase
+    .from('announcement_comment_likes')
+    .select('id')
+    .eq('comment_id', commentId)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (existing) {
+    await supabase.from('announcement_comment_likes').delete().eq('id', existing.id);
+    const { count } = await supabase.from('announcement_comment_likes').select('*', { count: 'exact', head: true }).eq('comment_id', commentId);
+    res.json({ liked: false, likesCount: count ?? 0 });
+    return;
+  }
+
+  const { error } = await supabase
+    .from('announcement_comment_likes')
+    .insert({ school_id: schoolId, comment_id: commentId, user_id: userId });
+  if (error) { res.status(400).json({ error: error.message }); return; }
+
+  const { count } = await supabase.from('announcement_comment_likes').select('*', { count: 'exact', head: true }).eq('comment_id', commentId);
+  res.json({ liked: true, likesCount: count ?? 0 });
+}
+
+export async function deleteAnnouncementComment(req: AuthRequest, res: Response): Promise<void> {
+  const { userId, role, schoolId } = req.user!;
+  const { commentId } = req.params;
+
+  const { data: existing } = await supabase
+    .from('announcement_comments')
+    .select('user_id')
+    .eq('id', commentId)
+    .eq('school_id', schoolId)
+    .single();
+
+  if (!existing) { res.status(404).json({ error: 'Not found' }); return; }
+  if (existing.user_id !== userId && role !== 'admin') {
+    res.status(403).json({ error: 'Forbidden' });
+    return;
+  }
+
+  const { error } = await supabase
+    .from('announcement_comments')
+    .update({ is_deleted: true })
+    .eq('id', commentId);
+
+  if (error) { res.status(400).json({ error: error.message }); return; }
+  res.json({ success: true });
 }
 
 // ---- LINK PREVIEW ----

@@ -188,6 +188,11 @@ export const adminApi = {
   createAnnouncement: (data: FormData | object) =>
     api.post('/admin/announcements', data,
       data instanceof FormData ? { headers: { 'Content-Type': 'multipart/form-data' } } : {}),
+  uploadAnnouncementImage: (file: File) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return api.post('/admin/announcements/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
   deleteAnnouncement: (id: string) => api.delete(`/admin/announcements/${id}`),
   getSettings: () => api.get('/admin/settings'),
   updateSettings: (data: object) => api.put('/admin/settings', data),
@@ -199,6 +204,17 @@ export const adminApi = {
   getTerms: () => api.get('/admin/terms'),
   createTerm: (data: { name: string }) => api.post('/admin/terms', data),
   deleteTerm: (id: string) => api.delete(`/admin/terms/${id}`),
+};
+
+// ---- ANNOUNCEMENTS (shared social) ----
+export const announcementApi = {
+  toggleLike: (id: string) => api.post(`/announcements/${id}/like`),
+  getComments: (id: string) => api.get(`/announcements/${id}/comments`),
+  createComment: (id: string, body: string, parentId?: string) =>
+    api.post(`/announcements/${id}/comments`, parentId ? { body, parentId } : { body }),
+  deleteComment: (commentId: string) => api.delete(`/announcements/comments/${commentId}`),
+  toggleCommentLike: (commentId: string) => api.post(`/announcements/comments/${commentId}/like`),
+  getById: (id: string) => api.get(`/announcements/${id}`),
 };
 
 // ---- DRIVER ----

@@ -147,9 +147,37 @@ export interface Announcement {
   title: string;
   content: string;
   targetAudience: string;
+  imageUrl?: string;
   attachmentUrl?: string;
   linkUrl?: string;
   createdAt: string;
+  likes_count?: number;
+  comments_count?: number;
+  liked_by_me?: boolean;
+  users?: {
+    id?: string;
+    first_name?: string;
+    last_name?: string;
+    role?: string;
+    profile_picture?: string;
+  };
+}
+
+export interface AnnouncementComment {
+  id: string;
+  announcement_id: string;
+  user_id: string;
+  parent_id: string | null;
+  body: string;
+  created_at: string;
+  likes_count?: number;
+  liked_by_me?: boolean;
+  users?: {
+    first_name?: string;
+    last_name?: string;
+    role?: string;
+    profile_picture?: string;
+  };
 }
 
 export interface Notification {

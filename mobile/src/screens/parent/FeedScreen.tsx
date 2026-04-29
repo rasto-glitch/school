@@ -6,12 +6,13 @@ import {
 import { DashboardSkeleton } from '../../components/Skeleton';
 import { useTranslation } from 'react-i18next';
 import { useNavigation } from '@react-navigation/native';
-import { Megaphone, FileText, FileBadge, Calendar, BookOpen, ClipboardList } from 'lucide-react-native';
+import { FileText, FileBadge, Calendar, BookOpen, ClipboardList } from 'lucide-react-native';
 import { useAuthStore } from '../../store/authStore';
-import { parentApi } from '../../services/api';
+import { parentApi, announcementApi } from '../../services/api';
 import { spacing, radius, shadow, font } from '../../theme';
 import { useColors } from '../../store/themeStore';
 import { useBadgeStore } from '../../store/badgeStore';
+import AnnouncementCard from '../../components/AnnouncementCard';
 import type { Announcement } from '../../types';
 
 interface Grade {
@@ -20,15 +21,6 @@ interface Grade {
   grade?: number;
   maxGrade?: number;
   students?: { fullName: string };
-}
-
-type FeedItem = { type: 'announcement'; date: string; data: Announcement };
-
-function timeLabel(dateStr: string): string {
-  const diffDays = Math.floor((Date.now() - new Date(dateStr).getTime()) / 86400000);
-  if (diffDays === 0) return 'Today';
-  if (diffDays === 1) return 'Yesterday';
-  return `${diffDays}d ago`;
 }
 
 export default function FeedScreen() {
@@ -60,7 +52,14 @@ export default function FeedScreen() {
     load().finally(() => setRefreshing(false));
   };
 
-  const feedItems: FeedItem[] = announcements.map(a => ({ type: 'announcement' as const, date: a.createdAt, data: a }));
+  const handleToggleLike = async (id: string) => {
+    setAnnouncements(prev => prev.map(a => a.id === id ? {
+      ...a,
+      liked_by_me: !a.liked_by_me,
+      likes_count: (a.likes_count ?? 0) + (a.liked_by_me ? -1 : 1),
+    } : a));
+    try { await announcementApi.toggleLike(id); } catch {}
+  };
 
   const shortcuts = [
     feat('reports') && { label: t('dashboard.quick_reports', 'Reports'), icon: FileText, bg: '#FAF5FF', iconColor: '#9333EA', tab: 'Reports', count: reportCount },
@@ -131,35 +130,21 @@ export default function FeedScreen() {
 
       {loading ? (
         <DashboardSkeleton />
-      ) : feedItems.length === 0 ? (
+      ) : announcements.length === 0 ? (
         <View style={styles.emptyBox}>
           <FileText size={40} color={colors.textMuted} />
           <Text style={styles.emptyText}>{t('dashboard.no_activity')}</Text>
         </View>
       ) : (
-        feedItems.map((item, i) => {
-          const ann = item.data;
-          return (
-            <TouchableOpacity key={`a${i}`} style={styles.card} activeOpacity={0.7}
-              onPress={() => navigation.navigate('AnnouncementDetail', { announcement: ann })}>
-              <View style={styles.cardRow}>
-                <View style={[styles.iconBox, { backgroundColor: '#FAF5FF' }]}>
-                  <Megaphone size={16} color="#9333EA" />
-                </View>
-                <View style={styles.cardBody}>
-                  <View style={styles.metaRow}>
-                    <View style={[styles.badge, { backgroundColor: '#F3E8FF' }]}>
-                      <Text style={[styles.badgeText, { color: '#7C3AED' }]}>{t('dashboard.badge_announcement')}</Text>
-                    </View>
-                    <Text style={styles.timeText}>{timeLabel(ann.createdAt)}</Text>
-                  </View>
-                  <Text style={styles.cardTitle}>{ann.title}</Text>
-                  <Text style={styles.cardDesc} numberOfLines={2}>{ann.content}</Text>
-                </View>
-              </View>
-            </TouchableOpacity>
-          );
-        })
+        announcements.map(ann => (
+          <AnnouncementCard
+            key={ann.id}
+            announcement={ann}
+            onPress={() => navigation.navigate('AnnouncementDetail', { announcement: ann })}
+            onPressComment={() => navigation.navigate('AnnouncementDetail', { announcement: ann, focusComment: true })}
+            onToggleLike={() => handleToggleLike(ann.id)}
+          />
+        ))
       )}
     </ScrollView>
   );
@@ -178,16 +163,6 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   shortcutBadge: { position: 'absolute', top: -5, right: -5, minWidth: 16, height: 16, borderRadius: 8, backgroundColor: '#EF4444', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3 },
   shortcutBadgeText: { fontSize: 9, fontWeight: '800', color: '#fff' },
   sectionLabel: { fontSize: font.xs, fontWeight: '700', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.sm },
-  card: { backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm, ...shadow.sm },
-  cardRow: { flexDirection: 'row', gap: spacing.sm },
-  iconBox: { width: 36, height: 36, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  cardBody: { flex: 1 },
-  metaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
-  badge: { borderRadius: radius.full, paddingHorizontal: 8, paddingVertical: 2 },
-  badgeText: { fontSize: font.xs, fontWeight: '700' },
-  timeText: { fontSize: font.xs, color: colors.textMuted },
-  cardTitle: { fontSize: font.sm, fontWeight: '600', color: colors.text, marginBottom: 3 },
-  cardDesc: { fontSize: font.sm, color: colors.textSecondary, lineHeight: 18 },
   gradesRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
   gradeCard: { flex: 1, backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.sm, alignItems: 'center', gap: 4, ...shadow.sm },
   gradeCircle: { width: 48, height: 48, borderRadius: 24, borderWidth: 2.5, alignItems: 'center', justifyContent: 'center' },

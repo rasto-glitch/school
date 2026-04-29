@@ -49,8 +49,8 @@ export type RootStackParamList = {
   HomeworkDetail: { homework: Homework };
   Assignments: undefined;
   AssignmentDetail: { assignment: { id: string; title: string; description?: string; subject?: string; dueDate?: string; submissionStatus?: string; grade?: number | null; createdAt: string; classes?: { name: string }; students?: { fullName: string } } };
-  AnnouncementDetail: { announcement: Announcement };
-  PostDetail: { postId: string };
+  AnnouncementDetail: { announcement?: Announcement; announcementId?: string; focusComment?: boolean };
+  PostDetail: { postId: string; focusComment?: boolean };
   EbookReader: { ebook: Ebook; studentId: string; studentName?: string };
   Chat: { conversation: Conversation };
 };

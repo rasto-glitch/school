@@ -3,6 +3,7 @@ import { supabase } from '../config/supabase';
 import type { AuthRequest } from '../middleware/auth';
 import { toCC } from '../utils/transform';
 import { emitToAdmins } from '../utils/notify';
+import { decorateAnnouncements } from './admin.controller';
 
 async function getParentAndChildren(userId: string, schoolId: string) {
   const { data: parent } = await supabase.from('parents').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
@@ -93,16 +94,17 @@ export async function getAssignments(req: AuthRequest, res: Response): Promise<v
 }
 
 export async function getAnnouncements(req: AuthRequest, res: Response): Promise<void> {
-  const { schoolId } = req.user!;
+  const { schoolId, userId } = req.user!;
   const cutoff = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
   const { data, error } = await supabase.from('announcements')
-    .select('*')
+    .select('*, users:created_by(id, first_name, last_name, role, profile_picture)')
     .eq('school_id', schoolId)
     .in('target_audience', ['all', 'parents'])
     .gte('created_at', cutoff)
     .order('created_at', { ascending: false });
   if (error) { res.status(500).json({ error: error.message }); return; }
-  res.json(toCC(data));
+  const decorated = await decorateAnnouncements(data ?? [], userId);
+  res.json(toCC(decorated));
 }
 
 export async function getHomeworkById(req: AuthRequest, res: Response): Promise<void> {
@@ -122,11 +124,16 @@ export async function getAssignmentById(req: AuthRequest, res: Response): Promis
 }
 
 export async function getAnnouncementById(req: AuthRequest, res: Response): Promise<void> {
-  const { schoolId } = req.user!;
+  const { schoolId, userId } = req.user!;
   const { id } = req.params;
-  const { data, error } = await supabase.from('announcements').select('*').eq('id', id).eq('school_id', schoolId).single();
+  const { data, error } = await supabase.from('announcements')
+    .select('*, users:created_by(id, first_name, last_name, role, profile_picture)')
+    .eq('id', id)
+    .eq('school_id', schoolId)
+    .single();
   if (error || !data) { res.status(404).json({ error: 'Not found' }); return; }
-  res.json(toCC(data));
+  const decorated = await decorateAnnouncements([data], userId);
+  res.json(toCC(decorated[0]));
 }
 
 export async function getReportById(req: AuthRequest, res: Response): Promise<void> {

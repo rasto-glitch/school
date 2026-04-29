@@ -96,7 +96,17 @@ export function createRouter(io: SocketServer) {
   router.get('/admin/announcements', authenticate, authorize('admin', 'teacher', 'parent', 'supervisor'), (req, res) => admin.getAnnouncements(req as AuthRequest, res));
   router.get('/link-preview', authenticate, (req, res) => admin.getLinkPreview(req as AuthRequest, res));
   router.post('/admin/announcements', authenticate, authorize('admin'), upload.single('attachment'), (req, res) => admin.createAnnouncement(req as AuthRequest, res));
+  router.post('/admin/announcements/upload', authenticate, authorize('admin'), upload.single('file'), (req, res) => admin.uploadAnnouncementFile(req as AuthRequest, res));
   router.delete('/admin/announcements/:id', authenticate, authorize('admin'), (req, res) => admin.deleteAnnouncement(req as AuthRequest, res));
+
+  // Announcement social (any logged-in role can read/like/comment)
+  const announcementRoles = ['admin', 'teacher', 'parent', 'supervisor', 'reception'] as const;
+  router.get('/announcements/:id', authenticate, authorize(...announcementRoles), (req, res) => admin.getAnnouncementById(req as AuthRequest, res));
+  router.post('/announcements/:id/like', authenticate, authorize(...announcementRoles), (req, res) => admin.toggleAnnouncementLike(req as AuthRequest, res));
+  router.get('/announcements/:id/comments', authenticate, authorize(...announcementRoles), (req, res) => admin.getAnnouncementComments(req as AuthRequest, res));
+  router.post('/announcements/:id/comments', authenticate, authorize(...announcementRoles), (req, res) => admin.createAnnouncementComment(req as AuthRequest, res));
+  router.delete('/announcements/comments/:commentId', authenticate, authorize(...announcementRoles), (req, res) => admin.deleteAnnouncementComment(req as AuthRequest, res));
+  router.post('/announcements/comments/:commentId/like', authenticate, authorize(...announcementRoles), (req, res) => admin.toggleAnnouncementCommentLike(req as AuthRequest, res));
 
   router.get('/admin/settings', authenticate, authorize('admin'), (req, res) => admin.getSettings(req as AuthRequest, res));
   router.put('/admin/settings', authenticate, authorize('admin'), (req, res) => admin.updateSettings(req as AuthRequest, res));

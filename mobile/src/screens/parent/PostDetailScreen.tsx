@@ -34,7 +34,7 @@ export default function PostDetailScreen() {
   const colors = useColors();
   const route = useRoute<any>();
   const navigation = useNavigation<any>();
-  const { user } = useAuthStore();
+  const { user, school } = useAuthStore();
   const postId: string = route.params?.postId;
   const focusComment: boolean = route.params?.focusComment === true;
   const headerHeight = useHeaderHeight();
@@ -140,6 +140,10 @@ export default function PostDetailScreen() {
     );
   };
 
+  const renderCommenter = (c: PostComment): string => c.users?.role === 'admin'
+    ? (school?.name || 'School')
+    : (`${c.users?.first_name ?? ''} ${c.users?.last_name ?? ''}`.trim() || 'User');
+
   const renderComment = (c: PostComment, isReply: boolean) => {
     const avatarUrl = c.users?.profile_picture;
     return (
@@ -159,9 +163,7 @@ export default function PostDetailScreen() {
           </View>
         )}
         <View style={{ flex: 1 }}>
-          <Text style={[styles.commentAuthor, { color: colors.text }]}>
-            {c.users?.first_name} {c.users?.last_name}
-          </Text>
+          <Text style={[styles.commentAuthor, { color: colors.text }]}>{renderCommenter(c)}</Text>
           <Text style={[styles.commentBody, { color: colors.text }]}>{c.body}</Text>
           <View style={styles.commentActionRow}>
             <TouchableOpacity onPress={() => handleToggleCommentLike(c)} style={styles.commentActionBtn} hitSlop={6}>
@@ -275,7 +277,7 @@ export default function PostDetailScreen() {
         <View style={[styles.replyPill, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
           <CornerDownRight size={13} color={colors.textMuted} />
           <Text style={[styles.replyPillText, { color: colors.textMuted }]} numberOfLines={1}>
-            {t('learn.replying_to', 'Replying to')} {replyTo.users?.first_name} {replyTo.users?.last_name}
+            {t('learn.replying_to', 'Replying to')} {renderCommenter(replyTo)}
           </Text>
           <TouchableOpacity onPress={() => setReplyTo(null)} hitSlop={8}>
             <X size={14} color={colors.textMuted} />

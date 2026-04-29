@@ -298,6 +298,43 @@ CREATE TABLE IF NOT EXISTS announcements (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Announcement social: likes, comments, comment-likes (mirrors post_* tables)
+CREATE TABLE IF NOT EXISTS announcement_likes (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  announcement_id UUID NOT NULL REFERENCES announcements(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(announcement_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_announcement_likes_announcement ON announcement_likes(announcement_id);
+CREATE INDEX IF NOT EXISTS idx_announcement_likes_user ON announcement_likes(user_id);
+
+CREATE TABLE IF NOT EXISTS announcement_comments (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  announcement_id UUID NOT NULL REFERENCES announcements(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  parent_id UUID REFERENCES announcement_comments(id) ON DELETE CASCADE,
+  body TEXT NOT NULL,
+  is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_announcement_comments_announcement ON announcement_comments(announcement_id, created_at ASC);
+CREATE INDEX IF NOT EXISTS idx_announcement_comments_parent ON announcement_comments(parent_id);
+
+CREATE TABLE IF NOT EXISTS announcement_comment_likes (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  comment_id UUID NOT NULL REFERENCES announcement_comments(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(comment_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_announcement_comment_likes_comment ON announcement_comment_likes(comment_id);
+CREATE INDEX IF NOT EXISTS idx_announcement_comment_likes_user ON announcement_comment_likes(user_id);
+
 -- ============================================================
 -- NOTIFICATIONS
 -- ============================================================

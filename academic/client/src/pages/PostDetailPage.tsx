@@ -18,12 +18,13 @@ interface CommentRowProps {
   c: PostComment;
   isReply: boolean;
   canDelete: boolean;
+  displayName: string;
   onLike: () => void;
   onReply: () => void;
   onDelete: () => void;
 }
 
-function CommentRow({ c, isReply, canDelete, onLike, onReply, onDelete }: CommentRowProps) {
+function CommentRow({ c, isReply, canDelete, displayName, onLike, onReply, onDelete }: CommentRowProps) {
   const avatarUrl = c.users?.profile_picture;
   return (
     <div className={`flex items-start gap-3 p-3 bg-gray-50 rounded-xl ${isReply ? 'ml-10' : ''}`}>
@@ -36,9 +37,7 @@ function CommentRow({ c, isReply, canDelete, onLike, onReply, onDelete }: Commen
       )}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-gray-800">
-            {c.users?.first_name} {c.users?.last_name}
-          </span>
+          <span className="text-sm font-semibold text-gray-800">{displayName}</span>
           <span className="text-xs text-gray-400">{format(new Date(c.created_at), 'MMM d, HH:mm')}</span>
         </div>
         <p className="text-sm text-gray-700 mt-0.5 whitespace-pre-wrap break-words">{c.body}</p>
@@ -71,7 +70,10 @@ function CommentRow({ c, isReply, canDelete, onLike, onReply, onDelete }: Commen
 export default function PostDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user } = useAuthStore();
+  const { user, school } = useAuthStore();
+  const commenterName = (c: PostComment) => c.users?.role === 'admin'
+    ? (school?.name || 'School')
+    : (`${c.users?.first_name ?? ''} ${c.users?.last_name ?? ''}`.trim() || 'User');
   const [post, setPost] = useState<AcademicPost | null>(null);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
@@ -322,7 +324,7 @@ export default function PostDetailPage() {
             <div className="flex items-center gap-2 mb-2 px-3 py-2 bg-primary-50 border border-primary-100 rounded-lg text-xs text-gray-600">
               <CornerDownRight className="w-3.5 h-3.5 text-gray-500" />
               <span className="flex-1 truncate">
-                Replying to <span className="font-semibold text-gray-800">{replyTo.users?.first_name} {replyTo.users?.last_name}</span>
+                Replying to <span className="font-semibold text-gray-800">{commenterName(replyTo)}</span>
               </span>
               <button onClick={() => setReplyTo(null)} className="text-gray-500 hover:text-gray-800">
                 <X className="w-3.5 h-3.5" />
@@ -357,6 +359,7 @@ export default function PostDetailPage() {
                     c={top}
                     isReply={false}
                     canDelete={top.user_id === user?.id || user?.role === 'admin'}
+                    displayName={commenterName(top)}
                     onLike={() => handleToggleCommentLike(top)}
                     onReply={() => handleStartReply(top)}
                     onDelete={() => handleDeleteComment(top.id)}
@@ -367,6 +370,7 @@ export default function PostDetailPage() {
                       c={r}
                       isReply
                       canDelete={r.user_id === user?.id || user?.role === 'admin'}
+                      displayName={commenterName(r)}
                       onLike={() => handleToggleCommentLike(r)}
                       onReply={() => handleStartReply(top)}
                       onDelete={() => handleDeleteComment(r.id)}
