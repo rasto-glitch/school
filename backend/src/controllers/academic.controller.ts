@@ -579,20 +579,37 @@ export async function getSavedPosts(req: AuthRequest, res: Response): Promise<vo
 // ── COMMENTS ──────────────────────────────────────────────────────────────────
 
 export async function getComments(req: AuthRequest, res: Response): Promise<void> {
-  const { schoolId } = req.user!;
+  const { userId, schoolId } = req.user!;
   const { id: postId } = req.params;
 
   try {
     const { data, error } = await supabase
       .from('post_comments')
-      .select('id, post_id, user_id, body, created_at, users(first_name, last_name, role, profile_picture)')
+      .select('id, post_id, user_id, parent_id, body, created_at, users(first_name, last_name, role, profile_picture)')
       .eq('post_id', postId)
       .eq('school_id', schoolId)
       .eq('is_deleted', false)
       .order('created_at', { ascending: true });
 
     if (error) { res.status(500).json({ error: error.message }); return; }
-    res.json(data ?? []);
+
+    const comments = data ?? [];
+    if (comments.length === 0) { res.json([]); return; }
+
+    const ids = comments.map((c: any) => c.id);
+    const [likesRes, myLikesRes] = await Promise.all([
+      supabase.from('post_comment_likes').select('comment_id').in('comment_id', ids),
+      supabase.from('post_comment_likes').select('comment_id').in('comment_id', ids).eq('user_id', userId),
+    ]);
+    const counts: Record<string, number> = {};
+    (likesRes.data ?? []).forEach((r: any) => { counts[r.comment_id] = (counts[r.comment_id] ?? 0) + 1; });
+    const liked = new Set((myLikesRes.data ?? []).map((r: any) => r.comment_id));
+
+    res.json(comments.map((c: any) => ({
+      ...c,
+      likes_count: counts[c.id] ?? 0,
+      liked_by_me: liked.has(c.id),
+    })));
   } catch {
     res.status(500).json({ error: 'Failed to fetch comments' });
   }
@@ -601,7 +618,7 @@ export async function getComments(req: AuthRequest, res: Response): Promise<void
 export async function createComment(req: AuthRequest, res: Response): Promise<void> {
   const { userId, schoolId } = req.user!;
   const { id: postId } = req.params;
-  const { body } = req.body;
+  const { body, parentId } = req.body;
 
   if (!body || typeof body !== 'string' || body.trim().length === 0) {
     res.status(400).json({ error: 'Comment body required' });
@@ -609,16 +626,69 @@ export async function createComment(req: AuthRequest, res: Response): Promise<vo
   }
 
   try {
+    let resolvedParentId: string | null = null;
+    if (parentId && typeof parentId === 'string') {
+      const { data: parent } = await supabase
+        .from('post_comments')
+        .select('id, post_id, parent_id')
+        .eq('id', parentId)
+        .eq('school_id', schoolId)
+        .maybeSingle();
+      if (!parent || parent.post_id !== postId) {
+        res.status(400).json({ error: 'Invalid parent comment' });
+        return;
+      }
+      // Flatten: replies to replies attach to the same top-level parent
+      resolvedParentId = parent.parent_id ?? parent.id;
+    }
+
     const { data, error } = await supabase
       .from('post_comments')
-      .insert({ school_id: schoolId, post_id: postId, user_id: userId, body: body.trim() })
-      .select('id, post_id, user_id, body, created_at, users(first_name, last_name, role, profile_picture)')
+      .insert({
+        school_id: schoolId,
+        post_id: postId,
+        user_id: userId,
+        parent_id: resolvedParentId,
+        body: body.trim(),
+      })
+      .select('id, post_id, user_id, parent_id, body, created_at, users(first_name, last_name, role, profile_picture)')
       .single();
 
     if (error) { res.status(400).json({ error: error.message }); return; }
-    res.status(201).json(data);
+    res.status(201).json({ ...data, likes_count: 0, liked_by_me: false });
   } catch {
     res.status(500).json({ error: 'Failed to create comment' });
+  }
+}
+
+export async function toggleCommentLike(req: AuthRequest, res: Response): Promise<void> {
+  const { userId, schoolId } = req.user!;
+  const { commentId } = req.params;
+
+  try {
+    const { data: existing } = await supabase
+      .from('post_comment_likes')
+      .select('id')
+      .eq('comment_id', commentId)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (existing) {
+      await supabase.from('post_comment_likes').delete().eq('id', existing.id);
+      const { count } = await supabase.from('post_comment_likes').select('*', { count: 'exact', head: true }).eq('comment_id', commentId);
+      res.json({ liked: false, likesCount: count ?? 0 });
+      return;
+    }
+
+    const { error } = await supabase
+      .from('post_comment_likes')
+      .insert({ school_id: schoolId, comment_id: commentId, user_id: userId });
+    if (error) { res.status(400).json({ error: error.message }); return; }
+
+    const { count } = await supabase.from('post_comment_likes').select('*', { count: 'exact', head: true }).eq('comment_id', commentId);
+    res.json({ liked: true, likesCount: count ?? 0 });
+  } catch {
+    res.status(500).json({ error: 'Failed to toggle comment like' });
   }
 }
 

@@ -12,6 +12,23 @@ import { useBadgeStore } from '../../store/badgeStore';
 import { spacing, radius, font } from '../../theme';
 import type { AcademicPost, Ebook, EbookProgress, Student } from '../../types';
 
+function bodyTeaser(raw: string): { text: string; truncated: boolean } {
+  const trimmed = raw.trim();
+  if (!trimmed) return { text: '', truncated: false };
+  const sentences = trimmed.match(/[^.!?\n]+[.!?\n]+/g);
+  if (sentences && sentences.length >= 2) {
+    const first2 = sentences.slice(0, 2).join('').trim();
+    return { text: first2, truncated: first2.length < trimmed.length };
+  }
+  const limit = 140;
+  if (trimmed.length > limit) {
+    const cut = trimmed.slice(0, limit);
+    const lastSpace = cut.lastIndexOf(' ');
+    return { text: (lastSpace > 60 ? cut.slice(0, lastSpace) : cut).trim(), truncated: true };
+  }
+  return { text: trimmed, truncated: false };
+}
+
 type Tab = 'ebooks' | 'posts' | 'saved';
 
 function authorLabel(post: AcademicPost): string {
@@ -30,8 +47,20 @@ function PostCard({ post, onPress, onToggleLike, onToggleSave, onPressComment }:
   onToggleSave: () => void;
   onPressComment: () => void;
 }) {
+  const { t } = useTranslation();
   const colors = useColors();
-  const body = post.body && post.body.length > 200 ? post.body.slice(0, 200) + '…' : post.body;
+  const [imgAspect, setImgAspect] = useState<number>(16 / 9);
+
+  useEffect(() => {
+    if (!post.image_url) return;
+    Image.getSize(
+      post.image_url,
+      (w, h) => { if (w > 0 && h > 0) setImgAspect(w / h); },
+      () => {},
+    );
+  }, [post.image_url]);
+
+  const teaser = post.body ? bodyTeaser(post.body) : null;
 
   return (
     <TouchableOpacity style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={onPress} activeOpacity={0.7}>
@@ -54,9 +83,25 @@ function PostCard({ post, onPress, onToggleLike, onToggleSave, onPressComment }:
         )}
       </View>
       <Text style={[styles.postTitle, { color: colors.text }]} numberOfLines={2}>{post.title}</Text>
-      {body && <Text style={[styles.postBody, { color: colors.textMuted }]} numberOfLines={3}>{body}</Text>}
+      {teaser && teaser.text.length > 0 && (
+        <Text style={[styles.postBody, { color: colors.textMuted }]}>
+          {teaser.text}
+          {teaser.truncated && (
+            <>
+              <Text>… </Text>
+              <Text style={{ color: colors.primary, fontWeight: '600' }} onPress={onPress}>
+                {t('learn.see_more', 'see more')}
+              </Text>
+            </>
+          )}
+        </Text>
+      )}
       {post.image_url && (
-        <Image source={{ uri: post.image_url }} style={styles.postImage} resizeMode="cover" />
+        <Image
+          source={{ uri: post.image_url }}
+          style={[styles.postImage, { aspectRatio: imgAspect }]}
+          resizeMode="cover"
+        />
       )}
       <View style={[styles.actionRow, { borderTopColor: colors.border }]}>
         <TouchableOpacity onPress={onToggleLike} style={styles.actionBtn} hitSlop={8}>
@@ -412,7 +457,7 @@ const styles = StyleSheet.create({
   badgeText: { fontSize: 10, fontWeight: '700' },
   postTitle: { fontSize: font.md, fontWeight: '700', marginBottom: 4 },
   postBody: { fontSize: font.sm, lineHeight: 20 },
-  postImage: { width: '100%', height: 180, borderRadius: radius.md, marginTop: 10 },
+  postImage: { width: '100%', borderRadius: radius.md, marginTop: 10 },
   actionRow: { flexDirection: 'row', gap: 18, marginTop: 12, paddingTop: 10, borderTopWidth: 1, alignItems: 'center' },
   actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   actionCount: { fontSize: font.xs, fontWeight: '600' },

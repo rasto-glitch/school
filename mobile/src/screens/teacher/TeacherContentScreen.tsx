@@ -3,7 +3,7 @@ import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { CardListSkeleton } from '../../components/Skeleton';
 import { TouchableOpacity } from 'react-native';
 import { useRoute, RouteProp } from '@react-navigation/native';
-import { BookOpen, ClipboardList, Star, FileText, Clock } from 'lucide-react-native';
+import { BookOpen, ClipboardList, Star, FileText, Clock, Megaphone } from 'lucide-react-native';
 import { teacherApi } from '../../services/api';
 import { useColors, useIsDark } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
@@ -13,8 +13,9 @@ import TeacherAssignmentsScreen from './TeacherAssignmentsScreen';
 import TeacherGradingScreen from './TeacherGradingScreen';
 import TeacherReportScreen from './TeacherReportScreen';
 import TeacherWeeklySummaryScreen from './TeacherWeeklySummaryScreen';
+import TeacherPostsScreen from './TeacherPostsScreen';
 
-type TabKey = 'homework' | 'assignments' | 'grades' | 'reports' | 'weekly';
+type TabKey = 'homework' | 'assignments' | 'grades' | 'reports' | 'weekly' | 'posts';
 interface ClassItem { id: string; name: string }
 
 export default function TeacherContentScreen() {
@@ -33,6 +34,7 @@ export default function TeacherContentScreen() {
     { key: 'grades',      label: 'Grades',      icon: Star,      feature: 'grades' },
     { key: 'reports',     label: 'Reports',     icon: FileText,  feature: 'reports' },
     { key: 'weekly',      label: 'Weekly',      icon: Clock,     feature: 'weekly_summary' },
+    { key: 'posts',       label: 'Posts',       icon: Megaphone, feature: 'academic_portal' },
   ];
   const TABS = ALL_TABS.filter(t => !t.feature || feat(t.feature));
 
@@ -93,8 +95,10 @@ export default function TeacherContentScreen() {
         <TeacherGradingScreen subject={subject} classes={classes} academicYear={academicYear} />
       ) : tab === 'reports' ? (
         <TeacherReportScreen subject={subject} classes={classes} />
-      ) : (
+      ) : tab === 'weekly' ? (
         <TeacherWeeklySummaryScreen subject={subject} classes={classes} />
+      ) : (
+        <TeacherPostsScreen subject={subject} classes={classes} />
       )}
     </View>
   );

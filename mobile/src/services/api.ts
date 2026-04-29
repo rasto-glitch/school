@@ -213,8 +213,26 @@ export const academicApi = {
   toggleSave: (postId: string) => api.post(`/academic/posts/${postId}/save`),
   getSavedPosts: () => api.get('/academic/saved'),
   getComments: (postId: string) => api.get(`/academic/posts/${postId}/comments`),
-  createComment: (postId: string, body: string) => api.post(`/academic/posts/${postId}/comments`, { body }),
+  createComment: (postId: string, body: string, parentId?: string) =>
+    api.post(`/academic/posts/${postId}/comments`, parentId ? { body, parentId } : { body }),
   deleteComment: (commentId: string) => api.delete(`/academic/comments/${commentId}`),
+  toggleCommentLike: (commentId: string) => api.post(`/academic/comments/${commentId}/like`),
+  createPost: (data: {
+    title: string;
+    classId?: string;
+    contentType: 'richtext' | 'plaintext' | 'file';
+    content?: string;
+    body?: string;
+    subject?: string;
+    imageUrl?: string;
+    isPublished?: boolean;
+  }) => api.post('/academic/posts', data),
+  deletePost: (id: string) => api.delete(`/academic/posts/${id}`),
+  uploadPostFile: (file: { uri: string; name: string; mimeType: string }) => {
+    const fd = new FormData();
+    fd.append('file', { uri: file.uri, name: file.name, type: file.mimeType } as any);
+    return api.post('/academic/posts/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
   getEbooks: () => api.get('/academic/ebooks'),
   getEbookProgress: (params?: { ebookId?: string; studentId?: string }) =>
     api.get('/academic/ebook-progress', { params }),

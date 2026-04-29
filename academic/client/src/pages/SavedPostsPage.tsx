@@ -6,6 +6,23 @@ import { academicApi } from '../services/api';
 import Navbar from '../components/layout/Navbar';
 import type { AcademicPost } from '../types';
 
+function bodyTeaser(raw: string): { text: string; truncated: boolean } {
+  const trimmed = raw.trim();
+  if (!trimmed) return { text: '', truncated: false };
+  const sentences = trimmed.match(/[^.!?\n]+[.!?\n]+/g);
+  if (sentences && sentences.length >= 2) {
+    const first2 = sentences.slice(0, 2).join('').trim();
+    return { text: first2, truncated: first2.length < trimmed.length };
+  }
+  const limit = 180;
+  if (trimmed.length > limit) {
+    const cut = trimmed.slice(0, limit);
+    const lastSpace = cut.lastIndexOf(' ');
+    return { text: (lastSpace > 80 ? cut.slice(0, lastSpace) : cut).trim(), truncated: true };
+  }
+  return { text: trimmed, truncated: false };
+}
+
 export default function SavedPostsPage() {
   const [posts, setPosts] = useState<AcademicPost[]>([]);
   const [loading, setLoading] = useState(true);
@@ -50,15 +67,11 @@ export default function SavedPostsPage() {
               const authorLabel = post.author_role === 'supervisor'
                 ? `${post.author_name ?? ''} — Principal`
                 : `${post.author_name ?? post.teachers?.full_name ?? 'Teacher'}${post.author_subject ? ` — ${post.author_subject}` : ''}`;
+              const teaser = post.body ? bodyTeaser(post.body) : null;
               return (
                 <article key={post.id} className="bg-white border border-gray-100 rounded-2xl hover:shadow-md transition-all overflow-hidden">
-                  <Link to={`/posts/${post.id}`} className={`block group ${post.image_url ? 'flex' : 'p-5'}`}>
-                    {post.image_url && (
-                      <div className="w-40 flex-shrink-0">
-                        <img src={post.image_url} alt="" className="w-full h-full object-cover" />
-                      </div>
-                    )}
-                    <div className={post.image_url ? 'flex-1 p-5' : ''}>
+                  <Link to={`/posts/${post.id}`} className="block group">
+                    <div className="p-5">
                       <div className="flex items-center gap-2 mb-2">
                         {post.classes?.name && (
                           <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{post.classes.name}</span>
@@ -68,10 +81,23 @@ export default function SavedPostsPage() {
                         )}
                         <time className="text-xs text-gray-400 ml-auto">{format(new Date(post.created_at), 'MMM d, yyyy')}</time>
                       </div>
-                      <h2 className="font-semibold text-gray-900 group-hover:text-primary-600 mb-1 line-clamp-2">{post.title}</h2>
-                      {post.body && <p className="text-sm text-gray-500 line-clamp-2">{post.body}</p>}
+                      <h2 className="font-semibold text-gray-900 group-hover:text-primary-600 mb-2 line-clamp-2">{post.title}</h2>
+                      {teaser && teaser.text.length > 0 && (
+                        <p className="text-sm text-gray-500 leading-relaxed whitespace-pre-wrap">
+                          {teaser.text}
+                          {teaser.truncated && (
+                            <>
+                              <span>… </span>
+                              <span className="text-primary-600 font-semibold">see more</span>
+                            </>
+                          )}
+                        </p>
+                      )}
                       <p className="text-xs text-gray-400 mt-3">{authorLabel}</p>
                     </div>
+                    {post.image_url && (
+                      <img src={post.image_url} alt="" className="w-full h-auto block" />
+                    )}
                   </Link>
                   <div className="flex items-center gap-4 px-5 pb-4 border-t border-gray-100 pt-3">
                     <span className="flex items-center gap-1 text-xs text-gray-500">

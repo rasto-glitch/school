@@ -221,6 +221,7 @@ export function createRouter(io: SocketServer) {
   router.get('/academic/posts/:id/comments', authenticate, authorize(...academicRoles), (req, res) => academic.getComments(req as AuthRequest, res));
   router.post('/academic/posts/:id/comments', authenticate, authorize(...academicRoles), (req, res) => academic.createComment(req as AuthRequest, res));
   router.delete('/academic/comments/:commentId', authenticate, authorize(...academicRoles), (req, res) => academic.deleteComment(req as AuthRequest, res));
+  router.post('/academic/comments/:commentId/like', authenticate, authorize(...academicRoles), (req, res) => academic.toggleCommentLike(req as AuthRequest, res));
 
   router.get('/academic/ebooks', authenticate, authorize(...academicRoles), (req, res) => academic.getEbooks(req as AuthRequest, res));
   router.post('/academic/ebooks', authenticate, authorize('admin'), upload.single('file'), (req, res) => academic.uploadEbook(req as AuthRequest, res));

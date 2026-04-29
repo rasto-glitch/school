@@ -56,8 +56,10 @@ export const academicApi = {
   toggleSave: (postId: string) => api.post(`/academic/posts/${postId}/save`),
   getSavedPosts: () => api.get('/academic/saved'),
   getComments: (postId: string) => api.get(`/academic/posts/${postId}/comments`),
-  createComment: (postId: string, body: string) => api.post(`/academic/posts/${postId}/comments`, { body }),
+  createComment: (postId: string, body: string, parentId?: string) =>
+    api.post(`/academic/posts/${postId}/comments`, parentId ? { body, parentId } : { body }),
   deleteComment: (commentId: string) => api.delete(`/academic/comments/${commentId}`),
+  toggleCommentLike: (commentId: string) => api.post(`/academic/comments/${commentId}/like`),
 
   // Ebook progress
   getEbookProgress: (params?: { ebookId?: string; studentId?: string }) =>

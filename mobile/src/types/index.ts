@@ -32,8 +32,11 @@ export interface PostComment {
   id: string;
   post_id: string;
   user_id: string;
+  parent_id?: string | null;
   body: string;
   created_at: string;
+  likes_count?: number;
+  liked_by_me?: boolean;
   users?: { first_name: string; last_name: string; role: string; profile_picture?: string };
 }
 

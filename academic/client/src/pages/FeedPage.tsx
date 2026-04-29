@@ -15,18 +15,33 @@ const typeColor = {
   file: 'bg-amber-50 text-amber-600',
 };
 
+function bodyTeaser(raw: string): { text: string; truncated: boolean } {
+  const trimmed = raw.trim();
+  if (!trimmed) return { text: '', truncated: false };
+  const sentences = trimmed.match(/[^.!?\n]+[.!?\n]+/g);
+  if (sentences && sentences.length >= 2) {
+    const first2 = sentences.slice(0, 2).join('').trim();
+    return { text: first2, truncated: first2.length < trimmed.length };
+  }
+  const limit = 180;
+  if (trimmed.length > limit) {
+    const cut = trimmed.slice(0, limit);
+    const lastSpace = cut.lastIndexOf(' ');
+    return { text: (lastSpace > 80 ? cut.slice(0, lastSpace) : cut).trim(), truncated: true };
+  }
+  return { text: trimmed, truncated: false };
+}
+
 function PostCard({ post, onToggleLike, onToggleSave }: {
   post: AcademicPost;
   onToggleLike: (id: string) => void;
   onToggleSave: (id: string) => void;
 }) {
   const Icon = typeIcon[post.content_type];
-  const bodyPreview = post.body && post.body.length > 200
-    ? post.body.slice(0, 200) + '…'
-    : post.body;
-  const preview = bodyPreview ?? (post.content_type !== 'file' && post.content
-    ? post.content.replace(/<[^>]+>/g, '').slice(0, 150)
-    : null);
+  const rawBody = post.body || (post.content_type !== 'file' && post.content
+    ? post.content.replace(/<[^>]+>/g, '')
+    : '');
+  const teaser = rawBody ? bodyTeaser(rawBody) : null;
 
   const authorLabel = post.author_role === 'supervisor'
     ? `${post.author_name ?? ''} — Principal`
@@ -40,13 +55,8 @@ function PostCard({ post, onToggleLike, onToggleSave }: {
 
   return (
     <Link to={`/posts/${post.id}`} className="block group">
-      <article className={`bg-white border border-gray-100 rounded-2xl hover:shadow-md hover:border-primary-100 transition-all overflow-hidden ${post.image_url ? 'flex' : 'p-5'}`}>
-        {post.image_url && (
-          <div className="w-40 sm:w-48 flex-shrink-0">
-            <img src={post.image_url} alt="" className="w-full h-full object-cover" />
-          </div>
-        )}
-        <div className={post.image_url ? 'flex-1 p-5' : ''}>
+      <article className="bg-white border border-gray-100 rounded-2xl hover:shadow-md hover:border-primary-100 transition-all overflow-hidden">
+        <div className="p-5">
           <div className="flex items-start justify-between gap-3 mb-3">
             <div className="flex items-center gap-2 flex-wrap">
               <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${typeColor[post.content_type]}`}>
@@ -63,36 +73,54 @@ function PostCard({ post, onToggleLike, onToggleSave }: {
               {format(new Date(post.created_at), 'MMM d, yyyy')}
             </time>
           </div>
-          <h2 className="font-semibold text-gray-900 group-hover:text-primary-600 transition-colors mb-1 line-clamp-2">
+          <h2 className="font-semibold text-gray-900 group-hover:text-primary-600 transition-colors mb-2 line-clamp-2">
             {post.title}
           </h2>
-          {preview && <p className="text-sm text-gray-500 line-clamp-2 leading-relaxed">{preview}</p>}
+          {teaser && teaser.text.length > 0 && (
+            <p className="text-sm text-gray-500 leading-relaxed whitespace-pre-wrap">
+              {teaser.text}
+              {teaser.truncated && (
+                <>
+                  <span>… </span>
+                  <span className="text-primary-600 font-semibold">see more</span>
+                </>
+              )}
+            </p>
+          )}
           {post.content_type === 'file' && post.attachment_name && (
-            <p className="text-sm text-amber-600 flex items-center gap-1 mt-1">
+            <p className="text-sm text-amber-600 flex items-center gap-1 mt-2">
               <Paperclip className="w-3.5 h-3.5" /> {post.attachment_name}
             </p>
           )}
           <p className="text-xs text-gray-400 mt-3">{authorLabel}</p>
+        </div>
 
-          <div className="flex items-center gap-4 mt-3 pt-3 border-t border-gray-100">
-            <button
-              onClick={(e) => handleAction(e, () => onToggleLike(post.id))}
-              className={`flex items-center gap-1 text-xs ${post.liked_by_me ? 'text-rose-600' : 'text-gray-500 hover:text-rose-600'}`}
-            >
-              <Heart className={`w-4 h-4 ${post.liked_by_me ? 'fill-rose-600' : ''}`} />
-              {post.likes_count ?? 0}
-            </button>
-            <span className="flex items-center gap-1 text-xs text-gray-500">
-              <MessageCircle className="w-4 h-4" />
-              {post.comments_count ?? 0}
-            </span>
-            <button
-              onClick={(e) => handleAction(e, () => onToggleSave(post.id))}
-              className={`ml-auto flex items-center gap-1 text-xs ${post.saved_by_me ? 'text-primary-600' : 'text-gray-500 hover:text-primary-600'}`}
-            >
-              <Bookmark className={`w-4 h-4 ${post.saved_by_me ? 'fill-primary-600' : ''}`} />
-            </button>
-          </div>
+        {post.image_url && (
+          <img
+            src={post.image_url}
+            alt=""
+            className="w-full h-auto block"
+          />
+        )}
+
+        <div className="flex items-center gap-4 px-5 py-3 border-t border-gray-100">
+          <button
+            onClick={(e) => handleAction(e, () => onToggleLike(post.id))}
+            className={`flex items-center gap-1 text-xs ${post.liked_by_me ? 'text-rose-600' : 'text-gray-500 hover:text-rose-600'}`}
+          >
+            <Heart className={`w-4 h-4 ${post.liked_by_me ? 'fill-rose-600' : ''}`} />
+            {post.likes_count ?? 0}
+          </button>
+          <span className="flex items-center gap-1 text-xs text-gray-500">
+            <MessageCircle className="w-4 h-4" />
+            {post.comments_count ?? 0}
+          </span>
+          <button
+            onClick={(e) => handleAction(e, () => onToggleSave(post.id))}
+            className={`ml-auto flex items-center gap-1 text-xs ${post.saved_by_me ? 'text-primary-600' : 'text-gray-500 hover:text-primary-600'}`}
+          >
+            <Bookmark className={`w-4 h-4 ${post.saved_by_me ? 'fill-primary-600' : ''}`} />
+          </button>
         </div>
       </article>
     </Link>

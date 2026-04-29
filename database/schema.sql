@@ -683,12 +683,29 @@ CREATE TABLE IF NOT EXISTS post_comments (
   school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
   post_id UUID NOT NULL REFERENCES academic_posts(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  parent_id UUID REFERENCES post_comments(id) ON DELETE CASCADE,
   body TEXT NOT NULL,
   is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_post_comments_post ON post_comments(post_id, created_at ASC);
+CREATE INDEX IF NOT EXISTS idx_post_comments_parent ON post_comments(parent_id);
+-- Run this if the table already exists:
+-- ALTER TABLE post_comments ADD COLUMN IF NOT EXISTS parent_id UUID REFERENCES post_comments(id) ON DELETE CASCADE;
+-- CREATE INDEX IF NOT EXISTS idx_post_comments_parent ON post_comments(parent_id);
+
+-- Likes on comments
+CREATE TABLE IF NOT EXISTS post_comment_likes (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  comment_id UUID NOT NULL REFERENCES post_comments(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(comment_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_post_comment_likes_comment ON post_comment_likes(comment_id);
+CREATE INDEX IF NOT EXISTS idx_post_comment_likes_user ON post_comment_likes(user_id);
 
 -- Ebook reading progress per student (not per parent)
 CREATE TABLE IF NOT EXISTS ebook_progress (
