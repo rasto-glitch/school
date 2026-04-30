@@ -2,7 +2,7 @@
   "expo": {
     "name": "Scholify",
     "slug": "school-portal",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "icon": "./assets/logo.png",
@@ -13,6 +13,7 @@
       "infoPlist": {
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Your location is used for real-time bus route tracking so parents are notified when the bus is nearby.",
         "NSLocationWhenInUseUsageDescription": "Your location is used for real-time bus route tracking so parents are notified when the bus is nearby.",
+        "NSPhotoLibraryUsageDescription": "Scholify accesses your photo library so you can choose images to use as your profile picture, attach photos to chat messages with teachers and parents, and add cover images to posts you publish.",
         "UIBackgroundModes": [
           "location"
         ],
