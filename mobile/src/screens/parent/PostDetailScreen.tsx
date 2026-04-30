@@ -140,9 +140,12 @@ export default function PostDetailScreen() {
     );
   };
 
-  const renderCommenter = (c: PostComment): string => c.users?.role === 'admin'
-    ? (school?.name || 'School')
-    : (`${c.users?.first_name ?? ''} ${c.users?.last_name ?? ''}`.trim() || 'User');
+  const renderCommenter = (c: PostComment): string => {
+    if (c.users?.role === 'admin') return school?.name || 'School';
+    const name = `${c.users?.first_name ?? ''} ${c.users?.last_name ?? ''}`.trim() || 'User';
+    if (c.users?.role === 'teacher' && c.author_subject) return `${name} — ${c.author_subject}`;
+    return name;
+  };
 
   const renderComment = (c: PostComment, isReply: boolean) => {
     const avatarUrl = c.users?.profile_picture;
@@ -211,11 +214,15 @@ export default function PostDetailScreen() {
       <ScrollView contentContainerStyle={{ padding: spacing.md, paddingBottom: spacing.xl }}>
         <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.header}>
-            <View style={[styles.avatar, { backgroundColor: colors.primaryLight }]}>
-              <Text style={[styles.avatarText, { color: colors.primary }]}>
-                {(post.author_name ?? '?').charAt(0).toUpperCase()}
-              </Text>
-            </View>
+            {post.author_avatar ? (
+              <Image source={{ uri: post.author_avatar }} style={styles.avatar} />
+            ) : (
+              <View style={[styles.avatar, { backgroundColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center' }]}>
+                <Text style={[styles.avatarText, { color: colors.primary }]}>
+                  {(post.author_name ?? '?').charAt(0).toUpperCase()}
+                </Text>
+              </View>
+            )}
             <View style={{ flex: 1 }}>
               <Text style={[styles.authorName, { color: colors.text }]} numberOfLines={1}>{authorLabel(post)}</Text>
               <Text style={[styles.postDate, { color: colors.textMuted }]}>

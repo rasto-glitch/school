@@ -71,9 +71,12 @@ export default function PostDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user, school } = useAuthStore();
-  const commenterName = (c: PostComment) => c.users?.role === 'admin'
-    ? (school?.name || 'School')
-    : (`${c.users?.first_name ?? ''} ${c.users?.last_name ?? ''}`.trim() || 'User');
+  const commenterName = (c: PostComment) => {
+    if (c.users?.role === 'admin') return school?.name || 'School';
+    const name = `${c.users?.first_name ?? ''} ${c.users?.last_name ?? ''}`.trim() || 'User';
+    if (c.users?.role === 'teacher' && c.author_subject) return `${name} — ${c.author_subject}`;
+    return name;
+  };
   const [post, setPost] = useState<AcademicPost | null>(null);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
@@ -226,6 +229,13 @@ export default function PostDetailPage() {
                 </div>
                 <h1 className="text-2xl font-bold text-gray-900 leading-snug">{post.title}</h1>
                 <div className="flex items-center gap-2 mt-3 text-sm text-gray-400">
+                  {post.author_avatar ? (
+                    <img src={post.author_avatar} alt="" className="w-7 h-7 rounded-full object-cover" />
+                  ) : (
+                    <div className="w-7 h-7 rounded-full bg-primary-100 text-primary-700 text-xs font-bold flex items-center justify-center">
+                      {(post.author_name ?? post.teachers?.full_name ?? '?').charAt(0).toUpperCase()}
+                    </div>
+                  )}
                   <span className="text-gray-600 font-medium">{authorLabel}</span>
                   <span>·</span>
                   <time>{format(new Date(post.created_at), 'MMMM d, yyyy')}</time>

@@ -172,6 +172,7 @@ export interface AnnouncementComment {
   created_at: string;
   likes_count?: number;
   liked_by_me?: boolean;
+  author_subject?: string | null;
   users?: {
     first_name?: string;
     last_name?: string;

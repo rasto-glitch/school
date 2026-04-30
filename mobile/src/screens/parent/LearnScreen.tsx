@@ -60,16 +60,23 @@ function PostCard({ post, onPress, onToggleLike, onToggleSave, onPressComment }:
     );
   }, [post.image_url]);
 
-  const teaser = post.body ? bodyTeaser(post.body) : null;
+  const rawBody = post.body || (post.content_type !== 'file' && post.content
+    ? post.content.replace(/<[^>]+>/g, '')
+    : '');
+  const teaser = rawBody ? bodyTeaser(rawBody) : null;
 
   return (
     <TouchableOpacity style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={onPress} activeOpacity={0.7}>
       <View style={styles.cardHeader}>
-        <View style={[styles.avatar, { backgroundColor: colors.primaryLight }]}>
-          <Text style={[styles.avatarText, { color: colors.primary }]}>
-            {(post.author_name ?? '?').charAt(0).toUpperCase()}
-          </Text>
-        </View>
+        {post.author_avatar ? (
+          <Image source={{ uri: post.author_avatar }} style={styles.avatar} />
+        ) : (
+          <View style={[styles.avatar, { backgroundColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center' }]}>
+            <Text style={[styles.avatarText, { color: colors.primary }]}>
+              {(post.author_name ?? '?').charAt(0).toUpperCase()}
+            </Text>
+          </View>
+        )}
         <View style={{ flex: 1 }}>
           <Text style={[styles.authorName, { color: colors.text }]} numberOfLines={1}>{authorLabel(post)}</Text>
           <Text style={[styles.postDate, { color: colors.textMuted }]}>

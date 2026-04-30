@@ -130,9 +130,12 @@ export default function AnnouncementDetailPage() {
   })();
   const announcerAvatar = announcement?.users?.profile_picture;
 
-  const commenterName = (c: AnnouncementComment) => c.users?.role === 'admin'
-    ? (school?.name || 'School')
-    : (`${c.users?.first_name ?? ''} ${c.users?.last_name ?? ''}`.trim() || 'User');
+  const commenterName = (c: AnnouncementComment) => {
+    if (c.users?.role === 'admin') return school?.name || 'School';
+    const name = `${c.users?.first_name ?? ''} ${c.users?.last_name ?? ''}`.trim() || 'User';
+    if (c.users?.role === 'teacher' && c.author_subject) return `${name} — ${c.author_subject}`;
+    return name;
+  };
 
   const handleToggleLike = async () => {
     if (!announcement) return;

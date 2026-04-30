@@ -1217,15 +1217,22 @@ export async function createAnnouncement(req: AuthRequest, res: Response): Promi
 
   if (error) { res.status(500).json({ error: error.message }); return; }
 
-  // Notify target audience in real-time + push
+  // Notify target audience in real-time + push.
+  // target_audience values are plural ('parents'|'teachers'|'students'|'all') but
+  // users.role is singular — map before filtering, otherwise no users match.
   const audience = targetAudience || 'all';
+  const audienceRoleMap: Record<string, string> = { parents: 'parent', teachers: 'teacher', students: 'student' };
   const roleFilter = audience === 'all'
     ? supabase.from('users').select('id').eq('school_id', schoolId).eq('is_active', true)
-    : supabase.from('users').select('id').eq('school_id', schoolId).eq('role', audience).eq('is_active', true);
+    : supabase.from('users').select('id').eq('school_id', schoolId).eq('role', audienceRoleMap[audience] ?? audience).eq('is_active', true);
   const { data: targets } = await roleFilter;
   if (targets && targets.length > 0) {
     const preview = content.length > 80 ? content.substring(0, 80) + '…' : content;
-    notifyMany(targets.map((u: any) => ({ schoolId, userId: u.id, title, message: preview, type: 'announcement', relatedId: data.id }))).catch(() => {});
+    // Don't notify the admin who just posted the announcement.
+    const recipients = targets.filter((u: any) => u.id !== userId);
+    if (recipients.length > 0) {
+      notifyMany(recipients.map((u: any) => ({ schoolId, userId: u.id, title, message: preview, type: 'announcement', relatedId: data.id }))).catch(() => {});
+    }
   }
 
   const decorated = await decorateAnnouncements([data], userId);
@@ -1286,16 +1293,25 @@ export async function getAnnouncementComments(req: AuthRequest, res: Response): 
   if (comments.length === 0) { res.json([]); return; }
 
   const ids = comments.map((c: any) => c.id);
-  const [likesRes, myLikesRes] = await Promise.all([
+  const teacherUserIds = Array.from(new Set(
+    comments.filter((c: any) => c.users?.role === 'teacher').map((c: any) => c.user_id)
+  ));
+  const [likesRes, myLikesRes, subjectsRes] = await Promise.all([
     supabase.from('announcement_comment_likes').select('comment_id').in('comment_id', ids),
     supabase.from('announcement_comment_likes').select('comment_id').in('comment_id', ids).eq('user_id', userId),
+    teacherUserIds.length > 0
+      ? supabase.from('teachers').select('user_id, subject').in('user_id', teacherUserIds)
+      : Promise.resolve({ data: [] as any[] }),
   ]);
   const counts: Record<string, number> = {};
   (likesRes.data ?? []).forEach((r: any) => { counts[r.comment_id] = (counts[r.comment_id] ?? 0) + 1; });
   const liked = new Set((myLikesRes.data ?? []).map((r: any) => r.comment_id));
+  const subjectByUser: Record<string, string | null> = {};
+  ((subjectsRes.data ?? []) as any[]).forEach((t: any) => { subjectByUser[t.user_id] = t.subject ?? null; });
 
   res.json(comments.map((c: any) => ({
     ...c,
+    author_subject: c.users?.role === 'teacher' ? (subjectByUser[c.user_id] ?? null) : null,
     likes_count: counts[c.id] ?? 0,
     liked_by_me: liked.has(c.id),
   })));
@@ -1312,10 +1328,11 @@ export async function createAnnouncementComment(req: AuthRequest, res: Response)
   }
 
   let resolvedParentId: string | null = null;
+  let directParentUserId: string | null = null;
   if (parentId && typeof parentId === 'string') {
     const { data: parent } = await supabase
       .from('announcement_comments')
-      .select('id, announcement_id, parent_id')
+      .select('id, announcement_id, parent_id, user_id')
       .eq('id', parentId)
       .eq('school_id', schoolId)
       .maybeSingle();
@@ -1325,6 +1342,7 @@ export async function createAnnouncementComment(req: AuthRequest, res: Response)
     }
     // Flatten replies-to-replies onto the top-level parent
     resolvedParentId = parent.parent_id ?? parent.id;
+    directParentUserId = parent.user_id;
   }
 
   const { data, error } = await supabase
@@ -1340,7 +1358,51 @@ export async function createAnnouncementComment(req: AuthRequest, res: Response)
     .single();
 
   if (error) { res.status(400).json({ error: error.message }); return; }
-  res.status(201).json({ ...data, likes_count: 0, liked_by_me: false });
+
+  // Notify announcement author + (if reply) the user being replied to.
+  // Skip self-notification and de-duplicate when the same user is both targets.
+  const { data: ann } = await supabase
+    .from('announcements')
+    .select('title, created_by')
+    .eq('id', announcementId)
+    .eq('school_id', schoolId)
+    .maybeSingle();
+  const { data: commenter } = await supabase
+    .from('users')
+    .select('first_name, last_name')
+    .eq('id', userId)
+    .maybeSingle();
+  const commenterName = `${commenter?.first_name ?? ''} ${commenter?.last_name ?? ''}`.trim() || 'Someone';
+  const annTitle = (ann?.title as string | undefined) ?? 'your announcement';
+  const preview = body.trim().length > 80 ? body.trim().substring(0, 80) + '…' : body.trim();
+  const targets = new Set<string>();
+  if (ann?.created_by && ann.created_by !== userId) targets.add(ann.created_by);
+  if (directParentUserId && directParentUserId !== userId && directParentUserId !== ann?.created_by) targets.add(directParentUserId);
+  if (targets.size > 0) {
+    const payloads = Array.from(targets).map(uid => ({
+      schoolId,
+      userId: uid,
+      title: directParentUserId === uid
+        ? `${commenterName} replied to your comment`
+        : `${commenterName} commented on "${annTitle}"`,
+      message: preview,
+      type: 'announcement',
+      relatedId: String(announcementId),
+    }));
+    notifyMany(payloads).catch(() => {});
+  }
+
+  let authorSubject: string | null = null;
+  if ((data as any)?.users?.role === 'teacher') {
+    const { data: teacher } = await supabase
+      .from('teachers')
+      .select('subject')
+      .eq('user_id', userId)
+      .maybeSingle();
+    authorSubject = (teacher as any)?.subject ?? null;
+  }
+
+  res.status(201).json({ ...data, author_subject: authorSubject, likes_count: 0, liked_by_me: false });
 }
 
 export async function toggleAnnouncementCommentLike(req: AuthRequest, res: Response): Promise<void> {

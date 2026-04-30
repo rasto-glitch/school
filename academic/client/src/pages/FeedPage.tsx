@@ -46,6 +46,7 @@ function PostCard({ post, onToggleLike, onToggleSave }: {
   const authorLabel = post.author_role === 'supervisor'
     ? `${post.author_name ?? ''} — Principal`
     : `${post.author_name ?? post.teachers?.full_name ?? 'Teacher'}${post.author_subject ? ` — ${post.author_subject}` : ''}`;
+  const authorInitial = (post.author_name ?? post.teachers?.full_name ?? '?').charAt(0).toUpperCase();
 
   const handleAction = (e: React.MouseEvent, fn: () => void) => {
     e.preventDefault();
@@ -92,7 +93,16 @@ function PostCard({ post, onToggleLike, onToggleSave }: {
               <Paperclip className="w-3.5 h-3.5" /> {post.attachment_name}
             </p>
           )}
-          <p className="text-xs text-gray-400 mt-3">{authorLabel}</p>
+          <div className="flex items-center gap-2 mt-3">
+            {post.author_avatar ? (
+              <img src={post.author_avatar} alt="" className="w-6 h-6 rounded-full object-cover" />
+            ) : (
+              <div className="w-6 h-6 rounded-full bg-primary-100 text-primary-700 text-[10px] font-bold flex items-center justify-center">
+                {authorInitial}
+              </div>
+            )}
+            <p className="text-xs text-gray-400">{authorLabel}</p>
+          </div>
         </div>
 
         {post.image_url && (

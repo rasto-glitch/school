@@ -42,6 +42,7 @@ export interface AcademicPost {
   author_role?: 'teacher' | 'supervisor';
   author_name?: string;
   author_subject?: string | null;
+  author_avatar?: string | null;
   likes_count?: number;
   saves_count?: number;
   comments_count?: number;
@@ -60,6 +61,7 @@ export interface PostComment {
   created_at: string;
   likes_count?: number;
   liked_by_me?: boolean;
+  author_subject?: string | null;
   users?: { first_name: string; last_name: string; role: string; profile_picture?: string };
 }
 

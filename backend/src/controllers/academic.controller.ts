@@ -34,24 +34,28 @@ async function getUserName(userId: string): Promise<string> {
 // parent in the school.
 async function notifyPostAudience(
   schoolId: string,
-  post: { id: string; author_role: string | null; class_id: string | null },
+  post: { id: string; author_role: string | null; class_id: string | null; author_user_id: string | null },
   title: string,
 ): Promise<void> {
   let userIds: string[] = [];
 
   if (post.author_role === 'teacher') {
     if (!post.class_id) return;
+    // Two-step lookup so the FK auto-detection between students and parents
+    // doesn't matter: collect parent_ids from students in the class, then
+    // resolve their user_ids.
     const { data: students } = await supabase
       .from('students')
-      .select('parents(user_id)')
+      .select('parent_id')
       .eq('class_id', post.class_id)
       .eq('school_id', schoolId);
-    const set = new Set<string>();
-    for (const s of (students ?? []) as any[]) {
-      const uid = s.parents?.user_id;
-      if (uid) set.add(uid);
-    }
-    userIds = Array.from(set);
+    const parentIds = Array.from(new Set(((students ?? []) as any[]).map(s => s.parent_id).filter(Boolean)));
+    if (parentIds.length === 0) return;
+    const { data: parents } = await supabase
+      .from('parents')
+      .select('user_id')
+      .in('id', parentIds);
+    userIds = Array.from(new Set(((parents ?? []) as any[]).map(p => p.user_id).filter(Boolean)));
   } else if (post.author_role === 'supervisor') {
     const { data: parentUsers } = await supabase
       .from('users')
@@ -62,6 +66,11 @@ async function notifyPostAudience(
     userIds = (parentUsers ?? []).map((u: { id: string }) => u.id);
   } else {
     return;
+  }
+
+  // Don't notify the author about their own post.
+  if (post.author_user_id) {
+    userIds = userIds.filter(uid => uid !== post.author_user_id);
   }
 
   if (userIds.length === 0) return;
@@ -98,18 +107,21 @@ async function decoratePosts(posts: any[], viewerUserId: string): Promise<any[]>
   const liked = new Set((myLikesRes.data ?? []).map((r: any) => r.post_id));
   const saved = new Set((mySavesRes.data ?? []).map((r: any) => r.post_id));
 
-  // Resolve author display for supervisor posts (teachers come from join)
-  const supervisorAuthorIds = Array.from(new Set(
-    posts.filter((p) => p.author_role === 'supervisor' && p.author_user_id).map((p) => p.author_user_id)
+  // Resolve author display + profile picture for every author. Teachers'
+  // teachers.full_name comes from the join, but the avatar lives on users.
+  const authorUserIds = Array.from(new Set(
+    posts.map((p) => p.author_user_id).filter(Boolean)
   ));
-  const supervisorNames: Record<string, string> = {};
-  if (supervisorAuthorIds.length > 0) {
+  const authorNames: Record<string, string> = {};
+  const authorAvatars: Record<string, string | null> = {};
+  if (authorUserIds.length > 0) {
     const { data: users } = await supabase
       .from('users')
-      .select('id, first_name, last_name')
-      .in('id', supervisorAuthorIds);
+      .select('id, first_name, last_name, profile_picture')
+      .in('id', authorUserIds);
     (users ?? []).forEach((u: any) => {
-      supervisorNames[u.id] = `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim();
+      authorNames[u.id] = `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim();
+      authorAvatars[u.id] = u.profile_picture ?? null;
     });
   }
 
@@ -120,12 +132,13 @@ async function decoratePosts(posts: any[], viewerUserId: string): Promise<any[]>
       authorName = p.teachers?.full_name ?? '';
       authorSubject = p.subject ?? p.teachers?.subject ?? null;
     } else if (p.author_role === 'supervisor') {
-      authorName = supervisorNames[p.author_user_id] ?? '';
+      authorName = authorNames[p.author_user_id] ?? '';
     }
     return {
       ...p,
       author_name: authorName,
       author_subject: authorSubject,
+      author_avatar: p.author_user_id ? (authorAvatars[p.author_user_id] ?? null) : null,
       likes_count: likesCount[p.id] ?? 0,
       saves_count: savesCount[p.id] ?? 0,
       comments_count: commentsCount[p.id] ?? 0,
@@ -597,16 +610,25 @@ export async function getComments(req: AuthRequest, res: Response): Promise<void
     if (comments.length === 0) { res.json([]); return; }
 
     const ids = comments.map((c: any) => c.id);
-    const [likesRes, myLikesRes] = await Promise.all([
+    const teacherUserIds = Array.from(new Set(
+      comments.filter((c: any) => c.users?.role === 'teacher').map((c: any) => c.user_id)
+    ));
+    const [likesRes, myLikesRes, subjectsRes] = await Promise.all([
       supabase.from('post_comment_likes').select('comment_id').in('comment_id', ids),
       supabase.from('post_comment_likes').select('comment_id').in('comment_id', ids).eq('user_id', userId),
+      teacherUserIds.length > 0
+        ? supabase.from('teachers').select('user_id, subject').in('user_id', teacherUserIds)
+        : Promise.resolve({ data: [] as any[] }),
     ]);
     const counts: Record<string, number> = {};
     (likesRes.data ?? []).forEach((r: any) => { counts[r.comment_id] = (counts[r.comment_id] ?? 0) + 1; });
     const liked = new Set((myLikesRes.data ?? []).map((r: any) => r.comment_id));
+    const subjectByUser: Record<string, string | null> = {};
+    ((subjectsRes.data ?? []) as any[]).forEach((t: any) => { subjectByUser[t.user_id] = t.subject ?? null; });
 
     res.json(comments.map((c: any) => ({
       ...c,
+      author_subject: c.users?.role === 'teacher' ? (subjectByUser[c.user_id] ?? null) : null,
       likes_count: counts[c.id] ?? 0,
       liked_by_me: liked.has(c.id),
     })));
@@ -627,10 +649,11 @@ export async function createComment(req: AuthRequest, res: Response): Promise<vo
 
   try {
     let resolvedParentId: string | null = null;
+    let directParentUserId: string | null = null;
     if (parentId && typeof parentId === 'string') {
       const { data: parent } = await supabase
         .from('post_comments')
-        .select('id, post_id, parent_id')
+        .select('id, post_id, parent_id, user_id')
         .eq('id', parentId)
         .eq('school_id', schoolId)
         .maybeSingle();
@@ -640,6 +663,7 @@ export async function createComment(req: AuthRequest, res: Response): Promise<vo
       }
       // Flatten: replies to replies attach to the same top-level parent
       resolvedParentId = parent.parent_id ?? parent.id;
+      directParentUserId = parent.user_id;
     }
 
     const { data, error } = await supabase
@@ -655,7 +679,51 @@ export async function createComment(req: AuthRequest, res: Response): Promise<vo
       .single();
 
     if (error) { res.status(400).json({ error: error.message }); return; }
-    res.status(201).json({ ...data, likes_count: 0, liked_by_me: false });
+
+    // Notify the post author + (if reply) the user being replied to.
+    // Skip self-notification and de-duplicate when the same user is both targets.
+    const { data: post } = await supabase
+      .from('academic_posts')
+      .select('title, author_user_id')
+      .eq('id', postId)
+      .eq('school_id', schoolId)
+      .maybeSingle();
+    const { data: commenter } = await supabase
+      .from('users')
+      .select('first_name, last_name')
+      .eq('id', userId)
+      .maybeSingle();
+    const commenterName = `${commenter?.first_name ?? ''} ${commenter?.last_name ?? ''}`.trim() || 'Someone';
+    const postTitle = (post?.title as string | undefined) ?? 'your post';
+    const preview = body.trim().length > 80 ? body.trim().substring(0, 80) + '…' : body.trim();
+    const targets = new Set<string>();
+    if (post?.author_user_id && post.author_user_id !== userId) targets.add(post.author_user_id);
+    if (directParentUserId && directParentUserId !== userId && directParentUserId !== post?.author_user_id) targets.add(directParentUserId);
+    if (targets.size > 0) {
+      const payloads = Array.from(targets).map(uid => ({
+        schoolId,
+        userId: uid,
+        title: directParentUserId === uid
+          ? `${commenterName} replied to your comment`
+          : `${commenterName} commented on "${postTitle}"`,
+        message: preview,
+        type: 'post',
+        relatedId: String(postId),
+      }));
+      notifyMany(payloads).catch(() => {});
+    }
+
+    let authorSubject: string | null = null;
+    if ((data as any)?.users?.role === 'teacher') {
+      const { data: teacher } = await supabase
+        .from('teachers')
+        .select('subject')
+        .eq('user_id', userId)
+        .maybeSingle();
+      authorSubject = (teacher as any)?.subject ?? null;
+    }
+
+    res.status(201).json({ ...data, author_subject: authorSubject, likes_count: 0, liked_by_me: false });
   } catch {
     res.status(500).json({ error: 'Failed to create comment' });
   }
