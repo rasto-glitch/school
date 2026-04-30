@@ -38,10 +38,14 @@ function PostCard({ post, onToggleLike, onToggleSave }: {
   onToggleSave: (id: string) => void;
 }) {
   const Icon = typeIcon[post.content_type];
-  const rawBody = post.body || (post.content_type !== 'file' && post.content
-    ? post.content.replace(/<[^>]+>/g, '')
-    : '');
-  const teaser = rawBody ? bodyTeaser(rawBody) : null;
+  const fullText = post.content_type !== 'file' && post.content
+    ? post.content.replace(/<[^>]+>/g, '').trim()
+    : '';
+  const shortBody = (post.body ?? '').trim();
+  const displayText = shortBody || fullText;
+  const teaser = displayText ? bodyTeaser(displayText) : null;
+  const hasMore = !!(teaser && shortBody && fullText && fullText.length > shortBody.length);
+  const showSeeMore = !!(teaser && (teaser.truncated || hasMore));
 
   const authorLabel = post.author_role === 'supervisor'
     ? `${post.author_name ?? ''} — Principal`
@@ -80,7 +84,7 @@ function PostCard({ post, onToggleLike, onToggleSave }: {
           {teaser && teaser.text.length > 0 && (
             <p className="text-sm text-gray-500 leading-relaxed whitespace-pre-wrap">
               {teaser.text}
-              {teaser.truncated && (
+              {showSeeMore && (
                 <>
                   <span>… </span>
                   <span className="text-primary-600 font-semibold">see more</span>

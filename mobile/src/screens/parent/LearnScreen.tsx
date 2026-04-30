@@ -60,10 +60,14 @@ function PostCard({ post, onPress, onToggleLike, onToggleSave, onPressComment }:
     );
   }, [post.image_url]);
 
-  const rawBody = post.body || (post.content_type !== 'file' && post.content
-    ? post.content.replace(/<[^>]+>/g, '')
-    : '');
-  const teaser = rawBody ? bodyTeaser(rawBody) : null;
+  const fullText = post.content_type !== 'file' && post.content
+    ? post.content.replace(/<[^>]+>/g, '').trim()
+    : '';
+  const shortBody = (post.body ?? '').trim();
+  const displayText = shortBody || fullText;
+  const teaser = displayText ? bodyTeaser(displayText) : null;
+  const hasMore = !!(teaser && shortBody && fullText && fullText.length > shortBody.length);
+  const showSeeMore = !!(teaser && (teaser.truncated || hasMore));
 
   return (
     <TouchableOpacity style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={onPress} activeOpacity={0.7}>
@@ -93,7 +97,7 @@ function PostCard({ post, onPress, onToggleLike, onToggleSave, onPressComment }:
       {teaser && teaser.text.length > 0 && (
         <Text style={[styles.postBody, { color: colors.textMuted }]}>
           {teaser.text}
-          {teaser.truncated && (
+          {showSeeMore && (
             <>
               <Text>… </Text>
               <Text style={{ color: colors.primary, fontWeight: '600' }} onPress={onPress}>
