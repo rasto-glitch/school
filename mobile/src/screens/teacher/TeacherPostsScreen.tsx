@@ -6,7 +6,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import { Plus, X, Send, Trash2, Image as ImageIcon, FileText } from 'lucide-react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CardListSkeleton } from '../../components/Skeleton';
 import { academicApi } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
@@ -174,8 +174,8 @@ export default function TeacherPostsScreen({ subject, classes }: Props) {
       </TouchableOpacity>
 
       {/* Composer modal */}
-      <Modal visible={showForm} animationType="slide" onRequestClose={() => setShowForm(false)}>
-        <SafeAreaView edges={['top']} style={[styles.modal, { backgroundColor: colors.bg }]}>
+      <Modal visible={showForm} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowForm(false)}>
+        <View style={[styles.modal, { backgroundColor: colors.bg, paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom }]}>
           <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
             <TouchableOpacity onPress={() => setShowForm(false)} hitSlop={8}>
               <X size={22} color={colors.text} />
@@ -266,7 +266,7 @@ export default function TeacherPostsScreen({ subject, classes }: Props) {
               />
             </View>
           </ScrollView>
-        </SafeAreaView>
+        </View>
       </Modal>
     </View>
   );
