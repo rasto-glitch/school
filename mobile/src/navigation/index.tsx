@@ -11,6 +11,7 @@ import SupervisorSettingsScreen from '../screens/supervisor/SupervisorSettingsSc
 import TeacherTabs from './TeacherTabs';
 import TeacherSettingsScreen from '../screens/teacher/TeacherSettingsScreen';
 import TeacherNotificationsScreen from '../screens/teacher/TeacherNotificationsScreen';
+import TeacherScheduleScreen from '../screens/teacher/TeacherScheduleScreen';
 import SetPickupLocationScreen from '../screens/parent/SetPickupLocationScreen';
 import SettingsScreen from '../screens/parent/SettingsScreen';
 import ReportsScreen from '../screens/parent/ReportsScreen';
@@ -25,6 +26,7 @@ import AssignmentDetailScreen from '../screens/parent/AssignmentDetailScreen';
 import AnnouncementDetailScreen from '../screens/parent/AnnouncementDetailScreen';
 import PostDetailScreen from '../screens/parent/PostDetailScreen';
 import EbookReaderScreen from '../screens/parent/EbookReaderScreen';
+import ParentScheduleScreen from '../screens/parent/ParentScheduleScreen';
 import ChatScreen from '../screens/chat/ChatScreen';
 import type { Homework, Announcement, Conversation, Ebook } from '../types';
 
@@ -38,6 +40,8 @@ export type RootStackParamList = {
   TeacherTabs: undefined;
   TeacherSettings: undefined;
   TeacherNotifications: undefined;
+  TeacherSchedule: undefined;
+  ParentSchedule: undefined;
   SetPickupLocation: undefined;
   Settings: undefined;
   Reports: undefined;
@@ -111,6 +115,11 @@ export default function Navigation() {
               name="TeacherNotifications"
               component={TeacherNotificationsScreen}
               options={{ headerShown: true, headerTitle: 'Notifications', headerBackTitle: 'Back' }}
+            />
+            <Stack.Screen
+              name="TeacherSchedule"
+              component={TeacherScheduleScreen}
+              options={{ headerShown: true, headerTitle: 'Schedule', headerBackTitle: 'Back' }}
             />
             <Stack.Screen
               name="PostDetail"
@@ -196,6 +205,11 @@ export default function Navigation() {
               name="EbookReader"
               component={EbookReaderScreen}
               options={{ headerShown: true, headerBackTitle: 'Back' }}
+            />
+            <Stack.Screen
+              name="ParentSchedule"
+              component={ParentScheduleScreen}
+              options={{ headerShown: true, headerTitle: 'Schedule', headerBackTitle: 'Back' }}
             />
             <Stack.Screen
               name="Chat"

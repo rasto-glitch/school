@@ -89,6 +89,7 @@ export const parentApi = {
   getLinkPreview: (url: string) => api.get('/link-preview', { params: { url } }),
   getUnreadCount: () => api.get('/parent/notifications/unread-count'),
   markTypeRead: (type: string) => api.patch(`/parent/notifications/read-type/${type}`),
+  getSchedule: (studentId: string) => api.get('/parent/schedule', { params: { studentId } }),
 };
 
 // ---- TEACHER ----
@@ -132,11 +133,11 @@ export const adminApi = {
   updateStudent: (id: string, data: object) => api.put(`/admin/students/${id}`, data),
   deleteStudent: (id: string) => api.delete(`/admin/students/${id}`),
   assignStudent: (data: object) => api.post('/admin/students/assign', data),
-  uploadSchedule: (file: File) => {
-    const fd = new FormData();
-    fd.append('file', file);
-    return api.post('/admin/schedule', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
-  },
+  getSchedule: () => api.get('/admin/schedule'),
+  updateScheduleConfig: (data: { periodsPerDay?: number; scheduleDays?: string[] }) =>
+    api.put('/admin/schedule/config', data),
+  setScheduleCell: (data: { teacherId: string; dayOfWeek: number; periodIndex: number; classId: string | null }) =>
+    api.put('/admin/schedule/cell', data),
   bulkUploadStudents: (file: File) => {
     const fd = new FormData();
     fd.append('file', file);

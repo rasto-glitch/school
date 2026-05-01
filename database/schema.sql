@@ -19,7 +19,8 @@ CREATE TABLE IF NOT EXISTS schools (
   domain TEXT,
   subscription_plan TEXT DEFAULT 'basic',
   is_active BOOLEAN DEFAULT TRUE,
-  schedule_url TEXT,
+  periods_per_day INT NOT NULL DEFAULT 6,
+  schedule_days TEXT[] NOT NULL DEFAULT ARRAY['sunday','monday','tuesday','wednesday','thursday'],
   features JSONB DEFAULT '{"homework":true,"assignments":true,"announcements":true,"grades":true,"reports":true,"bus_tracking":true,"appointments":true,"attendance":true,"weekly_summary":true,"chat":true}',
   features_version INTEGER NOT NULL DEFAULT 1,
   created_at TIMESTAMPTZ DEFAULT NOW()
@@ -92,6 +93,24 @@ CREATE TABLE IF NOT EXISTS classes (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(school_id, name)
 );
+
+-- ============================================================
+-- WEEKLY SCHEDULE — one row per (teacher, day, period)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS schedule_assignments (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  teacher_id UUID NOT NULL REFERENCES teachers(id) ON DELETE CASCADE,
+  class_id UUID NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+  day_of_week SMALLINT NOT NULL CHECK (day_of_week BETWEEN 0 AND 6),
+  period_index SMALLINT NOT NULL CHECK (period_index >= 1),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(school_id, teacher_id, day_of_week, period_index),
+  UNIQUE(school_id, class_id, day_of_week, period_index)
+);
+CREATE INDEX IF NOT EXISTS idx_schedule_assignments_school ON schedule_assignments(school_id);
+CREATE INDEX IF NOT EXISTS idx_schedule_assignments_teacher ON schedule_assignments(school_id, teacher_id);
+CREATE INDEX IF NOT EXISTS idx_schedule_assignments_class ON schedule_assignments(school_id, class_id);
 
 -- ============================================================
 -- PARENTS

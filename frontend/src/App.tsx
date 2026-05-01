@@ -26,6 +26,8 @@ import ProfilePage from './pages/parent/ProfilePage';
 
 // Teacher
 import TeacherDashboard from './pages/teacher/TeacherDashboard';
+import TeacherSchedulePage from './pages/teacher/TeacherSchedulePage';
+import ParentSchedulePage from './pages/parent/SchedulePage';
 import WriteHomeworkPage from './pages/teacher/WriteHomeworkPage';
 import GradingPage from './pages/teacher/GradingPage';
 import WeeklySummaryPage from './pages/teacher/WeeklySummaryPage';
@@ -38,6 +40,7 @@ import AdminDashboard from './pages/admin/AdminDashboard';
 import StudentsManagement from './pages/admin/StudentsManagement';
 import ArchiveManagement from './pages/admin/ArchiveManagement';
 import TeachersManagement from './pages/admin/TeachersManagement';
+import AdminSchedulePage from './pages/admin/SchedulePage';
 import DriversManagement from './pages/admin/DriversManagement';
 import AppointmentsPage from './pages/admin/AppointmentsPage';
 import AccountsPage from './pages/admin/AccountsPage';
@@ -150,6 +153,7 @@ export default function App() {
         <Route path="/parent/notifications" element={<ProtectedRoute allowedRoles={['parent']}><NotificationsPage /></ProtectedRoute>} />
         <Route path="/parent/appointments" element={<ProtectedRoute allowedRoles={['parent']}><ParentAppointmentsPage /></ProtectedRoute>} />
         <Route path="/parent/grades" element={<ProtectedRoute allowedRoles={['parent']}><GradesPage /></ProtectedRoute>} />
+        <Route path="/parent/schedule" element={<ProtectedRoute allowedRoles={['parent']}><ParentSchedulePage /></ProtectedRoute>} />
         <Route path="/parent/profile" element={<ProtectedRoute allowedRoles={['parent']}><ProfilePage /></ProtectedRoute>} />
 
         {/* Teacher Portal */}
@@ -161,6 +165,7 @@ export default function App() {
         <Route path="/teacher/grades" element={<ProtectedRoute allowedRoles={['teacher']}><GradingPage /></ProtectedRoute>} />
         <Route path="/teacher/weekly-summary" element={<ProtectedRoute allowedRoles={['teacher']}><WeeklySummaryPage /></ProtectedRoute>} />
         <Route path="/teacher/students" element={<ProtectedRoute allowedRoles={['teacher']}><StudentsPage /></ProtectedRoute>} />
+        <Route path="/teacher/schedule" element={<ProtectedRoute allowedRoles={['teacher']}><TeacherSchedulePage /></ProtectedRoute>} />
         <Route path="/teacher/notifications" element={<ProtectedRoute allowedRoles={['teacher']}><TeacherNotificationsPage /></ProtectedRoute>} />
         <Route path="/teacher/profile" element={<ProtectedRoute allowedRoles={['teacher']}><ProfilePage /></ProtectedRoute>} />
 
@@ -173,6 +178,7 @@ export default function App() {
         <Route path="/admin/archive" element={<ProtectedRoute allowedRoles={['admin']}><ArchiveManagement /></ProtectedRoute>} />
         <Route path="/admin/classes" element={<ProtectedRoute allowedRoles={['admin']}><ClassesPage /></ProtectedRoute>} />
         <Route path="/admin/teachers" element={<ProtectedRoute allowedRoles={['admin']}><TeachersManagement /></ProtectedRoute>} />
+        <Route path="/admin/schedule" element={<ProtectedRoute allowedRoles={['admin']}><AdminSchedulePage /></ProtectedRoute>} />
         <Route path="/admin/drivers" element={<ProtectedRoute allowedRoles={['admin']}><DriversManagement /></ProtectedRoute>} />
         <Route path="/admin/student-brief" element={<ProtectedRoute allowedRoles={['admin']}><StudentBriefPage /></ProtectedRoute>} />
         <Route path="/admin/weekly-summary" element={<ProtectedRoute allowedRoles={['admin']}><AdminWeeklySummaryPage /></ProtectedRoute>} />

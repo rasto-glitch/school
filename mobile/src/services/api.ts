@@ -90,6 +90,7 @@ export const parentApi = {
   getAnnouncementById: (id: string) => api.get(`/parent/announcements/${id}`),
   getReportById: (id: string) => api.get(`/parent/reports/${id}`),
   getLinkPreview: (url: string) => api.get('/link-preview', { params: { url } }),
+  getSchedule: (studentId: string) => api.get('/parent/schedule', { params: { studentId } }),
 };
 
 // ---- ANNOUNCEMENTS (shared) ----

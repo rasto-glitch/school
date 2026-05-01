@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { BookOpen, ClipboardList, FileText, Star, Clock, Users, LayoutGrid, ExternalLink } from 'lucide-react';
+import { BookOpen, ClipboardList, FileText, Star, Clock, Users } from 'lucide-react';
 import { teacherApi } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import PageLayout from '../../components/layout/PageLayout';
@@ -13,14 +13,12 @@ export default function TeacherDashboard() {
   const [recentHW, setRecentHW] = useState<Homework[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
   const [loading, setLoading] = useState(true);
-  const [scheduleUrl, setScheduleUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([teacherApi.getHomework(), teacherApi.getClasses(), teacherApi.getSchedule()])
-      .then(([hw, cls, sched]) => {
+    Promise.all([teacherApi.getHomework(), teacherApi.getClasses()])
+      .then(([hw, cls]) => {
         setRecentHW((hw.data || []).slice(0, 3));
         setClasses(cls.data || []);
-        setScheduleUrl(sched.data?.scheduleUrl ?? null);
       })
       .finally(() => setLoading(false));
   }, []);
@@ -67,40 +65,6 @@ export default function TeacherDashboard() {
             ))}
           </div>
         </div>
-
-        {/* Schedule */}
-        {scheduleUrl && (
-          <div>
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
-              <span className="flex items-center gap-2"><LayoutGrid className="w-4 h-4" />My Schedule</span>
-            </h2>
-            {scheduleUrl.match(/\.(jpg|jpeg|png|webp)$/i) ? (
-              <Card className="overflow-hidden p-0">
-                <img
-                  src={scheduleUrl}
-                  alt="Class Schedule"
-                  className="w-full rounded-2xl object-contain max-h-[600px]"
-                />
-              </Card>
-            ) : (
-              <Card className="flex items-center gap-3">
-                <LayoutGrid className="w-5 h-5 text-primary-600 flex-shrink-0" />
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-900">Class Schedule</p>
-                  <p className="text-xs text-gray-500">PDF document</p>
-                </div>
-                <a
-                  href={scheduleUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-sm text-primary-600 font-medium hover:underline"
-                >
-                  Open <ExternalLink className="w-3.5 h-3.5" />
-                </a>
-              </Card>
-            )}
-          </div>
-        )}
 
         {/* Recent homework */}
         {recentHW.length > 0 && (

@@ -1988,39 +1988,203 @@ export async function updateParent(req: AuthRequest, res: Response): Promise<voi
 }
 
 // ---- SCHEDULE ----
-export async function uploadSchedule(req: AuthRequest, res: Response): Promise<void> {
-  const { schoolId } = req.user!;
-  const file = (req as any).file;
-  if (!file) { res.status(400).json({ error: 'No file uploaded' }); return; }
+// Day-of-week is 0=Sunday..6=Saturday (matches JS Date.getDay()).
+const VALID_DAYS = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
 
-  const ext = file.originalname.includes('.') ? file.originalname.split('.').pop() : 'jpg';
-  const storagePath = `${schoolId}/schedule/${Date.now()}.${ext}`;
-  const bucket = process.env.SUPABASE_STORAGE_BUCKET || 'homework-attachments';
-
-  const { data: uploadData, error: uploadErr } = await supabase.storage
-    .from(bucket)
-    .upload(storagePath, file.buffer, { contentType: file.mimetype, upsert: false });
-
-  if (uploadErr || !uploadData) {
-    res.status(500).json({ error: uploadErr?.message || 'Upload failed' }); return;
-  }
-
-  const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(uploadData.path);
-  const scheduleUrl = urlData.publicUrl;
-
-  const { error: dbErr } = await supabase
-    .from('schools').update({ schedule_url: scheduleUrl }).eq('id', schoolId);
-  if (dbErr) { res.status(500).json({ error: dbErr.message }); return; }
-
-  res.json({ scheduleUrl });
+async function readScheduleConfig(schoolId: string) {
+  const { data } = await supabase
+    .from('schools')
+    .select('periods_per_day, schedule_days')
+    .eq('id', schoolId)
+    .single();
+  return {
+    periodsPerDay: (data?.periods_per_day as number | null) ?? 6,
+    scheduleDays: (data?.schedule_days as string[] | null) ?? ['sunday','monday','tuesday','wednesday','thursday'],
+  };
 }
 
-export async function getSchedule(req: AuthRequest, res: Response): Promise<void> {
+// Admin: full grid — config + every cell + every teacher + every class.
+export async function getAdminSchedule(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
-  const { data, error } = await supabase
-    .from('schools').select('schedule_url').eq('id', schoolId).single();
+  const config = await readScheduleConfig(schoolId);
+
+  const [{ data: teachers, error: tErr }, { data: classes, error: cErr }, { data: cells, error: aErr }] = await Promise.all([
+    supabase.from('teachers').select('id, full_name, subject').eq('school_id', schoolId).order('full_name'),
+    supabase.from('classes').select('id, name, grade_level').eq('school_id', schoolId).order('name'),
+    supabase.from('schedule_assignments').select('id, teacher_id, class_id, day_of_week, period_index').eq('school_id', schoolId),
+  ]);
+  if (tErr || cErr || aErr) {
+    res.status(500).json({ error: tErr?.message || cErr?.message || aErr?.message }); return;
+  }
+
+  res.json({
+    ...config,
+    teachers: toCC(teachers),
+    classes: toCC(classes),
+    assignments: toCC(cells),
+  });
+}
+
+export async function updateScheduleConfig(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { periodsPerDay, scheduleDays } = req.body as { periodsPerDay?: number; scheduleDays?: string[] };
+
+  const update: Record<string, unknown> = {};
+  if (typeof periodsPerDay === 'number') {
+    if (!Number.isInteger(periodsPerDay) || periodsPerDay < 1 || periodsPerDay > 20) {
+      res.status(400).json({ error: 'periodsPerDay must be an integer between 1 and 20' }); return;
+    }
+    update.periods_per_day = periodsPerDay;
+  }
+  if (Array.isArray(scheduleDays)) {
+    const cleaned = scheduleDays.map(d => String(d).toLowerCase()).filter(d => VALID_DAYS.includes(d));
+    if (cleaned.length === 0) {
+      res.status(400).json({ error: 'scheduleDays must include at least one valid day' }); return;
+    }
+    update.schedule_days = cleaned;
+  }
+  if (Object.keys(update).length === 0) { res.json({ success: true }); return; }
+
+  // If periodsPerDay shrinks, drop assignments past the new max.
+  if (typeof update.periods_per_day === 'number') {
+    await supabase
+      .from('schedule_assignments')
+      .delete()
+      .eq('school_id', schoolId)
+      .gt('period_index', update.periods_per_day as number);
+  }
+
+  const { error } = await supabase.from('schools').update(update).eq('id', schoolId);
   if (error) { res.status(500).json({ error: error.message }); return; }
-  res.json({ scheduleUrl: data?.schedule_url ?? null });
+  res.json({ ...await readScheduleConfig(schoolId) });
+}
+
+// Upsert (or clear) a single cell. classId=null clears the cell.
+export async function setScheduleCell(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { teacherId, dayOfWeek, periodIndex, classId } = req.body as {
+    teacherId?: string; dayOfWeek?: number; periodIndex?: number; classId?: string | null;
+  };
+
+  if (!teacherId || typeof dayOfWeek !== 'number' || typeof periodIndex !== 'number') {
+    res.status(400).json({ error: 'teacherId, dayOfWeek, and periodIndex are required' }); return;
+  }
+  if (dayOfWeek < 0 || dayOfWeek > 6 || periodIndex < 1) {
+    res.status(400).json({ error: 'Invalid dayOfWeek or periodIndex' }); return;
+  }
+
+  // Confirm scope: teacher must belong to this school.
+  const { data: teacher } = await supabase
+    .from('teachers').select('id').eq('id', teacherId).eq('school_id', schoolId).single();
+  if (!teacher) { res.status(404).json({ error: 'Teacher not found' }); return; }
+
+  // Clear: remove the cell for (teacher, day, period).
+  if (!classId) {
+    const { error } = await supabase
+      .from('schedule_assignments')
+      .delete()
+      .eq('school_id', schoolId)
+      .eq('teacher_id', teacherId)
+      .eq('day_of_week', dayOfWeek)
+      .eq('period_index', periodIndex);
+    if (error) { res.status(500).json({ error: error.message }); return; }
+    res.json({ success: true, cleared: true });
+    return;
+  }
+
+  // Confirm class belongs to this school.
+  const { data: cls } = await supabase
+    .from('classes').select('id').eq('id', classId).eq('school_id', schoolId).single();
+  if (!cls) { res.status(404).json({ error: 'Class not found' }); return; }
+
+  // Conflict: another teacher already owns (class, day, period).
+  const { data: classConflict } = await supabase
+    .from('schedule_assignments')
+    .select('id, teacher_id, teachers(full_name)')
+    .eq('school_id', schoolId)
+    .eq('class_id', classId)
+    .eq('day_of_week', dayOfWeek)
+    .eq('period_index', periodIndex)
+    .neq('teacher_id', teacherId)
+    .maybeSingle();
+  if (classConflict) {
+    const otherName = (classConflict as { teachers?: { full_name?: string } }).teachers?.full_name ?? 'another teacher';
+    res.status(409).json({ error: `That class is already assigned to ${otherName} at this period.` });
+    return;
+  }
+
+  // Upsert by (teacher, day, period). Delete existing then insert — safer than relying on
+  // ON CONFLICT with two unique constraints.
+  await supabase
+    .from('schedule_assignments')
+    .delete()
+    .eq('school_id', schoolId)
+    .eq('teacher_id', teacherId)
+    .eq('day_of_week', dayOfWeek)
+    .eq('period_index', periodIndex);
+
+  const { data, error } = await supabase
+    .from('schedule_assignments')
+    .insert({
+      school_id: schoolId,
+      teacher_id: teacherId,
+      class_id: classId,
+      day_of_week: dayOfWeek,
+      period_index: periodIndex,
+    })
+    .select('id, teacher_id, class_id, day_of_week, period_index')
+    .single();
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json({ success: true, assignment: toCC(data) });
+}
+
+// Teacher: own grid only.
+export async function getTeacherSchedule(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId, userId } = req.user!;
+  const config = await readScheduleConfig(schoolId);
+
+  // Resolve teacher row from user id.
+  const { data: teacher } = await supabase
+    .from('teachers').select('id, subject').eq('user_id', userId).eq('school_id', schoolId).single();
+  if (!teacher) { res.json({ ...config, assignments: [] }); return; }
+
+  const { data, error } = await supabase
+    .from('schedule_assignments')
+    .select('id, day_of_week, period_index, classes(id, name)')
+    .eq('school_id', schoolId)
+    .eq('teacher_id', teacher.id);
+  if (error) { res.status(500).json({ error: error.message }); return; }
+
+  res.json({ ...config, assignments: toCC(data) });
+}
+
+// Parent: schedule for a specific child's class — cells carry teacher name + subject.
+export async function getParentSchedule(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId, userId } = req.user!;
+  const { studentId } = req.query as Record<string, string>;
+  if (!studentId) { res.status(400).json({ error: 'studentId is required' }); return; }
+
+  // Confirm the student belongs to this parent (and this school).
+  const { data: parent } = await supabase
+    .from('parents').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
+  if (!parent) { res.status(404).json({ error: 'Parent not found' }); return; }
+
+  const { data: student } = await supabase
+    .from('students').select('id, class_id').eq('id', studentId).eq('parent_id', parent.id).eq('school_id', schoolId).single();
+  if (!student || !student.class_id) {
+    res.json({ ...await readScheduleConfig(schoolId), assignments: [] });
+    return;
+  }
+
+  const config = await readScheduleConfig(schoolId);
+  const { data, error } = await supabase
+    .from('schedule_assignments')
+    .select('id, day_of_week, period_index, teachers(id, full_name, subject)')
+    .eq('school_id', schoolId)
+    .eq('class_id', student.class_id);
+  if (error) { res.status(500).json({ error: error.message }); return; }
+
+  res.json({ ...config, assignments: toCC(data) });
 }
 
 // ---- MARK TYPES ----

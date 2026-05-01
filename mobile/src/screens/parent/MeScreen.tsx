@@ -3,7 +3,8 @@ import { View, Text, ScrollView, StyleSheet, ActivityIndicator, TouchableOpacity
 import { CardListSkeleton } from '../../components/Skeleton';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { User, GraduationCap, Bus, Plus, Pencil } from 'lucide-react-native';
+import { useNavigation } from '@react-navigation/native';
+import { User, GraduationCap, Bus, Plus, Pencil, Calendar, ChevronRight } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuthStore } from '../../store/authStore';
 import { useColors, useIsDark } from '../../store/themeStore';
@@ -17,6 +18,7 @@ export default function MeScreen() {
   const colors = useColors();
   const isDark = useIsDark();
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<any>();
   const [children, setChildren] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -107,6 +109,22 @@ export default function MeScreen() {
           <Text style={styles.infoValue}>{school?.name ?? '—'}</Text>
         </View>
       </View>
+
+      {/* Schedule */}
+      <TouchableOpacity
+        style={styles.actionCard}
+        onPress={() => navigation.navigate('ParentSchedule')}
+        activeOpacity={0.7}
+      >
+        <View style={styles.actionIcon}>
+          <Calendar size={20} color={isDark ? '#FFFFFF' : colors.primary} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.actionTitle}>Schedule</Text>
+          <Text style={styles.actionSub}>See your child's weekly classes</Text>
+        </View>
+        <ChevronRight size={16} color={colors.textMuted} />
+      </TouchableOpacity>
 
       {/* Children */}
       <Text style={styles.sectionTitle}>
@@ -216,4 +234,18 @@ const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').u
   driverText: { fontSize: 11, color: '#92400E', fontWeight: '600' },
   emptyBox: { alignItems: 'center', paddingVertical: 24 },
   emptyText: { fontSize: font.sm, color: colors.textMuted },
+  actionCard: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    backgroundColor: colors.card, borderRadius: radius.md,
+    padding: spacing.md, marginBottom: spacing.md, ...shadow.sm,
+  },
+  actionIcon: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: isDark ? 'transparent' : colors.primaryLight,
+    borderWidth: isDark ? 1.5 : 0,
+    borderColor: isDark ? '#FFFFFF' : 'transparent',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  actionTitle: { fontSize: font.md, fontWeight: '600', color: colors.text },
+  actionSub: { fontSize: font.xs, color: colors.textMuted, marginTop: 2 },
 });

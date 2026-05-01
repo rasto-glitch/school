@@ -91,7 +91,9 @@ export function createRouter(io: SocketServer) {
   router.post('/admin/notifications', authenticate, authorize('admin'), (req, res) => admin.sendNotification(req as AuthRequest, res));
   router.get('/admin/notifications/unread-count', authenticate, authorize('admin'), (req, res) => parent.getUnreadCount(req as AuthRequest, res));
   router.patch('/admin/notifications/read-all', authenticate, authorize('admin'), (req, res) => parent.markAllNotificationsRead(req as AuthRequest, res));
-  router.post('/admin/schedule', authenticate, authorize('admin'), upload.single('file'), (req, res) => admin.uploadSchedule(req as AuthRequest, res));
+  router.get('/admin/schedule', authenticate, authorize('admin'), (req, res) => admin.getAdminSchedule(req as AuthRequest, res));
+  router.put('/admin/schedule/config', authenticate, authorize('admin'), (req, res) => admin.updateScheduleConfig(req as AuthRequest, res));
+  router.put('/admin/schedule/cell', authenticate, authorize('admin'), (req, res) => admin.setScheduleCell(req as AuthRequest, res));
 
   router.get('/admin/announcements', authenticate, authorize('admin', 'teacher', 'parent', 'supervisor'), (req, res) => admin.getAnnouncements(req as AuthRequest, res));
   router.get('/link-preview', authenticate, (req, res) => admin.getLinkPreview(req as AuthRequest, res));
@@ -148,7 +150,7 @@ export function createRouter(io: SocketServer) {
   router.get('/teacher/subjects', authenticate, authorize('admin', 'teacher'), (req, res) => admin.getSubjects(req as AuthRequest, res));
   router.get('/teacher/attendance', authenticate, authorize('teacher'), (req, res) => teacher.getAttendance(req as AuthRequest, res));
   router.post('/teacher/attendance', authenticate, authorize('teacher'), (req, res) => teacher.markAttendance(req as AuthRequest, res));
-  router.get('/teacher/schedule', authenticate, authorize('teacher'), (req, res) => admin.getSchedule(req as AuthRequest, res));
+  router.get('/teacher/schedule', authenticate, authorize('teacher'), (req, res) => admin.getTeacherSchedule(req as AuthRequest, res));
 
   // ---- PARENT ----
   router.get('/parent/children', authenticate, authorize('parent'), (req, res) => parent.getChildren(req as AuthRequest, res));
@@ -156,6 +158,7 @@ export function createRouter(io: SocketServer) {
   router.get('/parent/homework/:id', authenticate, authorize('parent'), (req, res) => parent.getHomeworkById(req as AuthRequest, res));
   router.get('/parent/assignments', authenticate, authorize('parent'), (req, res) => parent.getAssignments(req as AuthRequest, res));
   router.get('/parent/assignments/:id', authenticate, authorize('parent'), (req, res) => parent.getAssignmentById(req as AuthRequest, res));
+  router.get('/parent/schedule', authenticate, authorize('parent'), (req, res) => admin.getParentSchedule(req as AuthRequest, res));
   router.get('/parent/announcements', authenticate, authorize('parent'), (req, res) => parent.getAnnouncements(req as AuthRequest, res));
   router.get('/parent/announcements/:id', authenticate, authorize('parent'), (req, res) => parent.getAnnouncementById(req as AuthRequest, res));
   router.get('/parent/reports', authenticate, authorize('parent'), (req, res) => parent.getReport(req as AuthRequest, res));
