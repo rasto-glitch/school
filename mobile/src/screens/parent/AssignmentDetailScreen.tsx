@@ -1,7 +1,9 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Linking, Image } from 'react-native';
 import { useRoute } from '@react-navigation/native';
 import { ClipboardList, Calendar, Paperclip, FileText, Download } from 'lucide-react-native';
+import ImageViewerModal from '../../components/ImageViewerModal';
+import { downloadAttachment } from '../../utils/download';
 
 function getAttachmentType(url: string): 'image' | 'pdf' | 'other' {
   const ext = url.split('?')[0].split('.').pop()?.toLowerCase() ?? '';
@@ -37,10 +39,18 @@ export default function AssignmentDetailScreen() {
   const assignment: Assignment = route.params?.assignment;
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   if (!assignment) return null;
 
   const statusStyle = STATUS_COLORS[assignment.submissionStatus ?? ''] ?? { bg: colors.border, text: colors.textSecondary };
+
+  const handleDownload = async () => {
+    if (!assignment.attachmentUrl || downloading) return;
+    setDownloading(true);
+    try { await downloadAttachment(assignment.attachmentUrl); } finally { setDownloading(false); }
+  };
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -106,10 +116,16 @@ export default function AssignmentDetailScreen() {
             <Text style={styles.sectionLabel}>Attachment</Text>
             {type === 'image' ? (
               <>
-                <Image source={{ uri: assignment.attachmentUrl }} style={styles.attachImage} resizeMode="contain" />
-                <TouchableOpacity style={[styles.attachBtn, { marginTop: spacing.sm }]} onPress={() => Linking.openURL(assignment.attachmentUrl!)}>
+                <TouchableOpacity activeOpacity={0.9} onPress={() => setViewerOpen(true)}>
+                  <Image source={{ uri: assignment.attachmentUrl }} style={styles.attachImage} resizeMode="contain" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.attachBtn, { marginTop: spacing.sm }]}
+                  onPress={handleDownload}
+                  disabled={downloading}
+                >
                   <Download size={15} color={colors.primary} />
-                  <Text style={styles.attachText}>Download</Text>
+                  <Text style={styles.attachText}>{downloading ? 'Downloading…' : 'Download'}</Text>
                 </TouchableOpacity>
               </>
             ) : type === 'pdf' ? (
@@ -125,9 +141,9 @@ export default function AssignmentDetailScreen() {
                 </TouchableOpacity>
               </View>
             ) : (
-              <TouchableOpacity style={styles.attachBtn} onPress={() => Linking.openURL(assignment.attachmentUrl!)}>
+              <TouchableOpacity style={styles.attachBtn} onPress={handleDownload} disabled={downloading}>
                 <Paperclip size={16} color={colors.primary} />
-                <Text style={styles.attachText}>Download Attachment</Text>
+                <Text style={styles.attachText}>{downloading ? 'Downloading…' : 'Download Attachment'}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -141,6 +157,14 @@ export default function AssignmentDetailScreen() {
       <Text style={styles.posted}>
         Posted {new Date(assignment.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
       </Text>
+
+      <ImageViewerModal
+        visible={viewerOpen}
+        uri={assignment.attachmentUrl ?? null}
+        onClose={() => setViewerOpen(false)}
+        onDownload={handleDownload}
+        downloading={downloading}
+      />
     </ScrollView>
   );
 }

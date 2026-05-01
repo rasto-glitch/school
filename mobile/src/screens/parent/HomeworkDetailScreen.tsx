@@ -1,10 +1,12 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Linking, Image } from 'react-native';
 import { useRoute } from '@react-navigation/native';
 import { BookOpen, Calendar, Paperclip, FileText, Download } from 'lucide-react-native';
 import { useColors } from '../../store/themeStore';
 import { spacing, radius, shadow, font } from '../../theme';
 import type { Homework } from '../../types';
+import ImageViewerModal from '../../components/ImageViewerModal';
+import { downloadAttachment } from '../../utils/download';
 
 function getAttachmentType(url: string): 'image' | 'pdf' | 'other' {
   const ext = url.split('?')[0].split('.').pop()?.toLowerCase() ?? '';
@@ -18,10 +20,18 @@ export default function HomeworkDetailScreen() {
   const homework: Homework = route.params?.homework;
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   if (!homework) return null;
 
   const overdue = homework.dueDate ? new Date(homework.dueDate) < new Date() : false;
+
+  const handleDownload = async () => {
+    if (!homework.attachmentUrl || downloading) return;
+    setDownloading(true);
+    try { await downloadAttachment(homework.attachmentUrl); } finally { setDownloading(false); }
+  };
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -79,14 +89,20 @@ export default function HomeworkDetailScreen() {
             <Text style={styles.sectionLabel}>Attachment</Text>
             {type === 'image' ? (
               <>
-                <Image
-                  source={{ uri: homework.attachmentUrl }}
-                  style={styles.attachImage}
-                  resizeMode="contain"
-                />
-                <TouchableOpacity style={[styles.attachBtn, { marginTop: spacing.sm }]} onPress={() => Linking.openURL(homework.attachmentUrl!)}>
+                <TouchableOpacity activeOpacity={0.9} onPress={() => setViewerOpen(true)}>
+                  <Image
+                    source={{ uri: homework.attachmentUrl }}
+                    style={styles.attachImage}
+                    resizeMode="contain"
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.attachBtn, { marginTop: spacing.sm }]}
+                  onPress={handleDownload}
+                  disabled={downloading}
+                >
                   <Download size={15} color={colors.primary} />
-                  <Text style={styles.attachText}>Download</Text>
+                  <Text style={styles.attachText}>{downloading ? 'Downloading…' : 'Download'}</Text>
                 </TouchableOpacity>
               </>
             ) : type === 'pdf' ? (
@@ -102,9 +118,9 @@ export default function HomeworkDetailScreen() {
                 </TouchableOpacity>
               </View>
             ) : (
-              <TouchableOpacity style={styles.attachBtn} onPress={() => Linking.openURL(homework.attachmentUrl!)}>
+              <TouchableOpacity style={styles.attachBtn} onPress={handleDownload} disabled={downloading}>
                 <Paperclip size={16} color={colors.primary} />
-                <Text style={styles.attachText}>Download Attachment</Text>
+                <Text style={styles.attachText}>{downloading ? 'Downloading…' : 'Download Attachment'}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -114,6 +130,14 @@ export default function HomeworkDetailScreen() {
       <Text style={styles.posted}>
         Posted {new Date(homework.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
       </Text>
+
+      <ImageViewerModal
+        visible={viewerOpen}
+        uri={homework.attachmentUrl ?? null}
+        onClose={() => setViewerOpen(false)}
+        onDownload={handleDownload}
+        downloading={downloading}
+      />
     </ScrollView>
   );
 }
