@@ -118,6 +118,11 @@ export default function Navigation() {
               options={{ headerShown: true, headerTitle: 'Post', headerBackTitle: 'Back' }}
             />
             <Stack.Screen
+              name="AnnouncementDetail"
+              component={AnnouncementDetailScreen}
+              options={{ headerShown: true, headerTitle: 'Announcement', headerBackTitle: 'Back' }}
+            />
+            <Stack.Screen
               name="Chat"
               component={ChatScreen}
               options={{ headerShown: true, headerBackTitle: 'Back' }}

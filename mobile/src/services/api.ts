@@ -187,6 +187,8 @@ export const teacherApi = {
   markNotificationRead: (id: string) => api.patch(`/teacher/notifications/${id}/read`),
   getUnreadCount: () => api.get('/teacher/notifications/unread-count'),
   markAllRead: () => api.patch('/teacher/notifications/read-all'),
+  getAnnouncements: () => api.get('/teacher/announcements'),
+  getSchedule: () => api.get('/teacher/schedule'),
 };
 
 // ---- CHAT ----

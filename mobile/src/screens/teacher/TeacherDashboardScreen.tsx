@@ -1,16 +1,22 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl, Image, Linking } from 'react-native';
 import { DashboardSkeleton } from '../../components/Skeleton';
 import { useNavigation } from '@react-navigation/native';
-import { Home, CalendarCheck, BookOpen, ClipboardList, Star, FileText, Clock, Users, ChevronRight } from 'lucide-react-native';
-import { teacherApi } from '../../services/api';
+import { CalendarCheck, BookOpen, ClipboardList, Star, FileText, Clock, ChevronRight, LayoutGrid, ExternalLink } from 'lucide-react-native';
+import { teacherApi, announcementApi } from '../../services/api';
 import { useColors, useIsDark } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
+import AnnouncementCard from '../../components/AnnouncementCard';
 import { spacing, radius, font, shadow } from '../../theme';
+import type { Announcement } from '../../types';
 
 interface ClassItem { id: string; name: string }
 interface HomeworkItem { id: string; title: string; subject?: string; dueDate?: string; classes?: { name: string } }
 interface PeriodItem { id: string; weekStartDate: string; weekEndDate: string }
+
+function isImageUrl(url: string): boolean {
+  return /\.(jpg|jpeg|png|webp|gif)(\?.*)?$/i.test(url);
+}
 
 export default function TeacherDashboardScreen() {
   const colors = useColors();
@@ -23,21 +29,42 @@ export default function TeacherDashboardScreen() {
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [recentHw, setRecentHw] = useState<HomeworkItem[]>([]);
   const [period, setPeriod] = useState<PeriodItem | null>(null);
+  const [scheduleUrl, setScheduleUrl] = useState<string | null>(null);
+  const [scheduleAspect, setScheduleAspect] = useState<number>(16 / 9);
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const today = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
 
   const load = useCallback(async () => {
-    const [cls, hw, pd] = await Promise.allSettled([
+    const [cls, hw, pd, sched, ann] = await Promise.allSettled([
       teacherApi.getClasses(),
       teacherApi.getHomework(),
       teacherApi.getActivePeriod(),
+      teacherApi.getSchedule(),
+      teacherApi.getAnnouncements(),
     ]);
     if (cls.status === 'fulfilled') setClasses(cls.value.data || []);
     if (hw.status === 'fulfilled') setRecentHw((hw.value.data || []).slice(0, 3));
     if (pd.status === 'fulfilled') setPeriod(pd.value.data || null);
+    if (sched.status === 'fulfilled') setScheduleUrl(sched.value.data?.scheduleUrl ?? null);
+    if (ann.status === 'fulfilled') setAnnouncements(ann.value.data || []);
   }, []);
+
+  useEffect(() => {
+    if (!scheduleUrl || !isImageUrl(scheduleUrl)) return;
+    Image.getSize(scheduleUrl, (w, h) => { if (w && h) setScheduleAspect(w / h); }, () => {});
+  }, [scheduleUrl]);
+
+  const handleToggleAnnouncementLike = async (id: string) => {
+    setAnnouncements(prev => prev.map(a => a.id === id ? {
+      ...a,
+      liked_by_me: !a.liked_by_me,
+      likes_count: (a.likes_count ?? 0) + (a.liked_by_me ? -1 : 1),
+    } : a));
+    try { await announcementApi.toggleLike(id); } catch {}
+  };
 
   useEffect(() => { load().finally(() => setLoading(false)); }, [load]);
   const onRefresh = () => { setRefreshing(true); load().finally(() => setRefreshing(false)); };
@@ -49,7 +76,6 @@ export default function TeacherDashboardScreen() {
     feat('grades') && { label: 'Grades', icon: Star, tab: 'TeacherContent', params: { initialTab: 'grades' }, color: '#F59E0B', bg: '#FEF3C7' },
     feat('reports') && { label: 'Reports', icon: FileText, tab: 'TeacherContent', params: { initialTab: 'reports' }, color: '#EF4444', bg: '#FEE2E2' },
     feat('weekly_summary') && { label: 'Weekly Summary', icon: Clock, tab: 'TeacherContent', params: { initialTab: 'weekly' }, color: '#06B6D4', bg: '#ECFEFF' },
-    { label: 'Students', icon: Users, tab: 'TeacherStudents', color: '#6B7280', bg: '#F3F4F6' },
   ].filter(Boolean) as { label: string; icon: any; tab: string; params?: object; color: string; bg: string }[];
 
   return (
@@ -105,6 +131,37 @@ export default function TeacherDashboardScreen() {
         ))}
       </View>
 
+      {/* Schedule (replaces the Students quick-action) */}
+      {scheduleUrl && (
+        <>
+          <Text style={[styles.sectionLabel, { marginTop: spacing.md }]}>My Schedule</Text>
+          {isImageUrl(scheduleUrl) ? (
+            <View style={styles.scheduleImageWrap}>
+              <Image
+                source={{ uri: scheduleUrl }}
+                style={[styles.scheduleImage, { aspectRatio: scheduleAspect }]}
+                resizeMode="contain"
+              />
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={styles.schedulePdfCard}
+              onPress={() => Linking.openURL(scheduleUrl)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.schedulePdfIcon}>
+                <LayoutGrid size={20} color={colors.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.schedulePdfTitle}>Class Schedule</Text>
+                <Text style={styles.schedulePdfSub}>PDF document</Text>
+              </View>
+              <ExternalLink size={16} color={colors.primary} />
+            </TouchableOpacity>
+          )}
+        </>
+      )}
+
       {/* Recent homework */}
       {loading ? (
         <DashboardSkeleton />
@@ -132,6 +189,22 @@ export default function TeacherDashboardScreen() {
           ))}
         </>
       ) : null}
+
+      {/* Announcements */}
+      {announcements.length > 0 && (
+        <>
+          <Text style={[styles.sectionLabel, { marginTop: spacing.md }]}>Announcements</Text>
+          {announcements.map(ann => (
+            <AnnouncementCard
+              key={ann.id}
+              announcement={ann}
+              onPress={() => navigation.navigate('AnnouncementDetail', { announcement: ann })}
+              onPressComment={() => navigation.navigate('AnnouncementDetail', { announcement: ann, focusComment: true })}
+              onToggleLike={() => handleToggleAnnouncementLike(ann.id)}
+            />
+          ))}
+        </>
+      )}
     </ScrollView>
   );
 }
@@ -159,4 +232,10 @@ const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').u
   hwIconBox: { width: 32, height: 32, borderRadius: radius.sm, backgroundColor: '#EFF6FF', alignItems: 'center', justifyContent: 'center' },
   hwTitle: { fontSize: font.sm, fontWeight: '600', color: colors.text },
   hwMeta: { fontSize: font.xs, color: colors.textMuted, marginTop: 2 },
+  scheduleImageWrap: { backgroundColor: colors.card, borderRadius: radius.md, overflow: 'hidden', marginBottom: spacing.xs, ...shadow.sm },
+  scheduleImage: { width: '100%' },
+  schedulePdfCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.xs, ...shadow.sm },
+  schedulePdfIcon: { width: 36, height: 36, borderRadius: radius.sm, backgroundColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center' },
+  schedulePdfTitle: { fontSize: font.sm, fontWeight: '600', color: colors.text },
+  schedulePdfSub: { fontSize: font.xs, color: colors.textMuted, marginTop: 2 },
 });
