@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { CheckCircle2, Globe2, Coins, Handshake, AlertCircle } from 'lucide-react';
+import { CheckCircle2, Sparkles, Compass, Handshake, AlertCircle } from 'lucide-react';
 import { Reveal } from '../components/Section';
 import { postPublic } from '../lib/api';
 
@@ -36,9 +36,9 @@ export default function PartnerPage() {
   const label = 'block text-sm font-semibold text-slate-800 mb-1.5';
 
   const reasons = [
-    { key: 'whitelabel', icon: Globe2 },
-    { key: 'revenue',    icon: Coins },
-    { key: 'support',    icon: Handshake },
+    { key: 'pilot',   icon: Sparkles },
+    { key: 'roadmap', icon: Compass },
+    { key: 'support', icon: Handshake },
   ];
 
   if (status === 'success') {
@@ -110,7 +110,7 @@ export default function PartnerPage() {
 
             <div className="grid sm:grid-cols-2 gap-5">
               <div>
-                <label className={label}>{t('partner.form.companyName')}</label>
+                <label className={label}>{t('partner.form.schoolName')}</label>
                 <input name="companyName" required className={input} />
               </div>
               <div>

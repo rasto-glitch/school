@@ -126,30 +126,30 @@
     }
   },
   "partner": {
-    "title": "Become a partner",
-    "subtitle": "Resellers, integrators, and regional partners — let's build together.",
+    "title": "Become a partner school",
+    "subtitle": "Bring Scholify into your school as a founding partner — we'll handle setup, you'll help shape what we build next.",
     "whyTitle": "Why partner with Scholify?",
     "why": {
-      "whitelabel": {
-        "title": "Localized rollout",
-        "desc": "Help schools in your region adopt a platform built with Arabic, Kurdish, and English from day one."
+      "pilot": {
+        "title": "30-day pilot",
+        "desc": "Try Scholify with one class or grade for a full month — no setup fees, no commitment to continue."
       },
-      "revenue": {
-        "title": "Revenue share",
-        "desc": "Earn recurring revenue on every school you onboard and maintain."
+      "roadmap": {
+        "title": "Shape the roadmap",
+        "desc": "As an early-partner school, your day-to-day reality goes directly into our planning. The features you need ship next."
       },
       "support": {
         "title": "Training & support",
-        "desc": "We'll train your team, and you'll have a direct line to ours."
+        "desc": "We'll handle setup, train your staff, and stay on call as your team gets up to speed."
       }
     },
     "form": {
-      "companyName": "Company name",
+      "schoolName": "School name",
       "contactName": "Your name",
       "email": "Email",
       "phone": "Phone",
       "country": "Country / region",
-      "about": "Tell us about your company and what you'd like to do with Scholify",
+      "about": "Tell us about your school — size, current systems, and what you'd like Scholify to help with",
       "submit": "Submit application",
       "sending": "Sending…",
       "success": "Thanks! Our partnerships team will be in touch.",
