@@ -10,6 +10,7 @@ import * as academic from '../controllers/academic.controller';
 import * as chat from '../controllers/chat.controller';
 import * as reception from '../controllers/reception.controller';
 import * as pub from '../controllers/public.controller';
+import * as fees from '../controllers/fees.controller';
 import { authenticate, authorize } from '../middleware/auth';
 import type { AuthRequest } from '../middleware/auth';
 import { Server as SocketServer } from 'socket.io';
@@ -112,6 +113,7 @@ export function createRouter(io: SocketServer) {
 
   router.get('/admin/settings', authenticate, authorize('admin'), (req, res) => admin.getSettings(req as AuthRequest, res));
   router.put('/admin/settings', authenticate, authorize('admin'), (req, res) => admin.updateSettings(req as AuthRequest, res));
+  router.patch('/admin/school-logo', authenticate, authorize('admin'), upload.single('logo'), (req, res) => admin.uploadSchoolLogo(req as AuthRequest, res));
   router.post('/admin/year-transition', authenticate, authorize('admin'), (req, res) => admin.yearTransition(req as AuthRequest, res));
   router.get('/teacher/settings', authenticate, authorize('teacher'), (req, res) => admin.getSettings(req as AuthRequest, res));
 
@@ -176,6 +178,36 @@ export function createRouter(io: SocketServer) {
   router.post('/parent/appointments', authenticate, authorize('parent'), (req, res) => parent.createAppointment(req as AuthRequest, res));
   router.put('/parent/pickup-location', authenticate, authorize('parent'), (req, res) => parent.updatePickupLocation(req as AuthRequest, res));
   router.get('/parent/pickup-location', authenticate, authorize('parent'), (req, res) => parent.getPickupLocation(req as AuthRequest, res));
+
+  // ---- TUITION FEES (premium feature, gated server-side) ----
+  // Admin: full read/write. Reception: read-only list/families/student-detail. Parent: own family only.
+  router.get('/admin/fees/plans', authenticate, authorize('admin', 'reception'), (req, res) => fees.listPlans(req as AuthRequest, res));
+  router.post('/admin/fees/plans', authenticate, authorize('admin'), (req, res) => fees.createPlan(req as AuthRequest, res));
+  router.put('/admin/fees/plans/:id', authenticate, authorize('admin'), (req, res) => fees.updatePlan(req as AuthRequest, res));
+  router.delete('/admin/fees/plans/:id', authenticate, authorize('admin'), (req, res) => fees.deletePlan(req as AuthRequest, res));
+  router.post('/admin/fees/plans/:id/assign', authenticate, authorize('admin'), (req, res) => fees.assignPlan(req as AuthRequest, res));
+
+  router.get('/admin/fees/students', authenticate, authorize('admin', 'reception'), (req, res) => fees.listStudentFees(req as AuthRequest, res));
+  router.get('/admin/fees/families', authenticate, authorize('admin', 'reception'), (req, res) => fees.listFamilies(req as AuthRequest, res));
+  router.get('/admin/fees/student-fees/:id', authenticate, authorize('admin', 'reception'), (req, res) => fees.getStudentFee(req as AuthRequest, res));
+  router.patch('/admin/fees/student-fees/:id', authenticate, authorize('admin'), (req, res) => fees.updateStudentFee(req as AuthRequest, res));
+  router.post('/admin/fees/student-fees/:id/payments', authenticate, authorize('admin'), (req, res) => fees.recordPayment(req as AuthRequest, res));
+  router.delete('/admin/fees/payments/:id', authenticate, authorize('admin'), (req, res) => fees.deletePayment(req as AuthRequest, res));
+
+  router.get('/admin/fees/config', authenticate, authorize('admin', 'reception'), (req, res) => fees.getConfig(req as AuthRequest, res));
+  router.put('/admin/fees/config', authenticate, authorize('admin'), (req, res) => fees.updateConfig(req as AuthRequest, res));
+  router.post('/admin/fees/notify-due', authenticate, authorize('admin'), (req, res) => fees.notifyDue(req as AuthRequest, res));
+
+  // Per-student feature locks. Admin-controlled, used independently of fees.
+  router.post('/admin/students/:studentId/locks', authenticate, authorize('admin'), (req, res) => fees.setLock(req as AuthRequest, res));
+  router.delete('/admin/students/:studentId/locks/:feature', authenticate, authorize('admin'), (req, res) => fees.removeLock(req as AuthRequest, res));
+
+  // Receipt PDFs — auth handled inside the controller (admin/reception/parent each verified differently).
+  router.get('/fees/payments/:id/receipt.pdf', authenticate, (req, res) => fees.paymentReceiptPdf(req as AuthRequest, res));
+  router.get('/fees/student-fees/:id/summary.pdf', authenticate, (req, res) => fees.studentFeeSummaryPdf(req as AuthRequest, res));
+
+  // Parent view
+  router.get('/parent/fees', authenticate, authorize('parent'), (req, res) => fees.getParentFees(req as AuthRequest, res));
 
   // ---- SUPERVISOR ----
   router.get('/supervisor/classes', authenticate, authorize('supervisor'), (req, res) => supervisor.getClasses(req as AuthRequest, res));

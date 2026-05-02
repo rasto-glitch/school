@@ -238,3 +238,84 @@ export interface WeeklySummary {
   homeworkReminder?: string;
   weekStartDate?: string;
 }
+
+// ── Tuition fees ──────────────────────────────────────────────────────────
+
+export type FeeStatus = 'paid_up' | 'current' | 'due_soon' | 'overdue';
+export type FeeAppliesTo = 'all' | 'classes' | 'manual';
+
+export interface FeeInstallment {
+  id: string;
+  sequence: number;
+  amount: number;
+  dueDate: string;
+}
+
+export interface FeePlan {
+  id: string;
+  name: string;
+  totalAmount: number;
+  currency: string;
+  appliesTo: FeeAppliesTo;
+  academicYear: string | null;
+  isActive: boolean;
+  createdAt: string;
+  installments: FeeInstallment[];
+  classIds: string[];
+}
+
+export interface FeePayment {
+  id: string;
+  amount: number;
+  paidOn: string;
+  method: string | null;
+  reference: string | null;
+  notes: string | null;
+  recordedBy?: string | null;
+  createdAt?: string;
+}
+
+export interface StudentFeeRow {
+  id: string;
+  schoolId: string;
+  studentId: string;
+  studentName: string;
+  className: string | null;
+  parentId: string | null;
+  parentName: string | null;
+  parentUserId: string | null;
+  planId: string;
+  planName: string;
+  academicYear: string | null;
+  currency: string;
+  totalAmount: number;
+  adjustment: number;
+  siblingDiscount: number;
+  paid: number;
+  balance: number;
+  status: FeeStatus;
+  installments: FeeInstallment[];
+  lockedFeatures: string[];
+}
+
+export interface FamilyFeeGroup {
+  parentId: string;
+  parentName: string;
+  parentUserId: string | null;
+  students: StudentFeeRow[];
+  totalDue: number;
+  totalPaid: number;
+  totalBalance: number;
+  currency: string;
+}
+
+export interface SiblingDiscountTier { minSiblings: number; value: number }
+export interface SiblingDiscountConfig {
+  enabled: boolean;
+  type: 'percent' | 'fixed';
+  tiers: SiblingDiscountTier[];
+}
+export interface TuitionConfig {
+  currency: string;
+  siblingDiscount: SiblingDiscountConfig;
+}

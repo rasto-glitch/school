@@ -1,7 +1,7 @@
 import { useState, FormEvent } from 'react';
 import {
   updateSchool, resetAdminPassword, School, DEFAULT_FEATURES, SchoolFeatures,
-  exportSchoolArchivePdf, exportSchoolArchiveXlsx,
+  PREMIUM_ONLY_FEATURES, exportSchoolArchivePdf, exportSchoolArchiveXlsx,
 } from '../api';
 import { PLANS, PLAN_IDS, PlanId, getPlan, formatMonthlyCost } from '../plans';
 
@@ -213,17 +213,25 @@ export default function EditSchoolModal({ school, onClose, onUpdated }: Props) {
           <div>
             <p className="text-xs font-medium text-slate-700 mb-2">Features</p>
             <div className="grid grid-cols-2 gap-2">
-              {(Object.keys(features) as (keyof SchoolFeatures)[]).map(key => (
-                <label key={key} className="flex items-center gap-2 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={features[key]}
-                    onChange={() => toggleFeature(key)}
-                    className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                  />
-                  <span className="text-sm text-slate-700 capitalize">{key.replace('_', ' ')}</span>
-                </label>
-              ))}
+              {(Object.keys(features) as (keyof SchoolFeatures)[]).map(key => {
+                const isPremium = (PREMIUM_ONLY_FEATURES as readonly string[]).includes(key);
+                return (
+                  <label key={key} className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={features[key]}
+                      onChange={() => toggleFeature(key)}
+                      className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <span className="text-sm text-slate-700 capitalize">{key.replace(/_/g, ' ')}</span>
+                    {isPremium && (
+                      <span className="text-[10px] font-bold uppercase tracking-wide text-amber-700 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded">
+                        Premium
+                      </span>
+                    )}
+                  </label>
+                );
+              })}
             </div>
           </div>
 

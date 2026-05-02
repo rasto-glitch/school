@@ -1845,6 +1845,28 @@ export async function updateSettings(req: AuthRequest, res: Response): Promise<v
   res.json(toCC(data));
 }
 
+// ---- SCHOOL LOGO (admin upload). Used in sidebar + tuition receipts. ----
+export async function uploadSchoolLogo(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const file = (req as any).file;
+  if (!file) { res.status(400).json({ error: 'No file uploaded' }); return; }
+
+  const ext = file.originalname.includes('.') ? '.' + file.originalname.split('.').pop() : '.png';
+  const storagePath = `school-logos/${schoolId}${ext}`;
+  const bucket = process.env.SUPABASE_STORAGE_BUCKET || 'homework-attachments';
+
+  const { data: uploadData, error: uploadErr } = await supabase.storage
+    .from(bucket)
+    .upload(storagePath, file.buffer, { contentType: file.mimetype, upsert: true });
+  if (uploadErr || !uploadData) { res.status(500).json({ error: 'Upload failed' }); return; }
+
+  const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(uploadData.path);
+  const logoUrl = `${urlData.publicUrl}?v=${Date.now()}`; // bust cache when re-uploaded
+
+  await supabase.from('schools').update({ logo_url: logoUrl }).eq('id', schoolId);
+  res.json({ logoUrl });
+}
+
 // ---- ALL ACCOUNTS ----
 export async function getAccounts(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;

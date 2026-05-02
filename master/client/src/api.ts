@@ -32,7 +32,12 @@ export interface SchoolFeatures {
   weekly_summary: boolean;
   chat: boolean;
   archive: boolean;
+  tuition_fees: boolean;
 }
+
+// Premium-only feature keys. Excluded from non-premium plan defaults
+// and visually flagged in the master portal.
+export const PREMIUM_ONLY_FEATURES = ['tuition_fees'] as const;
 
 export const DEFAULT_FEATURES: SchoolFeatures = {
   academic_portal: true,
@@ -47,6 +52,7 @@ export const DEFAULT_FEATURES: SchoolFeatures = {
   weekly_summary: true,
   chat: true,
   archive: true,
+  tuition_fees: false,
 };
 
 export interface School {

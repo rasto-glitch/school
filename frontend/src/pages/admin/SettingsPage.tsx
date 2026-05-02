@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'react-toastify';
-import { CalendarDays, Settings, Tag, Trash2, Plus, Layers } from 'lucide-react';
+import { CalendarDays, Settings, Tag, Trash2, Plus, Layers, Image as ImageIcon } from 'lucide-react';
 import { adminApi } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import PageLayout from '../../components/layout/PageLayout';
@@ -27,7 +27,7 @@ function appliesBadgeColor(v: string) {
 }
 
 export default function SettingsPage() {
-  const { school } = useAuthStore();
+  const { school, setAuth, token, user, rememberMe } = useAuthStore() as any;
   const feat = (key: string) => school?.features?.[key] !== false;
 
   const [academicYear, setAcademicYear] = useState('');
@@ -35,6 +35,29 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showWizard, setShowWizard] = useState(false);
+
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  const [logoUploading, setLogoUploading] = useState(false);
+
+  const onPickLogo = () => logoInputRef.current?.click();
+  const onLogoChosen = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setLogoUploading(true);
+    try {
+      const r = await adminApi.uploadSchoolLogo(file);
+      const newLogoUrl = r.data?.logoUrl;
+      if (newLogoUrl && school && token && user) {
+        setAuth(token, user, { ...school, logoUrl: newLogoUrl }, rememberMe);
+      }
+      toast.success('Logo updated');
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Upload failed');
+    } finally {
+      setLogoUploading(false);
+      if (logoInputRef.current) logoInputRef.current.value = '';
+    }
+  };
 
   // mark types state
   const [markTypes, setMarkTypes] = useState<MarkType[]>([]);
@@ -137,6 +160,36 @@ export default function SettingsPage() {
   return (
     <PageLayout title="Settings" subtitle="School-wide configuration">
       <div className="max-w-lg space-y-6">
+
+        {/* School logo */}
+        <Card>
+          <div className="flex items-center gap-2 mb-1">
+            <ImageIcon className="w-5 h-5 text-rose-600" />
+            <h2 className="font-semibold text-gray-900">School Logo</h2>
+          </div>
+          <p className="text-sm text-gray-500 mb-4">
+            Shown in the sidebar and on tuition receipts. Square images work best (PNG or JPG, up to 10 MB).
+          </p>
+          <div className="flex items-center gap-4">
+            {school?.logoUrl ? (
+              <img src={school.logoUrl} alt="School logo" className="w-16 h-16 rounded-xl object-cover border border-gray-200" />
+            ) : (
+              <div className="w-16 h-16 rounded-xl bg-gray-100 border border-gray-200 flex items-center justify-center">
+                <ImageIcon className="w-6 h-6 text-gray-400" />
+              </div>
+            )}
+            <input
+              ref={logoInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={onLogoChosen}
+            />
+            <Button onClick={onPickLogo} loading={logoUploading} variant="outline">
+              {school?.logoUrl ? 'Change logo' : 'Upload logo'}
+            </Button>
+          </div>
+        </Card>
 
         {/* Current academic year */}
         <Card>

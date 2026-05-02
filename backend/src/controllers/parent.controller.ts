@@ -4,6 +4,7 @@ import type { AuthRequest } from '../middleware/auth';
 import { toCC } from '../utils/transform';
 import { emitToAdmins } from '../utils/notify';
 import { decorateAnnouncements } from './admin.controller';
+import { getLocksForStudents, isFeatureLocked } from '../utils/locks';
 
 async function getParentAndChildren(userId: string, schoolId: string) {
   const { data: parent } = await supabase.from('parents').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
@@ -19,7 +20,15 @@ export async function getChildren(req: AuthRequest, res: Response): Promise<void
 
   const { data, error } = await supabase.from('students').select('id, full_name, profile_picture, class_id, classes(name), drivers(full_name, phone_number, license_number, buses(bus_number))').eq('parent_id', parent.id).eq('school_id', schoolId);
   if (error) { res.status(500).json({ error: error.message }); return; }
-  res.json(toCC(data));
+
+  // Attach per-child locked feature list so the UI can render a "Contact school" state
+  const ids = (data ?? []).map(s => (s as any).id);
+  const locks = await getLocksForStudents(ids);
+  const decorated = (data ?? []).map(s => ({
+    ...(s as any),
+    locked_features: Array.from(locks.get((s as any).id) ?? []),
+  }));
+  res.json(toCC(decorated));
 }
 
 export async function getHomework(req: AuthRequest, res: Response): Promise<void> {
@@ -139,8 +148,13 @@ export async function getAnnouncementById(req: AuthRequest, res: Response): Prom
 export async function getReportById(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
   const { id } = req.params;
-  const { data, error } = await supabase.from('reports').select('*, students(full_name), teachers(full_name)').eq('id', id).eq('school_id', schoolId).single();
+  const { data, error } = await supabase.from('reports').select('*, students(id, full_name), teachers(full_name)').eq('id', id).eq('school_id', schoolId).single();
   if (error || !data) { res.status(404).json({ error: 'Not found' }); return; }
+  const studentId = (data as any).students?.id ?? (data as any).student_id;
+  if (studentId) {
+    const lock = await isFeatureLocked(studentId, 'reports');
+    if (lock.locked) { res.status(403).json({ error: 'feature_locked', feature: 'reports', reason: lock.reason }); return; }
+  }
   res.json(toCC(data));
 }
 
@@ -152,7 +166,21 @@ export async function getReport(req: AuthRequest, res: Response): Promise<void> 
   if (studentIds.length === 0) { res.json([]); return; }
 
   const targetIds = studentId ? [studentId] : studentIds;
-  let query = supabase.from('reports').select('*, students(full_name), teachers(full_name)').eq('school_id', schoolId).in('student_id', targetIds).order('created_at', { ascending: false });
+
+  // If a specific student is targeted and reports are locked for them, surface
+  // a 403 the frontend can render as a "Contact school" state.
+  if (studentId) {
+    const lock = await isFeatureLocked(studentId, 'reports');
+    if (lock.locked) { res.status(403).json({ error: 'feature_locked', feature: 'reports', reason: lock.reason }); return; }
+  }
+
+  // Otherwise (list across all kids), silently exclude any student whose
+  // reports are locked — a single locked child shouldn't blank the whole list.
+  const locks = await getLocksForStudents(targetIds);
+  const allowed = targetIds.filter(id => !(locks.get(id)?.has('reports') ?? false));
+  if (allowed.length === 0) { res.json([]); return; }
+
+  let query = supabase.from('reports').select('*, students(full_name), teachers(full_name)').eq('school_id', schoolId).in('student_id', allowed).order('created_at', { ascending: false });
   if (subject) query = query.eq('subject', subject);
 
   const { data, error } = await query;
@@ -168,6 +196,9 @@ export async function getGrades(req: AuthRequest, res: Response): Promise<void> 
   if (studentIds.length === 0) { res.json([]); return; }
 
   const targetId = studentId && (studentIds as string[]).includes(studentId) ? studentId : studentIds[0];
+
+  const lock = await isFeatureLocked(targetId, 'grades');
+  if (lock.locked) { res.status(403).json({ error: 'feature_locked', feature: 'grades', reason: lock.reason }); return; }
 
   const { data, error } = await supabase
     .from('grades')

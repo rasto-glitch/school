@@ -205,6 +205,50 @@ export const adminApi = {
   getTerms: () => api.get('/admin/terms'),
   createTerm: (data: { name: string }) => api.post('/admin/terms', data),
   deleteTerm: (id: string) => api.delete(`/admin/terms/${id}`),
+  uploadSchoolLogo: (file: File) => {
+    const fd = new FormData();
+    fd.append('logo', file);
+    return api.patch('/admin/school-logo', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
+};
+
+// ---- TUITION FEES (premium) ----
+export const feesApi = {
+  // Plans
+  listPlans: () => api.get('/admin/fees/plans'),
+  createPlan: (data: object) => api.post('/admin/fees/plans', data),
+  updatePlan: (id: string, data: object) => api.put(`/admin/fees/plans/${id}`, data),
+  deletePlan: (id: string) => api.delete(`/admin/fees/plans/${id}`),
+  assignPlan: (id: string, data?: { studentIds?: string[] }) => api.post(`/admin/fees/plans/${id}/assign`, data ?? {}),
+  // Students / families
+  listStudentFees: () => api.get('/admin/fees/students'),
+  listFamilies: () => api.get('/admin/fees/families'),
+  getStudentFee: (id: string) => api.get(`/admin/fees/student-fees/${id}`),
+  updateStudentFee: (id: string, data: { adjustment?: number; notes?: string | null; totalAmount?: number }) =>
+    api.patch(`/admin/fees/student-fees/${id}`, data),
+  recordPayment: (studentFeeId: string, data: { amount: number; paidOn: string; method?: string; reference?: string; notes?: string }) =>
+    api.post(`/admin/fees/student-fees/${studentFeeId}/payments`, data),
+  deletePayment: (paymentId: string) => api.delete(`/admin/fees/payments/${paymentId}`),
+  // Config
+  getConfig: () => api.get('/admin/fees/config'),
+  updateConfig: (data: object) => api.put('/admin/fees/config', data),
+  // Broadcast
+  notifyDue: (data: { title?: string; message?: string; statusFilter?: string[] }) =>
+    api.post('/admin/fees/notify-due', data),
+  // Locks
+  setLock: (studentId: string, data: { feature: string; reason?: string }) =>
+    api.post(`/admin/students/${studentId}/locks`, data),
+  removeLock: (studentId: string, feature: string) =>
+    api.delete(`/admin/students/${studentId}/locks/${feature}`),
+  // Receipts (open in new tab; auth via interceptor on the API client)
+  paymentReceiptUrl: (paymentId: string) => `${api.defaults.baseURL}/fees/payments/${paymentId}/receipt.pdf`,
+  studentFeeSummaryUrl: (studentFeeId: string) => `${api.defaults.baseURL}/fees/student-fees/${studentFeeId}/summary.pdf`,
+  downloadPaymentReceipt: (paymentId: string) =>
+    api.get(`/fees/payments/${paymentId}/receipt.pdf`, { responseType: 'blob' }),
+  downloadStudentFeeSummary: (studentFeeId: string) =>
+    api.get(`/fees/student-fees/${studentFeeId}/summary.pdf`, { responseType: 'blob' }),
+  // Parent
+  getParentFees: () => api.get('/parent/fees'),
 };
 
 // ---- ANNOUNCEMENTS (shared social) ----

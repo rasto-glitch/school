@@ -22,6 +22,7 @@ const make = (overrides: Partial<SchoolFeatures>): SchoolFeatures => ({
   weekly_summary: false,
   chat: false,
   archive: false,
+  tuition_fees: false,
   ...overrides,
 });
 
@@ -63,6 +64,7 @@ export const PLANS: Record<PlanId, PlanDef> = {
       academic_portal: true,
       chat: true,
       archive: true,
+      tuition_fees: true,
     }),
   },
 };

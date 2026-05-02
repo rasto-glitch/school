@@ -9,7 +9,8 @@ import {
   Home, BookOpen, ClipboardList, Megaphone, BarChart2,
   MapPin, Bell, User, Users, GraduationCap, Bus,
   Calendar, Settings, UserCog, LogOut, ChevronLeft, ChevronRight,
-  FileText, Star, Clock, X, ClipboardCheck, MessageSquare, Archive
+  FileText, Star, Clock, X, ClipboardCheck, MessageSquare, Archive,
+  CreditCard,
 } from 'lucide-react';
 import type { Dispatch, SetStateAction } from 'react';
 import type { Role } from '../../types';
@@ -26,6 +27,7 @@ const navItems: Record<Role, NavItem[]> = {
     { to: '/parent/reports', icon: BarChart2, label: 'Reports', feature: 'reports' },
     { to: '/parent/bus', icon: MapPin, label: 'Track Bus', feature: 'bus_tracking' },
     { to: '/parent/appointments', icon: Calendar, label: 'Appointments', feature: 'appointments' },
+    { to: '/parent/tuition', icon: CreditCard, label: 'Tuition', feature: 'tuition_fees' },
     { to: '/parent/schedule', icon: Clock, label: 'Schedule' },
     { to: '/chat', icon: MessageSquare, label: 'Chat' },
     { to: '/parent/notifications', icon: Bell, label: 'Notifications' },
@@ -54,6 +56,7 @@ const navItems: Record<Role, NavItem[]> = {
     { to: '/admin/schedule', icon: Calendar, label: 'Schedule' },
     { to: '/admin/drivers', icon: Bus, label: 'Drivers', feature: 'bus_tracking' },
     { to: '/admin/announcements', icon: Megaphone, label: 'Announcements', feature: 'announcements' },
+    { to: '/admin/tuition', icon: CreditCard, label: 'Tuition', feature: 'tuition_fees' },
     { to: '/admin/notifications', icon: Bell, label: 'Notifications' },
     { to: '/admin/accounts', icon: UserCog, label: 'Accounts' },
     { to: '/admin/settings', icon: Settings, label: 'Settings' },
@@ -62,6 +65,7 @@ const navItems: Record<Role, NavItem[]> = {
   reception: [
     { to: '/reception/dashboard', icon: Home, label: 'Dashboard' },
     { to: '/reception/appointments', icon: Calendar, label: 'Appointments', feature: 'appointments' },
+    { to: '/reception/tuition', icon: CreditCard, label: 'Tuition', feature: 'tuition_fees' },
     { to: '/reception/profile', icon: User, label: 'Profile' },
   ],
   driver: [
@@ -191,7 +195,15 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
 
   const isRTL = ['ar', 'ku'].includes(i18n.language);
   const showLangSwitcher = user?.role === 'parent' || user?.role === 'driver';
-  const isFeatureEnabled = (feature?: string) => !feature || school?.features?.[feature] !== false;
+  // Premium-only features default to OFF when the key is missing — so a school
+  // without a premium plan never sees the tab even if their features JSONB
+  // pre-dates the feature flag being added.
+  const PREMIUM_FEATURES = ['tuition_fees'];
+  const isFeatureEnabled = (feature?: string) => {
+    if (!feature) return true;
+    if (PREMIUM_FEATURES.includes(feature)) return school?.features?.[feature] === true;
+    return school?.features?.[feature] !== false;
+  };
   const items = user ? navItems[user.role].filter(item => isFeatureEnabled(item.feature)) : [];
 
   return (

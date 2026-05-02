@@ -54,7 +54,10 @@ import AdminTeachersListPage from './pages/admin/AdminTeachersListPage';
 import AdminDriversListPage from './pages/admin/AdminDriversListPage';
 import AdminWeeklySummaryPage from './pages/admin/AdminWeeklySummaryPage';
 import SettingsPage from './pages/admin/SettingsPage';
+import AdminTuitionPage from './pages/admin/AdminTuitionPage';
+import AdminTuitionStudentDetailPage from './pages/admin/AdminTuitionStudentDetailPage';
 import ParentAppointmentsPage from './pages/parent/AppointmentsPage';
+import ParentTuitionPage from './pages/parent/TuitionPage';
 import WriteAssignmentsPage from './pages/teacher/WriteAssignmentsPage';
 
 // Reception
@@ -152,6 +155,7 @@ export default function App() {
         <Route path="/parent/bus" element={<ProtectedRoute allowedRoles={['parent']}><BusTrackingPage /></ProtectedRoute>} />
         <Route path="/parent/notifications" element={<ProtectedRoute allowedRoles={['parent']}><NotificationsPage /></ProtectedRoute>} />
         <Route path="/parent/appointments" element={<ProtectedRoute allowedRoles={['parent']}><ParentAppointmentsPage /></ProtectedRoute>} />
+        <Route path="/parent/tuition" element={<ProtectedRoute allowedRoles={['parent']}><ParentTuitionPage /></ProtectedRoute>} />
         <Route path="/parent/grades" element={<ProtectedRoute allowedRoles={['parent']}><GradesPage /></ProtectedRoute>} />
         <Route path="/parent/schedule" element={<ProtectedRoute allowedRoles={['parent']}><ParentSchedulePage /></ProtectedRoute>} />
         <Route path="/parent/profile" element={<ProtectedRoute allowedRoles={['parent']}><ProfilePage /></ProtectedRoute>} />
@@ -187,6 +191,8 @@ export default function App() {
         <Route path="/admin/announcements" element={<ProtectedRoute allowedRoles={['admin']}><AnnouncementsPage /></ProtectedRoute>} />
         <Route path="/admin/accounts" element={<ProtectedRoute allowedRoles={['admin']}><AccountsPage /></ProtectedRoute>} />
         <Route path="/admin/settings" element={<ProtectedRoute allowedRoles={['admin']}><SettingsPage /></ProtectedRoute>} />
+        <Route path="/admin/tuition" element={<ProtectedRoute allowedRoles={['admin']}><AdminTuitionPage /></ProtectedRoute>} />
+        <Route path="/admin/tuition/student/:id" element={<ProtectedRoute allowedRoles={['admin']}><AdminTuitionStudentDetailPage /></ProtectedRoute>} />
         <Route path="/admin/parents/:id" element={<ProtectedRoute allowedRoles={['admin']}><ParentProfilePage /></ProtectedRoute>} />
         <Route path="/admin/profile" element={<ProtectedRoute allowedRoles={['admin']}><ProfilePage /></ProtectedRoute>} />
 
@@ -203,6 +209,8 @@ export default function App() {
         {/* Reception Portal */}
         <Route path="/reception/dashboard" element={<ProtectedRoute allowedRoles={['reception']}><ReceptionDashboard /></ProtectedRoute>} />
         <Route path="/reception/appointments" element={<ProtectedRoute allowedRoles={['reception']}><ReceptionAppointmentsPage /></ProtectedRoute>} />
+        <Route path="/reception/tuition" element={<ProtectedRoute allowedRoles={['reception']}><AdminTuitionPage /></ProtectedRoute>} />
+        <Route path="/reception/tuition/student/:id" element={<ProtectedRoute allowedRoles={['reception']}><AdminTuitionStudentDetailPage /></ProtectedRoute>} />
         <Route path="/reception/profile" element={<ProtectedRoute allowedRoles={['reception']}><ProfilePage /></ProtectedRoute>} />
 
         {/* Driver Portal */}

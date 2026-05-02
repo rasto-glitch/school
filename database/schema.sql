@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS schools (
   schedule_days TEXT[] NOT NULL DEFAULT ARRAY['sunday','monday','tuesday','wednesday','thursday'],
   features JSONB DEFAULT '{"homework":true,"assignments":true,"announcements":true,"grades":true,"reports":true,"bus_tracking":true,"appointments":true,"attendance":true,"weekly_summary":true,"chat":true}',
   features_version INTEGER NOT NULL DEFAULT 1,
+  tuition_config JSONB DEFAULT '{"currency":"USD","siblingDiscount":{"enabled":false,"type":"percent","tiers":[]}}'::jsonb,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 -- Run this if the table already exists:
@@ -777,3 +778,86 @@ CREATE TABLE IF NOT EXISTS ebook_progress (
 );
 CREATE INDEX IF NOT EXISTS idx_ebook_progress_student ON ebook_progress(student_id);
 CREATE INDEX IF NOT EXISTS idx_ebook_progress_ebook ON ebook_progress(ebook_id);
+
+-- ============================================================
+-- STUDENT ACCESS LOCKS (per-student per-feature gating, admin-controlled)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS student_access_locks (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  feature TEXT NOT NULL,
+  reason TEXT,
+  locked_at TIMESTAMPTZ DEFAULT NOW(),
+  locked_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  UNIQUE (student_id, feature)
+);
+CREATE INDEX IF NOT EXISTS idx_student_access_locks_student ON student_access_locks(student_id, feature);
+CREATE INDEX IF NOT EXISTS idx_student_access_locks_school ON student_access_locks(school_id);
+
+-- ============================================================
+-- TUITION FEES (premium feature)
+-- ============================================================
+-- Tuition config column on schools — see schools table.
+-- ALTER TABLE schools ADD COLUMN IF NOT EXISTS tuition_config JSONB
+--   DEFAULT '{"currency":"USD","siblingDiscount":{"enabled":false,"type":"percent","tiers":[]}}'::jsonb;
+
+CREATE TABLE IF NOT EXISTS fee_plans (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  total_amount NUMERIC(12,2) NOT NULL CHECK (total_amount >= 0),
+  currency TEXT NOT NULL DEFAULT 'USD',
+  applies_to TEXT NOT NULL CHECK (applies_to IN ('all','classes','manual')),
+  academic_year TEXT,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_fee_plans_school ON fee_plans(school_id, is_active);
+
+CREATE TABLE IF NOT EXISTS fee_plan_classes (
+  fee_plan_id UUID NOT NULL REFERENCES fee_plans(id) ON DELETE CASCADE,
+  class_id UUID NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+  PRIMARY KEY (fee_plan_id, class_id)
+);
+
+CREATE TABLE IF NOT EXISTS fee_installments (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  fee_plan_id UUID NOT NULL REFERENCES fee_plans(id) ON DELETE CASCADE,
+  sequence INT NOT NULL CHECK (sequence > 0),
+  amount NUMERIC(12,2) NOT NULL CHECK (amount >= 0),
+  due_date DATE NOT NULL,
+  UNIQUE (fee_plan_id, sequence)
+);
+CREATE INDEX IF NOT EXISTS idx_fee_installments_plan ON fee_installments(fee_plan_id, sequence);
+
+CREATE TABLE IF NOT EXISTS student_fees (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  fee_plan_id UUID NOT NULL REFERENCES fee_plans(id) ON DELETE CASCADE,
+  total_amount NUMERIC(12,2) NOT NULL CHECK (total_amount >= 0),
+  adjustment NUMERIC(12,2) NOT NULL DEFAULT 0,
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (student_id, fee_plan_id)
+);
+CREATE INDEX IF NOT EXISTS idx_student_fees_student ON student_fees(student_id);
+CREATE INDEX IF NOT EXISTS idx_student_fees_school ON student_fees(school_id);
+CREATE INDEX IF NOT EXISTS idx_student_fees_plan ON student_fees(fee_plan_id);
+
+CREATE TABLE IF NOT EXISTS fee_payments (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  student_fee_id UUID NOT NULL REFERENCES student_fees(id) ON DELETE CASCADE,
+  amount NUMERIC(12,2) NOT NULL CHECK (amount > 0),
+  paid_on DATE NOT NULL,
+  method TEXT,
+  reference TEXT,
+  notes TEXT,
+  recorded_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_fee_payments_student_fee ON fee_payments(student_fee_id, paid_on DESC);
+CREATE INDEX IF NOT EXISTS idx_fee_payments_school ON fee_payments(school_id);
