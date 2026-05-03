@@ -6,8 +6,10 @@ import Input from '../../components/common/Input';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import EmptyState from '../../components/common/EmptyState';
 import Modal from '../../components/common/Modal';
-import { Plus, Trash2, Pencil, Users as UsersIcon, BellRing, Receipt, History } from 'lucide-react';
+import { Plus, Trash2, Pencil, Users as UsersIcon, BellRing, Receipt, History, Megaphone, Archive as ArchiveIcon, RotateCcw, FileDown, FileSpreadsheet } from 'lucide-react';
 import type { StaffMember, StaffSalaryPayment, StaffSetupTeacher } from '../../types';
+
+type SubTab = 'active' | 'archive';
 
 interface StaffForm {
   id?: string;
@@ -38,6 +40,20 @@ interface PaymentForm {
   notes: string;
 }
 
+interface MassReminderForm {
+  title: string;
+  message: string;
+  onlyDueSoon: boolean;
+  dueWithinDays: string;
+}
+
+const emptyMass: MassReminderForm = {
+  title: '',
+  message: '',
+  onlyDueSoon: false,
+  dueWithinDays: '7',
+};
+
 function fmtMoney(amount: number, currency: string) {
   const sym: Record<string, string> = { USD: '$', EUR: '€', GBP: '£' };
   const s = sym[currency] ?? '';
@@ -63,12 +79,27 @@ function dueBadge(dateStr: string | null): { text: string; cls: string } | null 
   return { text: `Due in ${d} days`, cls: 'bg-gray-100 text-gray-600' };
 }
 
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 export default function StaffSalariesTab() {
-  const [staff, setStaff] = useState<StaffMember[] | null>(null);
+  const [subTab, setSubTab] = useState<SubTab>('active');
+  const [active, setActive] = useState<StaffMember[] | null>(null);
+  const [archived, setArchived] = useState<StaffMember[] | null>(null);
   const [teachers, setTeachers] = useState<StaffSetupTeacher[]>([]);
   const [editing, setEditing] = useState<StaffForm | null>(null);
   const [saving, setSaving] = useState(false);
   const [notifyingId, setNotifyingId] = useState<string | null>(null);
+  const [reactivatingId, setReactivatingId] = useState<string | null>(null);
+  const [exporting, setExporting] = useState<string | null>(null);
 
   const [paymentTarget, setPaymentTarget] = useState<StaffMember | null>(null);
   const [paymentForm, setPaymentForm] = useState<PaymentForm | null>(null);
@@ -77,17 +108,25 @@ export default function StaffSalariesTab() {
   const [historyTarget, setHistoryTarget] = useState<StaffMember | null>(null);
   const [history, setHistory] = useState<StaffSalaryPayment[] | null>(null);
 
-  const load = async () => {
-    const r = await staffApi.list();
-    setStaff(r.data as StaffMember[]);
+  const [massReminder, setMassReminder] = useState<MassReminderForm | null>(null);
+  const [sendingMass, setSendingMass] = useState(false);
+
+  const loadActive = async () => {
+    const r = await staffApi.list('active');
+    setActive(r.data as StaffMember[]);
+  };
+  const loadArchive = async () => {
+    const r = await staffApi.list('archived');
+    setArchived(r.data as StaffMember[]);
   };
   const loadSetup = async () => {
     const r = await staffApi.getSetup();
     setTeachers(r.data.teachers as StaffSetupTeacher[]);
   };
+  const loadAll = () => Promise.all([loadActive(), loadArchive()]);
 
   useEffect(() => {
-    load().catch((e: any) => toast.error(e.response?.data?.error || 'Failed to load staff'));
+    loadAll().catch((e: any) => toast.error(e.response?.data?.error || 'Failed to load staff'));
     loadSetup().catch(() => {});
   }, []);
 
@@ -129,20 +168,46 @@ export default function StaffSalariesTab() {
         toast.success('Staff added');
       }
       setEditing(null);
-      await Promise.all([load(), loadSetup()]);
+      await Promise.all([loadAll(), loadSetup()]);
     } catch (e: any) {
       toast.error(e.response?.data?.error || 'Failed to save');
     } finally { setSaving(false); }
   };
 
+  const deactivate = async (s: StaffMember) => {
+    if (!confirm(`Deactivate ${s.fullName}? Their record will move to the archive but payment history will be kept.`)) return;
+    try {
+      await staffApi.update(s.id, { isActive: false });
+      toast.success('Staff archived');
+      await loadAll();
+    } catch (e: any) {
+      toast.error(e.response?.data?.error || 'Failed to deactivate');
+    }
+  };
+
+  const reactivate = async (s: StaffMember) => {
+    if (s.userIsActive === false) {
+      toast.error('Reactivate the user account in the admin portal first.');
+      return;
+    }
+    setReactivatingId(s.id);
+    try {
+      await staffApi.update(s.id, { isActive: true });
+      toast.success('Staff reactivated');
+      await loadAll();
+    } catch (e: any) {
+      toast.error(e.response?.data?.error || 'Failed to reactivate');
+    } finally { setReactivatingId(null); }
+  };
+
   const remove = async (s: StaffMember) => {
-    if (!confirm(`Remove ${s.fullName}? Payment history will also be deleted. This cannot be undone.`)) return;
+    if (!confirm(`Permanently delete ${s.fullName}? Payment history will also be deleted. This cannot be undone.`)) return;
     try {
       await staffApi.remove(s.id);
-      toast.success('Staff removed');
-      await Promise.all([load(), loadSetup()]);
+      toast.success('Staff deleted');
+      await Promise.all([loadAll(), loadSetup()]);
     } catch (e: any) {
-      toast.error(e.response?.data?.error || 'Failed to remove');
+      toast.error(e.response?.data?.error || 'Failed to delete');
     }
   };
 
@@ -186,7 +251,7 @@ export default function StaffSalariesTab() {
       toast.success('Payment recorded');
       setPaymentTarget(null);
       setPaymentForm(null);
-      await load();
+      await loadAll();
     } catch (e: any) {
       toast.error(e.response?.data?.error || 'Failed to record payment');
     } finally { setSavingPayment(false); }
@@ -212,58 +277,137 @@ export default function StaffSalariesTab() {
       toast.success('Payment deleted');
       const r = await staffApi.listPayments(historyTarget.id);
       setHistory(r.data as StaffSalaryPayment[]);
-      await load();
+      await loadAll();
     } catch (e: any) {
       toast.error(e.response?.data?.error || 'Failed to delete payment');
     }
   };
 
+  const sendMassReminder = async () => {
+    if (!massReminder) return;
+    const days = Number(massReminder.dueWithinDays);
+    const body: { title?: string; message?: string; dueWithinDays?: number } = {};
+    if (massReminder.title.trim()) body.title = massReminder.title.trim();
+    if (massReminder.message.trim()) body.message = massReminder.message.trim();
+    if (massReminder.onlyDueSoon && !isNaN(days) && days >= 0) body.dueWithinDays = Math.floor(days);
+
+    setSendingMass(true);
+    try {
+      const r = await staffApi.notifyAllDue(body);
+      const count = r.data?.sent ?? 0;
+      toast.success(count === 0 ? 'No staff matched the filter' : `Reminder sent to ${count} staff member${count === 1 ? '' : 's'}`);
+      setMassReminder(null);
+    } catch (e: any) {
+      toast.error(e.response?.data?.error || 'Failed to send reminders');
+    } finally { setSendingMass(false); }
+  };
+
+  const exportPdf = async (s: StaffMember) => {
+    setExporting(`${s.id}:pdf`);
+    try {
+      const r = await staffApi.downloadSalaryPdf(s.id);
+      downloadBlob(r.data as Blob, `salary-${s.fullName.replace(/[^a-zA-Z0-9._-]+/g, '_')}.pdf`);
+    } catch (e: any) {
+      toast.error(e.response?.data?.error || 'Failed to download PDF');
+    } finally { setExporting(null); }
+  };
+
+  const exportXlsx = async (s: StaffMember) => {
+    setExporting(`${s.id}:xlsx`);
+    try {
+      const r = await staffApi.downloadSalaryXlsx(s.id);
+      downloadBlob(r.data as Blob, `salary-${s.fullName.replace(/[^a-zA-Z0-9._-]+/g, '_')}.xlsx`);
+    } catch (e: any) {
+      toast.error(e.response?.data?.error || 'Failed to download Excel');
+    } finally { setExporting(null); }
+  };
+
   const availableTeachers = useMemo(() => {
     if (!editing) return teachers;
-    // When editing, also surface the currently-linked teacher (even though alreadyLinked=true)
     return teachers.filter(t => !t.alreadyLinked || t.userId === editing.userId);
   }, [teachers, editing]);
 
-  if (staff === null) return <LoadingSpinner />;
+  const list = subTab === 'active' ? active : archived;
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <p className="text-sm text-gray-500">Track teacher and staff salaries. Linked teacher accounts receive in-app notifications when reminders are sent.</p>
-        <Button onClick={openNew} icon={<Plus className="w-4 h-4" />}>Add staff</Button>
+      <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit mb-4">
+        <button
+          onClick={() => setSubTab('active')}
+          className={`px-4 py-1.5 text-sm font-medium rounded-lg transition-colors ${subTab === 'active' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+        >Active{active && ` (${active.length})`}</button>
+        <button
+          onClick={() => setSubTab('archive')}
+          className={`px-4 py-1.5 text-sm font-medium rounded-lg transition-colors ${subTab === 'archive' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+        >Archive{archived && ` (${archived.length})`}</button>
       </div>
 
-      {staff.length === 0 ? (
-        <EmptyState title="No staff yet" description="Add a teacher or custom employee to start tracking salaries." icon={<UsersIcon className="w-8 h-8 text-gray-400" />} />
+      {subTab === 'active' && (
+        <div className="flex items-center justify-between mb-4">
+          <p className="text-sm text-gray-500">Track teacher and staff salaries. Linked teachers receive in-app notifications when reminders are sent.</p>
+          <div className="flex gap-2">
+            <Button variant="ghost" onClick={() => setMassReminder({ ...emptyMass })} icon={<Megaphone className="w-4 h-4" />}>Mass reminder</Button>
+            <Button onClick={openNew} icon={<Plus className="w-4 h-4" />}>Add staff</Button>
+          </div>
+        </div>
+      )}
+
+      {subTab === 'archive' && (
+        <div className="mb-4">
+          <p className="text-sm text-gray-500">Archived staff. Payment history is preserved and can be exported. Teachers whose admin account is deactivated appear here automatically.</p>
+        </div>
+      )}
+
+      {list === null ? <LoadingSpinner /> : list.length === 0 ? (
+        subTab === 'active' ? (
+          <EmptyState title="No staff yet" description="Add a teacher or custom employee to start tracking salaries." icon={<UsersIcon className="w-8 h-8 text-gray-400" />} />
+        ) : (
+          <EmptyState title="Archive is empty" description="Deactivated or removed staff will appear here." icon={<ArchiveIcon className="w-8 h-8 text-gray-400" />} />
+        )
       ) : (
         <div className="space-y-3">
-          {staff.map(s => {
-            const badge = s.isActive ? dueBadge(s.nextPaymentDate) : null;
+          {list.map(s => {
+            const badge = subTab === 'active' && s.isActive ? dueBadge(s.nextPaymentDate) : null;
             return (
-              <div key={s.id} className={`bg-white rounded-2xl border border-gray-200 p-4 ${!s.isActive ? 'opacity-60' : ''}`}>
+              <div key={s.id} className={`bg-white rounded-2xl border border-gray-200 p-4 ${subTab === 'archive' ? 'opacity-80' : ''}`}>
                 <div className="flex items-start justify-between gap-3 mb-2">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <h3 className="font-semibold text-gray-900">{s.fullName}</h3>
                       {s.position && <span className="text-xs text-gray-500">· {s.position}</span>}
-                      {!s.isActive && <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">Inactive</span>}
                       {!s.userId && <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">No account</span>}
+                      {s.archiveReason && <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{s.archiveReason}</span>}
                       {badge && <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${badge.cls}`}>{badge.text}</span>}
                     </div>
                     <div className="text-sm text-gray-500 mt-0.5">
                       Salary: <span className="font-semibold text-gray-700">{fmtMoney(s.salaryAmount, s.currency)}</span>
-                      {s.nextPaymentDate && <> · Next payment: {s.nextPaymentDate}</>}
+                      {s.nextPaymentDate && subTab === 'active' && <> · Next payment: {s.nextPaymentDate}</>}
                       {s.lastPayment && <> · Last paid: {fmtMoney(s.lastPayment.amount, s.lastPayment.currency)} on {s.lastPayment.paidOn}</>}
                     </div>
                   </div>
                   <div className="flex gap-1 shrink-0 flex-wrap">
-                    <Button size="sm" variant="ghost" onClick={() => openRecordPayment(s)} icon={<Receipt className="w-4 h-4" />}>Record payment</Button>
-                    <Button size="sm" variant="ghost" onClick={() => openHistory(s)} icon={<History className="w-4 h-4" />}>History</Button>
-                    {s.userId && s.isActive && (
-                      <Button size="sm" variant="ghost" onClick={() => sendReminder(s)} loading={notifyingId === s.id} icon={<BellRing className="w-4 h-4" />}>Send reminder</Button>
+                    {subTab === 'active' && (
+                      <>
+                        <Button size="sm" variant="ghost" onClick={() => openRecordPayment(s)} icon={<Receipt className="w-4 h-4" />}>Record payment</Button>
+                        <Button size="sm" variant="ghost" onClick={() => openHistory(s)} icon={<History className="w-4 h-4" />}>History</Button>
+                        {s.userId && (
+                          <Button size="sm" variant="ghost" onClick={() => sendReminder(s)} loading={notifyingId === s.id} icon={<BellRing className="w-4 h-4" />}>Send reminder</Button>
+                        )}
+                        <button onClick={() => openEdit(s)} className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg" title="Edit"><Pencil className="w-4 h-4" /></button>
+                        <button onClick={() => deactivate(s)} className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg" title="Archive (deactivate)"><ArchiveIcon className="w-4 h-4" /></button>
+                      </>
                     )}
-                    <button onClick={() => openEdit(s)} className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg"><Pencil className="w-4 h-4" /></button>
-                    <button onClick={() => remove(s)} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4" /></button>
+                    {subTab === 'archive' && (
+                      <>
+                        <Button size="sm" variant="ghost" onClick={() => exportPdf(s)} loading={exporting === `${s.id}:pdf`} icon={<FileDown className="w-4 h-4" />}>PDF</Button>
+                        <Button size="sm" variant="ghost" onClick={() => exportXlsx(s)} loading={exporting === `${s.id}:xlsx`} icon={<FileSpreadsheet className="w-4 h-4" />}>Excel</Button>
+                        <Button size="sm" variant="ghost" onClick={() => openHistory(s)} icon={<History className="w-4 h-4" />}>History</Button>
+                        {s.userIsActive !== false && (
+                          <Button size="sm" variant="ghost" onClick={() => reactivate(s)} loading={reactivatingId === s.id} icon={<RotateCcw className="w-4 h-4" />}>Reactivate</Button>
+                        )}
+                        <button onClick={() => remove(s)} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg" title="Delete permanently"><Trash2 className="w-4 h-4" /></button>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
@@ -364,13 +508,51 @@ export default function StaffSalariesTab() {
                     </div>
                     {p.notes && <div className="text-xs text-gray-600 mt-1">{p.notes}</div>}
                   </div>
-                  <button onClick={() => deletePaymentEntry(p)} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg shrink-0">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  {historyTarget.effectiveActive && (
+                    <button onClick={() => deletePaymentEntry(p)} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg shrink-0">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
           )}
+        </Modal>
+      )}
+
+      {massReminder && (
+        <Modal isOpen onClose={() => setMassReminder(null)} title="Send mass salary reminder" size="lg">
+          <div className="space-y-4">
+            <p className="text-sm text-gray-500">Sends a push and in-app notification to every active staff member with a linked teacher account. Leave the title and message blank to use the default (which is auto-translated for each teacher).</p>
+
+            <Input label="Custom title (optional)" value={massReminder.title} onChange={e => setMassReminder({ ...massReminder, title: e.target.value })} placeholder="Salary payment due" />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Custom message (optional)</label>
+              <textarea
+                value={massReminder.message}
+                onChange={e => setMassReminder({ ...massReminder, message: e.target.value })}
+                rows={3}
+                placeholder="Leave blank to use the default per-staff message with their amount and date."
+                className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <input type="checkbox" checked={massReminder.onlyDueSoon} onChange={e => setMassReminder({ ...massReminder, onlyDueSoon: e.target.checked })} className="w-4 h-4 rounded border-gray-300 text-primary-600" />
+              Only send to staff with payment due within
+            </label>
+            {massReminder.onlyDueSoon && (
+              <div className="flex items-center gap-2 ml-6">
+                <Input label="" type="number" min="0" value={massReminder.dueWithinDays} onChange={e => setMassReminder({ ...massReminder, dueWithinDays: e.target.value })} />
+                <span className="text-sm text-gray-500">days</span>
+              </div>
+            )}
+
+            <div className="flex gap-2 justify-end pt-2">
+              <Button variant="ghost" onClick={() => setMassReminder(null)}>Cancel</Button>
+              <Button onClick={sendMassReminder} loading={sendingMass}>Send reminders</Button>
+            </div>
+          </div>
         </Modal>
       )}
     </div>

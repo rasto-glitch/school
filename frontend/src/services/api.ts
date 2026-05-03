@@ -264,7 +264,7 @@ export const feesApi = {
 // ---- STAFF SALARIES (premium, gated by tuition_fees) ----
 export const staffApi = {
   getSetup: () => api.get<{ teachers: { teacherId: string; userId: string; fullName: string; subject: string | null; alreadyLinked: boolean }[] }>('/accounting/staff/setup'),
-  list: () => api.get('/accounting/staff'),
+  list: (status?: 'active' | 'archived' | 'all') => api.get('/accounting/staff', { params: status ? { status } : {} }),
   create: (data: {
     userId?: string | null;
     fullName: string;
@@ -289,6 +289,10 @@ export const staffApi = {
     api.post(`/accounting/staff/${id}/payments`, data),
   deletePayment: (paymentId: string) => api.delete(`/accounting/staff-payments/${paymentId}`),
   notifyDue: (id: string) => api.post(`/accounting/staff/${id}/notify-due`),
+  notifyAllDue: (data?: { title?: string; message?: string; dueWithinDays?: number }) =>
+    api.post('/accounting/staff/notify-due-all', data ?? {}),
+  downloadSalaryPdf: (id: string) => api.get(`/accounting/staff/${id}/export.pdf`, { responseType: 'blob' }),
+  downloadSalaryXlsx: (id: string) => api.get(`/accounting/staff/${id}/export.xlsx`, { responseType: 'blob' }),
 };
 
 export interface ArchiveListItem {

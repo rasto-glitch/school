@@ -230,7 +230,11 @@ export function createRouter(io: SocketServer) {
   router.get('/accounting/staff/:id/payments', authenticate, authorize(...accountingRW), (req, res) => staff.listStaffPayments(req as AuthRequest, res));
   router.post('/accounting/staff/:id/payments', authenticate, authorize(...accountingRW), (req, res) => staff.recordStaffPayment(req as AuthRequest, res));
   router.delete('/accounting/staff-payments/:id', authenticate, authorize(...accountingRW), (req, res) => staff.deleteStaffPayment(req as AuthRequest, res));
+  // Static path first so it isn't shadowed by the :id route below.
+  router.post('/accounting/staff/notify-due-all', authenticate, authorize(...accountingRW), (req, res) => staff.notifyAllStaffDue(req as AuthRequest, res));
   router.post('/accounting/staff/:id/notify-due', authenticate, authorize(...accountingRW), (req, res) => staff.notifyStaffDue(req as AuthRequest, res));
+  router.get('/accounting/staff/:id/export.pdf', authenticate, authorize(...accountingRW), (req, res) => staff.exportStaffSalaryPdf(req as AuthRequest, res));
+  router.get('/accounting/staff/:id/export.xlsx', authenticate, authorize(...accountingRW), (req, res) => staff.exportStaffSalaryXlsx(req as AuthRequest, res));
 
   // Teacher self-service: read-only "my salary"
   router.get('/teacher/salary', authenticate, authorize('teacher'), (req, res) => staff.getMyStaffInfo(req as AuthRequest, res));

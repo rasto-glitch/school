@@ -343,6 +343,9 @@ export interface StaffMember {
   currency: string;
   nextPaymentDate: string | null;
   isActive: boolean;
+  userIsActive: boolean | null;
+  effectiveActive: boolean;
+  archiveReason: string | null;
   createdAt: string;
   lastPayment: { amount: number; currency: string; paidOn: string; periodLabel: string | null } | null;
 }
