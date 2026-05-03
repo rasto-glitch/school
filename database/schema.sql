@@ -547,6 +547,7 @@ CREATE TABLE IF NOT EXISTS archived_students (
   parent_phone TEXT,
   classes_attended JSONB DEFAULT '[]',
   grades JSONB DEFAULT '[]',
+  payment_history JSONB DEFAULT '[]',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_archived_students_school ON archived_students(school_id, created_at DESC);

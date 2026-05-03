@@ -251,7 +251,52 @@ export const feesApi = {
     api.get(`/accounting/student-fees/${studentFeeId}/summary.pdf`, { responseType: 'blob' }),
   // Parent
   getParentFees: () => api.get('/parent/fees'),
+  // Archive — payment history for archived + graduated students
+  listArchive: (search?: string) => api.get<ArchiveListItem[]>('/accounting/archive', { params: { search } }),
+  getArchiveDetail: (kind: 'archived' | 'graduated', id: string) =>
+    api.get<ArchiveDetail>(`/accounting/archive/${kind}/${id}`),
+  downloadArchivePdf: (kind: 'archived' | 'graduated', id: string) =>
+    api.get(`/accounting/archive/${kind}/${id}/export.pdf`, { responseType: 'blob' }),
+  downloadArchiveXlsx: (kind: 'archived' | 'graduated', id: string) =>
+    api.get(`/accounting/archive/${kind}/${id}/export.xlsx`, { responseType: 'blob' }),
 };
+
+export interface ArchiveListItem {
+  kind: 'archived' | 'graduated';
+  id: string;
+  fullName: string;
+  className: string | null;
+  parentName: string | null;
+  parentPhone: string | null;
+  date: string | null;
+  reason: string | null;
+  totalDue: number;
+  totalPaid: number;
+  balance: number;
+  currency: string;
+}
+
+export interface ArchivePlanDetail {
+  planName: string;
+  academicYear: string | null;
+  currency: string;
+  totalAmount: number;
+  adjustment: number;
+  payments: { amount: number; paidOn: string; method: string | null; reference: string | null; notes: string | null }[];
+}
+
+export interface ArchiveDetail {
+  schoolName: string;
+  schoolLogoUrl: string | null;
+  studentName: string;
+  status: 'archived' | 'graduated';
+  parentName: string | null;
+  parentPhone: string | null;
+  className: string | null;
+  departureDate: string | null;
+  reason: string | null;
+  plans: ArchivePlanDetail[];
+}
 
 // ---- ANNOUNCEMENTS (shared social) ----
 export const announcementApi = {

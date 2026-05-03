@@ -4,6 +4,7 @@ import type { AuthRequest } from '../middleware/auth';
 import { toCC } from '../utils/transform';
 import { notify, notifyMany } from '../utils/notify';
 import { streamPaymentReceipt, streamYearSummary } from '../utils/receipts';
+import { streamArchivePaymentPdf, buildArchivePaymentXlsx, type ArchivePaymentExportData, type ArchivePlanEntry } from '../utils/paymentArchiveExport';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -896,4 +897,304 @@ export async function getParentFees(req: AuthRequest, res: Response): Promise<vo
   }
 
   res.json(mine.map(r => ({ ...r, payments: paysBySf.get(r.id) ?? [] })));
+}
+
+// ── Archive (graduated + archived students) ────────────────────────────
+//
+// Graduated students still live in `students` with is_graduated=true, so their
+// student_fees / fee_payments rows are intact and queried live.
+//
+// Archived students were copied into `archived_students` and the original row
+// was hard-deleted, which cascades fee_payments away. From migration 008
+// onward, archived_students.payment_history holds a JSONB snapshot taken at
+// archive time. Older archived rows have an empty array.
+//
+// Both kinds are surfaced via the same endpoints. The route param `:kind`
+// (archived | graduated) tells the controller which source to read.
+
+interface ArchiveListItem {
+  kind: 'archived' | 'graduated';
+  id: string;
+  fullName: string;
+  className: string | null;
+  parentName: string | null;
+  parentPhone: string | null;
+  date: string | null; // departure_date for archived, null for graduated
+  reason: string | null;
+  totalDue: number;
+  totalPaid: number;
+  balance: number;
+  currency: string;
+}
+
+function plansFromSnapshot(snapshot: any): ArchivePlanEntry[] {
+  const arr = Array.isArray(snapshot) ? snapshot : [];
+  return arr.map((sf: any) => ({
+    planName: sf.planName ?? 'Plan',
+    academicYear: sf.academicYear ?? null,
+    currency: sf.currency ?? 'USD',
+    totalAmount: Number(sf.totalAmount ?? 0),
+    adjustment: Number(sf.adjustment ?? 0),
+    payments: Array.isArray(sf.payments) ? sf.payments.map((p: any) => ({
+      amount: Number(p.amount ?? 0),
+      paidOn: p.paidOn ?? '',
+      method: p.method ?? null,
+      reference: p.reference ?? null,
+      notes: p.notes ?? null,
+    })) : [],
+  }));
+}
+
+async function plansFromGraduated(schoolId: string, studentId: string): Promise<ArchivePlanEntry[]> {
+  const { data: sfs } = await supabase
+    .from('student_fees')
+    .select('id, total_amount, adjustment, fee_plans(name, currency, academic_year)')
+    .eq('student_id', studentId)
+    .eq('school_id', schoolId);
+  const sfIds = (sfs ?? []).map((s: any) => s.id);
+  const { data: pays } = sfIds.length
+    ? await supabase
+        .from('fee_payments')
+        .select('student_fee_id, amount, paid_on, method, reference, notes')
+        .in('student_fee_id', sfIds)
+        .order('paid_on', { ascending: true })
+    : { data: [] as any[] };
+  const paysBySf = new Map<string, any[]>();
+  for (const p of pays ?? []) {
+    const arr = paysBySf.get((p as any).student_fee_id) ?? [];
+    arr.push({
+      amount: Number((p as any).amount),
+      paidOn: (p as any).paid_on,
+      method: (p as any).method ?? null,
+      reference: (p as any).reference ?? null,
+      notes: (p as any).notes ?? null,
+    });
+    paysBySf.set((p as any).student_fee_id, arr);
+  }
+  return (sfs ?? []).map((sf: any) => ({
+    planName: sf.fee_plans?.name ?? 'Plan',
+    academicYear: sf.fee_plans?.academic_year ?? null,
+    currency: sf.fee_plans?.currency ?? 'USD',
+    totalAmount: Number(sf.total_amount),
+    adjustment: Number(sf.adjustment),
+    payments: paysBySf.get(sf.id) ?? [],
+  }));
+}
+
+function summarisePlans(plans: ArchivePlanEntry[]): { totalDue: number; totalPaid: number; balance: number; currency: string } {
+  let totalDue = 0, totalPaid = 0;
+  for (const p of plans) {
+    totalDue += p.totalAmount + p.adjustment;
+    totalPaid += p.payments.reduce((s, x) => s + x.amount, 0);
+  }
+  return {
+    totalDue,
+    totalPaid,
+    balance: Math.max(0, totalDue - totalPaid),
+    currency: plans[0]?.currency ?? 'USD',
+  };
+}
+
+export async function listArchivePaymentRecords(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const guard = await ensurePremium(schoolId);
+  if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
+
+  const search = (req.query.search as string | undefined)?.trim().toLowerCase() ?? '';
+
+  // Archived
+  const { data: archivedRows } = await supabase
+    .from('archived_students')
+    .select('id, full_name, departure_date, reason, parent_full_name, parent_phone, classes_attended, payment_history, created_at')
+    .eq('school_id', schoolId)
+    .order('created_at', { ascending: false });
+
+  const archived: ArchiveListItem[] = (archivedRows ?? []).map((r: any) => {
+    const plans = plansFromSnapshot(r.payment_history);
+    const sum = summarisePlans(plans);
+    const lastClass = Array.isArray(r.classes_attended) && r.classes_attended.length
+      ? r.classes_attended[r.classes_attended.length - 1].className ?? null
+      : null;
+    return {
+      kind: 'archived',
+      id: r.id,
+      fullName: r.full_name,
+      className: lastClass,
+      parentName: r.parent_full_name ?? null,
+      parentPhone: r.parent_phone ?? null,
+      date: r.departure_date ?? null,
+      reason: r.reason ?? null,
+      ...sum,
+    };
+  });
+
+  // Graduated
+  const { data: gradRows } = await supabase
+    .from('students')
+    .select('id, full_name, classes(name), parents(full_name, phone_number)')
+    .eq('school_id', schoolId)
+    .eq('is_graduated', true)
+    .order('full_name');
+
+  const gradIds = (gradRows ?? []).map((g: any) => g.id);
+  const { data: gradSfs } = gradIds.length
+    ? await supabase
+        .from('student_fees')
+        .select('id, student_id, total_amount, adjustment, fee_plans(name, currency, academic_year)')
+        .in('student_id', gradIds)
+    : { data: [] as any[] };
+
+  const gradSfIds = (gradSfs ?? []).map((s: any) => s.id);
+  const { data: gradPays } = gradSfIds.length
+    ? await supabase
+        .from('fee_payments')
+        .select('student_fee_id, amount')
+        .in('student_fee_id', gradSfIds)
+    : { data: [] as any[] };
+
+  const paidBySf = new Map<string, number>();
+  for (const p of gradPays ?? []) {
+    paidBySf.set((p as any).student_fee_id, (paidBySf.get((p as any).student_fee_id) ?? 0) + Number((p as any).amount));
+  }
+  const sfsByStudent = new Map<string, any[]>();
+  for (const sf of gradSfs ?? []) {
+    const arr = sfsByStudent.get((sf as any).student_id) ?? [];
+    arr.push(sf);
+    sfsByStudent.set((sf as any).student_id, arr);
+  }
+
+  const graduated: ArchiveListItem[] = (gradRows ?? []).map((g: any) => {
+    const sfs = sfsByStudent.get(g.id) ?? [];
+    let totalDue = 0, totalPaid = 0;
+    let currency = 'USD';
+    for (const sf of sfs) {
+      totalDue += Number(sf.total_amount) + Number(sf.adjustment);
+      totalPaid += paidBySf.get(sf.id) ?? 0;
+      currency = sf.fee_plans?.currency ?? currency;
+    }
+    return {
+      kind: 'graduated',
+      id: g.id,
+      fullName: g.full_name,
+      className: g.classes?.name ?? null,
+      parentName: g.parents?.full_name ?? null,
+      parentPhone: g.parents?.phone_number ?? null,
+      date: null,
+      reason: null,
+      totalDue,
+      totalPaid,
+      balance: Math.max(0, totalDue - totalPaid),
+      currency,
+    };
+  });
+
+  let combined = [...archived, ...graduated];
+  if (search) {
+    combined = combined.filter(r =>
+      r.fullName.toLowerCase().includes(search)
+      || (r.parentName ?? '').toLowerCase().includes(search)
+      || (r.className ?? '').toLowerCase().includes(search),
+    );
+  }
+  res.json(combined);
+}
+
+async function loadArchiveDetail(schoolId: string, kind: 'archived' | 'graduated', id: string): Promise<ArchivePaymentExportData | null> {
+  const { data: schoolRow } = await supabase
+    .from('schools').select('name, logo_url').eq('id', schoolId).single();
+  const schoolName = (schoolRow as any)?.name ?? 'School';
+  const schoolLogoUrl = (schoolRow as any)?.logo_url ?? null;
+
+  if (kind === 'archived') {
+    const { data: row } = await supabase
+      .from('archived_students')
+      .select('id, full_name, departure_date, reason, parent_full_name, parent_phone, classes_attended, payment_history')
+      .eq('id', id)
+      .eq('school_id', schoolId)
+      .single();
+    if (!row) return null;
+    const lastClass = Array.isArray((row as any).classes_attended) && (row as any).classes_attended.length
+      ? (row as any).classes_attended[(row as any).classes_attended.length - 1].className ?? null
+      : null;
+    return {
+      schoolName,
+      schoolLogoUrl,
+      studentName: (row as any).full_name,
+      status: 'archived',
+      parentName: (row as any).parent_full_name ?? null,
+      parentPhone: (row as any).parent_phone ?? null,
+      className: lastClass,
+      departureDate: (row as any).departure_date ?? null,
+      reason: (row as any).reason ?? null,
+      plans: plansFromSnapshot((row as any).payment_history),
+    };
+  }
+
+  // graduated
+  const { data: row } = await supabase
+    .from('students')
+    .select('id, full_name, is_graduated, classes(name), parents(full_name, phone_number)')
+    .eq('id', id)
+    .eq('school_id', schoolId)
+    .single();
+  if (!row || !(row as any).is_graduated) return null;
+  return {
+    schoolName,
+    schoolLogoUrl,
+    studentName: (row as any).full_name,
+    status: 'graduated',
+    parentName: (row as any).parents?.full_name ?? null,
+    parentPhone: (row as any).parents?.phone_number ?? null,
+    className: (row as any).classes?.name ?? null,
+    departureDate: null,
+    reason: null,
+    plans: await plansFromGraduated(schoolId, id),
+  };
+}
+
+export async function getArchivePaymentRecord(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const guard = await ensurePremium(schoolId);
+  if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
+
+  const kind = req.params.kind as 'archived' | 'graduated';
+  if (kind !== 'archived' && kind !== 'graduated') { res.status(400).json({ error: 'kind must be archived or graduated' }); return; }
+  const detail = await loadArchiveDetail(schoolId, kind, req.params.id as string);
+  if (!detail) { res.status(404).json({ error: 'Not found' }); return; }
+  res.json(detail);
+}
+
+function safeFile(s: string): string {
+  return s.replace(/[^a-z0-9-_]+/gi, '_').slice(0, 60) || 'student';
+}
+
+export async function archivePaymentPdf(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const guard = await ensurePremium(schoolId);
+  if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
+
+  const kind = req.params.kind as 'archived' | 'graduated';
+  if (kind !== 'archived' && kind !== 'graduated') { res.status(400).json({ error: 'kind must be archived or graduated' }); return; }
+  const detail = await loadArchiveDetail(schoolId, kind, req.params.id as string);
+  if (!detail) { res.status(404).json({ error: 'Not found' }); return; }
+
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="payments-${safeFile(detail.studentName)}.pdf"`);
+  await streamArchivePaymentPdf(res, detail);
+}
+
+export async function archivePaymentXlsx(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const guard = await ensurePremium(schoolId);
+  if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
+
+  const kind = req.params.kind as 'archived' | 'graduated';
+  if (kind !== 'archived' && kind !== 'graduated') { res.status(400).json({ error: 'kind must be archived or graduated' }); return; }
+  const detail = await loadArchiveDetail(schoolId, kind, req.params.id as string);
+  if (!detail) { res.status(404).json({ error: 'Not found' }); return; }
+
+  const buf = buildArchivePaymentXlsx(detail);
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="payments-${safeFile(detail.studentName)}.xlsx"`);
+  res.send(buf);
 }

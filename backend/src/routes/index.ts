@@ -211,6 +211,12 @@ export function createRouter(io: SocketServer) {
   router.get('/accounting/payments/:id/receipt.pdf', authenticate, (req, res) => fees.paymentReceiptPdf(req as AuthRequest, res));
   router.get('/accounting/student-fees/:id/summary.pdf', authenticate, (req, res) => fees.studentFeeSummaryPdf(req as AuthRequest, res));
 
+  // Archive — payment history for archived + graduated students.
+  router.get('/accounting/archive', authenticate, authorize(...accountingRO), (req, res) => fees.listArchivePaymentRecords(req as AuthRequest, res));
+  router.get('/accounting/archive/:kind/:id', authenticate, authorize(...accountingRO), (req, res) => fees.getArchivePaymentRecord(req as AuthRequest, res));
+  router.get('/accounting/archive/:kind/:id/export.pdf', authenticate, authorize(...accountingRO), (req, res) => fees.archivePaymentPdf(req as AuthRequest, res));
+  router.get('/accounting/archive/:kind/:id/export.xlsx', authenticate, authorize(...accountingRO), (req, res) => fees.archivePaymentXlsx(req as AuthRequest, res));
+
   // Parent view
   router.get('/parent/fees', authenticate, authorize('parent'), (req, res) => fees.getParentFees(req as AuthRequest, res));
 

@@ -597,6 +597,52 @@ export async function archiveStudent(req: AuthRequest, res: Response): Promise<v
     termExamGrade: g.term_exam_grade,
   }));
 
+  // Snapshot tuition payment history before students.delete() cascades it away.
+  // Each entry = one student_fee row (a plan applied to this student) with its
+  // own payment list. This is the source of truth for the accountant archive
+  // tab once the student is gone.
+  const { data: studentFeeRows } = await supabase
+    .from('student_fees')
+    .select('id, total_amount, adjustment, notes, created_at, fee_plans(name, currency, academic_year)')
+    .eq('student_id', id)
+    .eq('school_id', schoolId);
+
+  const sfIds = (studentFeeRows || []).map((s: any) => s.id);
+  const { data: paymentRows } = sfIds.length
+    ? await supabase
+        .from('fee_payments')
+        .select('id, student_fee_id, amount, paid_on, method, reference, notes, created_at')
+        .in('student_fee_id', sfIds)
+        .order('paid_on', { ascending: true })
+    : { data: [] as any[] };
+
+  const paymentsBySf = new Map<string, any[]>();
+  for (const p of paymentRows || []) {
+    const arr = paymentsBySf.get((p as any).student_fee_id) ?? [];
+    arr.push({
+      id: (p as any).id,
+      amount: Number((p as any).amount),
+      paidOn: (p as any).paid_on,
+      method: (p as any).method ?? null,
+      reference: (p as any).reference ?? null,
+      notes: (p as any).notes ?? null,
+      createdAt: (p as any).created_at,
+    });
+    paymentsBySf.set((p as any).student_fee_id, arr);
+  }
+
+  const paymentHistory = (studentFeeRows || []).map((sf: any) => ({
+    studentFeeId: sf.id,
+    planName: sf.fee_plans?.name ?? 'Plan',
+    academicYear: sf.fee_plans?.academic_year ?? null,
+    currency: sf.fee_plans?.currency ?? 'USD',
+    totalAmount: Number(sf.total_amount),
+    adjustment: Number(sf.adjustment),
+    notes: sf.notes ?? null,
+    createdAt: sf.created_at,
+    payments: paymentsBySf.get(sf.id) ?? [],
+  }));
+
   // Insert archive record
   const { error: archiveErr } = await supabase.from('archived_students').insert({
     school_id: schoolId,
@@ -610,6 +656,7 @@ export async function archiveStudent(req: AuthRequest, res: Response): Promise<v
     parent_phone: (student as any).parents?.phone_number ?? null,
     classes_attended: classesAttended,
     grades: gradesSnapshot,
+    payment_history: paymentHistory,
   });
 
   if (archiveErr) {

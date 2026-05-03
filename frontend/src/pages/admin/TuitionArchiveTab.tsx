@@ -1,0 +1,290 @@
+import { useEffect, useMemo, useState } from 'react';
+import { feesApi, type ArchiveListItem, type ArchiveDetail } from '../../services/api';
+import { toast } from 'react-toastify';
+import Input from '../../components/common/Input';
+import LoadingSpinner from '../../components/common/LoadingSpinner';
+import EmptyState from '../../components/common/EmptyState';
+import Modal from '../../components/common/Modal';
+import { Archive, Search, FileSpreadsheet, FileText, GraduationCap } from 'lucide-react';
+
+function fmt(amount: number, currency: string) {
+  const sym: Record<string, string> = { USD: '$', EUR: '€', GBP: '£' };
+  const s = sym[currency] ?? '';
+  const n = amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return s ? `${s}${n}` : `${currency} ${n}`;
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function safeFile(s: string) {
+  return s.replace(/[^a-z0-9-_]+/gi, '_').slice(0, 60) || 'student';
+}
+
+export default function TuitionArchiveTab() {
+  const [items, setItems] = useState<ArchiveListItem[] | null>(null);
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState<'all' | 'archived' | 'graduated'>('all');
+  const [detailFor, setDetailFor] = useState<ArchiveListItem | null>(null);
+  const [detail, setDetail] = useState<ArchiveDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [exporting, setExporting] = useState<'pdf' | 'xlsx' | null>(null);
+
+  useEffect(() => {
+    feesApi.listArchive()
+      .then(r => setItems(r.data))
+      .catch((e: any) => toast.error(e.response?.data?.error || 'Failed to load archive'));
+  }, []);
+
+  const filtered = useMemo(() => {
+    if (!items) return null;
+    const q = search.trim().toLowerCase();
+    let arr = items;
+    if (filter !== 'all') arr = arr.filter(i => i.kind === filter);
+    if (q) arr = arr.filter(i =>
+      i.fullName.toLowerCase().includes(q)
+      || (i.parentName ?? '').toLowerCase().includes(q)
+      || (i.className ?? '').toLowerCase().includes(q),
+    );
+    return arr;
+  }, [items, search, filter]);
+
+  const openDetail = async (item: ArchiveListItem) => {
+    setDetailFor(item);
+    setDetail(null);
+    setDetailLoading(true);
+    try {
+      const r = await feesApi.getArchiveDetail(item.kind, item.id);
+      setDetail(r.data);
+    } catch (e: any) {
+      toast.error(e.response?.data?.error || 'Failed to load record');
+      setDetailFor(null);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const closeDetail = () => {
+    setDetailFor(null);
+    setDetail(null);
+  };
+
+  const exportFile = async (kind: 'pdf' | 'xlsx') => {
+    if (!detailFor || !detail) return;
+    setExporting(kind);
+    try {
+      const r = kind === 'pdf'
+        ? await feesApi.downloadArchivePdf(detailFor.kind, detailFor.id)
+        : await feesApi.downloadArchiveXlsx(detailFor.kind, detailFor.id);
+      downloadBlob(r.data, `payments-${safeFile(detail.studentName)}.${kind}`);
+    } catch (e: any) {
+      toast.error(e.response?.data?.error || `Failed to export ${kind.toUpperCase()}`);
+    } finally {
+      setExporting(null);
+    }
+  };
+
+  if (items === null) return <LoadingSpinner />;
+
+  return (
+    <div>
+      <div className="flex flex-col sm:flex-row gap-3 mb-4">
+        <div className="flex-1 max-w-sm">
+          <Input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search student, parent, class…"
+            icon={<Search className="w-4 h-4 text-gray-400" />}
+          />
+        </div>
+        <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
+          {(['all', 'archived', 'graduated'] as const).map(k => (
+            <button
+              key={k}
+              onClick={() => setFilter(k)}
+              className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${filter === k ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              {k === 'all' ? 'All' : k === 'archived' ? 'Archived' : 'Graduated'}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {filtered && filtered.length === 0 ? (
+        <EmptyState
+          icon={<Archive className="w-10 h-10 text-gray-400" />}
+          title="No archived or graduated students"
+          description="Once students are archived or marked as graduated, their payment records appear here."
+        />
+      ) : (
+        <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-gray-500">
+                <tr>
+                  <th className="text-left px-4 py-3 font-medium">Student</th>
+                  <th className="text-left px-4 py-3 font-medium">Status</th>
+                  <th className="text-left px-4 py-3 font-medium">Parent</th>
+                  <th className="text-left px-4 py-3 font-medium">Class</th>
+                  <th className="text-right px-4 py-3 font-medium">Total paid</th>
+                  <th className="text-right px-4 py-3 font-medium">Balance</th>
+                  <th className="px-4 py-3"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {filtered?.map(item => (
+                  <tr key={`${item.kind}:${item.id}`} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 font-medium text-gray-900">{item.fullName}</td>
+                    <td className="px-4 py-3">
+                      {item.kind === 'archived' ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                          <Archive className="w-3 h-3" /> Archived{item.date ? ` · ${item.date}` : ''}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                          <GraduationCap className="w-3 h-3" /> Graduated
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-gray-700">{item.parentName ?? '—'}</td>
+                    <td className="px-4 py-3 text-gray-700">{item.className ?? '—'}</td>
+                    <td className="px-4 py-3 text-right text-gray-900">{fmt(item.totalPaid, item.currency)}</td>
+                    <td className="px-4 py-3 text-right">
+                      <span className={item.balance > 0 ? 'text-rose-600 font-medium' : 'text-gray-500'}>
+                        {fmt(item.balance, item.currency)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        onClick={() => openDetail(item)}
+                        className="text-sm font-medium text-indigo-600 hover:text-indigo-700"
+                      >
+                        View
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      <Modal isOpen={!!detailFor} onClose={closeDetail} title={detail?.studentName ?? 'Payment history'} size="lg">
+        {detailLoading || !detail ? (
+          <LoadingSpinner />
+        ) : (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <div className="text-gray-500 text-xs uppercase tracking-wide">Status</div>
+                <div className="text-gray-900 font-medium">
+                  {detail.status === 'archived' ? 'Archived' : 'Graduated'}
+                  {detail.departureDate ? ` · ${detail.departureDate}` : ''}
+                  {detail.reason ? ` · ${detail.reason}` : ''}
+                </div>
+              </div>
+              <div>
+                <div className="text-gray-500 text-xs uppercase tracking-wide">Parent</div>
+                <div className="text-gray-900 font-medium">
+                  {detail.parentName ?? '—'}{detail.parentPhone ? ` · ${detail.parentPhone}` : ''}
+                </div>
+              </div>
+              <div>
+                <div className="text-gray-500 text-xs uppercase tracking-wide">Last class</div>
+                <div className="text-gray-900 font-medium">{detail.className ?? '—'}</div>
+              </div>
+            </div>
+
+            {detail.plans.length === 0 ? (
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-6 text-center text-sm text-gray-600">
+                No tuition plans on record for this student.
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {detail.plans.map((plan, idx) => {
+                  const due = plan.totalAmount + plan.adjustment;
+                  const paid = plan.payments.reduce((s, p) => s + p.amount, 0);
+                  const balance = Math.max(0, due - paid);
+                  return (
+                    <div key={idx} className="border border-gray-200 rounded-xl overflow-hidden">
+                      <div className="bg-gray-50 px-4 py-3 flex items-center justify-between">
+                        <div>
+                          <div className="font-medium text-gray-900">
+                            {plan.planName}{plan.academicYear ? ` · ${plan.academicYear}` : ''}
+                          </div>
+                          <div className="text-xs text-gray-500 mt-0.5">
+                            Tuition {fmt(plan.totalAmount, plan.currency)}
+                            {plan.adjustment !== 0 ? ` · Adjustment ${fmt(plan.adjustment, plan.currency)}` : ''}
+                            {' · '}Due {fmt(due, plan.currency)}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-sm text-gray-700">Paid {fmt(paid, plan.currency)}</div>
+                          <div className={`text-sm font-medium ${balance > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                            {balance > 0 ? `Balance ${fmt(balance, plan.currency)}` : 'Paid in full'}
+                          </div>
+                        </div>
+                      </div>
+                      {plan.payments.length === 0 ? (
+                        <div className="px-4 py-3 text-sm text-gray-500">No payments recorded.</div>
+                      ) : (
+                        <table className="w-full text-sm">
+                          <thead className="bg-white text-gray-500">
+                            <tr>
+                              <th className="text-left px-4 py-2 font-medium text-xs uppercase tracking-wide">Date</th>
+                              <th className="text-left px-4 py-2 font-medium text-xs uppercase tracking-wide">Method</th>
+                              <th className="text-left px-4 py-2 font-medium text-xs uppercase tracking-wide">Reference</th>
+                              <th className="text-right px-4 py-2 font-medium text-xs uppercase tracking-wide">Amount</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {plan.payments.map((p, pIdx) => (
+                              <tr key={pIdx}>
+                                <td className="px-4 py-2 text-gray-900">{p.paidOn}</td>
+                                <td className="px-4 py-2 text-gray-700">{p.method ? p.method[0].toUpperCase() + p.method.slice(1) : '—'}</td>
+                                <td className="px-4 py-2 text-gray-700">{p.reference || '—'}</td>
+                                <td className="px-4 py-2 text-right text-gray-900">{fmt(p.amount, plan.currency)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-gray-200">
+              <button
+                onClick={() => exportFile('xlsx')}
+                disabled={exporting !== null}
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                {exporting === 'xlsx' ? 'Exporting…' : 'Excel'}
+              </button>
+              <button
+                onClick={() => exportFile('pdf')}
+                disabled={exporting !== null}
+                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
+              >
+                <FileText className="w-4 h-4" />
+                {exporting === 'pdf' ? 'Exporting…' : 'PDF'}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+    </div>
+  );
+}
