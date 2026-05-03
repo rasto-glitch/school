@@ -33,7 +33,7 @@ export async function notify(payload: NotifyPayload): Promise<void> {
   const { schoolId, userId, title, message, type = 'general', relatedId } = payload;
 
   // 1. Save to DB
-  await supabase.from('notifications').insert({
+  const { error: insertError } = await supabase.from('notifications').insert({
     school_id: schoolId,
     user_id: userId,
     title,
@@ -41,6 +41,7 @@ export async function notify(payload: NotifyPayload): Promise<void> {
     notification_type: type,
     related_id: relatedId ?? null,
   });
+  if (insertError) console.error('[notify] notifications insert failed', { type, userId, error: insertError.message });
 
   // 2. Real-time socket event
   if (_io) {
@@ -80,7 +81,7 @@ export async function notifyMany(payloads: NotifyPayload[]): Promise<void> {
   if (payloads.length === 0) return;
 
   // Batch DB insert
-  await supabase.from('notifications').insert(
+  const { error: insertError } = await supabase.from('notifications').insert(
     payloads.map(p => ({
       school_id: p.schoolId,
       user_id: p.userId,
@@ -90,6 +91,7 @@ export async function notifyMany(payloads: NotifyPayload[]): Promise<void> {
       related_id: p.relatedId ?? null,
     }))
   );
+  if (insertError) console.error('[notifyMany] notifications insert failed', { count: payloads.length, type: payloads[0]?.type, error: insertError.message });
 
   // Socket + push per user
   await Promise.all(payloads.map(p => {
