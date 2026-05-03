@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   BookOpen, ClipboardList, Megaphone, FileText, Calendar,
   FileBadge, Bus, MessageSquare, Settings as SettingsIcon, Bell,
+  CreditCard, BellRing,
 } from 'lucide-react-native';
 import { parentApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
@@ -53,6 +54,8 @@ const TYPE_ICONS: Record<string, { Icon: any; bg: string; color: string }> = {
   appointment: { Icon: Calendar, bg: '#F0FDFA', color: '#0D9488' },
   grade: { Icon: FileBadge, bg: '#EEF2FF', color: '#4F46E5' },
   bus: { Icon: Bus, bg: '#FEE2E2', color: '#DC2626' },
+  payment_recorded: { Icon: CreditCard, bg: '#DCFCE7', color: '#16A34A' },
+  fees_reminder: { Icon: BellRing, bg: '#FEF3C7', color: '#D97706' },
   system: { Icon: SettingsIcon, bg: '#F3F4F6', color: '#6B7280' },
   general: { Icon: Bell, bg: '#F3F4F6', color: '#6B7280' },
 };
