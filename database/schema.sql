@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT,
   username TEXT NOT NULL,
   password_hash TEXT NOT NULL,
-  role TEXT NOT NULL CHECK (role IN ('parent','teacher','admin','driver','supervisor','reception')),
+  role TEXT NOT NULL CHECK (role IN ('parent','teacher','admin','driver','supervisor','reception','accountant')),
   profile_picture TEXT,
   first_name TEXT NOT NULL,
   last_name TEXT NOT NULL,

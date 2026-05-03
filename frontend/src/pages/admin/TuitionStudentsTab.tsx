@@ -9,7 +9,7 @@ import { CreditCard, Lock, Search } from 'lucide-react';
 import type { StudentFeeRow, FeeStatus } from '../../types';
 
 interface Props {
-  basePath: string; // '/admin/tuition' or '/reception/tuition'
+  basePath: string; // '/accounting' (used to build student detail links)
   canWrite: boolean;
 }
 

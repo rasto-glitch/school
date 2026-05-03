@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { UserPlus, Search, Trash2, KeyRound, Clock, CheckCircle2, X, Pencil, Shield, ExternalLink } from 'lucide-react';
 import { adminApi } from '../../services/api';
+import { useAuthStore } from '../../store/authStore';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
 import Input from '../../components/common/Input';
@@ -18,13 +19,16 @@ const ROLE_COLORS: Record<string, string> = {
   supervisor: 'bg-teal-100 text-teal-700',
   parent:     'bg-green-100 text-green-700',
   reception:  'bg-pink-100 text-pink-700',
+  accountant: 'bg-amber-100 text-amber-700',
 };
 
-const ROLE_FILTERS = ['all', 'parent', 'teacher', 'driver', 'supervisor', 'admin', 'reception'] as const;
+const ROLE_FILTERS = ['all', 'parent', 'teacher', 'driver', 'supervisor', 'admin', 'reception', 'accountant'] as const;
 type RoleFilter = typeof ROLE_FILTERS[number];
 
 export default function AccountsPage() {
   const navigate = useNavigate();
+  const { school } = useAuthStore();
+  const isAccountingPremium = school?.features?.tuition_fees === true;
   const [loading, setLoading] = useState(false);
   const { register, handleSubmit, reset } = useForm<{
     firstName: string; lastName: string; email: string; phone: string;
@@ -245,6 +249,7 @@ export default function AccountsPage() {
                 { value: 'supervisor', label: 'Supervisor' },
                 { value: 'reception', label: 'Reception' },
                 { value: 'admin', label: 'Admin' },
+                ...(isAccountingPremium ? [{ value: 'accountant', label: 'Accountant' }] : []),
               ]}
               placeholder="Select role"
               {...register('role', { required: true })}
@@ -354,7 +359,7 @@ export default function AccountsPage() {
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
-                    ) : (acc.role === 'teacher' || acc.role === 'supervisor' || acc.role === 'reception') ? (
+                    ) : (acc.role === 'teacher' || acc.role === 'supervisor' || acc.role === 'reception' || acc.role === 'accountant') ? (
                       <button
                         onClick={() => onDeleteAccount(acc)}
                         disabled={deletingId === acc.id}

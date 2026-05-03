@@ -24,6 +24,8 @@ const ROLE_DASHBOARDS: Record<string, string> = {
   admin: '/admin/dashboard',
   driver: '/driver/dashboard',
   supervisor: '/supervisor/dashboard',
+  reception: '/reception/dashboard',
+  accountant: '/accounting',
 };
 
 export default function LoginPage() {

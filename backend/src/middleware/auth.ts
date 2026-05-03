@@ -5,7 +5,7 @@ import { supabase } from '../config/supabase';
 export interface AuthPayload {
   userId: string;
   schoolId: string;
-  role: 'parent' | 'teacher' | 'admin' | 'driver' | 'supervisor' | 'reception';
+  role: 'parent' | 'teacher' | 'admin' | 'driver' | 'supervisor' | 'reception' | 'accountant';
   username: string;
   featuresVersion?: number;
 }
@@ -32,7 +32,7 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
 
   const { data: user } = await supabase
     .from('users')
-    .select('is_active, password_changed_at, schools(is_active, features_version)')
+    .select('is_active, password_changed_at, schools(is_active, features_version, features)')
     .eq('id', decoded.userId)
     .single();
 
@@ -46,7 +46,7 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
     return;
   }
 
-  const school = user.schools as unknown as { is_active: boolean; features_version: number } | null;
+  const school = user.schools as unknown as { is_active: boolean; features_version: number; features: Record<string, boolean> | null } | null;
 
   if (!school?.is_active) {
     res.status(401).json({ error: 'School is deactivated' });
@@ -55,6 +55,13 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
 
   if (school.features_version > (decoded.featuresVersion ?? 1)) {
     res.status(401).json({ error: 'School settings updated. Please log in again.' });
+    return;
+  }
+
+  // Accountant role is gated by the premium tuition_fees feature.
+  // If the school drops below premium, existing accountant accounts can't authenticate.
+  if (decoded.role === 'accountant' && school.features?.tuition_fees !== true) {
+    res.status(403).json({ error: 'Accounting module is not enabled for this school.' });
     return;
   }
 

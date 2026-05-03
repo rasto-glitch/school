@@ -100,34 +100,28 @@ function SocketProvider({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+const ROLE_REDIRECTS: Record<string, string> = {
+  parent: '/parent/dashboard',
+  teacher: '/teacher/dashboard',
+  admin: '/admin/dashboard',
+  driver: '/driver/dashboard',
+  supervisor: '/supervisor/dashboard',
+  reception: '/reception/dashboard',
+  accountant: '/accounting',
+};
+
 function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode; allowedRoles?: string[] }) {
   const { isAuthenticated, user } = useAuthStore();
   if (!isAuthenticated()) return <Navigate to="/login" replace />;
   if (allowedRoles && user && !allowedRoles.includes(user.role)) {
-    const roleRedirects: Record<string, string> = {
-      parent: '/parent/dashboard',
-      teacher: '/teacher/dashboard',
-      admin: '/admin/dashboard',
-      driver: '/driver/dashboard',
-      supervisor: '/supervisor/dashboard',
-      reception: '/reception/dashboard',
-    };
-    return <Navigate to={roleRedirects[user.role] || '/login'} replace />;
+    return <Navigate to={ROLE_REDIRECTS[user.role] || '/login'} replace />;
   }
   return <>{children}</>;
 }
 
 function RootRedirect() {
   const { isAuthenticated, user } = useAuthStore();
-  const roleRedirects: Record<string, string> = {
-    parent: '/parent/dashboard',
-    teacher: '/teacher/dashboard',
-    admin: '/admin/dashboard',
-    driver: '/driver/dashboard',
-    supervisor: '/supervisor/dashboard',
-    reception: '/reception/dashboard',
-  };
-  if (isAuthenticated()) return <Navigate to={roleRedirects[user?.role || ''] || '/login'} replace />;
+  if (isAuthenticated()) return <Navigate to={ROLE_REDIRECTS[user?.role || ''] || '/login'} replace />;
   return <Navigate to="/login" replace />;
 }
 
@@ -191,8 +185,6 @@ export default function App() {
         <Route path="/admin/announcements" element={<ProtectedRoute allowedRoles={['admin']}><AnnouncementsPage /></ProtectedRoute>} />
         <Route path="/admin/accounts" element={<ProtectedRoute allowedRoles={['admin']}><AccountsPage /></ProtectedRoute>} />
         <Route path="/admin/settings" element={<ProtectedRoute allowedRoles={['admin']}><SettingsPage /></ProtectedRoute>} />
-        <Route path="/admin/tuition" element={<ProtectedRoute allowedRoles={['admin']}><AdminTuitionPage /></ProtectedRoute>} />
-        <Route path="/admin/tuition/student/:id" element={<ProtectedRoute allowedRoles={['admin']}><AdminTuitionStudentDetailPage /></ProtectedRoute>} />
         <Route path="/admin/parents/:id" element={<ProtectedRoute allowedRoles={['admin']}><ParentProfilePage /></ProtectedRoute>} />
         <Route path="/admin/profile" element={<ProtectedRoute allowedRoles={['admin']}><ProfilePage /></ProtectedRoute>} />
 
@@ -209,9 +201,12 @@ export default function App() {
         {/* Reception Portal */}
         <Route path="/reception/dashboard" element={<ProtectedRoute allowedRoles={['reception']}><ReceptionDashboard /></ProtectedRoute>} />
         <Route path="/reception/appointments" element={<ProtectedRoute allowedRoles={['reception']}><ReceptionAppointmentsPage /></ProtectedRoute>} />
-        <Route path="/reception/tuition" element={<ProtectedRoute allowedRoles={['reception']}><AdminTuitionPage /></ProtectedRoute>} />
-        <Route path="/reception/tuition/student/:id" element={<ProtectedRoute allowedRoles={['reception']}><AdminTuitionStudentDetailPage /></ProtectedRoute>} />
         <Route path="/reception/profile" element={<ProtectedRoute allowedRoles={['reception']}><ProfilePage /></ProtectedRoute>} />
+
+        {/* Accounting Portal — premium tuition module. Shared by admin, accountant, reception (read-only via backend). */}
+        <Route path="/accounting" element={<ProtectedRoute allowedRoles={['admin', 'accountant', 'reception']}><AdminTuitionPage /></ProtectedRoute>} />
+        <Route path="/accounting/student/:id" element={<ProtectedRoute allowedRoles={['admin', 'accountant', 'reception']}><AdminTuitionStudentDetailPage /></ProtectedRoute>} />
+        <Route path="/accounting/profile" element={<ProtectedRoute allowedRoles={['accountant']}><ProfilePage /></ProtectedRoute>} />
 
         {/* Driver Portal */}
         <Route path="/driver/dashboard" element={<ProtectedRoute allowedRoles={['driver']}><DriverDashboard /></ProtectedRoute>} />

@@ -179,32 +179,36 @@ export function createRouter(io: SocketServer) {
   router.put('/parent/pickup-location', authenticate, authorize('parent'), (req, res) => parent.updatePickupLocation(req as AuthRequest, res));
   router.get('/parent/pickup-location', authenticate, authorize('parent'), (req, res) => parent.getPickupLocation(req as AuthRequest, res));
 
-  // ---- TUITION FEES (premium feature, gated server-side) ----
-  // Admin: full read/write. Reception: read-only list/families/student-detail. Parent: own family only.
-  router.get('/admin/fees/plans', authenticate, authorize('admin', 'reception'), (req, res) => fees.listPlans(req as AuthRequest, res));
-  router.post('/admin/fees/plans', authenticate, authorize('admin'), (req, res) => fees.createPlan(req as AuthRequest, res));
-  router.put('/admin/fees/plans/:id', authenticate, authorize('admin'), (req, res) => fees.updatePlan(req as AuthRequest, res));
-  router.delete('/admin/fees/plans/:id', authenticate, authorize('admin'), (req, res) => fees.deletePlan(req as AuthRequest, res));
-  router.post('/admin/fees/plans/:id/assign', authenticate, authorize('admin'), (req, res) => fees.assignPlan(req as AuthRequest, res));
+  // ---- ACCOUNTING (premium feature, gated server-side) ----
+  // Admin & accountant: full read/write. Reception: read-only list/families/student-detail. Parent: own family only.
+  // (Routes formerly lived under /admin/fees/*; renamed to /accounting/* when introducing the dedicated accountant role.)
+  const accountingRW = ['admin', 'accountant'] as const;
+  const accountingRO = ['admin', 'accountant', 'reception'] as const;
 
-  router.get('/admin/fees/students', authenticate, authorize('admin', 'reception'), (req, res) => fees.listStudentFees(req as AuthRequest, res));
-  router.get('/admin/fees/families', authenticate, authorize('admin', 'reception'), (req, res) => fees.listFamilies(req as AuthRequest, res));
-  router.get('/admin/fees/student-fees/:id', authenticate, authorize('admin', 'reception'), (req, res) => fees.getStudentFee(req as AuthRequest, res));
-  router.patch('/admin/fees/student-fees/:id', authenticate, authorize('admin'), (req, res) => fees.updateStudentFee(req as AuthRequest, res));
-  router.post('/admin/fees/student-fees/:id/payments', authenticate, authorize('admin'), (req, res) => fees.recordPayment(req as AuthRequest, res));
-  router.delete('/admin/fees/payments/:id', authenticate, authorize('admin'), (req, res) => fees.deletePayment(req as AuthRequest, res));
+  router.get('/accounting/plans', authenticate, authorize(...accountingRO), (req, res) => fees.listPlans(req as AuthRequest, res));
+  router.post('/accounting/plans', authenticate, authorize(...accountingRW), (req, res) => fees.createPlan(req as AuthRequest, res));
+  router.put('/accounting/plans/:id', authenticate, authorize(...accountingRW), (req, res) => fees.updatePlan(req as AuthRequest, res));
+  router.delete('/accounting/plans/:id', authenticate, authorize(...accountingRW), (req, res) => fees.deletePlan(req as AuthRequest, res));
+  router.post('/accounting/plans/:id/assign', authenticate, authorize(...accountingRW), (req, res) => fees.assignPlan(req as AuthRequest, res));
 
-  router.get('/admin/fees/config', authenticate, authorize('admin', 'reception'), (req, res) => fees.getConfig(req as AuthRequest, res));
-  router.put('/admin/fees/config', authenticate, authorize('admin'), (req, res) => fees.updateConfig(req as AuthRequest, res));
-  router.post('/admin/fees/notify-due', authenticate, authorize('admin'), (req, res) => fees.notifyDue(req as AuthRequest, res));
+  router.get('/accounting/students', authenticate, authorize(...accountingRO), (req, res) => fees.listStudentFees(req as AuthRequest, res));
+  router.get('/accounting/families', authenticate, authorize(...accountingRO), (req, res) => fees.listFamilies(req as AuthRequest, res));
+  router.get('/accounting/student-fees/:id', authenticate, authorize(...accountingRO), (req, res) => fees.getStudentFee(req as AuthRequest, res));
+  router.patch('/accounting/student-fees/:id', authenticate, authorize(...accountingRW), (req, res) => fees.updateStudentFee(req as AuthRequest, res));
+  router.post('/accounting/student-fees/:id/payments', authenticate, authorize(...accountingRW), (req, res) => fees.recordPayment(req as AuthRequest, res));
+  router.delete('/accounting/payments/:id', authenticate, authorize(...accountingRW), (req, res) => fees.deletePayment(req as AuthRequest, res));
 
-  // Per-student feature locks. Admin-controlled, used independently of fees.
-  router.post('/admin/students/:studentId/locks', authenticate, authorize('admin'), (req, res) => fees.setLock(req as AuthRequest, res));
-  router.delete('/admin/students/:studentId/locks/:feature', authenticate, authorize('admin'), (req, res) => fees.removeLock(req as AuthRequest, res));
+  router.get('/accounting/config', authenticate, authorize(...accountingRO), (req, res) => fees.getConfig(req as AuthRequest, res));
+  router.put('/accounting/config', authenticate, authorize(...accountingRW), (req, res) => fees.updateConfig(req as AuthRequest, res));
+  router.post('/accounting/notify-due', authenticate, authorize(...accountingRW), (req, res) => fees.notifyDue(req as AuthRequest, res));
 
-  // Receipt PDFs — auth handled inside the controller (admin/reception/parent each verified differently).
-  router.get('/fees/payments/:id/receipt.pdf', authenticate, (req, res) => fees.paymentReceiptPdf(req as AuthRequest, res));
-  router.get('/fees/student-fees/:id/summary.pdf', authenticate, (req, res) => fees.studentFeeSummaryPdf(req as AuthRequest, res));
+  // Per-student feature locks. Admin/accountant controlled, used independently of fees.
+  router.post('/accounting/students/:studentId/locks', authenticate, authorize(...accountingRW), (req, res) => fees.setLock(req as AuthRequest, res));
+  router.delete('/accounting/students/:studentId/locks/:feature', authenticate, authorize(...accountingRW), (req, res) => fees.removeLock(req as AuthRequest, res));
+
+  // Receipt PDFs — auth handled inside the controller (admin/accountant/reception/parent each verified differently).
+  router.get('/accounting/payments/:id/receipt.pdf', authenticate, (req, res) => fees.paymentReceiptPdf(req as AuthRequest, res));
+  router.get('/accounting/student-fees/:id/summary.pdf', authenticate, (req, res) => fees.studentFeeSummaryPdf(req as AuthRequest, res));
 
   // Parent view
   router.get('/parent/fees', authenticate, authorize('parent'), (req, res) => fees.getParentFees(req as AuthRequest, res));

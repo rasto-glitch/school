@@ -56,7 +56,7 @@ const navItems: Record<Role, NavItem[]> = {
     { to: '/admin/schedule', icon: Calendar, label: 'Schedule' },
     { to: '/admin/drivers', icon: Bus, label: 'Drivers', feature: 'bus_tracking' },
     { to: '/admin/announcements', icon: Megaphone, label: 'Announcements', feature: 'announcements' },
-    { to: '/admin/tuition', icon: CreditCard, label: 'Tuition', feature: 'tuition_fees' },
+    { to: '/accounting', icon: CreditCard, label: 'Accounting', feature: 'tuition_fees' },
     { to: '/admin/notifications', icon: Bell, label: 'Notifications' },
     { to: '/admin/accounts', icon: UserCog, label: 'Accounts' },
     { to: '/admin/settings', icon: Settings, label: 'Settings' },
@@ -65,8 +65,12 @@ const navItems: Record<Role, NavItem[]> = {
   reception: [
     { to: '/reception/dashboard', icon: Home, label: 'Dashboard' },
     { to: '/reception/appointments', icon: Calendar, label: 'Appointments', feature: 'appointments' },
-    { to: '/reception/tuition', icon: CreditCard, label: 'Tuition', feature: 'tuition_fees' },
+    { to: '/accounting', icon: CreditCard, label: 'Accounting', feature: 'tuition_fees' },
     { to: '/reception/profile', icon: User, label: 'Profile' },
+  ],
+  accountant: [
+    { to: '/accounting', icon: CreditCard, label: 'Accounting', feature: 'tuition_fees' },
+    { to: '/accounting/profile', icon: User, label: 'Profile' },
   ],
   driver: [
     { to: '/driver/dashboard', icon: Home, label: 'Dashboard' },

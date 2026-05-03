@@ -310,7 +310,7 @@ export async function assignPlan(req: AuthRequest, res: Response): Promise<void>
   res.json({ assigned: toInsert.length, skipped: studentIds.length - toInsert.length });
 }
 
-// ── Students/families list (admin + reception read; admin-only writes) ──
+// ── Students/families list (admin/accountant + reception read; admin/accountant write) ──
 
 interface StudentFeeRow {
   id: string;
@@ -729,7 +729,7 @@ async function loadReceiptContext(schoolId: string, studentFeeId: string) {
 }
 
 // Verifies the requesting user can see this payment.
-// admin/reception: their school. parent: must own the student.
+// admin/accountant/reception: their school. parent: must own the student.
 async function authorizeReceipt(req: AuthRequest, studentFeeId: string): Promise<{ ok: boolean }> {
   const { schoolId, userId, role } = req.user!;
   const { data: sf } = await supabase
@@ -737,7 +737,7 @@ async function authorizeReceipt(req: AuthRequest, studentFeeId: string): Promise
     .select('school_id, students!inner(parents(user_id))')
     .eq('id', studentFeeId).single();
   if (!sf || (sf as any).school_id !== schoolId) return { ok: false };
-  if (role === 'admin' || role === 'reception') return { ok: true };
+  if (role === 'admin' || role === 'accountant' || role === 'reception') return { ok: true };
   if (role === 'parent') {
     const parentUserId = (sf as any).students?.parents?.user_id;
     if (parentUserId === userId) return { ok: true };

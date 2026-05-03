@@ -11,10 +11,10 @@ type Tab = 'students' | 'families' | 'plans' | 'settings';
 export default function AdminTuitionPage() {
   const { user, school } = useAuthStore();
   const role = user?.role;
-  const canWrite = role === 'admin';
+  const canWrite = role === 'admin' || role === 'accountant';
   const isPremium = school?.features?.tuition_fees === true;
 
-  const basePath = role === 'reception' ? '/reception/tuition' : '/admin/tuition';
+  const basePath = '/accounting';
   const [tab, setTab] = useState<Tab>('students');
 
   const tabs: { id: Tab; label: string; show: boolean }[] = [
@@ -26,11 +26,11 @@ export default function AdminTuitionPage() {
 
   if (!isPremium) {
     return (
-      <PageLayout title="Tuition" subtitle="Premium feature">
+      <PageLayout title="Accounting" subtitle="Premium feature">
         <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 max-w-xl">
-          <h3 className="font-semibold text-amber-900 mb-1">Tuition module not enabled</h3>
+          <h3 className="font-semibold text-amber-900 mb-1">Accounting module not enabled</h3>
           <p className="text-sm text-amber-800">
-            The tuition fees module is part of the Premium plan. Contact Scholify to enable it for your school.
+            The accounting module is part of the Premium plan. Contact Scholify to enable it for your school.
           </p>
         </div>
       </PageLayout>
@@ -38,7 +38,7 @@ export default function AdminTuitionPage() {
   }
 
   return (
-    <PageLayout title="Tuition" subtitle={canWrite ? 'Plans, payments, reminders' : 'View tuition status (read-only)'}>
+    <PageLayout title="Accounting" subtitle={canWrite ? 'Plans, payments, reminders' : 'View tuition status (read-only)'}>
       <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit mb-6">
         {tabs.filter(t => t.show).map(t => (
           <button

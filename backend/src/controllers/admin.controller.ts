@@ -988,7 +988,14 @@ export async function createAccount(req: AuthRequest, res: Response): Promise<vo
   const { schoolId } = req.user!;
   const { firstName, lastName, email, phone, username, password, role } = req.body;
 
-  const { data: schoolData } = await supabase.from('schools').select('abbreviation').eq('id', schoolId).single();
+  const { data: schoolData } = await supabase.from('schools').select('abbreviation, features').eq('id', schoolId).single();
+
+  // Accountant role requires the premium tuition_fees feature.
+  if (role === 'accountant' && (schoolData?.features as Record<string, boolean> | null)?.tuition_fees !== true) {
+    res.status(403).json({ error: 'Accounting module is not enabled for this school. Contact your provider to upgrade.' });
+    return;
+  }
+
   const abbrev = (schoolData?.abbreviation || '').toLowerCase();
   const finalUsername = abbrev && !username.startsWith(`${abbrev}_`) ? `${abbrev}_${username}` : username;
 

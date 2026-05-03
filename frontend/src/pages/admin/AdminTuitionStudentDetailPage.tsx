@@ -46,8 +46,8 @@ export default function AdminTuitionStudentDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const canWrite = user?.role === 'admin';
-  const basePath = user?.role === 'reception' ? '/reception/tuition' : '/admin/tuition';
+  const canWrite = user?.role === 'admin' || user?.role === 'accountant';
+  const basePath = '/accounting';
 
   const [data, setData] = useState<StudentFeeDetail | null>(null);
   const [showPay, setShowPay] = useState(false);

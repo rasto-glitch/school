@@ -212,41 +212,41 @@ export const adminApi = {
   },
 };
 
-// ---- TUITION FEES (premium) ----
+// ---- ACCOUNTING (premium tuition module) ----
 export const feesApi = {
   // Plans
-  listPlans: () => api.get('/admin/fees/plans'),
-  createPlan: (data: object) => api.post('/admin/fees/plans', data),
-  updatePlan: (id: string, data: object) => api.put(`/admin/fees/plans/${id}`, data),
-  deletePlan: (id: string) => api.delete(`/admin/fees/plans/${id}`),
-  assignPlan: (id: string, data?: { studentIds?: string[] }) => api.post(`/admin/fees/plans/${id}/assign`, data ?? {}),
+  listPlans: () => api.get('/accounting/plans'),
+  createPlan: (data: object) => api.post('/accounting/plans', data),
+  updatePlan: (id: string, data: object) => api.put(`/accounting/plans/${id}`, data),
+  deletePlan: (id: string) => api.delete(`/accounting/plans/${id}`),
+  assignPlan: (id: string, data?: { studentIds?: string[] }) => api.post(`/accounting/plans/${id}/assign`, data ?? {}),
   // Students / families
-  listStudentFees: () => api.get('/admin/fees/students'),
-  listFamilies: () => api.get('/admin/fees/families'),
-  getStudentFee: (id: string) => api.get(`/admin/fees/student-fees/${id}`),
+  listStudentFees: () => api.get('/accounting/students'),
+  listFamilies: () => api.get('/accounting/families'),
+  getStudentFee: (id: string) => api.get(`/accounting/student-fees/${id}`),
   updateStudentFee: (id: string, data: { adjustment?: number; notes?: string | null; totalAmount?: number }) =>
-    api.patch(`/admin/fees/student-fees/${id}`, data),
+    api.patch(`/accounting/student-fees/${id}`, data),
   recordPayment: (studentFeeId: string, data: { amount: number; paidOn: string; method?: string; reference?: string; notes?: string }) =>
-    api.post(`/admin/fees/student-fees/${studentFeeId}/payments`, data),
-  deletePayment: (paymentId: string) => api.delete(`/admin/fees/payments/${paymentId}`),
+    api.post(`/accounting/student-fees/${studentFeeId}/payments`, data),
+  deletePayment: (paymentId: string) => api.delete(`/accounting/payments/${paymentId}`),
   // Config
-  getConfig: () => api.get('/admin/fees/config'),
-  updateConfig: (data: object) => api.put('/admin/fees/config', data),
+  getConfig: () => api.get('/accounting/config'),
+  updateConfig: (data: object) => api.put('/accounting/config', data),
   // Broadcast
   notifyDue: (data: { title?: string; message?: string; statusFilter?: string[] }) =>
-    api.post('/admin/fees/notify-due', data),
+    api.post('/accounting/notify-due', data),
   // Locks
   setLock: (studentId: string, data: { feature: string; reason?: string }) =>
-    api.post(`/admin/students/${studentId}/locks`, data),
+    api.post(`/accounting/students/${studentId}/locks`, data),
   removeLock: (studentId: string, feature: string) =>
-    api.delete(`/admin/students/${studentId}/locks/${feature}`),
+    api.delete(`/accounting/students/${studentId}/locks/${feature}`),
   // Receipts (open in new tab; auth via interceptor on the API client)
-  paymentReceiptUrl: (paymentId: string) => `${api.defaults.baseURL}/fees/payments/${paymentId}/receipt.pdf`,
-  studentFeeSummaryUrl: (studentFeeId: string) => `${api.defaults.baseURL}/fees/student-fees/${studentFeeId}/summary.pdf`,
+  paymentReceiptUrl: (paymentId: string) => `${api.defaults.baseURL}/accounting/payments/${paymentId}/receipt.pdf`,
+  studentFeeSummaryUrl: (studentFeeId: string) => `${api.defaults.baseURL}/accounting/student-fees/${studentFeeId}/summary.pdf`,
   downloadPaymentReceipt: (paymentId: string) =>
-    api.get(`/fees/payments/${paymentId}/receipt.pdf`, { responseType: 'blob' }),
+    api.get(`/accounting/payments/${paymentId}/receipt.pdf`, { responseType: 'blob' }),
   downloadStudentFeeSummary: (studentFeeId: string) =>
-    api.get(`/fees/student-fees/${studentFeeId}/summary.pdf`, { responseType: 'blob' }),
+    api.get(`/accounting/student-fees/${studentFeeId}/summary.pdf`, { responseType: 'blob' }),
   // Parent
   getParentFees: () => api.get('/parent/fees'),
 };
