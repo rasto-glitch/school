@@ -66,11 +66,15 @@ export default function AdminTuitionStudentDetailPage() {
   const [adjNotes, setAdjNotes] = useState('');
   const [adjSaving, setAdjSaving] = useState(false);
 
-  const load = () => id && feesApi.getStudentFee(id).then(r => setData(r.data));
+  const load = async () => {
+    if (!id) return;
+    const r = await feesApi.getStudentFee(id);
+    setData(r.data);
+  };
 
   useEffect(() => {
     if (!id) return;
-    load()?.catch((e: any) => toast.error(e.response?.data?.error || 'Failed to load'));
+    load().catch((e: any) => toast.error(e.response?.data?.error || 'Failed to load'));
   }, [id]);
 
   if (!data) return <PageLayout title="Tuition"><LoadingSpinner /></PageLayout>;
