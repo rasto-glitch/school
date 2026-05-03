@@ -198,6 +198,7 @@ export const teacherApi = {
   markAllRead: () => api.patch('/teacher/notifications/read-all'),
   getAnnouncements: () => api.get('/teacher/announcements'),
   getSchedule: () => api.get('/teacher/schedule'),
+  getSalary: () => api.get('/teacher/salary'),
 };
 
 // ---- CHAT ----

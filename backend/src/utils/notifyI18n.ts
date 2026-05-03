@@ -19,6 +19,8 @@ interface PushStrings {
   prefix_post: string;
   prefix_payment_recorded: string;
   prefix_fees_reminder: string;
+  prefix_salary_due_soon: string;
+  prefix_salary_paid: string;
   prefix_general: string;
   prefix_system: string;
 }
@@ -45,6 +47,8 @@ const T: Record<string, PushStrings> = {
     prefix_post: 'New Post',
     prefix_payment_recorded: 'Tuition Payment Recorded',
     prefix_fees_reminder: 'Tuition Reminder',
+    prefix_salary_due_soon: 'Salary Payment Due',
+    prefix_salary_paid: 'Salary Recorded',
     prefix_general: 'Notification',
     prefix_system: 'System',
   },
@@ -69,6 +73,8 @@ const T: Record<string, PushStrings> = {
     prefix_post: 'پۆستی نوێ',
     prefix_payment_recorded: 'پارەی خوێندن تۆمارکرا',
     prefix_fees_reminder: 'ئاگاداری پارەی خوێندن',
+    prefix_salary_due_soon: 'کاتی موچە نزیکبووەتەوە',
+    prefix_salary_paid: 'موچە تۆمارکرا',
     prefix_general: 'ئاگادارکردنەوە',
     prefix_system: 'سیستەم',
   },
@@ -93,6 +99,8 @@ const T: Record<string, PushStrings> = {
     prefix_post: 'منشور جديد',
     prefix_payment_recorded: 'تم تسجيل دفعة الرسوم',
     prefix_fees_reminder: 'تذكير بالرسوم',
+    prefix_salary_due_soon: 'موعد استلام الراتب',
+    prefix_salary_paid: 'تم تسجيل الراتب',
     prefix_general: 'إشعار',
     prefix_system: 'النظام',
   },

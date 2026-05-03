@@ -6,8 +6,9 @@ import TuitionFamiliesTab from './TuitionFamiliesTab';
 import TuitionPlansTab from './TuitionPlansTab';
 import TuitionSettingsTab from './TuitionSettingsTab';
 import TuitionArchiveTab from './TuitionArchiveTab';
+import StaffSalariesTab from './StaffSalariesTab';
 
-type Tab = 'students' | 'families' | 'plans' | 'archive' | 'settings';
+type Tab = 'students' | 'families' | 'plans' | 'salaries' | 'archive' | 'settings';
 
 export default function AdminTuitionPage() {
   const { user, school } = useAuthStore();
@@ -22,6 +23,7 @@ export default function AdminTuitionPage() {
     { id: 'students', label: 'Students', show: true },
     { id: 'families', label: 'Families', show: true },
     { id: 'plans', label: 'Plans', show: canWrite },
+    { id: 'salaries', label: 'Salaries', show: canWrite },
     { id: 'archive', label: 'Archive', show: true },
     { id: 'settings', label: 'Settings', show: canWrite },
   ];
@@ -56,6 +58,7 @@ export default function AdminTuitionPage() {
       {tab === 'students' && <TuitionStudentsTab basePath={basePath} canWrite={canWrite} />}
       {tab === 'families' && <TuitionFamiliesTab basePath={basePath} />}
       {tab === 'plans' && canWrite && <TuitionPlansTab />}
+      {tab === 'salaries' && canWrite && <StaffSalariesTab />}
       {tab === 'archive' && <TuitionArchiveTab />}
       {tab === 'settings' && canWrite && <TuitionSettingsTab />}
     </PageLayout>

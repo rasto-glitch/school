@@ -319,3 +319,38 @@ export interface TuitionConfig {
   currency: string;
   siblingDiscount: SiblingDiscountConfig;
 }
+
+// ── Staff salaries ────────────────────────────────────────────────────────
+
+export interface StaffSalaryPayment {
+  id: string;
+  amount: number;
+  currency: string;
+  paidOn: string;
+  periodLabel: string | null;
+  notes: string | null;
+  recordedBy?: string | null;
+  createdAt?: string;
+}
+
+export interface StaffMember {
+  id: string;
+  schoolId: string;
+  userId: string | null;
+  fullName: string;
+  position: string | null;
+  salaryAmount: number;
+  currency: string;
+  nextPaymentDate: string | null;
+  isActive: boolean;
+  createdAt: string;
+  lastPayment: { amount: number; currency: string; paidOn: string; periodLabel: string | null } | null;
+}
+
+export interface StaffSetupTeacher {
+  teacherId: string;
+  userId: string;
+  fullName: string;
+  subject: string | null;
+  alreadyLinked: boolean;
+}

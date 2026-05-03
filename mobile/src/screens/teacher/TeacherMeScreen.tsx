@@ -2,7 +2,8 @@ import { useMemo, useEffect, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Image, Alert, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { User, Settings, ShieldCheck, Plus, Pencil } from 'lucide-react-native';
+import { User, Settings, ShieldCheck, Plus, Pencil, Wallet, ChevronRight } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuthStore } from '../../store/authStore';
 import { useColors } from '../../store/themeStore';
@@ -10,6 +11,7 @@ import { authApi } from '../../services/api';
 import { spacing, radius, font, shadow } from '../../theme';
 
 export default function TeacherMeScreen() {
+  const { t } = useTranslation();
   const { user, school, setProfilePicture } = useAuthStore();
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -79,6 +81,21 @@ export default function TeacherMeScreen() {
         )}
       </View>
 
+      <TouchableOpacity
+        style={styles.actionCard}
+        activeOpacity={0.7}
+        onPress={() => navigation.navigate('TeacherSalary')}
+      >
+        <View style={styles.actionIconBox}>
+          <Wallet size={18} color={colors.primary} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.actionTitle}>{t('salary.title', 'My Salary')}</Text>
+          <Text style={styles.actionSubtitle}>{t('salary.subtitle_short', 'View salary and payments')}</Text>
+        </View>
+        <ChevronRight size={18} color={colors.textMuted} />
+      </TouchableOpacity>
+
       <View style={styles.infoCard}>
         <View style={styles.infoRow}>
           <Text style={styles.infoLabel}>Full Name</Text>
@@ -116,6 +133,10 @@ const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').u
   profileUsername: { fontSize: font.sm, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
   schoolBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: radius.full, paddingHorizontal: 10, paddingVertical: 4, marginTop: spacing.sm },
   schoolBadgeText: { fontSize: font.xs, color: '#fff', fontWeight: '600' },
+  actionCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.md, ...shadow.sm },
+  actionIconBox: { width: 36, height: 36, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primaryLight },
+  actionTitle: { fontSize: font.md, fontWeight: '700', color: colors.text },
+  actionSubtitle: { fontSize: font.xs, color: colors.textMuted, marginTop: 2 },
   infoCard: { backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.md, ...shadow.sm },
   infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10 },
   infoLabel: { fontSize: font.sm, color: colors.textMuted, fontWeight: '500' },

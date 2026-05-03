@@ -365,7 +365,7 @@ CREATE TABLE IF NOT EXISTS notifications (
   title TEXT NOT NULL,
   message TEXT NOT NULL,
   is_read BOOLEAN DEFAULT FALSE,
-  notification_type TEXT DEFAULT 'general' CHECK (notification_type IN ('homework','assignment','announcement','bus','grade','general','system','report','appointment','post','payment_recorded','fees_reminder')),
+  notification_type TEXT DEFAULT 'general' CHECK (notification_type IN ('homework','assignment','announcement','bus','grade','general','system','report','appointment','post','payment_recorded','fees_reminder','salary_due_soon','salary_paid')),
   related_id UUID,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -862,3 +862,40 @@ CREATE TABLE IF NOT EXISTS fee_payments (
 );
 CREATE INDEX IF NOT EXISTS idx_fee_payments_student_fee ON fee_payments(student_fee_id, paid_on DESC);
 CREATE INDEX IF NOT EXISTS idx_fee_payments_school ON fee_payments(school_id);
+
+-- ============================================================
+-- STAFF SALARIES (premium feature, gated by school.features.tuition_fees)
+-- ============================================================
+-- Unified roster of paid staff. user_id is set when the row is linked to a
+-- teacher account (so notifications can fire); custom employees added by the
+-- accountant for record-keeping have user_id = NULL.
+CREATE TABLE IF NOT EXISTS staff_members (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  full_name TEXT NOT NULL,
+  position TEXT,
+  salary_amount NUMERIC(12,2) NOT NULL CHECK (salary_amount >= 0),
+  currency TEXT NOT NULL DEFAULT 'USD',
+  next_payment_date DATE,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_staff_members_school ON staff_members(school_id, is_active);
+CREATE INDEX IF NOT EXISTS idx_staff_members_user ON staff_members(user_id) WHERE user_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_staff_members_school_user_unique ON staff_members(school_id, user_id) WHERE user_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS staff_salary_payments (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  staff_id UUID NOT NULL REFERENCES staff_members(id) ON DELETE CASCADE,
+  amount NUMERIC(12,2) NOT NULL CHECK (amount > 0),
+  currency TEXT NOT NULL,
+  paid_on DATE NOT NULL,
+  period_label TEXT,
+  notes TEXT,
+  recorded_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_staff_salary_payments_staff ON staff_salary_payments(staff_id, paid_on DESC);
+CREATE INDEX IF NOT EXISTS idx_staff_salary_payments_school ON staff_salary_payments(school_id);

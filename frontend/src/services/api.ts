@@ -261,6 +261,36 @@ export const feesApi = {
     api.get(`/accounting/archive/${kind}/${id}/export.xlsx`, { responseType: 'blob' }),
 };
 
+// ---- STAFF SALARIES (premium, gated by tuition_fees) ----
+export const staffApi = {
+  getSetup: () => api.get<{ teachers: { teacherId: string; userId: string; fullName: string; subject: string | null; alreadyLinked: boolean }[] }>('/accounting/staff/setup'),
+  list: () => api.get('/accounting/staff'),
+  create: (data: {
+    userId?: string | null;
+    fullName: string;
+    position?: string | null;
+    salaryAmount: number;
+    currency: string;
+    nextPaymentDate?: string | null;
+    isActive?: boolean;
+  }) => api.post('/accounting/staff', data),
+  update: (id: string, data: Partial<{
+    userId: string | null;
+    fullName: string;
+    position: string | null;
+    salaryAmount: number;
+    currency: string;
+    nextPaymentDate: string | null;
+    isActive: boolean;
+  }>) => api.put(`/accounting/staff/${id}`, data),
+  remove: (id: string) => api.delete(`/accounting/staff/${id}`),
+  listPayments: (id: string) => api.get(`/accounting/staff/${id}/payments`),
+  recordPayment: (id: string, data: { amount: number; currency?: string; paidOn: string; periodLabel?: string | null; notes?: string | null }) =>
+    api.post(`/accounting/staff/${id}/payments`, data),
+  deletePayment: (paymentId: string) => api.delete(`/accounting/staff-payments/${paymentId}`),
+  notifyDue: (id: string) => api.post(`/accounting/staff/${id}/notify-due`),
+};
+
 export interface ArchiveListItem {
   kind: 'archived' | 'graduated';
   id: string;

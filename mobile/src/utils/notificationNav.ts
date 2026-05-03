@@ -21,6 +21,8 @@ const TYPE_META: Record<string, { emoji: string }> = {
   bus: { emoji: '🚌' },
   payment_recorded: { emoji: '💵' },
   fees_reminder: { emoji: '💵' },
+  salary_due_soon: { emoji: '💰' },
+  salary_paid: { emoji: '💰' },
   system: { emoji: '⚙️' },
   general: { emoji: '🔔' },
 };
@@ -61,6 +63,10 @@ export async function openNotificationTarget(d: NotifDispatch): Promise<void> {
     }
 
     if (role !== 'parent') {
+      if (role === 'teacher' && (d.type === 'salary_due_soon' || d.type === 'salary_paid')) {
+        (navigationRef as any).navigate('TeacherSalary');
+        return;
+      }
       const notifScreen = role === 'teacher' ? 'TeacherNotifications' : 'Notifications';
       try { (navigationRef as any).navigate(notifScreen); } catch { goTab('Feed'); }
       return;

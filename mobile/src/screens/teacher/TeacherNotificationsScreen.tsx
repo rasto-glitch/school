@@ -1,15 +1,52 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { View, Text, ScrollView, StyleSheet, ActivityIndicator, TouchableOpacity, RefreshControl } from 'react-native';
 import { CardListSkeleton } from '../../components/Skeleton';
-import { Bell, CheckCircle } from 'lucide-react-native';
+import { Bell, CheckCircle, Wallet } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 import { format, isToday, isYesterday, parseISO } from 'date-fns';
 import { teacherApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
 import { spacing, radius, font, shadow } from '../../theme';
+import { openNotificationTarget } from '../../utils/notificationNav';
 
-interface Notif { id: string; title: string; message?: string; isRead: boolean; createdAt: string }
+interface Notif { id: string; title: string; message?: string; isRead: boolean; createdAt: string; notificationType?: string }
+
+const TYPE_ICONS: Record<string, { Icon: any; bg: string; color: string }> = {
+  salary_paid: { Icon: Wallet, bg: '#DCFCE7', color: '#16A34A' },
+  salary_due_soon: { Icon: Wallet, bg: '#FEF3C7', color: '#D97706' },
+};
+
+function localizeSalary(
+  type: string | undefined,
+  title: string,
+  message: string,
+  t: (k: string, opts?: any) => string,
+): { title: string; message: string } {
+  if (type === 'salary_paid') {
+    const m = /^Salary of (\S+) (\S+) recorded(?: for (.+))?$/.exec(message);
+    return {
+      title: t('notifications.salary_paid_title'),
+      message: m
+        ? (m[3]
+          ? t('notifications.salary_paid_body_period', { amount: m[1], currency: m[2], period: m[3] })
+          : t('notifications.salary_paid_body', { amount: m[1], currency: m[2] }))
+        : message,
+    };
+  }
+  if (type === 'salary_due_soon') {
+    const m = /^Your salary of (\S+) (\S+) is due (.+?)\. Please visit/.exec(message);
+    return {
+      title: t('notifications.salary_due_title'),
+      message: m
+        ? t('notifications.salary_due_body', { amount: m[1], currency: m[2], when: m[3] })
+        : message,
+    };
+  }
+  return { title, message };
+}
 
 export default function TeacherNotificationsScreen() {
+  const { t } = useTranslation();
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
@@ -94,25 +131,36 @@ export default function TeacherNotificationsScreen() {
         grouped.map(({ label, items }) => (
           <View key={label}>
             <Text style={styles.groupLabel}>{label}</Text>
-            {items.map(n => (
-              <View key={n.id} style={[styles.card, !n.isRead && styles.cardUnread]}>
-                <View style={[styles.iconBox, { backgroundColor: n.isRead ? colors.bg : colors.primaryLight }]}>
-                  <Bell size={16} color={n.isRead ? colors.textMuted : colors.primary} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.cardTitle, !n.isRead && styles.cardTitleUnread]}>{n.title}</Text>
-                  {n.message && <Text style={styles.cardMsg} numberOfLines={2}>{n.message}</Text>}
-                  <Text style={styles.cardTime}>{format(parseISO(n.createdAt), 'h:mm a')}</Text>
-                </View>
-                {!n.isRead && (
-                  <TouchableOpacity onPress={() => markRead(n.id)} disabled={marking === n.id} style={styles.checkBtn}>
-                    {marking === n.id
-                      ? <ActivityIndicator size="small" color={colors.primary} />
-                      : <CheckCircle size={20} color={colors.primary} />}
-                  </TouchableOpacity>
-                )}
-              </View>
-            ))}
+            {items.map(n => {
+              const typed = TYPE_ICONS[n.notificationType ?? ''];
+              const Icon = typed?.Icon ?? Bell;
+              const iconBg = typed?.bg ?? (n.isRead ? colors.bg : colors.primaryLight);
+              const iconColor = typed?.color ?? (n.isRead ? colors.textMuted : colors.primary);
+              const { title, message } = localizeSalary(n.notificationType, n.title, n.message ?? '', t);
+              const handleTap = () => {
+                if (!n.isRead) markRead(n.id);
+                openNotificationTarget({ type: n.notificationType });
+              };
+              return (
+                <TouchableOpacity key={n.id} activeOpacity={0.75} onPress={handleTap} style={[styles.card, !n.isRead && styles.cardUnread]}>
+                  <View style={[styles.iconBox, { backgroundColor: iconBg }]}>
+                    <Icon size={16} color={iconColor} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.cardTitle, !n.isRead && styles.cardTitleUnread]}>{title}</Text>
+                    {message ? <Text style={styles.cardMsg} numberOfLines={2}>{message}</Text> : null}
+                    <Text style={styles.cardTime}>{format(parseISO(n.createdAt), 'h:mm a')}</Text>
+                  </View>
+                  {!n.isRead && (
+                    <TouchableOpacity onPress={() => markRead(n.id)} disabled={marking === n.id} style={styles.checkBtn}>
+                      {marking === n.id
+                        ? <ActivityIndicator size="small" color={colors.primary} />
+                        : <CheckCircle size={20} color={colors.primary} />}
+                    </TouchableOpacity>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
           </View>
         ))
       )}

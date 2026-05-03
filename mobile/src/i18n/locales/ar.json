@@ -180,7 +180,26 @@
     "payment_recorded_title": "تم تسجيل دفعة الرسوم",
     "payment_recorded_body": "تم استلام دفعة بمبلغ {{amount}}",
     "fees_reminder_title": "تذكير بدفع الرسوم",
-    "fees_reminder_body": "هناك دفعة رسوم مستحقة. يرجى التواصل مع المدرسة لمزيد من التفاصيل."
+    "fees_reminder_body": "هناك دفعة رسوم مستحقة. يرجى التواصل مع المدرسة لمزيد من التفاصيل.",
+    "salary_paid_title": "تم تسجيل الراتب",
+    "salary_paid_body": "تم تسجيل راتب بقيمة {{amount}} {{currency}}",
+    "salary_paid_body_period": "تم تسجيل راتب بقيمة {{amount}} {{currency}} عن {{period}}",
+    "salary_due_title": "موعد استلام الراتب",
+    "salary_due_body": "راتبك البالغ {{amount}} {{currency}} مستحق {{when}}. يرجى زيارة قسم المحاسبة."
+  },
+  "salary": {
+    "title": "راتبي",
+    "subtitle": "اطلع على راتبك وسجل المدفوعات.",
+    "subtitle_short": "عرض الراتب والمدفوعات",
+    "monthly_amount": "المبلغ الشهري",
+    "next_payment": "الدفعة القادمة",
+    "not_scheduled": "غير مجدول",
+    "in_days": "خلال {{count}} يوم",
+    "today": "اليوم",
+    "overdue": "متأخر",
+    "payment_history": "سجل المدفوعات",
+    "no_payments": "لم يتم تسجيل أي مدفوعات بعد.",
+    "empty": "لا يوجد سجل راتب حتى الآن. سيقوم قسم المحاسبة بإعداده."
   },
   "settings": {
     "notifications_section": "الإشعارات",

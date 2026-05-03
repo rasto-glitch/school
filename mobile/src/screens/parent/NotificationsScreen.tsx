@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   BookOpen, ClipboardList, Megaphone, FileText, Calendar,
   FileBadge, Bus, MessageSquare, Settings as SettingsIcon, Bell,
-  CreditCard, BellRing,
+  CreditCard, BellRing, Wallet,
 } from 'lucide-react-native';
 import { parentApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
@@ -56,6 +56,8 @@ const TYPE_ICONS: Record<string, { Icon: any; bg: string; color: string }> = {
   bus: { Icon: Bus, bg: '#FEE2E2', color: '#DC2626' },
   payment_recorded: { Icon: CreditCard, bg: '#DCFCE7', color: '#16A34A' },
   fees_reminder: { Icon: BellRing, bg: '#FEF3C7', color: '#D97706' },
+  salary_paid: { Icon: Wallet, bg: '#DCFCE7', color: '#16A34A' },
+  salary_due_soon: { Icon: Wallet, bg: '#FEF3C7', color: '#D97706' },
   system: { Icon: SettingsIcon, bg: '#F3F4F6', color: '#6B7280' },
   general: { Icon: Bell, bg: '#F3F4F6', color: '#6B7280' },
 };
@@ -64,7 +66,7 @@ function getTypeIcon(type?: string) {
   return (type && TYPE_ICONS[type]) || TYPE_ICONS.general;
 }
 
-// Localize tuition notifications. Their default English title/body strings
+// Localize tuition + salary notifications. Default English title/body strings
 // are fixed on the backend; admin-customized fees_reminder text is shown
 // as-is.
 function localizeTuition(
@@ -86,6 +88,26 @@ function localizeTuition(
     return {
       title: isDefaultTitle ? t('notifications.fees_reminder_title') : title,
       message: isDefaultBody ? t('notifications.fees_reminder_body') : message,
+    };
+  }
+  if (type === 'salary_paid') {
+    const m = /^Salary of (\S+) (\S+) recorded(?: for (.+))?$/.exec(message);
+    return {
+      title: t('notifications.salary_paid_title'),
+      message: m
+        ? (m[3]
+          ? t('notifications.salary_paid_body_period', { amount: m[1], currency: m[2], period: m[3] })
+          : t('notifications.salary_paid_body', { amount: m[1], currency: m[2] }))
+        : message,
+    };
+  }
+  if (type === 'salary_due_soon') {
+    const m = /^Your salary of (\S+) (\S+) is due (.+?)\. Please visit/.exec(message);
+    return {
+      title: t('notifications.salary_due_title'),
+      message: m
+        ? t('notifications.salary_due_body', { amount: m[1], currency: m[2], when: m[3] })
+        : message,
     };
   }
   return { title, message };

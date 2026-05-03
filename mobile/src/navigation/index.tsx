@@ -12,6 +12,7 @@ import TeacherTabs from './TeacherTabs';
 import TeacherSettingsScreen from '../screens/teacher/TeacherSettingsScreen';
 import TeacherNotificationsScreen from '../screens/teacher/TeacherNotificationsScreen';
 import TeacherScheduleScreen from '../screens/teacher/TeacherScheduleScreen';
+import TeacherSalaryScreen from '../screens/teacher/TeacherSalaryScreen';
 import SetPickupLocationScreen from '../screens/parent/SetPickupLocationScreen';
 import SettingsScreen from '../screens/parent/SettingsScreen';
 import ReportsScreen from '../screens/parent/ReportsScreen';
@@ -42,6 +43,7 @@ export type RootStackParamList = {
   TeacherSettings: undefined;
   TeacherNotifications: undefined;
   TeacherSchedule: undefined;
+  TeacherSalary: undefined;
   ParentSchedule: undefined;
   Tuition: undefined;
   SetPickupLocation: undefined;
@@ -122,6 +124,11 @@ export default function Navigation() {
               name="TeacherSchedule"
               component={TeacherScheduleScreen}
               options={{ headerShown: true, headerTitle: 'Schedule', headerBackTitle: 'Back' }}
+            />
+            <Stack.Screen
+              name="TeacherSalary"
+              component={TeacherSalaryScreen}
+              options={{ headerShown: true, headerTitle: 'My Salary', headerBackTitle: 'Back' }}
             />
             <Stack.Screen
               name="PostDetail"

@@ -11,6 +11,7 @@ import * as chat from '../controllers/chat.controller';
 import * as reception from '../controllers/reception.controller';
 import * as pub from '../controllers/public.controller';
 import * as fees from '../controllers/fees.controller';
+import * as staff from '../controllers/staff.controller';
 import { authenticate, authorize } from '../middleware/auth';
 import type { AuthRequest } from '../middleware/auth';
 import { Server as SocketServer } from 'socket.io';
@@ -219,6 +220,20 @@ export function createRouter(io: SocketServer) {
 
   // Parent view
   router.get('/parent/fees', authenticate, authorize('parent'), (req, res) => fees.getParentFees(req as AuthRequest, res));
+
+  // Staff salaries — admin/accountant only (RW); read-only access (e.g. reception) intentionally not granted.
+  router.get('/accounting/staff/setup', authenticate, authorize(...accountingRW), (req, res) => staff.getStaffSetup(req as AuthRequest, res));
+  router.get('/accounting/staff', authenticate, authorize(...accountingRW), (req, res) => staff.listStaff(req as AuthRequest, res));
+  router.post('/accounting/staff', authenticate, authorize(...accountingRW), (req, res) => staff.createStaff(req as AuthRequest, res));
+  router.put('/accounting/staff/:id', authenticate, authorize(...accountingRW), (req, res) => staff.updateStaff(req as AuthRequest, res));
+  router.delete('/accounting/staff/:id', authenticate, authorize(...accountingRW), (req, res) => staff.deleteStaff(req as AuthRequest, res));
+  router.get('/accounting/staff/:id/payments', authenticate, authorize(...accountingRW), (req, res) => staff.listStaffPayments(req as AuthRequest, res));
+  router.post('/accounting/staff/:id/payments', authenticate, authorize(...accountingRW), (req, res) => staff.recordStaffPayment(req as AuthRequest, res));
+  router.delete('/accounting/staff-payments/:id', authenticate, authorize(...accountingRW), (req, res) => staff.deleteStaffPayment(req as AuthRequest, res));
+  router.post('/accounting/staff/:id/notify-due', authenticate, authorize(...accountingRW), (req, res) => staff.notifyStaffDue(req as AuthRequest, res));
+
+  // Teacher self-service: read-only "my salary"
+  router.get('/teacher/salary', authenticate, authorize('teacher'), (req, res) => staff.getMyStaffInfo(req as AuthRequest, res));
 
   // ---- SUPERVISOR ----
   router.get('/supervisor/classes', authenticate, authorize('supervisor'), (req, res) => supervisor.getClasses(req as AuthRequest, res));

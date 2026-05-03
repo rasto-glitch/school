@@ -180,7 +180,26 @@
     "payment_recorded_title": "پارەی خوێندن تۆمارکرا",
     "payment_recorded_body": "بڕی {{amount}} وەرگیرا",
     "fees_reminder_title": "بیرخستنەوەی پارەی خوێندن",
-    "fees_reminder_body": "پارەی خوێندن کاتی هاتووە. تکایە پەیوەندی بە قوتابخانەوە بکە."
+    "fees_reminder_body": "پارەی خوێندن کاتی هاتووە. تکایە پەیوەندی بە قوتابخانەوە بکە.",
+    "salary_paid_title": "موچە تۆمارکرا",
+    "salary_paid_body": "موچەی {{amount}} {{currency}} تۆمارکرا",
+    "salary_paid_body_period": "موچەی {{amount}} {{currency}} بۆ {{period}} تۆمارکرا",
+    "salary_due_title": "کاتی موچە نزیکبووەتەوە",
+    "salary_due_body": "موچەکەت بە بڕی {{amount}} {{currency}} کاتی هاتووە {{when}}. تکایە سەردانی بەشی ژمێریاری بکە."
+  },
+  "salary": {
+    "title": "موچەی من",
+    "subtitle": "موچە و مێژووی پارەدان ببینە.",
+    "subtitle_short": "بینینی موچە و پارەدانەکان",
+    "monthly_amount": "بڕی مانگانە",
+    "next_payment": "پارەدانی داهاتوو",
+    "not_scheduled": "دیاری نەکراوە",
+    "in_days": "لە {{count}} ڕۆژدا",
+    "today": "ئەمڕۆ",
+    "overdue": "دواکەوتووە",
+    "payment_history": "مێژووی پارەدان",
+    "no_payments": "هیچ پارەدانێک تۆمار نەکراوە.",
+    "empty": "هێشتا تۆماری موچە نییە. بەشی ژمێریاری ئەمە دادەنێت."
   },
   "settings": {
     "notifications_section": "ئاگادارکردنەوەکان",

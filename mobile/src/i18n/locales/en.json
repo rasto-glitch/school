@@ -180,7 +180,26 @@
     "payment_recorded_title": "Tuition payment recorded",
     "payment_recorded_body": "Payment of {{amount}} received",
     "fees_reminder_title": "Tuition payment reminder",
-    "fees_reminder_body": "A tuition payment is due. Please contact the school for details."
+    "fees_reminder_body": "A tuition payment is due. Please contact the school for details.",
+    "salary_paid_title": "Salary recorded",
+    "salary_paid_body": "Salary of {{amount}} {{currency}} recorded",
+    "salary_paid_body_period": "Salary of {{amount}} {{currency}} recorded for {{period}}",
+    "salary_due_title": "Salary payment due",
+    "salary_due_body": "Your salary of {{amount}} {{currency}} is due {{when}}. Please visit the accounting office."
+  },
+  "salary": {
+    "title": "My Salary",
+    "subtitle": "View your salary and payment history.",
+    "subtitle_short": "View salary and payments",
+    "monthly_amount": "Monthly amount",
+    "next_payment": "Next payment",
+    "not_scheduled": "Not scheduled",
+    "in_days": "in {{count}} days",
+    "today": "today",
+    "overdue": "overdue",
+    "payment_history": "Payment history",
+    "no_payments": "No payments recorded yet.",
+    "empty": "No salary record yet. The accounting office will set this up."
   },
   "settings": {
     "notifications_section": "Notifications",
