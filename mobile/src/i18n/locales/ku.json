@@ -176,7 +176,11 @@
     "title": "ئاگادارکردنەوەکان",
     "subtitle": "پەیام و ئاگادارکردنەوەکانی قوتابخانە",
     "no_notifications": "هیچ ئاگادارکردنەوەیەک نییە.",
-    "mark_read": "نیشانکردن وەک خوێندراوە"
+    "mark_read": "نیشانکردن وەک خوێندراوە",
+    "payment_recorded_title": "پارەی خوێندن تۆمارکرا",
+    "payment_recorded_body": "بڕی {{amount}} وەرگیرا",
+    "fees_reminder_title": "بیرخستنەوەی پارەی خوێندن",
+    "fees_reminder_body": "پارەی خوێندن کاتی هاتووە. تکایە پەیوەندی بە قوتابخانەوە بکە."
   },
   "settings": {
     "notifications_section": "ئاگادارکردنەوەکان",

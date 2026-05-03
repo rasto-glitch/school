@@ -17,6 +17,8 @@ interface PushStrings {
   prefix_report: string;
   prefix_grade: string;
   prefix_post: string;
+  prefix_payment_recorded: string;
+  prefix_fees_reminder: string;
   prefix_general: string;
   prefix_system: string;
 }
@@ -41,6 +43,8 @@ const T: Record<string, PushStrings> = {
     prefix_report: 'New Report',
     prefix_grade: 'Grades Updated',
     prefix_post: 'New Post',
+    prefix_payment_recorded: 'Tuition Payment Recorded',
+    prefix_fees_reminder: 'Tuition Reminder',
     prefix_general: 'Notification',
     prefix_system: 'System',
   },
@@ -63,6 +67,8 @@ const T: Record<string, PushStrings> = {
     prefix_report: 'ڕاپۆرتی نوێ',
     prefix_grade: 'نمرەکان نوێکرانەوە',
     prefix_post: 'پۆستی نوێ',
+    prefix_payment_recorded: 'پارەی خوێندن تۆمارکرا',
+    prefix_fees_reminder: 'ئاگاداری پارەی خوێندن',
     prefix_general: 'ئاگادارکردنەوە',
     prefix_system: 'سیستەم',
   },
@@ -85,6 +91,8 @@ const T: Record<string, PushStrings> = {
     prefix_report: 'تقرير جديد',
     prefix_grade: 'تحديث الدرجات',
     prefix_post: 'منشور جديد',
+    prefix_payment_recorded: 'تم تسجيل دفعة الرسوم',
+    prefix_fees_reminder: 'تذكير بالرسوم',
     prefix_general: 'إشعار',
     prefix_system: 'النظام',
   },

@@ -176,7 +176,11 @@
     "title": "الإشعارات",
     "subtitle": "تنبيهات ورسائل من المدرسة",
     "no_notifications": "لا توجد إشعارات حتى الآن.",
-    "mark_read": "تحديد كمقروء"
+    "mark_read": "تحديد كمقروء",
+    "payment_recorded_title": "تم تسجيل دفعة الرسوم",
+    "payment_recorded_body": "تم استلام دفعة بمبلغ {{amount}}",
+    "fees_reminder_title": "تذكير بدفع الرسوم",
+    "fees_reminder_body": "هناك دفعة رسوم مستحقة. يرجى التواصل مع المدرسة لمزيد من التفاصيل."
   },
   "settings": {
     "notifications_section": "الإشعارات",

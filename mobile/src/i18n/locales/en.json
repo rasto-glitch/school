@@ -176,7 +176,11 @@
     "title": "Notifications",
     "subtitle": "Alerts and messages from school",
     "no_notifications": "No notifications yet.",
-    "mark_read": "Mark as read"
+    "mark_read": "Mark as read",
+    "payment_recorded_title": "Tuition payment recorded",
+    "payment_recorded_body": "Payment of {{amount}} received",
+    "fees_reminder_title": "Tuition payment reminder",
+    "fees_reminder_body": "A tuition payment is due. Please contact the school for details."
   },
   "settings": {
     "notifications_section": "Notifications",

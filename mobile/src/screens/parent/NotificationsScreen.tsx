@@ -64,6 +64,33 @@ function getTypeIcon(type?: string) {
   return (type && TYPE_ICONS[type]) || TYPE_ICONS.general;
 }
 
+// Localize tuition notifications. Their default English title/body strings
+// are fixed on the backend; admin-customized fees_reminder text is shown
+// as-is.
+function localizeTuition(
+  type: string | undefined,
+  title: string,
+  message: string,
+  t: (k: string, opts?: any) => string,
+): { title: string; message: string } {
+  if (type === 'payment_recorded') {
+    const m = /^Payment of (.+) received$/.exec(message);
+    return {
+      title: t('notifications.payment_recorded_title'),
+      message: m ? t('notifications.payment_recorded_body', { amount: m[1] }) : message,
+    };
+  }
+  if (type === 'fees_reminder') {
+    const isDefaultTitle = title === 'Tuition payment reminder';
+    const isDefaultBody = message === 'A tuition payment is due. Please contact the school for details.';
+    return {
+      title: isDefaultTitle ? t('notifications.fees_reminder_title') : title,
+      message: isDefaultBody ? t('notifications.fees_reminder_body') : message,
+    };
+  }
+  return { title, message };
+}
+
 function groupByDay(notifications: Notification[]): Group[] {
   const map = new Map<string, Group>();
   for (const n of notifications) {
@@ -132,6 +159,7 @@ export default function NotificationsScreen() {
               <Text style={styles.dayLabel}>{group.label}</Text>
               {group.items.map(item => {
                 const { Icon, bg, color } = getTypeIcon(item.notificationType);
+                const { title, message } = localizeTuition(item.notificationType, item.title, item.message, t);
                 return (
                   <TouchableOpacity key={item.id} activeOpacity={0.75}
                     style={[styles.card, !item.isRead && styles.cardUnread]}
@@ -142,10 +170,10 @@ export default function NotificationsScreen() {
                       </View>
                       <View style={{ flex: 1 }}>
                         <View style={styles.titleRow}>
-                          <Text style={styles.cardTitle} numberOfLines={1}>{item.title}</Text>
+                          <Text style={styles.cardTitle} numberOfLines={1}>{title}</Text>
                           {!item.isRead && <View style={styles.dot} />}
                         </View>
-                        <Text style={styles.cardMessage} numberOfLines={2}>{item.message}</Text>
+                        <Text style={styles.cardMessage} numberOfLines={2}>{message}</Text>
                         <Text style={[styles.cardTime, { marginTop: 8 }]}>{formatTime(item.createdAt)}</Text>
                       </View>
                     </View>
