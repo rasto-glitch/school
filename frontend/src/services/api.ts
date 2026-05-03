@@ -214,6 +214,8 @@ export const adminApi = {
 
 // ---- ACCOUNTING (premium tuition module) ----
 export const feesApi = {
+  // Plans-tab bootstrap: classes + school's current academic year
+  getSetup: () => api.get<{ classes: { id: string; name: string; gradeLevel?: string }[]; currentAcademicYear: string | null }>('/accounting/setup'),
   // Plans
   listPlans: () => api.get('/accounting/plans'),
   createPlan: (data: object) => api.post('/accounting/plans', data),

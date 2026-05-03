@@ -574,6 +574,27 @@ export async function updateStudentFee(req: AuthRequest, res: Response): Promise
   res.json({ success: true });
 }
 
+// ── Bootstrap data for the Plans tab: class list + school's current academic year.
+// Accountants don't have access to /admin/classes (which is gated to admin/teacher),
+// so the accounting module gets its own endpoint that returns both pieces.
+export async function getAccountingSetup(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const guard = await ensurePremium(schoolId);
+  if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
+
+  const [classesRes, schoolRes] = await Promise.all([
+    supabase.from('classes').select('id, name, grade_level').eq('school_id', schoolId).order('name'),
+    supabase.from('schools').select('current_academic_year').eq('id', schoolId).single(),
+  ]);
+
+  if (classesRes.error) { res.status(500).json({ error: classesRes.error.message }); return; }
+
+  res.json({
+    classes: toCC(classesRes.data || []),
+    currentAcademicYear: schoolRes.data?.current_academic_year ?? null,
+  });
+}
+
 // ── Tuition config (admin only) ────────────────────────────────────────
 
 export async function getConfig(req: AuthRequest, res: Response): Promise<void> {

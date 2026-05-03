@@ -198,6 +198,7 @@ export function createRouter(io: SocketServer) {
   router.post('/accounting/student-fees/:id/payments', authenticate, authorize(...accountingRW), (req, res) => fees.recordPayment(req as AuthRequest, res));
   router.delete('/accounting/payments/:id', authenticate, authorize(...accountingRW), (req, res) => fees.deletePayment(req as AuthRequest, res));
 
+  router.get('/accounting/setup', authenticate, authorize(...accountingRW), (req, res) => fees.getAccountingSetup(req as AuthRequest, res));
   router.get('/accounting/config', authenticate, authorize(...accountingRO), (req, res) => fees.getConfig(req as AuthRequest, res));
   router.put('/accounting/config', authenticate, authorize(...accountingRW), (req, res) => fees.updateConfig(req as AuthRequest, res));
   router.post('/accounting/notify-due', authenticate, authorize(...accountingRW), (req, res) => fees.notifyDue(req as AuthRequest, res));

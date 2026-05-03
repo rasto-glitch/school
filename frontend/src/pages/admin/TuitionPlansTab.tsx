@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { feesApi, adminApi } from '../../services/api';
+import { feesApi } from '../../services/api';
 import { toast } from 'react-toastify';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
@@ -44,6 +44,7 @@ function fmt(amount: number, currency: string) {
 export default function TuitionPlansTab() {
   const [plans, setPlans] = useState<FeePlan[] | null>(null);
   const [classes, setClasses] = useState<Class[]>([]);
+  const [currentAcademicYear, setCurrentAcademicYear] = useState<string>('');
   const [editing, setEditing] = useState<PlanForm | null>(null);
   const [saving, setSaving] = useState(false);
   const [assigning, setAssigning] = useState<string | null>(null);
@@ -51,10 +52,14 @@ export default function TuitionPlansTab() {
   const load = () => feesApi.listPlans().then(r => setPlans(r.data));
   useEffect(() => {
     load().catch((e: any) => toast.error(e.response?.data?.error || 'Failed to load plans'));
-    adminApi.getClasses().then(r => setClasses(r.data || []));
+    feesApi.getSetup().then(r => {
+      setClasses(r.data.classes as Class[]);
+      setCurrentAcademicYear(r.data.currentAcademicYear ?? '');
+    }).catch(() => {});
   }, []);
 
-  const openNew = () => setEditing({ ...empty });
+  // Prefill academic year with the school's current setting (admin sets it in Settings).
+  const openNew = () => setEditing({ ...empty, academicYear: currentAcademicYear });
   const openEdit = (p: FeePlan) => setEditing({
     id: p.id,
     name: p.name,
@@ -186,7 +191,12 @@ export default function TuitionPlansTab() {
               <Input label="Total amount" type="number" step="0.01" value={editing.totalAmount} onChange={e => setEditing({ ...editing, totalAmount: e.target.value })} />
               <Input label="Currency" value={editing.currency} onChange={e => setEditing({ ...editing, currency: e.target.value.toUpperCase() })} />
             </div>
-            <Input label="Academic year (optional)" value={editing.academicYear} onChange={e => setEditing({ ...editing, academicYear: e.target.value })} placeholder="2026-2027" />
+            <Input
+              label={currentAcademicYear ? `Academic year (auto-filled from school settings)` : 'Academic year (optional)'}
+              value={editing.academicYear}
+              onChange={e => setEditing({ ...editing, academicYear: e.target.value })}
+              placeholder={currentAcademicYear || '2026-2027'}
+            />
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Applies to</label>
