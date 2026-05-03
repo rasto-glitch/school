@@ -27,6 +27,7 @@ import AnnouncementDetailScreen from '../screens/parent/AnnouncementDetailScreen
 import PostDetailScreen from '../screens/parent/PostDetailScreen';
 import EbookReaderScreen from '../screens/parent/EbookReaderScreen';
 import ParentScheduleScreen from '../screens/parent/ParentScheduleScreen';
+import TuitionScreen from '../screens/parent/TuitionScreen';
 import ChatScreen from '../screens/chat/ChatScreen';
 import type { Homework, Announcement, Conversation, Ebook } from '../types';
 
@@ -42,6 +43,7 @@ export type RootStackParamList = {
   TeacherNotifications: undefined;
   TeacherSchedule: undefined;
   ParentSchedule: undefined;
+  Tuition: undefined;
   SetPickupLocation: undefined;
   Settings: undefined;
   Reports: undefined;
@@ -210,6 +212,11 @@ export default function Navigation() {
               name="ParentSchedule"
               component={ParentScheduleScreen}
               options={{ headerShown: true, headerTitle: 'Schedule', headerBackTitle: 'Back' }}
+            />
+            <Stack.Screen
+              name="Tuition"
+              component={TuitionScreen}
+              options={{ headerShown: true, headerTitle: 'Tuition', headerBackTitle: 'Back' }}
             />
             <Stack.Screen
               name="Chat"

@@ -19,6 +19,8 @@ const TYPE_META: Record<string, { emoji: string }> = {
   grade: { emoji: '💯' },
   post: { emoji: '📰' },
   bus: { emoji: '🚌' },
+  payment_recorded: { emoji: '💵' },
+  fees_reminder: { emoji: '💵' },
   system: { emoji: '⚙️' },
   general: { emoji: '🔔' },
 };
@@ -101,6 +103,10 @@ export async function openNotificationTarget(d: NotifDispatch): Promise<void> {
         return;
       case 'bus':
         goTab('BusTracking');
+        return;
+      case 'payment_recorded':
+      case 'fees_reminder':
+        (navigationRef as any).navigate('Tuition');
         return;
       default:
         (navigationRef as any).navigate('Notifications');

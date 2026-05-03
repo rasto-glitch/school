@@ -4,7 +4,7 @@ import { CardListSkeleton } from '../../components/Skeleton';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { User, GraduationCap, Bus, Plus, Pencil, Calendar, ChevronRight } from 'lucide-react-native';
+import { User, GraduationCap, Bus, Plus, Pencil, Calendar, ChevronRight, CreditCard } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuthStore } from '../../store/authStore';
 import { useColors, useIsDark } from '../../store/themeStore';
@@ -125,6 +125,24 @@ export default function MeScreen() {
         </View>
         <ChevronRight size={16} color={colors.textMuted} />
       </TouchableOpacity>
+
+      {/* Tuition (premium) */}
+      {school?.features?.tuition_fees === true && (
+        <TouchableOpacity
+          style={styles.actionCard}
+          onPress={() => navigation.navigate('Tuition')}
+          activeOpacity={0.7}
+        >
+          <View style={styles.actionIcon}>
+            <CreditCard size={20} color={isDark ? '#FFFFFF' : colors.primary} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.actionTitle}>{t('tuition.title', 'Tuition')}</Text>
+            <Text style={styles.actionSub}>{t('tuition.subtitle', 'Status, payments, receipts')}</Text>
+          </View>
+          <ChevronRight size={16} color={colors.textMuted} />
+        </TouchableOpacity>
+      )}
 
       {/* Children */}
       <Text style={styles.sectionTitle}>

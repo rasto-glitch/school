@@ -239,3 +239,50 @@ export interface BusLocation {
   recordedAt: string;
   drivers?: { fullName: string; phoneNumber?: string; licenseNumber?: string; buses?: { busNumber: string } };
 }
+
+// ── Tuition fees ────────────────────────────────────────────────────────
+export type FeeStatus = 'paid_up' | 'current' | 'due_soon' | 'overdue';
+
+export interface FeeInstallment {
+  id: string;
+  sequence: number;
+  amount: number;
+  dueDate: string;
+}
+
+export interface FeePayment {
+  id: string;
+  amount: number;
+  paidOn: string;
+  method: string | null;
+  reference: string | null;
+  notes: string | null;
+  createdAt?: string;
+}
+
+export interface StudentFeeRow {
+  id: string;
+  schoolId: string;
+  studentId: string;
+  studentName: string;
+  className: string | null;
+  parentId: string | null;
+  parentName: string | null;
+  parentUserId: string | null;
+  planId: string;
+  planName: string;
+  academicYear: string | null;
+  currency: string;
+  totalAmount: number;
+  adjustment: number;
+  siblingDiscount: number;
+  paid: number;
+  balance: number;
+  status: FeeStatus;
+  installments: FeeInstallment[];
+  lockedFeatures: string[];
+}
+
+export interface ParentFeeRow extends StudentFeeRow {
+  payments: FeePayment[];
+}

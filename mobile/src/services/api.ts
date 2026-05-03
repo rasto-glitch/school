@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { useAuthStore } from '../store/authStore';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://school-production-3ccc.up.railway.app/api';
+export const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://school-production-3ccc.up.railway.app/api';
 
 const api = axios.create({
   baseURL: API_URL,
@@ -91,6 +91,14 @@ export const parentApi = {
   getReportById: (id: string) => api.get(`/parent/reports/${id}`),
   getLinkPreview: (url: string) => api.get('/link-preview', { params: { url } }),
   getSchedule: (studentId: string) => api.get('/parent/schedule', { params: { studentId } }),
+};
+
+// ---- FEES (parent) ----
+export const feesApi = {
+  getParentFees: () => api.get('/parent/fees'),
+  // Auth-protected PDF endpoints; download via the helper in utils/download.ts.
+  paymentReceiptPath: (paymentId: string) => `/accounting/payments/${paymentId}/receipt.pdf`,
+  studentFeeStatementPath: (studentFeeId: string) => `/accounting/student-fees/${studentFeeId}/summary.pdf`,
 };
 
 // ---- ANNOUNCEMENTS (shared) ----
