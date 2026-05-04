@@ -205,6 +205,7 @@ export default function App() {
 
         {/* Accounting Portal — premium tuition module. Shared by admin, accountant, reception (read-only via backend). */}
         <Route path="/accounting" element={<ProtectedRoute allowedRoles={['admin', 'accountant', 'reception']}><AdminTuitionPage /></ProtectedRoute>} />
+        <Route path="/accounting/staff" element={<ProtectedRoute allowedRoles={['admin', 'accountant']}><AdminTuitionPage /></ProtectedRoute>} />
         <Route path="/accounting/student/:id" element={<ProtectedRoute allowedRoles={['admin', 'accountant', 'reception']}><AdminTuitionStudentDetailPage /></ProtectedRoute>} />
         <Route path="/accounting/profile" element={<ProtectedRoute allowedRoles={['accountant']}><ProfilePage /></ProtectedRoute>} />
 
