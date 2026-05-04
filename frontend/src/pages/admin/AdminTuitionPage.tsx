@@ -8,7 +8,8 @@ import TuitionSettingsTab from './TuitionSettingsTab';
 import TuitionArchiveTab from './TuitionArchiveTab';
 import StaffSalariesTab from './StaffSalariesTab';
 
-type Tab = 'students' | 'families' | 'plans' | 'salaries' | 'archive' | 'settings';
+type Section = 'students' | 'staff';
+type StudentTab = 'students' | 'families' | 'plans' | 'archive' | 'settings';
 
 export default function AdminTuitionPage() {
   const { user, school } = useAuthStore();
@@ -17,13 +18,13 @@ export default function AdminTuitionPage() {
   const isPremium = school?.features?.tuition_fees === true;
 
   const basePath = '/accounting';
-  const [tab, setTab] = useState<Tab>('students');
+  const [section, setSection] = useState<Section>('students');
+  const [studentTab, setStudentTab] = useState<StudentTab>('students');
 
-  const tabs: { id: Tab; label: string; show: boolean }[] = [
+  const studentTabs: { id: StudentTab; label: string; show: boolean }[] = [
     { id: 'students', label: 'Students', show: true },
     { id: 'families', label: 'Families', show: true },
     { id: 'plans', label: 'Plans', show: canWrite },
-    { id: 'salaries', label: 'Salaries', show: canWrite },
     { id: 'archive', label: 'Archive', show: true },
     { id: 'settings', label: 'Settings', show: canWrite },
   ];
@@ -41,26 +42,53 @@ export default function AdminTuitionPage() {
     );
   }
 
+  const subtitle =
+    section === 'staff'
+      ? (canWrite ? 'Track salaries and payments' : 'View staff salaries (read-only)')
+      : (canWrite ? 'Plans, payments, reminders' : 'View tuition status (read-only)');
+
+  const sectionTabs: { id: Section; label: string; show: boolean }[] = [
+    { id: 'students', label: 'Students', show: true },
+    { id: 'staff', label: 'Teachers & staff', show: canWrite },
+  ];
+
   return (
-    <PageLayout title="Accounting" subtitle={canWrite ? 'Plans, payments, reminders' : 'View tuition status (read-only)'}>
-      <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit mb-6">
-        {tabs.filter(t => t.show).map(t => (
+    <PageLayout title="Accounting" subtitle={subtitle}>
+      <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit mb-4">
+        {sectionTabs.filter(t => t.show).map(t => (
           <button
             key={t.id}
-            onClick={() => setTab(t.id)}
-            className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${tab === t.id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            onClick={() => setSection(t.id)}
+            className={`px-4 py-2 text-sm font-semibold rounded-lg transition-colors ${section === t.id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
           >
             {t.label}
           </button>
         ))}
       </div>
 
-      {tab === 'students' && <TuitionStudentsTab basePath={basePath} canWrite={canWrite} />}
-      {tab === 'families' && <TuitionFamiliesTab basePath={basePath} />}
-      {tab === 'plans' && canWrite && <TuitionPlansTab />}
-      {tab === 'salaries' && canWrite && <StaffSalariesTab />}
-      {tab === 'archive' && <TuitionArchiveTab />}
-      {tab === 'settings' && canWrite && <TuitionSettingsTab />}
+      {section === 'students' && (
+        <>
+          <div className="flex gap-1 bg-gray-50 border border-gray-200 rounded-xl p-1 w-fit mb-6">
+            {studentTabs.filter(t => t.show).map(t => (
+              <button
+                key={t.id}
+                onClick={() => setStudentTab(t.id)}
+                className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${studentTab === t.id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          {studentTab === 'students' && <TuitionStudentsTab basePath={basePath} canWrite={canWrite} />}
+          {studentTab === 'families' && <TuitionFamiliesTab basePath={basePath} />}
+          {studentTab === 'plans' && canWrite && <TuitionPlansTab />}
+          {studentTab === 'archive' && <TuitionArchiveTab />}
+          {studentTab === 'settings' && canWrite && <TuitionSettingsTab />}
+        </>
+      )}
+
+      {section === 'staff' && canWrite && <StaffSalariesTab />}
     </PageLayout>
   );
 }
