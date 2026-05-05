@@ -40,12 +40,106 @@ export async function getStudents(req: AuthRequest, res: Response): Promise<void
 
 export async function createStudent(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
-  const { fullName, parentId, classId, driverId, homeAddress, emergencyContact, phoneNumber, dateOfBirth } = req.body;
+  const { fullName, parentId, classId, driverId, homeAddress, emergencyContact, phoneNumber, dateOfBirth, residenceType, blockNumber } = req.body;
+
+  let resolvedParentId: string | null = parentId || null;
+  let parentAccountCreated: { username: string; password: string; fullName: string } | null = null;
+
+  // Auto-resolve parent from the student's name when the admin didn't pick one.
+  // Mirrors the bulk-upload flow: name → "father grandfather...", match existing
+  // parent (name + phone), otherwise create a fresh users + parents row.
+  if (!resolvedParentId && fullName) {
+    const nameParts = String(fullName).trim().split(/\s+/);
+    if (nameParts.length >= 3) {
+      const fatherName = nameParts[1];
+      const grandfatherName = nameParts.slice(2).join(' ');
+      const parentFullName = `${fatherName} ${grandfatherName}`;
+      const parentNameKey = parentFullName.toLowerCase().trim();
+      const resolvedPhone = (phoneNumber || '').toString().trim() || null;
+
+      const { data: existingParents } = await supabase
+        .from('parents')
+        .select('id, full_name, phone_number')
+        .eq('school_id', schoolId);
+
+      const sameName = (existingParents || []).filter(
+        (p: any) => (p.full_name || '').toLowerCase().trim() === parentNameKey
+      );
+      let match: any = null;
+      if (resolvedPhone) match = sameName.find((p: any) => p.phone_number === resolvedPhone) || null;
+      if (!match) match = sameName.find((p: any) => !p.phone_number || !resolvedPhone) || null;
+
+      if (match) {
+        resolvedParentId = match.id;
+      } else {
+        const [{ data: schoolData }, { data: existingParentUsers }] = await Promise.all([
+          supabase.from('schools').select('abbreviation').eq('id', schoolId).single(),
+          supabase.from('users').select('username').eq('school_id', schoolId).eq('role', 'parent'),
+        ]);
+        const schoolAbbrev = (schoolData?.abbreviation || '').toLowerCase();
+        const taken = new Set((existingParentUsers || []).map((u: any) => u.username.toLowerCase()));
+
+        const grandfatherFirst = grandfatherName.split(/\s+/)[0] || '';
+        const prefix = schoolAbbrev ? `${schoolAbbrev}_` : '';
+        const base = `${prefix}${(fatherName + grandfatherFirst).toLowerCase().replace(/[^a-z0-9]/g, '')}`;
+        let username = base;
+        let n = 2;
+        while (taken.has(username)) { username = `${base}${n++}`; }
+
+        const rounds = parseInt(process.env.BCRYPT_ROUNDS || '10');
+        const passwordHash = await bcrypt.hash('Parent@123', rounds);
+
+        const { data: newUser, error: userErr } = await supabase
+          .from('users').insert({
+            school_id: schoolId,
+            first_name: fatherName,
+            last_name: grandfatherName,
+            username,
+            password_hash: passwordHash,
+            role: 'parent',
+            is_active: true,
+          }).select('id').single();
+
+        if (userErr || !newUser) {
+          res.status(500).json({ error: userErr?.message || 'Failed to create parent user' });
+          return;
+        }
+
+        const normRes = (v?: string): 'apartment' | 'house' | null => {
+          if (!v) return null;
+          const lv = v.toString().toLowerCase().trim();
+          if (lv === 'apartment') return 'apartment';
+          if (lv === 'house') return 'house';
+          return null;
+        };
+
+        const { data: newParent, error: parentErr } = await supabase
+          .from('parents').insert({
+            school_id: schoolId,
+            user_id: newUser.id,
+            full_name: parentFullName,
+            phone_number: resolvedPhone,
+            residence_type: normRes(residenceType),
+            block_number: blockNumber || null,
+          }).select('id').single();
+
+        if (parentErr || !newParent) {
+          // Roll back the orphan user row so retries don't trip the username uniqueness check.
+          await supabase.from('users').delete().eq('id', newUser.id);
+          res.status(500).json({ error: parentErr?.message || 'Failed to create parent record' });
+          return;
+        }
+
+        resolvedParentId = newParent.id;
+        parentAccountCreated = { username, password: 'Parent@123', fullName: parentFullName };
+      }
+    }
+  }
 
   const { data, error } = await supabase.from('students').insert({
     school_id: schoolId,
     full_name: fullName,
-    parent_id: parentId || null,
+    parent_id: resolvedParentId,
     class_id: classId || null,
     driver_id: driverId || null,
     home_address: homeAddress,
@@ -55,7 +149,7 @@ export async function createStudent(req: AuthRequest, res: Response): Promise<vo
   }).select().single();
 
   if (error) { res.status(500).json({ error: error.message }); return; }
-  res.status(201).json(toCC(data));
+  res.status(201).json({ ...(toCC(data) as Record<string, unknown>), parentAccountCreated });
 }
 
 export async function updateStudent(req: AuthRequest, res: Response): Promise<void> {

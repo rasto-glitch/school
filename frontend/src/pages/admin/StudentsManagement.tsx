@@ -71,11 +71,27 @@ export default function StudentsManagement() {
   const onAdd = async (data: any) => {
     setAddSubmitting(true);
     try {
-      await adminApi.createStudent({ fullName: data.fullName, parentId: data.parentId || undefined, phoneNumber: data.phoneNumber, emergencyContact: data.emergencyContact, homeAddress: data.homeAddress, classId: data.classId || undefined, dateOfBirth: data.dateOfBirth || undefined });
+      const res = await adminApi.createStudent({
+        fullName: data.fullName,
+        parentId: data.parentId || undefined,
+        phoneNumber: data.phoneNumber,
+        emergencyContact: data.emergencyContact,
+        homeAddress: data.homeAddress,
+        classId: data.classId || undefined,
+        dateOfBirth: data.dateOfBirth || undefined,
+        residenceType: data.residenceType || undefined,
+        blockNumber: data.blockNumber || undefined,
+      });
       if (data.parentId && (data.residenceType || data.blockNumber)) {
         await adminApi.updateParent(data.parentId, { residenceType: data.residenceType || null, blockNumber: data.blockNumber || null }).catch(() => {});
       }
-      toast.success('Student added!');
+      const created = res.data?.parentAccountCreated;
+      if (created) {
+        toast.success(`Student added! Parent account created — username: ${created.username} · password: Parent@123`, { autoClose: 8000 });
+        adminApi.getParents().then(r => setParents(r.data || []));
+      } else {
+        toast.success('Student added!');
+      }
       addForm.reset();
       load();
     } catch (err: any) {
