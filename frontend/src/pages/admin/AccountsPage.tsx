@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { UserPlus, Search, Trash2, KeyRound, Clock, CheckCircle2, X, Pencil, Shield, ExternalLink } from 'lucide-react';
+import { UserPlus, Search, Trash2, KeyRound, Clock, CheckCircle2, X, Pencil, Shield, ExternalLink, Printer } from 'lucide-react';
 import { adminApi } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import PageLayout from '../../components/layout/PageLayout';
@@ -52,6 +52,14 @@ export default function AccountsPage() {
   // Reset requests
   const [resetRequests, setResetRequests] = useState<any[]>([]);
 
+  // Credentials PDF export
+  const [classes, setClasses] = useState<any[]>([]);
+  const [credRole, setCredRole] = useState<'teacher' | 'driver' | 'parent'>('teacher');
+  const [credParentScope, setCredParentScope] = useState<'all' | 'class' | 'individual'>('all');
+  const [credClassId, setCredClassId] = useState('');
+  const [credParentId, setCredParentId] = useState('');
+  const [credBusy, setCredBusy] = useState(false);
+
   // Edit account modal
   const [editUser, setEditUser] = useState<any | null>(null);
   const [editForm, setEditForm] = useState({
@@ -73,7 +81,36 @@ export default function AccountsPage() {
     loadAccounts();
     loadParents();
     loadResetRequests();
+    adminApi.getClasses().then(r => setClasses(r.data || [])).catch(() => {});
   }, []);
+
+  const onExportCredentials = async () => {
+    if (credRole === 'parent' && credParentScope === 'class' && !credClassId) {
+      toast.error('Pick a class first'); return;
+    }
+    if (credRole === 'parent' && credParentScope === 'individual' && !credParentId) {
+      toast.error('Pick a parent first'); return;
+    }
+    setCredBusy(true);
+    try {
+      const params: { role: 'parent' | 'teacher' | 'driver'; classId?: string; parentId?: string } = { role: credRole };
+      if (credRole === 'parent' && credParentScope === 'class') params.classId = credClassId;
+      if (credRole === 'parent' && credParentScope === 'individual') params.parentId = credParentId;
+      const res = await adminApi.exportCredentialsPdf(params);
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `credentials-${credRole}-${new Date().toISOString().split('T')[0]}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to download credentials PDF');
+    } finally {
+      setCredBusy(false);
+    }
+  };
 
   const onSubmit = async (data: any) => {
     setLoading(true);
@@ -264,6 +301,80 @@ export default function AccountsPage() {
             <Input label="Password" type="password" placeholder="Initial password" {...register('password', { required: true })} />
             <Button type="submit" loading={loading} fullWidth icon={<UserPlus className="w-4 h-4" />}>Create Account</Button>
           </form>
+        </Card>
+
+        {/* Print Credentials */}
+        <Card>
+          <div className="flex items-center gap-2 mb-1">
+            <Printer className="w-5 h-5 text-primary-600" />
+            <h2 className="font-semibold text-gray-900">Print Login Credentials</h2>
+          </div>
+          <p className="text-xs text-gray-500 mb-4">
+            Download a printable PDF with usernames and default passwords. The PDF prints 4 cards per A4 page (cut along the dashed lines).
+            Passwords shown are the role defaults — if the user has changed theirs, the printed value will not work.
+          </p>
+          <div className="space-y-3">
+            <Select
+              label="Role"
+              options={[
+                { value: 'teacher', label: 'All Teachers' },
+                { value: 'driver', label: 'All Drivers' },
+                { value: 'parent', label: 'Parents' },
+              ]}
+              value={credRole}
+              onChange={e => { setCredRole(e.target.value as any); setCredClassId(''); setCredParentId(''); }}
+            />
+
+            {credRole === 'parent' && (
+              <>
+                <div className="flex flex-wrap gap-2">
+                  {(['all', 'class', 'individual'] as const).map(s => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setCredParentScope(s)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors capitalize ${
+                        credParentScope === s
+                          ? 'bg-primary-600 text-white'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    >
+                      {s === 'all' ? 'All Parents' : s === 'class' ? 'By Class' : 'Individual'}
+                    </button>
+                  ))}
+                </div>
+
+                {credParentScope === 'class' && (
+                  <Select
+                    label="Class"
+                    placeholder="Select a class"
+                    options={classes.map(c => ({ value: c.id, label: c.name }))}
+                    value={credClassId}
+                    onChange={e => setCredClassId(e.target.value)}
+                  />
+                )}
+
+                {credParentScope === 'individual' && (
+                  <Select
+                    label="Parent"
+                    placeholder="Select a parent"
+                    options={parents.map(p => ({ value: p.id, label: p.fullName }))}
+                    value={credParentId}
+                    onChange={e => setCredParentId(e.target.value)}
+                  />
+                )}
+              </>
+            )}
+
+            <Button
+              fullWidth
+              loading={credBusy}
+              onClick={onExportCredentials}
+              icon={<Printer className="w-4 h-4" />}
+            >
+              Download Credentials PDF
+            </Button>
+          </div>
         </Card>
 
         {/* All Accounts */}

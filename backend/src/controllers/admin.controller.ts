@@ -6,6 +6,7 @@ import type { AuthRequest } from '../middleware/auth';
 import { toCC } from '../utils/transform';
 import { notify, notifyMany } from '../utils/notify';
 import { loadArchiveSnapshot, streamPdf, buildXlsx } from '../utils/archiveExport';
+import { streamCredentialsPdf, type CredentialEntry } from '../utils/credentialsPdf';
 
 // True iff this school has the historical-records feature enabled. When off,
 // no archived/graduated student record may be created, read, or persisted —
@@ -2013,6 +2014,155 @@ export async function uploadSchoolLogo(req: AuthRequest, res: Response): Promise
 
   await supabase.from('schools').update({ logo_url: logoUrl }).eq('id', schoolId);
   res.json({ logoUrl });
+}
+
+// ---- CREDENTIALS PDF ----
+// Printable PDF for handing out username + default password to users.
+// Filters: role=teacher | driver | parent (+ optional classId for parents,
+// or parentId for a single parent slip).
+//
+// Defaults match the createTeacher / createDriver / parent auto-create flows:
+//   parent  → Parent@123
+//   teacher → Teacher@123
+//   driver  → Driver@123
+// Note: bcrypt hashes can't be reversed, so the PDF prints the role default.
+// Users who have changed their password will need to use that new one instead.
+export async function exportCredentialsPdf(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { role, classId, parentId } = req.query as Record<string, string | undefined>;
+
+  if (!role || !['parent', 'teacher', 'driver'].includes(role)) {
+    res.status(400).json({ error: 'role must be parent, teacher, or driver' });
+    return;
+  }
+
+  const { data: schoolData } = await supabase
+    .from('schools').select('name').eq('id', schoolId).single();
+  const schoolName = schoolData?.name || 'School';
+
+  const entries: CredentialEntry[] = [];
+  let title = '';
+
+  if (role === 'teacher') {
+    const { data, error } = await supabase
+      .from('teachers')
+      .select('full_name, users!inner(username, is_active)')
+      .eq('school_id', schoolId)
+      .order('full_name');
+    if (error) { res.status(500).json({ error: error.message }); return; }
+    for (const t of (data || []) as any[]) {
+      if (t.users?.is_active === false) continue;
+      entries.push({
+        fullName: t.full_name,
+        role: 'teacher',
+        username: t.users?.username || '',
+        password: 'Teacher@123',
+      });
+    }
+    title = 'Teacher Login Credentials';
+  } else if (role === 'driver') {
+    const { data, error } = await supabase
+      .from('drivers')
+      .select('full_name, users!inner(username, is_active)')
+      .eq('school_id', schoolId)
+      .order('full_name');
+    if (error) { res.status(500).json({ error: error.message }); return; }
+    for (const d of (data || []) as any[]) {
+      if (d.users?.is_active === false) continue;
+      entries.push({
+        fullName: d.full_name,
+        role: 'driver',
+        username: d.users?.username || '',
+        password: 'Driver@123',
+      });
+    }
+    title = 'Driver Login Credentials';
+  } else {
+    // parent
+    if (parentId) {
+      const { data, error } = await supabase
+        .from('parents')
+        .select('id, full_name, users!inner(username, is_active), students(full_name, classes(name))')
+        .eq('school_id', schoolId)
+        .eq('id', parentId)
+        .single();
+      if (error || !data) { res.status(404).json({ error: 'Parent not found' }); return; }
+      const p: any = data;
+      entries.push({
+        fullName: p.full_name,
+        role: 'parent',
+        username: p.users?.username || '',
+        password: 'Parent@123',
+        children: (p.students || []).map((s: any) => ({
+          name: s.full_name,
+          className: s.classes?.name ?? null,
+        })),
+      });
+      title = `Login Credentials — ${p.full_name}`;
+    } else if (classId) {
+      // Parents of students in this class
+      const { data: classData } = await supabase
+        .from('classes').select('name').eq('id', classId).eq('school_id', schoolId).single();
+      const className = classData?.name || 'Class';
+
+      const { data, error } = await supabase
+        .from('students')
+        .select('full_name, parents!inner(id, full_name, users!inner(username, is_active)), classes(name)')
+        .eq('school_id', schoolId)
+        .eq('class_id', classId)
+        .eq('is_graduated', false);
+      if (error) { res.status(500).json({ error: error.message }); return; }
+
+      // Group by parent so a parent with multiple children in the same class shows once
+      const byParent = new Map<string, CredentialEntry>();
+      for (const s of (data || []) as any[]) {
+        const p = s.parents;
+        if (!p || p.users?.is_active === false) continue;
+        const existing = byParent.get(p.id);
+        if (existing) {
+          existing.children!.push({ name: s.full_name, className: s.classes?.name ?? null });
+        } else {
+          byParent.set(p.id, {
+            fullName: p.full_name,
+            role: 'parent',
+            username: p.users?.username || '',
+            password: 'Parent@123',
+            children: [{ name: s.full_name, className: s.classes?.name ?? null }],
+          });
+        }
+      }
+      entries.push(...Array.from(byParent.values()).sort((a, b) => a.fullName.localeCompare(b.fullName)));
+      title = `Parent Login Credentials — ${className}`;
+    } else {
+      // All parents
+      const { data, error } = await supabase
+        .from('parents')
+        .select('id, full_name, users!inner(username, is_active), students(full_name, classes(name))')
+        .eq('school_id', schoolId)
+        .order('full_name');
+      if (error) { res.status(500).json({ error: error.message }); return; }
+      for (const p of (data || []) as any[]) {
+        if (p.users?.is_active === false) continue;
+        entries.push({
+          fullName: p.full_name,
+          role: 'parent',
+          username: p.users?.username || '',
+          password: 'Parent@123',
+          children: (p.students || []).map((s: any) => ({
+            name: s.full_name,
+            className: s.classes?.name ?? null,
+          })),
+        });
+      }
+      title = 'Parent Login Credentials';
+    }
+  }
+
+  const safeName = schoolName.replace(/[^a-z0-9-_]+/gi, '_');
+  const datePart = new Date().toISOString().split('T')[0];
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="credentials-${role}-${safeName}-${datePart}.pdf"`);
+  streamCredentialsPdf(schoolName, title, entries, res);
 }
 
 // ---- ALL ACCOUNTS ----

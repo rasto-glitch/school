@@ -176,6 +176,8 @@ export const adminApi = {
   getAccounts: () => api.get('/admin/accounts'),
   updateAccount: (userId: string, data: object) => api.put(`/admin/accounts/${userId}`, data),
   deleteAccount: (userId: string) => api.delete(`/admin/accounts/${userId}`),
+  exportCredentialsPdf: (params: { role: 'parent' | 'teacher' | 'driver'; classId?: string; parentId?: string }) =>
+    api.get('/admin/accounts/credentials.pdf', { params, responseType: 'blob' }),
   getResetRequests: () => api.get('/admin/reset-requests'),
   resetUserPassword: (userId: string, newPassword: string) =>
     api.post(`/admin/users/${userId}/reset-password`, { newPassword }),
