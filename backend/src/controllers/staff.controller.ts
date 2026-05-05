@@ -500,6 +500,44 @@ export async function reverseStaffInsurancePayout(req: AuthRequest, res: Respons
   res.json({ success: true });
 }
 
+// ── Bulk next payment date (admin/accountant only) ────────────────────
+
+export async function bulkSetNextPaymentDate(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const guard = await ensurePremium(schoolId);
+  if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
+
+  const { nextPaymentDate, staffIds } = req.body as { nextPaymentDate?: string | null; staffIds?: string[] };
+
+  // null/empty means "clear the date"
+  const newDate: string | null = (nextPaymentDate === null || nextPaymentDate === undefined || (typeof nextPaymentDate === 'string' && nextPaymentDate.trim() === ''))
+    ? null
+    : nextPaymentDate;
+  if (newDate !== null && !/^\d{4}-\d{2}-\d{2}$/.test(newDate)) {
+    res.status(400).json({ error: 'nextPaymentDate must be YYYY-MM-DD or null' });
+    return;
+  }
+
+  let q = supabase
+    .from('staff_members')
+    .update({ next_payment_date: newDate })
+    .eq('school_id', schoolId)
+    .eq('is_active', true);
+
+  if (Array.isArray(staffIds)) {
+    if (staffIds.length === 0) { res.json({ updated: 0 }); return; }
+    if (!staffIds.every(s => typeof s === 'string')) {
+      res.status(400).json({ error: 'staffIds must be an array of strings' });
+      return;
+    }
+    q = q.in('id', staffIds);
+  }
+
+  const { data, error } = await q.select('id');
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json({ updated: (data ?? []).length });
+}
+
 // ── Manual reminder (admin/accountant only) ────────────────────────────
 
 export async function notifyStaffDue(req: AuthRequest, res: Response): Promise<void> {

@@ -293,6 +293,8 @@ export const staffApi = {
   notifyDue: (id: string) => api.post(`/accounting/staff/${id}/notify-due`),
   notifyAllDue: (data?: { title?: string; message?: string; dueWithinDays?: number }) =>
     api.post('/accounting/staff/notify-due-all', data ?? {}),
+  bulkSetNextPayment: (data: { nextPaymentDate: string | null; staffIds?: string[] }) =>
+    api.post<{ updated: number }>('/accounting/staff/bulk-next-payment', data),
   downloadSalaryPdf: (id: string) => api.get(`/accounting/staff/${id}/export.pdf`, { responseType: 'blob' }),
   downloadSalaryXlsx: (id: string) => api.get(`/accounting/staff/${id}/export.xlsx`, { responseType: 'blob' }),
   payInsurance: (id: string, data: { paidOn?: string; amount?: number; currency?: string; notes?: string | null }) =>

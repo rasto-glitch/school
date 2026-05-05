@@ -6,7 +6,7 @@ import Input from '../../components/common/Input';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import EmptyState from '../../components/common/EmptyState';
 import Modal from '../../components/common/Modal';
-import { Plus, Trash2, Pencil, Users as UsersIcon, BellRing, Receipt, History, Megaphone, Archive as ArchiveIcon, RotateCcw, FileDown, FileSpreadsheet, Shield, ShieldCheck } from 'lucide-react';
+import { Plus, Trash2, Pencil, Users as UsersIcon, BellRing, Receipt, History, Megaphone, Archive as ArchiveIcon, RotateCcw, FileDown, FileSpreadsheet, Shield, ShieldCheck, CalendarClock } from 'lucide-react';
 import type { StaffMember, StaffSalaryPayment, StaffSetupTeacher } from '../../types';
 
 type SubTab = 'active' | 'archive';
@@ -50,6 +50,11 @@ interface InsurancePayoutForm {
   amount: string;
   currency: string;
   notes: string;
+}
+
+interface BulkNextPaymentForm {
+  date: string;
+  selectedIds: Set<string>;
 }
 
 interface MassReminderForm {
@@ -127,6 +132,9 @@ export default function StaffSalariesTab() {
   const [insurancePayoutForm, setInsurancePayoutForm] = useState<InsurancePayoutForm | null>(null);
   const [savingInsurancePayout, setSavingInsurancePayout] = useState(false);
   const [reversingInsuranceId, setReversingInsuranceId] = useState<string | null>(null);
+
+  const [bulkNextPayment, setBulkNextPayment] = useState<BulkNextPaymentForm | null>(null);
+  const [savingBulkNext, setSavingBulkNext] = useState(false);
 
   const loadActive = async () => {
     const r = await staffApi.list('active');
@@ -375,6 +383,42 @@ export default function StaffSalariesTab() {
     } finally { setReversingInsuranceId(null); }
   };
 
+  const openBulkNextPayment = () => {
+    if (!active) return;
+    const d = new Date();
+    d.setMonth(d.getMonth() + 1);
+    const defaultDate = d.toISOString().slice(0, 10);
+    setBulkNextPayment({
+      date: defaultDate,
+      selectedIds: new Set(active.map(s => s.id)),
+    });
+  };
+
+  const submitBulkNextPayment = async () => {
+    if (!bulkNextPayment) return;
+    if (bulkNextPayment.selectedIds.size === 0) { toast.error('Select at least one staff member'); return; }
+    if (bulkNextPayment.date && !/^\d{4}-\d{2}-\d{2}$/.test(bulkNextPayment.date)) {
+      toast.error('Enter a valid date'); return;
+    }
+    setSavingBulkNext(true);
+    try {
+      const r = await staffApi.bulkSetNextPayment({
+        nextPaymentDate: bulkNextPayment.date || null,
+        staffIds: Array.from(bulkNextPayment.selectedIds),
+      });
+      const n = r.data?.updated ?? bulkNextPayment.selectedIds.size;
+      toast.success(
+        bulkNextPayment.date
+          ? `Next payment date set for ${n} staff member${n === 1 ? '' : 's'}`
+          : `Next payment date cleared for ${n} staff member${n === 1 ? '' : 's'}`
+      );
+      setBulkNextPayment(null);
+      await loadActive();
+    } catch (e: any) {
+      toast.error(e.response?.data?.error || 'Failed to update');
+    } finally { setSavingBulkNext(false); }
+  };
+
   const sendMassReminder = async () => {
     if (!massReminder) return;
     const days = Number(massReminder.dueWithinDays);
@@ -437,7 +481,8 @@ export default function StaffSalariesTab() {
       {subTab === 'active' && (
         <div className="flex items-center justify-between mb-4">
           <p className="text-sm text-gray-500">Track teacher and staff salaries. Linked teachers receive in-app notifications when reminders are sent.</p>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
+            <Button variant="ghost" onClick={openBulkNextPayment} icon={<CalendarClock className="w-4 h-4" />}>Set next payment</Button>
             <Button variant="ghost" onClick={() => setMassReminder({ ...emptyMass })} icon={<Megaphone className="w-4 h-4" />}>Mass reminder</Button>
             <Button onClick={openNew} icon={<Plus className="w-4 h-4" />}>Add staff</Button>
           </div>
@@ -801,6 +846,82 @@ export default function StaffSalariesTab() {
             <div className="flex gap-2 justify-end pt-2">
               <Button variant="ghost" onClick={() => { setInsurancePayoutTarget(null); setInsurancePayoutForm(null); }}>Cancel</Button>
               <Button onClick={submitInsurancePayout} loading={savingInsurancePayout}>Mark insurance paid</Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {bulkNextPayment && (
+        <Modal isOpen onClose={() => setBulkNextPayment(null)} title="Set next payment for all" size="lg">
+          <div className="space-y-4">
+            <p className="text-sm text-gray-500">Apply a single next payment date to multiple active staff members at once. Leave the date blank to clear it for the selected staff.</p>
+
+            <Input
+              label="Next payment date"
+              type="date"
+              value={bulkNextPayment.date}
+              onChange={e => setBulkNextPayment({ ...bulkNextPayment, date: e.target.value })}
+            />
+
+            {!bulkNextPayment.date && (
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                Date is empty — selected staff will have their next payment date cleared.
+              </p>
+            )}
+
+            <div className="border border-gray-200 rounded-xl overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200 bg-gray-50">
+                <span className="text-sm font-semibold text-gray-700">
+                  {bulkNextPayment.selectedIds.size} of {active?.length ?? 0} selected
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!active) return;
+                    const allSelected = bulkNextPayment.selectedIds.size === active.length;
+                    setBulkNextPayment({
+                      ...bulkNextPayment,
+                      selectedIds: allSelected ? new Set() : new Set(active.map(s => s.id)),
+                    });
+                  }}
+                  className="text-sm text-primary-600 hover:underline font-medium"
+                >
+                  {bulkNextPayment.selectedIds.size === (active?.length ?? 0) && (active?.length ?? 0) > 0 ? 'Deselect all' : 'Select all'}
+                </button>
+              </div>
+              <div className="max-h-72 overflow-y-auto divide-y divide-gray-100">
+                {(active ?? []).map(s => {
+                  const checked = bulkNextPayment.selectedIds.has(s.id);
+                  return (
+                    <label key={s.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={e => {
+                          const next = new Set(bulkNextPayment.selectedIds);
+                          if (e.target.checked) next.add(s.id); else next.delete(s.id);
+                          setBulkNextPayment({ ...bulkNextPayment, selectedIds: next });
+                        }}
+                        className="w-4 h-4 rounded border-gray-300 text-primary-600"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium text-gray-900 truncate">{s.fullName}</div>
+                        <div className="text-xs text-gray-500 truncate">
+                          {s.position ?? 'Staff'}
+                          {s.nextPaymentDate ? <> · current: {s.nextPaymentDate}</> : <> · no date set</>}
+                        </div>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="flex gap-2 justify-end pt-2">
+              <Button variant="ghost" onClick={() => setBulkNextPayment(null)}>Cancel</Button>
+              <Button onClick={submitBulkNextPayment} loading={savingBulkNext} disabled={bulkNextPayment.selectedIds.size === 0}>
+                {bulkNextPayment.date ? `Apply to ${bulkNextPayment.selectedIds.size}` : `Clear for ${bulkNextPayment.selectedIds.size}`}
+              </Button>
             </div>
           </div>
         </Modal>

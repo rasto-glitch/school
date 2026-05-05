@@ -230,8 +230,9 @@ export function createRouter(io: SocketServer) {
   router.get('/accounting/staff/:id/payments', authenticate, authorize(...accountingRW), (req, res) => staff.listStaffPayments(req as AuthRequest, res));
   router.post('/accounting/staff/:id/payments', authenticate, authorize(...accountingRW), (req, res) => staff.recordStaffPayment(req as AuthRequest, res));
   router.delete('/accounting/staff-payments/:id', authenticate, authorize(...accountingRW), (req, res) => staff.deleteStaffPayment(req as AuthRequest, res));
-  // Static path first so it isn't shadowed by the :id route below.
+  // Static paths first so they aren't shadowed by the :id routes below.
   router.post('/accounting/staff/notify-due-all', authenticate, authorize(...accountingRW), (req, res) => staff.notifyAllStaffDue(req as AuthRequest, res));
+  router.post('/accounting/staff/bulk-next-payment', authenticate, authorize(...accountingRW), (req, res) => staff.bulkSetNextPaymentDate(req as AuthRequest, res));
   router.post('/accounting/staff/:id/notify-due', authenticate, authorize(...accountingRW), (req, res) => staff.notifyStaffDue(req as AuthRequest, res));
   router.get('/accounting/staff/:id/export.pdf', authenticate, authorize(...accountingRW), (req, res) => staff.exportStaffSalaryPdf(req as AuthRequest, res));
   router.get('/accounting/staff/:id/export.xlsx', authenticate, authorize(...accountingRW), (req, res) => staff.exportStaffSalaryXlsx(req as AuthRequest, res));
