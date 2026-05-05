@@ -199,7 +199,12 @@
     "overdue": "متأخر",
     "payment_history": "سجل المدفوعات",
     "no_payments": "لم يتم تسجيل أي مدفوعات بعد.",
-    "empty": "لا يوجد سجل راتب حتى الآن. سيقوم قسم المحاسبة بإعداده."
+    "empty": "لا يوجد سجل راتب حتى الآن. سيقوم قسم المحاسبة بإعداده.",
+    "insurance": "التأمين",
+    "insurance_pct": "يتم اقتطاع {{pct}}% من كل دفعة",
+    "insurance_held": "المحتجز: {{amount}}",
+    "insurance_paid_out": "تم الصرف: {{amount}} في {{date}}",
+    "insurance_withheld": "التأمين: {{ins}} · الصافي: {{net}}"
   },
   "settings": {
     "notifications_section": "الإشعارات",

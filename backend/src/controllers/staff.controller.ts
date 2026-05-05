@@ -25,6 +25,7 @@ interface StaffBody {
   currency?: string;
   nextPaymentDate?: string | null;
   isActive?: boolean;
+  insurancePercentage?: number | null;
 }
 
 interface PaymentBody {
@@ -32,6 +33,15 @@ interface PaymentBody {
   currency?: string;
   paidOn?: string;
   periodLabel?: string | null;
+  notes?: string | null;
+  insuranceAmount?: number | null;
+  insurancePercentage?: number | null;
+}
+
+interface InsurancePayoutBody {
+  paidOn?: string;
+  amount?: number;
+  currency?: string;
   notes?: string | null;
 }
 
@@ -47,6 +57,12 @@ interface RawStaffRow {
   currency: string;
   next_payment_date: string | null;
   is_active: boolean;
+  insurance_percentage: number | null;
+  insurance_paid_out: boolean;
+  insurance_paid_out_at: string | null;
+  insurance_paid_out_amount: number | null;
+  insurance_paid_out_currency: string | null;
+  insurance_paid_out_notes: string | null;
   created_at: string;
   users?: { is_active: boolean } | { is_active: boolean }[] | null;
 }
@@ -60,7 +76,7 @@ function userIsActive(joined: RawStaffRow['users']): boolean | null {
 async function fetchStaffWithLastPayment(schoolId: string): Promise<{ active: unknown[]; archived: unknown[] }> {
   const { data: staff, error } = await supabase
     .from('staff_members')
-    .select('id, school_id, user_id, full_name, position, salary_amount, currency, next_payment_date, is_active, created_at, users(is_active)')
+    .select('id, school_id, user_id, full_name, position, salary_amount, currency, next_payment_date, is_active, insurance_percentage, insurance_paid_out, insurance_paid_out_at, insurance_paid_out_amount, insurance_paid_out_currency, insurance_paid_out_notes, created_at, users(is_active)')
     .eq('school_id', schoolId)
     .order('is_active', { ascending: false })
     .order('next_payment_date', { ascending: true, nullsFirst: false })
@@ -73,14 +89,22 @@ async function fetchStaffWithLastPayment(schoolId: string): Promise<{ active: un
   const ids = rows.map(s => s.id);
   const { data: payments } = await supabase
     .from('staff_salary_payments')
-    .select('staff_id, amount, currency, paid_on, period_label')
+    .select('staff_id, amount, currency, paid_on, period_label, insurance_amount')
     .in('staff_id', ids)
     .order('paid_on', { ascending: false });
 
-  const lastByStaff = new Map<string, { amount: number; currency: string; paidOn: string; periodLabel: string | null }>();
-  for (const p of (payments ?? []) as { staff_id: string; amount: number; currency: string; paid_on: string; period_label: string | null }[]) {
+  const lastByStaff = new Map<string, { amount: number; currency: string; paidOn: string; periodLabel: string | null; insuranceAmount: number }>();
+  // Total insurance withheld per staff, keyed by currency for safety
+  const insuranceByStaff = new Map<string, Map<string, number>>();
+  for (const p of (payments ?? []) as { staff_id: string; amount: number; currency: string; paid_on: string; period_label: string | null; insurance_amount: number }[]) {
     if (!lastByStaff.has(p.staff_id)) {
-      lastByStaff.set(p.staff_id, { amount: p.amount, currency: p.currency, paidOn: p.paid_on, periodLabel: p.period_label });
+      lastByStaff.set(p.staff_id, { amount: p.amount, currency: p.currency, paidOn: p.paid_on, periodLabel: p.period_label, insuranceAmount: Number(p.insurance_amount) || 0 });
+    }
+    const ins = Number(p.insurance_amount) || 0;
+    if (ins > 0) {
+      let perCur = insuranceByStaff.get(p.staff_id);
+      if (!perCur) { perCur = new Map(); insuranceByStaff.set(p.staff_id, perCur); }
+      perCur.set(p.currency, (perCur.get(p.currency) ?? 0) + ins);
     }
   }
 
@@ -94,12 +118,20 @@ async function fetchStaffWithLastPayment(schoolId: string): Promise<{ active: un
       ? 'Deactivated by accounting'
       : (userActive === false ? 'Account deactivated' : null);
     const last = lastByStaff.get(s.id) ?? null;
+    // Pick insurance total in the staff's primary currency (most common case)
+    const perCur = insuranceByStaff.get(s.id);
+    const insuranceHeldTotal = perCur ? (perCur.get(s.currency) ?? 0) : 0;
+    const insuranceHeldByCurrency = perCur
+      ? Array.from(perCur.entries()).map(([currency, amount]) => ({ currency, amount }))
+      : [];
     const enriched = {
       ...(toCC(s) as Record<string, unknown>),
       userIsActive: userActive,
       effectiveActive,
       archiveReason,
       lastPayment: last,
+      insuranceHeldTotal,
+      insuranceHeldByCurrency,
     };
     // Strip the JOIN-only field
     delete (enriched as Record<string, unknown>).users;
@@ -165,10 +197,19 @@ export async function createStaff(req: AuthRequest, res: Response): Promise<void
   const guard = await ensurePremium(schoolId);
   if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
 
-  const { userId, fullName, position, salaryAmount, currency, nextPaymentDate, isActive } = req.body as StaffBody;
+  const { userId, fullName, position, salaryAmount, currency, nextPaymentDate, isActive, insurancePercentage } = req.body as StaffBody;
   if (!fullName || !fullName.trim()) { res.status(400).json({ error: 'fullName is required' }); return; }
   if (typeof salaryAmount !== 'number' || salaryAmount < 0) { res.status(400).json({ error: 'salaryAmount must be a non-negative number' }); return; }
   if (!currency || currency.length < 1 || currency.length > 8) { res.status(400).json({ error: 'currency is required' }); return; }
+
+  let insurancePct: number | null = null;
+  if (insurancePercentage !== undefined && insurancePercentage !== null) {
+    if (typeof insurancePercentage !== 'number' || insurancePercentage < 0 || insurancePercentage > 100) {
+      res.status(400).json({ error: 'insurancePercentage must be between 0 and 100' });
+      return;
+    }
+    insurancePct = insurancePercentage;
+  }
 
   // If linking a user, validate the user belongs to this school
   if (userId) {
@@ -185,6 +226,7 @@ export async function createStaff(req: AuthRequest, res: Response): Promise<void
     currency: currency.toUpperCase(),
     next_payment_date: nextPaymentDate || null,
     is_active: isActive ?? true,
+    insurance_percentage: insurancePct,
   }).select().single();
 
   if (error) {
@@ -219,6 +261,16 @@ export async function updateStaff(req: AuthRequest, res: Response): Promise<void
   if (typeof body.currency === 'string' && body.currency.length >= 1 && body.currency.length <= 8) upd.currency = body.currency.toUpperCase();
   if ('nextPaymentDate' in body) upd.next_payment_date = body.nextPaymentDate || null;
   if (typeof body.isActive === 'boolean') upd.is_active = body.isActive;
+  if ('insurancePercentage' in body) {
+    if (body.insurancePercentage === null || body.insurancePercentage === undefined) {
+      upd.insurance_percentage = null;
+    } else if (typeof body.insurancePercentage === 'number' && body.insurancePercentage >= 0 && body.insurancePercentage <= 100) {
+      upd.insurance_percentage = body.insurancePercentage;
+    } else {
+      res.status(400).json({ error: 'insurancePercentage must be between 0 and 100' });
+      return;
+    }
+  }
 
   const { error } = await supabase.from('staff_members').update(upd).eq('id', id).eq('school_id', schoolId);
   if (error) {
@@ -254,7 +306,7 @@ export async function listStaffPayments(req: AuthRequest, res: Response): Promis
 
   const { data, error } = await supabase
     .from('staff_salary_payments')
-    .select('id, amount, currency, paid_on, period_label, notes, recorded_by, created_at')
+    .select('id, amount, currency, paid_on, period_label, notes, insurance_amount, insurance_percentage, recorded_by, created_at')
     .eq('staff_id', id)
     .order('paid_on', { ascending: false });
   if (error) { res.status(500).json({ error: error.message }); return; }
@@ -267,18 +319,48 @@ export async function recordStaffPayment(req: AuthRequest, res: Response): Promi
   if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
 
   const { id } = req.params; // staff_id
-  const { amount, currency, paidOn, periodLabel, notes } = req.body as PaymentBody;
+  const { amount, currency, paidOn, periodLabel, notes, insuranceAmount, insurancePercentage } = req.body as PaymentBody;
 
   if (typeof amount !== 'number' || amount <= 0) { res.status(400).json({ error: 'amount must be a positive number' }); return; }
   if (!paidOn) { res.status(400).json({ error: 'paidOn is required' }); return; }
 
   const { data: staff } = await supabase
     .from('staff_members')
-    .select('id, user_id, full_name, currency')
+    .select('id, user_id, full_name, currency, insurance_percentage')
     .eq('id', id).eq('school_id', schoolId).single();
   if (!staff) { res.status(404).json({ error: 'Staff member not found' }); return; }
 
-  const finalCurrency = (currency && currency.length >= 1 && currency.length <= 8 ? currency.toUpperCase() : (staff as { currency: string }).currency);
+  const staffRow = staff as { user_id: string | null; full_name: string; currency: string; insurance_percentage: number | null };
+  const finalCurrency = (currency && currency.length >= 1 && currency.length <= 8 ? currency.toUpperCase() : staffRow.currency);
+
+  // Resolve insurance for this payment.
+  // Default behaviour: snapshot the staff's current % and compute insurance = round(amount * pct / 100, 2).
+  // The client may override either the percentage or the absolute amount per payment.
+  let insPct: number | null = staffRow.insurance_percentage;
+  if (insurancePercentage !== undefined) {
+    if (insurancePercentage === null) insPct = null;
+    else if (typeof insurancePercentage !== 'number' || insurancePercentage < 0 || insurancePercentage > 100) {
+      res.status(400).json({ error: 'insurancePercentage must be between 0 and 100' });
+      return;
+    } else insPct = insurancePercentage;
+  }
+
+  let insAmt: number;
+  if (insuranceAmount !== undefined && insuranceAmount !== null) {
+    if (typeof insuranceAmount !== 'number' || insuranceAmount < 0) {
+      res.status(400).json({ error: 'insuranceAmount must be non-negative' });
+      return;
+    }
+    if (insuranceAmount > amount) {
+      res.status(400).json({ error: 'insuranceAmount cannot exceed the payment amount' });
+      return;
+    }
+    insAmt = Math.round(insuranceAmount * 100) / 100;
+  } else if (insPct !== null && insPct > 0) {
+    insAmt = Math.round((amount * insPct) / 100 * 100) / 100;
+  } else {
+    insAmt = 0;
+  }
 
   const { data, error } = await supabase.from('staff_salary_payments').insert({
     school_id: schoolId,
@@ -288,19 +370,23 @@ export async function recordStaffPayment(req: AuthRequest, res: Response): Promi
     paid_on: paidOn,
     period_label: periodLabel?.trim() || null,
     notes: notes?.trim() || null,
+    insurance_amount: insAmt,
+    insurance_percentage: insPct,
     recorded_by: userId,
   }).select().single();
   if (error) { res.status(500).json({ error: error.message }); return; }
 
   // Notify linked teacher (if any) that their salary was recorded
-  const linkedUser = (staff as { user_id: string | null }).user_id;
+  const linkedUser = staffRow.user_id;
   if (linkedUser) {
+    const netPaid = Math.round((amount - insAmt) * 100) / 100;
+    const insLine = insAmt > 0 ? ` (insurance withheld: ${insAmt} ${finalCurrency}; net: ${netPaid} ${finalCurrency})` : '';
     await notify({
       schoolId,
       userId: linkedUser,
       type: 'salary_paid',
       title: 'Salary recorded',
-      message: `Salary of ${amount} ${finalCurrency} recorded${periodLabel ? ` for ${periodLabel}` : ''}`,
+      message: `Salary of ${amount} ${finalCurrency} recorded${periodLabel ? ` for ${periodLabel}` : ''}${insLine}`,
       relatedId: (data as { id: string }).id,
     });
   }
@@ -315,6 +401,101 @@ export async function deleteStaffPayment(req: AuthRequest, res: Response): Promi
 
   const { id } = req.params;
   const { error } = await supabase.from('staff_salary_payments').delete().eq('id', id).eq('school_id', schoolId);
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json({ success: true });
+}
+
+// ── Insurance payout (admin/accountant only, archived staff) ──────────
+
+async function sumInsuranceHeld(staffId: string, currency: string): Promise<number> {
+  const { data } = await supabase
+    .from('staff_salary_payments')
+    .select('insurance_amount, currency')
+    .eq('staff_id', staffId);
+  let total = 0;
+  for (const r of (data ?? []) as { insurance_amount: number; currency: string }[]) {
+    if (r.currency === currency) total += Number(r.insurance_amount) || 0;
+  }
+  return Math.round(total * 100) / 100;
+}
+
+export async function markStaffInsurancePaid(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const guard = await ensurePremium(schoolId);
+  if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
+
+  const id = String(req.params.id);
+  const body = req.body as InsurancePayoutBody;
+
+  const { data: staff } = await supabase
+    .from('staff_members')
+    .select('id, user_id, full_name, currency, insurance_paid_out')
+    .eq('id', id).eq('school_id', schoolId).single();
+  if (!staff) { res.status(404).json({ error: 'Staff member not found' }); return; }
+
+  const s = staff as { user_id: string | null; full_name: string; currency: string; insurance_paid_out: boolean };
+  if (s.insurance_paid_out) { res.status(409).json({ error: 'Insurance has already been paid out' }); return; }
+
+  const finalCurrency = (body.currency && body.currency.length >= 1 && body.currency.length <= 8 ? body.currency.toUpperCase() : s.currency);
+  const heldTotal = await sumInsuranceHeld(id, finalCurrency);
+
+  let payoutAmount: number;
+  if (typeof body.amount === 'number') {
+    if (body.amount < 0) { res.status(400).json({ error: 'amount must be non-negative' }); return; }
+    payoutAmount = Math.round(body.amount * 100) / 100;
+  } else {
+    payoutAmount = heldTotal;
+  }
+
+  const paidOn = body.paidOn || new Date().toISOString().slice(0, 10);
+
+  const { error } = await supabase.from('staff_members').update({
+    insurance_paid_out: true,
+    insurance_paid_out_at: paidOn,
+    insurance_paid_out_amount: payoutAmount,
+    insurance_paid_out_currency: finalCurrency,
+    insurance_paid_out_notes: body.notes?.trim() || null,
+  }).eq('id', id).eq('school_id', schoolId);
+  if (error) { res.status(500).json({ error: error.message }); return; }
+
+  // Notify linked teacher (if any) that their insurance was paid out
+  if (s.user_id) {
+    await notify({
+      schoolId,
+      userId: s.user_id,
+      type: 'salary_paid',
+      title: 'Insurance paid out',
+      message: `Your insurance of ${payoutAmount} ${finalCurrency} has been paid out on ${paidOn}.`,
+      relatedId: id,
+    });
+  }
+
+  res.json({ success: true });
+}
+
+export async function reverseStaffInsurancePayout(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const guard = await ensurePremium(schoolId);
+  if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
+
+  const id = String(req.params.id);
+  const { data: staff } = await supabase
+    .from('staff_members')
+    .select('id, insurance_paid_out')
+    .eq('id', id).eq('school_id', schoolId).single();
+  if (!staff) { res.status(404).json({ error: 'Staff member not found' }); return; }
+  if (!(staff as { insurance_paid_out: boolean }).insurance_paid_out) {
+    res.status(409).json({ error: 'Insurance has not been paid out' });
+    return;
+  }
+
+  const { error } = await supabase.from('staff_members').update({
+    insurance_paid_out: false,
+    insurance_paid_out_at: null,
+    insurance_paid_out_amount: null,
+    insurance_paid_out_currency: null,
+    insurance_paid_out_notes: null,
+  }).eq('id', id).eq('school_id', schoolId);
   if (error) { res.status(500).json({ error: error.message }); return; }
   res.json({ success: true });
 }
@@ -404,7 +585,7 @@ export async function notifyAllStaffDue(req: AuthRequest, res: Response): Promis
 async function buildExportData(schoolId: string, staffId: string): Promise<StaffSalaryExportData | null> {
   const { data: staff } = await supabase
     .from('staff_members')
-    .select('id, user_id, full_name, position, salary_amount, currency, next_payment_date, is_active, users(is_active)')
+    .select('id, user_id, full_name, position, salary_amount, currency, next_payment_date, is_active, insurance_percentage, insurance_paid_out, insurance_paid_out_at, insurance_paid_out_amount, insurance_paid_out_currency, insurance_paid_out_notes, users(is_active)')
     .eq('id', staffId).eq('school_id', schoolId).single();
   if (!staff) return null;
 
@@ -417,7 +598,7 @@ async function buildExportData(schoolId: string, staffId: string): Promise<Staff
 
   const { data: payments } = await supabase
     .from('staff_salary_payments')
-    .select('amount, currency, paid_on, period_label, notes')
+    .select('amount, currency, paid_on, period_label, notes, insurance_amount, insurance_percentage')
     .eq('staff_id', staffId)
     .order('paid_on', { ascending: false });
 
@@ -425,6 +606,12 @@ async function buildExportData(schoolId: string, staffId: string): Promise<Staff
     .from('schools')
     .select('name, logo_url')
     .eq('id', schoolId).single();
+
+  let insuranceHeld = 0;
+  for (const p of (payments ?? []) as { currency: string; insurance_amount: number }[]) {
+    if (p.currency === s.currency) insuranceHeld += Number(p.insurance_amount) || 0;
+  }
+  insuranceHeld = Math.round(insuranceHeld * 100) / 100;
 
   return {
     schoolName: (school as { name: string } | null)?.name ?? 'School',
@@ -436,8 +623,23 @@ async function buildExportData(schoolId: string, staffId: string): Promise<Staff
     nextPaymentDate: s.next_payment_date,
     status: effectiveActive ? 'active' : 'archived',
     archiveReason,
-    payments: ((payments ?? []) as { amount: number; currency: string; paid_on: string; period_label: string | null; notes: string | null }[])
-      .map(p => ({ amount: p.amount, currency: p.currency, paidOn: p.paid_on, periodLabel: p.period_label, notes: p.notes })),
+    insurancePercentage: s.insurance_percentage,
+    insuranceHeld,
+    insurancePaidOut: s.insurance_paid_out,
+    insurancePaidOutAt: s.insurance_paid_out_at,
+    insurancePaidOutAmount: s.insurance_paid_out_amount,
+    insurancePaidOutCurrency: s.insurance_paid_out_currency,
+    insurancePaidOutNotes: s.insurance_paid_out_notes,
+    payments: ((payments ?? []) as { amount: number; currency: string; paid_on: string; period_label: string | null; notes: string | null; insurance_amount: number; insurance_percentage: number | null }[])
+      .map(p => ({
+        amount: p.amount,
+        currency: p.currency,
+        paidOn: p.paid_on,
+        periodLabel: p.period_label,
+        notes: p.notes,
+        insuranceAmount: Number(p.insurance_amount) || 0,
+        insurancePercentage: p.insurance_percentage,
+      })),
   };
 }
 
@@ -479,21 +681,30 @@ export async function getMyStaffInfo(req: AuthRequest, res: Response): Promise<v
 
   const { data: staff } = await supabase
     .from('staff_members')
-    .select('id, full_name, position, salary_amount, currency, next_payment_date, is_active, created_at')
+    .select('id, full_name, position, salary_amount, currency, next_payment_date, is_active, insurance_percentage, insurance_paid_out, insurance_paid_out_at, insurance_paid_out_amount, insurance_paid_out_currency, insurance_paid_out_notes, created_at')
     .eq('school_id', schoolId)
     .eq('user_id', userId)
     .maybeSingle();
 
   if (!staff) { res.json({ staff: null, payments: [] }); return; }
 
+  const staffRow = staff as { id: string; currency: string };
   const { data: payments } = await supabase
     .from('staff_salary_payments')
-    .select('id, amount, currency, paid_on, period_label, notes, created_at')
-    .eq('staff_id', (staff as { id: string }).id)
+    .select('id, amount, currency, paid_on, period_label, notes, insurance_amount, insurance_percentage, created_at')
+    .eq('staff_id', staffRow.id)
     .order('paid_on', { ascending: false });
 
+  let insuranceHeld = 0;
+  for (const p of (payments ?? []) as { currency: string; insurance_amount: number }[]) {
+    if (p.currency === staffRow.currency) insuranceHeld += Number(p.insurance_amount) || 0;
+  }
+  insuranceHeld = Math.round(insuranceHeld * 100) / 100;
+
+  const staffEnriched = { ...(toCC(staff) as Record<string, unknown>), insuranceHeldTotal: insuranceHeld };
+
   res.json({
-    staff: toCC(staff),
+    staff: staffEnriched,
     payments: toCC(payments ?? []),
   });
 }

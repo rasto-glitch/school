@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, RefreshControl } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { Wallet, CalendarClock, History } from 'lucide-react-native';
+import { Wallet, CalendarClock, History, Shield, ShieldCheck } from 'lucide-react-native';
 import { CardListSkeleton } from '../../components/Skeleton';
 import { teacherApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
@@ -15,6 +15,12 @@ interface StaffInfo {
   currency: string;
   nextPaymentDate: string | null;
   isActive: boolean;
+  insurancePercentage: number | null;
+  insurancePaidOut: boolean;
+  insurancePaidOutAt: string | null;
+  insurancePaidOutAmount: number | null;
+  insurancePaidOutCurrency: string | null;
+  insuranceHeldTotal: number;
 }
 
 interface SalaryPayment {
@@ -24,6 +30,8 @@ interface SalaryPayment {
   paidOn: string;
   periodLabel: string | null;
   notes: string | null;
+  insuranceAmount: number;
+  insurancePercentage: number | null;
 }
 
 function fmtMoney(amount: number, currency: string) {
@@ -110,6 +118,36 @@ export default function TeacherSalaryScreen() {
             </View>
           </View>
 
+          {(staff.insurancePercentage !== null || (staff.insuranceHeldTotal && staff.insuranceHeldTotal > 0) || staff.insurancePaidOut) && (
+            <View style={styles.infoCard}>
+              <View style={styles.infoRow}>
+                <View style={styles.infoIconBox}>
+                  {staff.insurancePaidOut
+                    ? <ShieldCheck size={16} color="#059669" />
+                    : <Shield size={16} color={colors.primary} />}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.infoLabel}>{t('salary.insurance', 'Insurance')}</Text>
+                  {staff.insurancePercentage !== null && (
+                    <Text style={styles.infoValue}>
+                      {t('salary.insurance_pct', { pct: staff.insurancePercentage, defaultValue: `${staff.insurancePercentage}% withheld per payment` })}
+                    </Text>
+                  )}
+                  {!staff.insurancePaidOut && staff.insuranceHeldTotal > 0 && (
+                    <Text style={[styles.infoValue, { color: colors.text, marginTop: 2 }]}>
+                      {t('salary.insurance_held', { defaultValue: 'Held: {{amount}}', amount: fmtMoney(staff.insuranceHeldTotal, staff.currency) })}
+                    </Text>
+                  )}
+                  {staff.insurancePaidOut && (
+                    <Text style={[styles.infoValue, { color: '#059669', marginTop: 2 }]}>
+                      {t('salary.insurance_paid_out', { defaultValue: 'Paid out: {{amount}} on {{date}}', amount: fmtMoney(staff.insurancePaidOutAmount ?? 0, staff.insurancePaidOutCurrency ?? staff.currency), date: staff.insurancePaidOutAt ?? '' })}
+                    </Text>
+                  )}
+                </View>
+              </View>
+            </View>
+          )}
+
           <View style={styles.historyHeader}>
             <History size={16} color={colors.textMuted} />
             <Text style={styles.historyTitle}>{t('salary.payment_history', 'Payment history')}</Text>
@@ -118,17 +156,26 @@ export default function TeacherSalaryScreen() {
           {payments.length === 0 ? (
             <Text style={styles.noPayments}>{t('salary.no_payments', 'No payments recorded yet.')}</Text>
           ) : (
-            payments.map(p => (
-              <View key={p.id} style={styles.paymentCard}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.paymentAmount}>{fmtMoney(p.amount, p.currency)}</Text>
-                  <Text style={styles.paymentMeta}>
-                    {p.paidOn}{p.periodLabel ? ` · ${p.periodLabel}` : ''}
-                  </Text>
-                  {p.notes && <Text style={styles.paymentNotes}>{p.notes}</Text>}
+            payments.map(p => {
+              const ins = p.insuranceAmount || 0;
+              const net = Math.round((p.amount - ins) * 100) / 100;
+              return (
+                <View key={p.id} style={styles.paymentCard}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.paymentAmount}>{fmtMoney(p.amount, p.currency)}</Text>
+                    <Text style={styles.paymentMeta}>
+                      {p.paidOn}{p.periodLabel ? ` · ${p.periodLabel}` : ''}
+                    </Text>
+                    {ins > 0 && (
+                      <Text style={[styles.paymentMeta, { color: '#4F46E5', marginTop: 2 }]}>
+                        {t('salary.insurance_withheld', { defaultValue: 'Insurance: {{ins}} · Net: {{net}}', ins: fmtMoney(ins, p.currency), net: fmtMoney(net, p.currency) })}
+                      </Text>
+                    )}
+                    {p.notes && <Text style={styles.paymentNotes}>{p.notes}</Text>}
+                  </View>
                 </View>
-              </View>
-            ))
+              );
+            })
           )}
         </>
       )}

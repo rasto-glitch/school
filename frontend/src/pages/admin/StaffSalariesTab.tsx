@@ -6,7 +6,7 @@ import Input from '../../components/common/Input';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import EmptyState from '../../components/common/EmptyState';
 import Modal from '../../components/common/Modal';
-import { Plus, Trash2, Pencil, Users as UsersIcon, BellRing, Receipt, History, Megaphone, Archive as ArchiveIcon, RotateCcw, FileDown, FileSpreadsheet } from 'lucide-react';
+import { Plus, Trash2, Pencil, Users as UsersIcon, BellRing, Receipt, History, Megaphone, Archive as ArchiveIcon, RotateCcw, FileDown, FileSpreadsheet, Shield, ShieldCheck } from 'lucide-react';
 import type { StaffMember, StaffSalaryPayment, StaffSetupTeacher } from '../../types';
 
 type SubTab = 'active' | 'archive';
@@ -20,6 +20,7 @@ interface StaffForm {
   currency: string;
   nextPaymentDate: string;
   isActive: boolean;
+  insurancePercentage: string;
 }
 
 const empty: StaffForm = {
@@ -30,6 +31,7 @@ const empty: StaffForm = {
   currency: 'USD',
   nextPaymentDate: '',
   isActive: true,
+  insurancePercentage: '',
 };
 
 interface PaymentForm {
@@ -37,6 +39,16 @@ interface PaymentForm {
   currency: string;
   paidOn: string;
   periodLabel: string;
+  notes: string;
+  insurancePercentage: string;
+  insuranceAmount: string;
+  insuranceTouched: boolean;
+}
+
+interface InsurancePayoutForm {
+  paidOn: string;
+  amount: string;
+  currency: string;
   notes: string;
 }
 
@@ -111,6 +123,11 @@ export default function StaffSalariesTab() {
   const [massReminder, setMassReminder] = useState<MassReminderForm | null>(null);
   const [sendingMass, setSendingMass] = useState(false);
 
+  const [insurancePayoutTarget, setInsurancePayoutTarget] = useState<StaffMember | null>(null);
+  const [insurancePayoutForm, setInsurancePayoutForm] = useState<InsurancePayoutForm | null>(null);
+  const [savingInsurancePayout, setSavingInsurancePayout] = useState(false);
+  const [reversingInsuranceId, setReversingInsuranceId] = useState<string | null>(null);
+
   const loadActive = async () => {
     const r = await staffApi.list('active');
     setActive(r.data as StaffMember[]);
@@ -140,6 +157,7 @@ export default function StaffSalariesTab() {
     currency: s.currency,
     nextPaymentDate: s.nextPaymentDate ?? '',
     isActive: s.isActive,
+    insurancePercentage: s.insurancePercentage !== null && s.insurancePercentage !== undefined ? String(s.insurancePercentage) : '',
   });
 
   const save = async () => {
@@ -147,6 +165,13 @@ export default function StaffSalariesTab() {
     const total = Number(editing.salaryAmount);
     if (!editing.fullName.trim() || isNaN(total) || total < 0) { toast.error('Name and salary amount are required'); return; }
     if (!editing.currency.trim()) { toast.error('Currency is required'); return; }
+
+    let insurancePct: number | null = null;
+    if (editing.insurancePercentage.trim() !== '') {
+      const pct = Number(editing.insurancePercentage);
+      if (isNaN(pct) || pct < 0 || pct > 100) { toast.error('Insurance % must be between 0 and 100'); return; }
+      insurancePct = pct;
+    }
 
     const body = {
       userId: editing.userId || null,
@@ -156,6 +181,7 @@ export default function StaffSalariesTab() {
       currency: editing.currency.toUpperCase(),
       nextPaymentDate: editing.nextPaymentDate || null,
       isActive: editing.isActive,
+      insurancePercentage: insurancePct,
     };
 
     setSaving(true);
@@ -224,12 +250,17 @@ export default function StaffSalariesTab() {
 
   const openRecordPayment = (s: StaffMember) => {
     setPaymentTarget(s);
+    const pct = s.insurancePercentage ?? 0;
+    const insAmt = pct > 0 ? Math.round((s.salaryAmount * pct) / 100 * 100) / 100 : 0;
     setPaymentForm({
       amount: String(s.salaryAmount),
       currency: s.currency,
       paidOn: new Date().toISOString().slice(0, 10),
       periodLabel: '',
       notes: '',
+      insurancePercentage: s.insurancePercentage !== null && s.insurancePercentage !== undefined ? String(s.insurancePercentage) : '',
+      insuranceAmount: insAmt > 0 ? String(insAmt) : '',
+      insuranceTouched: false,
     });
   };
 
@@ -239,6 +270,20 @@ export default function StaffSalariesTab() {
     if (isNaN(amt) || amt <= 0) { toast.error('Amount must be greater than 0'); return; }
     if (!paymentForm.paidOn) { toast.error('Payment date is required'); return; }
 
+    let insAmt: number | null = null;
+    if (paymentForm.insuranceAmount.trim() !== '') {
+      const v = Number(paymentForm.insuranceAmount);
+      if (isNaN(v) || v < 0) { toast.error('Insurance amount must be non-negative'); return; }
+      if (v > amt) { toast.error('Insurance cannot exceed the payment amount'); return; }
+      insAmt = Math.round(v * 100) / 100;
+    }
+    let insPct: number | null = null;
+    if (paymentForm.insurancePercentage.trim() !== '') {
+      const v = Number(paymentForm.insurancePercentage);
+      if (isNaN(v) || v < 0 || v > 100) { toast.error('Insurance % must be between 0 and 100'); return; }
+      insPct = v;
+    }
+
     setSavingPayment(true);
     try {
       await staffApi.recordPayment(paymentTarget.id, {
@@ -247,6 +292,8 @@ export default function StaffSalariesTab() {
         paidOn: paymentForm.paidOn,
         periodLabel: paymentForm.periodLabel.trim() || null,
         notes: paymentForm.notes.trim() || null,
+        insuranceAmount: insAmt,
+        insurancePercentage: insPct,
       });
       toast.success('Payment recorded');
       setPaymentTarget(null);
@@ -281,6 +328,51 @@ export default function StaffSalariesTab() {
     } catch (e: any) {
       toast.error(e.response?.data?.error || 'Failed to delete payment');
     }
+  };
+
+  const openInsurancePayout = (s: StaffMember) => {
+    setInsurancePayoutTarget(s);
+    setInsurancePayoutForm({
+      paidOn: new Date().toISOString().slice(0, 10),
+      amount: String(s.insuranceHeldTotal || 0),
+      currency: s.currency,
+      notes: '',
+    });
+  };
+
+  const submitInsurancePayout = async () => {
+    if (!insurancePayoutTarget || !insurancePayoutForm) return;
+    const amt = Number(insurancePayoutForm.amount);
+    if (isNaN(amt) || amt < 0) { toast.error('Amount must be non-negative'); return; }
+    if (!insurancePayoutForm.paidOn) { toast.error('Date is required'); return; }
+
+    setSavingInsurancePayout(true);
+    try {
+      await staffApi.payInsurance(insurancePayoutTarget.id, {
+        paidOn: insurancePayoutForm.paidOn,
+        amount: amt,
+        currency: insurancePayoutForm.currency.toUpperCase(),
+        notes: insurancePayoutForm.notes.trim() || null,
+      });
+      toast.success('Insurance marked as paid');
+      setInsurancePayoutTarget(null);
+      setInsurancePayoutForm(null);
+      await loadAll();
+    } catch (e: any) {
+      toast.error(e.response?.data?.error || 'Failed to mark insurance paid');
+    } finally { setSavingInsurancePayout(false); }
+  };
+
+  const reverseInsurancePayout = async (s: StaffMember) => {
+    if (!confirm(`Reverse the insurance payout for ${s.fullName}? Their insurance will be marked as still pending.`)) return;
+    setReversingInsuranceId(s.id);
+    try {
+      await staffApi.reverseInsurancePayout(s.id);
+      toast.success('Insurance payout reversed');
+      await loadAll();
+    } catch (e: any) {
+      toast.error(e.response?.data?.error || 'Failed to reverse payout');
+    } finally { setReversingInsuranceId(null); }
   };
 
   const sendMassReminder = async () => {
@@ -368,6 +460,9 @@ export default function StaffSalariesTab() {
         <div className="space-y-3">
           {list.map(s => {
             const badge = subTab === 'active' && s.isActive ? dueBadge(s.nextPaymentDate) : null;
+            const hasInsurance = s.insurancePercentage !== null && s.insurancePercentage !== undefined;
+            const insuranceHeld = s.insuranceHeldTotal || 0;
+            const showHeldBadge = insuranceHeld > 0 && !s.insurancePaidOut;
             return (
               <div key={s.id} className={`bg-white rounded-2xl border border-gray-200 p-4 ${subTab === 'archive' ? 'opacity-80' : ''}`}>
                 <div className="flex items-start justify-between gap-3 mb-2">
@@ -378,12 +473,42 @@ export default function StaffSalariesTab() {
                       {!s.userId && <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">No account</span>}
                       {s.archiveReason && <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{s.archiveReason}</span>}
                       {badge && <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${badge.cls}`}>{badge.text}</span>}
+                      {hasInsurance && (
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 inline-flex items-center gap-1">
+                          <Shield className="w-3 h-3" /> Insurance {s.insurancePercentage}%
+                        </span>
+                      )}
+                      {showHeldBadge && (
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800">
+                          Held: {fmtMoney(insuranceHeld, s.currency)}
+                        </span>
+                      )}
+                      {s.insurancePaidOut && (
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 inline-flex items-center gap-1">
+                          <ShieldCheck className="w-3 h-3" /> Insurance paid {s.insurancePaidOutAt ?? ''}
+                        </span>
+                      )}
+                      {subTab === 'archive' && insuranceHeld > 0 && !s.insurancePaidOut && (
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">Insurance pending payout</span>
+                      )}
                     </div>
                     <div className="text-sm text-gray-500 mt-0.5">
                       Salary: <span className="font-semibold text-gray-700">{fmtMoney(s.salaryAmount, s.currency)}</span>
                       {s.nextPaymentDate && subTab === 'active' && <> · Next payment: {s.nextPaymentDate}</>}
-                      {s.lastPayment && <> · Last paid: {fmtMoney(s.lastPayment.amount, s.lastPayment.currency)} on {s.lastPayment.paidOn}</>}
+                      {s.lastPayment && (
+                        <> · Last paid: {fmtMoney(s.lastPayment.amount, s.lastPayment.currency)} on {s.lastPayment.paidOn}
+                          {s.lastPayment.insuranceAmount > 0 && (
+                            <> (insurance: {fmtMoney(s.lastPayment.insuranceAmount, s.lastPayment.currency)})</>
+                          )}
+                        </>
+                      )}
                     </div>
+                    {s.insurancePaidOut && (s.insurancePaidOutAmount ?? 0) > 0 && (
+                      <div className="text-xs text-emerald-700 mt-1">
+                        Insurance paid out: {fmtMoney(s.insurancePaidOutAmount ?? 0, s.insurancePaidOutCurrency ?? s.currency)} on {s.insurancePaidOutAt ?? '—'}
+                        {s.insurancePaidOutNotes && <> · {s.insurancePaidOutNotes}</>}
+                      </div>
+                    )}
                   </div>
                   <div className="flex gap-1 shrink-0 flex-wrap">
                     {subTab === 'active' && (
@@ -399,6 +524,12 @@ export default function StaffSalariesTab() {
                     )}
                     {subTab === 'archive' && (
                       <>
+                        {!s.insurancePaidOut && insuranceHeld > 0 && (
+                          <Button size="sm" variant="ghost" onClick={() => openInsurancePayout(s)} icon={<ShieldCheck className="w-4 h-4" />}>Pay insurance</Button>
+                        )}
+                        {s.insurancePaidOut && (
+                          <Button size="sm" variant="ghost" onClick={() => reverseInsurancePayout(s)} loading={reversingInsuranceId === s.id} icon={<RotateCcw className="w-4 h-4" />}>Reverse insurance</Button>
+                        )}
                         <Button size="sm" variant="ghost" onClick={() => exportPdf(s)} loading={exporting === `${s.id}:pdf`} icon={<FileDown className="w-4 h-4" />}>PDF</Button>
                         <Button size="sm" variant="ghost" onClick={() => exportXlsx(s)} loading={exporting === `${s.id}:xlsx`} icon={<FileSpreadsheet className="w-4 h-4" />}>Excel</Button>
                         <Button size="sm" variant="ghost" onClick={() => openHistory(s)} icon={<History className="w-4 h-4" />}>History</Button>
@@ -450,6 +581,20 @@ export default function StaffSalariesTab() {
 
             <Input label="Next payment date (optional)" type="date" value={editing.nextPaymentDate} onChange={e => setEditing({ ...editing, nextPaymentDate: e.target.value })} />
 
+            <div>
+              <Input
+                label="Insurance % (optional)"
+                type="number"
+                step="0.01"
+                min="0"
+                max="100"
+                value={editing.insurancePercentage}
+                onChange={e => setEditing({ ...editing, insurancePercentage: e.target.value })}
+                placeholder="e.g. 5"
+              />
+              <p className="text-xs text-gray-500 mt-1">Percentage withheld from each salary payment as insurance. The accumulated amount is paid out when the staff member leaves. Leave blank for no insurance.</p>
+            </div>
+
             <label className="flex items-center gap-2 text-sm text-gray-700">
               <input type="checkbox" checked={editing.isActive} onChange={e => setEditing({ ...editing, isActive: e.target.checked })} className="w-4 h-4 rounded border-gray-300 text-primary-600" />
               Active (uncheck to archive without deleting)
@@ -463,34 +608,105 @@ export default function StaffSalariesTab() {
         </Modal>
       )}
 
-      {paymentTarget && paymentForm && (
-        <Modal isOpen onClose={() => { setPaymentTarget(null); setPaymentForm(null); }} title={`Record payment — ${paymentTarget.fullName}`} size="lg">
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <Input label="Amount" type="number" step="0.01" value={paymentForm.amount} onChange={e => setPaymentForm({ ...paymentForm, amount: e.target.value })} />
-              <Input label="Currency" value={paymentForm.currency} onChange={e => setPaymentForm({ ...paymentForm, currency: e.target.value.toUpperCase() })} />
+      {paymentTarget && paymentForm && (() => {
+        const grossN = Number(paymentForm.amount) || 0;
+        const insN = Number(paymentForm.insuranceAmount) || 0;
+        const netN = Math.max(0, Math.round((grossN - insN) * 100) / 100);
+        return (
+          <Modal isOpen onClose={() => { setPaymentTarget(null); setPaymentForm(null); }} title={`Record payment — ${paymentTarget.fullName}`} size="lg">
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <Input
+                  label="Gross amount"
+                  type="number"
+                  step="0.01"
+                  value={paymentForm.amount}
+                  onChange={e => {
+                    const newAmt = e.target.value;
+                    const pct = Number(paymentForm.insurancePercentage);
+                    const a = Number(newAmt);
+                    const next: PaymentForm = { ...paymentForm, amount: newAmt };
+                    if (!paymentForm.insuranceTouched && !isNaN(a) && !isNaN(pct) && pct > 0) {
+                      next.insuranceAmount = String(Math.round((a * pct) / 100 * 100) / 100);
+                    }
+                    setPaymentForm(next);
+                  }}
+                />
+                <Input label="Currency" value={paymentForm.currency} onChange={e => setPaymentForm({ ...paymentForm, currency: e.target.value.toUpperCase() })} />
+              </div>
+              <Input label="Payment date" type="date" value={paymentForm.paidOn} onChange={e => setPaymentForm({ ...paymentForm, paidOn: e.target.value })} />
+              <Input label="Period label (optional)" value={paymentForm.periodLabel} onChange={e => setPaymentForm({ ...paymentForm, periodLabel: e.target.value })} placeholder="e.g. May 2026" />
+
+              <div className="border-t border-gray-200 pt-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Shield className="w-4 h-4 text-indigo-600" />
+                  <h4 className="text-sm font-semibold text-gray-700">Insurance withholding</h4>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <Input
+                    label="Insurance %"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="100"
+                    value={paymentForm.insurancePercentage}
+                    onChange={e => {
+                      const pctStr = e.target.value;
+                      const pct = Number(pctStr);
+                      const a = Number(paymentForm.amount);
+                      const next: PaymentForm = { ...paymentForm, insurancePercentage: pctStr };
+                      if (!paymentForm.insuranceTouched) {
+                        if (pctStr.trim() === '' || isNaN(pct)) next.insuranceAmount = '';
+                        else if (!isNaN(a)) next.insuranceAmount = String(Math.round((a * pct) / 100 * 100) / 100);
+                      }
+                      setPaymentForm(next);
+                    }}
+                  />
+                  <Input
+                    label="Insurance amount"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={paymentForm.insuranceAmount}
+                    onChange={e => setPaymentForm({ ...paymentForm, insuranceAmount: e.target.value, insuranceTouched: true })}
+                  />
+                </div>
+                <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                  <div className="bg-gray-50 rounded-lg py-2 px-3">
+                    <div className="text-xs text-gray-500">Gross</div>
+                    <div className="font-semibold text-gray-900">{fmtMoney(grossN, paymentForm.currency)}</div>
+                  </div>
+                  <div className="bg-indigo-50 rounded-lg py-2 px-3">
+                    <div className="text-xs text-indigo-600">Insurance</div>
+                    <div className="font-semibold text-indigo-900">{fmtMoney(insN, paymentForm.currency)}</div>
+                  </div>
+                  <div className="bg-emerald-50 rounded-lg py-2 px-3">
+                    <div className="text-xs text-emerald-700">Net paid</div>
+                    <div className="font-semibold text-emerald-900">{fmtMoney(netN, paymentForm.currency)}</div>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Notes (optional)</label>
+                <textarea
+                  value={paymentForm.notes}
+                  onChange={e => setPaymentForm({ ...paymentForm, notes: e.target.value })}
+                  rows={3}
+                  className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
+              {paymentTarget.userId && (
+                <p className="text-xs text-gray-500">A confirmation notification will be sent to {paymentTarget.fullName}.</p>
+              )}
+              <div className="flex gap-2 justify-end pt-2">
+                <Button variant="ghost" onClick={() => { setPaymentTarget(null); setPaymentForm(null); }}>Cancel</Button>
+                <Button onClick={submitPayment} loading={savingPayment}>Record payment</Button>
+              </div>
             </div>
-            <Input label="Payment date" type="date" value={paymentForm.paidOn} onChange={e => setPaymentForm({ ...paymentForm, paidOn: e.target.value })} />
-            <Input label="Period label (optional)" value={paymentForm.periodLabel} onChange={e => setPaymentForm({ ...paymentForm, periodLabel: e.target.value })} placeholder="e.g. May 2026" />
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Notes (optional)</label>
-              <textarea
-                value={paymentForm.notes}
-                onChange={e => setPaymentForm({ ...paymentForm, notes: e.target.value })}
-                rows={3}
-                className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-              />
-            </div>
-            {paymentTarget.userId && (
-              <p className="text-xs text-gray-500">A confirmation notification will be sent to {paymentTarget.fullName}.</p>
-            )}
-            <div className="flex gap-2 justify-end pt-2">
-              <Button variant="ghost" onClick={() => { setPaymentTarget(null); setPaymentForm(null); }}>Cancel</Button>
-              <Button onClick={submitPayment} loading={savingPayment}>Record payment</Button>
-            </div>
-          </div>
-        </Modal>
-      )}
+          </Modal>
+        );
+      })()}
 
       {historyTarget && (
         <Modal isOpen onClose={() => { setHistoryTarget(null); setHistory(null); }} title={`Payment history — ${historyTarget.fullName}`} size="xl">
@@ -498,25 +714,95 @@ export default function StaffSalariesTab() {
             <p className="text-sm text-gray-500 py-6 text-center">No payments recorded yet.</p>
           ) : (
             <div className="space-y-2">
-              {history.map(p => (
-                <div key={p.id} className="flex items-start justify-between gap-3 bg-gray-50 rounded-xl px-4 py-3">
-                  <div className="min-w-0">
-                    <div className="font-semibold text-gray-900">{fmtMoney(p.amount, p.currency)}</div>
-                    <div className="text-xs text-gray-500">
-                      Paid on {p.paidOn}
-                      {p.periodLabel && <> · {p.periodLabel}</>}
+              {history.map(p => {
+                const ins = p.insuranceAmount || 0;
+                const net = Math.round((p.amount - ins) * 100) / 100;
+                return (
+                  <div key={p.id} className="flex items-start justify-between gap-3 bg-gray-50 rounded-xl px-4 py-3">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+                        <span className="font-semibold text-gray-900">{fmtMoney(p.amount, p.currency)}</span>
+                        {ins > 0 && (
+                          <span className="text-xs text-indigo-700">− insurance {fmtMoney(ins, p.currency)}{p.insurancePercentage !== null && p.insurancePercentage !== undefined ? ` (${p.insurancePercentage}%)` : ''}</span>
+                        )}
+                        {ins > 0 && (
+                          <span className="text-xs font-semibold text-emerald-700">net {fmtMoney(net, p.currency)}</span>
+                        )}
+                      </div>
+                      <div className="text-xs text-gray-500 mt-0.5">
+                        Paid on {p.paidOn}
+                        {p.periodLabel && <> · {p.periodLabel}</>}
+                      </div>
+                      {p.notes && <div className="text-xs text-gray-600 mt-1">{p.notes}</div>}
                     </div>
-                    {p.notes && <div className="text-xs text-gray-600 mt-1">{p.notes}</div>}
+                    {historyTarget.effectiveActive && (
+                      <button onClick={() => deletePaymentEntry(p)} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg shrink-0">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
-                  {historyTarget.effectiveActive && (
-                    <button onClick={() => deletePaymentEntry(p)} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg shrink-0">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-              ))}
+                );
+              })}
+              {(() => {
+                const same = history.filter(p => p.currency === historyTarget.currency);
+                if (same.length === 0) return null;
+                const totalGross = same.reduce((s, p) => s + p.amount, 0);
+                const totalIns = same.reduce((s, p) => s + (p.insuranceAmount || 0), 0);
+                const totalNet = Math.round((totalGross - totalIns) * 100) / 100;
+                if (totalIns === 0) return null;
+                return (
+                  <div className="mt-3 pt-3 border-t border-gray-200 grid grid-cols-3 gap-2 text-center">
+                    <div className="bg-gray-50 rounded-lg py-2 px-3">
+                      <div className="text-xs text-gray-500">Total gross</div>
+                      <div className="font-semibold text-gray-900">{fmtMoney(totalGross, historyTarget.currency)}</div>
+                    </div>
+                    <div className="bg-indigo-50 rounded-lg py-2 px-3">
+                      <div className="text-xs text-indigo-600">Insurance withheld</div>
+                      <div className="font-semibold text-indigo-900">{fmtMoney(totalIns, historyTarget.currency)}</div>
+                    </div>
+                    <div className="bg-emerald-50 rounded-lg py-2 px-3">
+                      <div className="text-xs text-emerald-700">Total net</div>
+                      <div className="font-semibold text-emerald-900">{fmtMoney(totalNet, historyTarget.currency)}</div>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
+        </Modal>
+      )}
+
+      {insurancePayoutTarget && insurancePayoutForm && (
+        <Modal isOpen onClose={() => { setInsurancePayoutTarget(null); setInsurancePayoutForm(null); }} title={`Pay insurance — ${insurancePayoutTarget.fullName}`} size="lg">
+          <div className="space-y-4">
+            <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-3">
+              <div className="text-xs text-indigo-700 font-semibold uppercase tracking-wide">Insurance held</div>
+              <div className="text-xl font-bold text-indigo-900 mt-1">{fmtMoney(insurancePayoutTarget.insuranceHeldTotal || 0, insurancePayoutTarget.currency)}</div>
+              <div className="text-xs text-indigo-700 mt-1">Total withheld across all recorded salary payments.</div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <Input label="Payout amount" type="number" step="0.01" min="0" value={insurancePayoutForm.amount} onChange={e => setInsurancePayoutForm({ ...insurancePayoutForm, amount: e.target.value })} />
+              <Input label="Currency" value={insurancePayoutForm.currency} onChange={e => setInsurancePayoutForm({ ...insurancePayoutForm, currency: e.target.value.toUpperCase() })} />
+            </div>
+            <Input label="Payout date" type="date" value={insurancePayoutForm.paidOn} onChange={e => setInsurancePayoutForm({ ...insurancePayoutForm, paidOn: e.target.value })} />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Notes (optional)</label>
+              <textarea
+                value={insurancePayoutForm.notes}
+                onChange={e => setInsurancePayoutForm({ ...insurancePayoutForm, notes: e.target.value })}
+                rows={3}
+                placeholder="e.g. End-of-contract insurance settlement"
+                className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+            <p className="text-xs text-gray-500">This records the insurance settlement on the staff member's archive entry. You can reverse it later if needed.</p>
+
+            <div className="flex gap-2 justify-end pt-2">
+              <Button variant="ghost" onClick={() => { setInsurancePayoutTarget(null); setInsurancePayoutForm(null); }}>Cancel</Button>
+              <Button onClick={submitInsurancePayout} loading={savingInsurancePayout}>Mark insurance paid</Button>
+            </div>
+          </div>
         </Modal>
       )}
 

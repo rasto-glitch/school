@@ -273,6 +273,7 @@ export const staffApi = {
     currency: string;
     nextPaymentDate?: string | null;
     isActive?: boolean;
+    insurancePercentage?: number | null;
   }) => api.post('/accounting/staff', data),
   update: (id: string, data: Partial<{
     userId: string | null;
@@ -282,10 +283,11 @@ export const staffApi = {
     currency: string;
     nextPaymentDate: string | null;
     isActive: boolean;
+    insurancePercentage: number | null;
   }>) => api.put(`/accounting/staff/${id}`, data),
   remove: (id: string) => api.delete(`/accounting/staff/${id}`),
   listPayments: (id: string) => api.get(`/accounting/staff/${id}/payments`),
-  recordPayment: (id: string, data: { amount: number; currency?: string; paidOn: string; periodLabel?: string | null; notes?: string | null }) =>
+  recordPayment: (id: string, data: { amount: number; currency?: string; paidOn: string; periodLabel?: string | null; notes?: string | null; insuranceAmount?: number | null; insurancePercentage?: number | null }) =>
     api.post(`/accounting/staff/${id}/payments`, data),
   deletePayment: (paymentId: string) => api.delete(`/accounting/staff-payments/${paymentId}`),
   notifyDue: (id: string) => api.post(`/accounting/staff/${id}/notify-due`),
@@ -293,6 +295,9 @@ export const staffApi = {
     api.post('/accounting/staff/notify-due-all', data ?? {}),
   downloadSalaryPdf: (id: string) => api.get(`/accounting/staff/${id}/export.pdf`, { responseType: 'blob' }),
   downloadSalaryXlsx: (id: string) => api.get(`/accounting/staff/${id}/export.xlsx`, { responseType: 'blob' }),
+  payInsurance: (id: string, data: { paidOn?: string; amount?: number; currency?: string; notes?: string | null }) =>
+    api.post(`/accounting/staff/${id}/insurance/pay`, data),
+  reverseInsurancePayout: (id: string) => api.post(`/accounting/staff/${id}/insurance/reverse`),
 };
 
 export interface ArchiveListItem {

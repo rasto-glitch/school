@@ -879,8 +879,20 @@ CREATE TABLE IF NOT EXISTS staff_members (
   currency TEXT NOT NULL DEFAULT 'USD',
   next_payment_date DATE,
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  insurance_percentage NUMERIC(5,2) CHECK (insurance_percentage IS NULL OR (insurance_percentage >= 0 AND insurance_percentage <= 100)),
+  insurance_paid_out BOOLEAN NOT NULL DEFAULT FALSE,
+  insurance_paid_out_at DATE,
+  insurance_paid_out_amount NUMERIC(12,2),
+  insurance_paid_out_currency TEXT,
+  insurance_paid_out_notes TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+ALTER TABLE staff_members ADD COLUMN IF NOT EXISTS insurance_percentage NUMERIC(5,2) CHECK (insurance_percentage IS NULL OR (insurance_percentage >= 0 AND insurance_percentage <= 100));
+ALTER TABLE staff_members ADD COLUMN IF NOT EXISTS insurance_paid_out BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE staff_members ADD COLUMN IF NOT EXISTS insurance_paid_out_at DATE;
+ALTER TABLE staff_members ADD COLUMN IF NOT EXISTS insurance_paid_out_amount NUMERIC(12,2);
+ALTER TABLE staff_members ADD COLUMN IF NOT EXISTS insurance_paid_out_currency TEXT;
+ALTER TABLE staff_members ADD COLUMN IF NOT EXISTS insurance_paid_out_notes TEXT;
 CREATE INDEX IF NOT EXISTS idx_staff_members_school ON staff_members(school_id, is_active);
 CREATE INDEX IF NOT EXISTS idx_staff_members_user ON staff_members(user_id) WHERE user_id IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_staff_members_school_user_unique ON staff_members(school_id, user_id) WHERE user_id IS NOT NULL;
@@ -894,8 +906,12 @@ CREATE TABLE IF NOT EXISTS staff_salary_payments (
   paid_on DATE NOT NULL,
   period_label TEXT,
   notes TEXT,
+  insurance_amount NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (insurance_amount >= 0),
+  insurance_percentage NUMERIC(5,2),
   recorded_by UUID REFERENCES users(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+ALTER TABLE staff_salary_payments ADD COLUMN IF NOT EXISTS insurance_amount NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (insurance_amount >= 0);
+ALTER TABLE staff_salary_payments ADD COLUMN IF NOT EXISTS insurance_percentage NUMERIC(5,2);
 CREATE INDEX IF NOT EXISTS idx_staff_salary_payments_staff ON staff_salary_payments(staff_id, paid_on DESC);
 CREATE INDEX IF NOT EXISTS idx_staff_salary_payments_school ON staff_salary_payments(school_id);

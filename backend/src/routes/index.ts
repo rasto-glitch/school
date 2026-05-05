@@ -235,6 +235,8 @@ export function createRouter(io: SocketServer) {
   router.post('/accounting/staff/:id/notify-due', authenticate, authorize(...accountingRW), (req, res) => staff.notifyStaffDue(req as AuthRequest, res));
   router.get('/accounting/staff/:id/export.pdf', authenticate, authorize(...accountingRW), (req, res) => staff.exportStaffSalaryPdf(req as AuthRequest, res));
   router.get('/accounting/staff/:id/export.xlsx', authenticate, authorize(...accountingRW), (req, res) => staff.exportStaffSalaryXlsx(req as AuthRequest, res));
+  router.post('/accounting/staff/:id/insurance/pay', authenticate, authorize(...accountingRW), (req, res) => staff.markStaffInsurancePaid(req as AuthRequest, res));
+  router.post('/accounting/staff/:id/insurance/reverse', authenticate, authorize(...accountingRW), (req, res) => staff.reverseStaffInsurancePayout(req as AuthRequest, res));
 
   // Teacher self-service: read-only "my salary"
   router.get('/teacher/salary', authenticate, authorize('teacher'), (req, res) => staff.getMyStaffInfo(req as AuthRequest, res));

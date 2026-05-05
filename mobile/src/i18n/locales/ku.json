@@ -199,7 +199,12 @@
     "overdue": "دواکەوتووە",
     "payment_history": "مێژووی پارەدان",
     "no_payments": "هیچ پارەدانێک تۆمار نەکراوە.",
-    "empty": "هێشتا تۆماری موچە نییە. بەشی ژمێریاری ئەمە دادەنێت."
+    "empty": "هێشتا تۆماری موچە نییە. بەشی ژمێریاری ئەمە دادەنێت.",
+    "insurance": "بیمە",
+    "insurance_pct": "{{pct}}% لە هەر پارەدانێک دەکرێت",
+    "insurance_held": "هەڵگیراو: {{amount}}",
+    "insurance_paid_out": "دراوەتەوە: {{amount}} لە {{date}}",
+    "insurance_withheld": "بیمە: {{ins}} · ڕوون: {{net}}"
   },
   "settings": {
     "notifications_section": "ئاگادارکردنەوەکان",

@@ -199,7 +199,12 @@
     "overdue": "overdue",
     "payment_history": "Payment history",
     "no_payments": "No payments recorded yet.",
-    "empty": "No salary record yet. The accounting office will set this up."
+    "empty": "No salary record yet. The accounting office will set this up.",
+    "insurance": "Insurance",
+    "insurance_pct": "{{pct}}% withheld per payment",
+    "insurance_held": "Held: {{amount}}",
+    "insurance_paid_out": "Paid out: {{amount}} on {{date}}",
+    "insurance_withheld": "Insurance: {{ins}} · Net: {{net}}"
   },
   "settings": {
     "notifications_section": "Notifications",

@@ -329,6 +329,8 @@ export interface StaffSalaryPayment {
   paidOn: string;
   periodLabel: string | null;
   notes: string | null;
+  insuranceAmount: number;
+  insurancePercentage: number | null;
   recordedBy?: string | null;
   createdAt?: string;
 }
@@ -347,7 +349,15 @@ export interface StaffMember {
   effectiveActive: boolean;
   archiveReason: string | null;
   createdAt: string;
-  lastPayment: { amount: number; currency: string; paidOn: string; periodLabel: string | null } | null;
+  lastPayment: { amount: number; currency: string; paidOn: string; periodLabel: string | null; insuranceAmount: number } | null;
+  insurancePercentage: number | null;
+  insurancePaidOut: boolean;
+  insurancePaidOutAt: string | null;
+  insurancePaidOutAmount: number | null;
+  insurancePaidOutCurrency: string | null;
+  insurancePaidOutNotes: string | null;
+  insuranceHeldTotal: number;
+  insuranceHeldByCurrency: { currency: string; amount: number }[];
 }
 
 export interface StaffSetupTeacher {
