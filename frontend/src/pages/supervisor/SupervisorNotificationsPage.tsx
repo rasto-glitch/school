@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell, Check, CheckCheck } from 'lucide-react';
-import { teacherApi } from '../../services/api';
-import { useNotificationStore } from '../../store/notificationStore';
+import { supervisorApi } from '../../services/api';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
 import EmptyState from '../../components/common/EmptyState';
@@ -21,27 +20,25 @@ function groupByDate(notifications: Notification[]) {
   return groups;
 }
 
-export default function TeacherNotificationsPage() {
+export default function SupervisorNotificationsPage() {
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
-  const { setTeacherUnreadCount } = useNotificationStore();
 
   useEffect(() => {
-    setTeacherUnreadCount(0);
-    teacherApi.getNotifications()
+    supervisorApi.getNotifications()
       .then(r => setNotifications(r.data || []))
       .catch(() => setNotifications([]))
       .finally(() => setLoading(false));
   }, []);
 
   const markRead = async (id: string) => {
-    await teacherApi.markNotificationRead(id);
+    await supervisorApi.markNotificationRead(id);
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
   };
 
   const markAllRead = async () => {
-    await teacherApi.markAllRead();
+    await supervisorApi.markAllRead();
     setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
   };
 
@@ -49,19 +46,19 @@ export default function TeacherNotificationsPage() {
     if (!n.isRead) markRead(n.id);
     switch (n.notificationType) {
       case 'homework':
-        navigate('/teacher/homework');
+        navigate('/supervisor/homework');
         break;
       case 'assignment':
-        navigate('/teacher/assignments');
+        navigate('/supervisor/assignments');
         break;
       case 'report':
-        navigate('/teacher/reports');
+        navigate('/supervisor/student-reports');
         break;
-      case 'grade':
-        navigate('/teacher/grades');
+      case 'weekly_summary':
+        navigate('/supervisor/weekly-summary');
         break;
-      case 'announcement':
-        navigate('/teacher/dashboard');
+      case 'attendance':
+        navigate('/supervisor/attendance');
         break;
       case 'chat':
         navigate('/chat');

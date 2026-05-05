@@ -264,6 +264,14 @@ export function createRouter(io: SocketServer) {
   router.delete('/supervisor/weekly-period', authenticate, authorize('supervisor'), (req, res) => supervisor.closePeriod(req as AuthRequest, res));
   router.get('/supervisor/subjects', authenticate, authorize('supervisor'), (req, res) => admin.getSubjects(req as AuthRequest, res));
   router.get('/supervisor/student-brief/:id', authenticate, authorize('supervisor'), (req, res) => admin.getStudentBrief(req as AuthRequest, res));
+  router.get('/supervisor/homework/:id', authenticate, authorize('supervisor'), (req, res) => parent.getHomeworkById(req as AuthRequest, res));
+  router.get('/supervisor/assignments/:id', authenticate, authorize('supervisor'), (req, res) => parent.getAssignmentById(req as AuthRequest, res));
+  router.get('/supervisor/announcements', authenticate, authorize('supervisor'), (req, res) => admin.getAnnouncements(req as AuthRequest, res));
+  router.get('/supervisor/announcements/:id', authenticate, authorize('supervisor'), (req, res) => parent.getAnnouncementById(req as AuthRequest, res));
+  router.get('/supervisor/notifications', authenticate, authorize('supervisor'), (req, res) => parent.getNotifications(req as AuthRequest, res));
+  router.get('/supervisor/notifications/unread-count', authenticate, authorize('supervisor'), (req, res) => parent.getUnreadCount(req as AuthRequest, res));
+  router.patch('/supervisor/notifications/read-all', authenticate, authorize('supervisor'), (req, res) => parent.markAllNotificationsRead(req as AuthRequest, res));
+  router.patch('/supervisor/notifications/:id/read', authenticate, authorize('supervisor'), (req, res) => parent.markNotificationRead(req as AuthRequest, res));
 
   // ---- RECEPTION ----
   router.get('/reception/appointments/pending-count', authenticate, authorize('reception'), (req, res) => reception.getPendingAppointmentCount(req as AuthRequest, res));

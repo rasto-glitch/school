@@ -55,15 +55,37 @@ export default function NotificationsPage() {
 
   const handlePress = async (n: Notification) => {
     if (!n.isRead) markRead(n.id);
-    if (!n.relatedId) return;
-    if (n.notificationType === 'homework') {
-      navigate(`/parent/homework/${n.relatedId}`);
-    } else if (n.notificationType === 'assignment') {
-      navigate(`/parent/assignments/${n.relatedId}`);
-    } else if (n.notificationType === 'announcement') {
-      navigate(`/parent/announcements/${n.relatedId}`);
-    } else if (n.notificationType === 'report') {
-      navigate(`/parent/reports/${n.relatedId}`);
+    switch (n.notificationType) {
+      case 'homework':
+        if (n.relatedId) navigate(`/parent/homework/${n.relatedId}`);
+        break;
+      case 'assignment':
+        if (n.relatedId) navigate(`/parent/assignments/${n.relatedId}`);
+        break;
+      case 'announcement':
+        if (n.relatedId) navigate(`/parent/announcements/${n.relatedId}`);
+        else navigate('/parent/announcements');
+        break;
+      case 'report':
+        if (n.relatedId) navigate(`/parent/reports/${n.relatedId}`);
+        else navigate('/parent/reports');
+        break;
+      case 'grade':
+        navigate('/parent/grades');
+        break;
+      case 'appointment':
+        navigate('/parent/appointments');
+        break;
+      case 'bus':
+        navigate('/parent/bus');
+        break;
+      case 'payment_recorded':
+      case 'fees_reminder':
+        navigate('/parent/tuition');
+        break;
+      case 'chat':
+        navigate('/chat');
+        break;
     }
   };
 

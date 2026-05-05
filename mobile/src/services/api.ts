@@ -134,6 +134,14 @@ export const supervisorApi = {
   closePeriod: () => api.delete('/supervisor/weekly-period'),
   getSubjects: () => api.get('/supervisor/subjects'),
   getStudentBrief: (id: string) => api.get(`/supervisor/student-brief/${id}`),
+  getHomeworkById: (id: string) => api.get(`/supervisor/homework/${id}`),
+  getAssignmentById: (id: string) => api.get(`/supervisor/assignments/${id}`),
+  getAnnouncements: () => api.get('/supervisor/announcements'),
+  getAnnouncementById: (id: string) => api.get(`/supervisor/announcements/${id}`),
+  getNotifications: () => api.get('/supervisor/notifications'),
+  getUnreadCount: () => api.get('/supervisor/notifications/unread-count'),
+  markNotificationRead: (id: string) => api.patch(`/supervisor/notifications/${id}/read`),
+  markAllRead: () => api.patch('/supervisor/notifications/read-all'),
 };
 
 // ---- TEACHER ----

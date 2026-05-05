@@ -67,6 +67,10 @@ export const supervisorApi = {
   getSubjects: () => api.get('/supervisor/subjects'),
   getStudentBrief: (id: string) => api.get(`/supervisor/student-brief/${id}`),
   getAllStudents: (params?: Record<string, string>) => api.get('/supervisor/students', { params }),
+  getNotifications: () => api.get('/supervisor/notifications'),
+  getUnreadCount: () => api.get('/supervisor/notifications/unread-count'),
+  markNotificationRead: (id: string) => api.patch(`/supervisor/notifications/${id}/read`),
+  markAllRead: () => api.patch('/supervisor/notifications/read-all'),
 };
 
 // ---- PARENT ----

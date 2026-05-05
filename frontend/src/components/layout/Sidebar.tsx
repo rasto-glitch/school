@@ -89,6 +89,7 @@ const navItems: Record<Role, NavItem[]> = {
     { to: '/supervisor/weekly-summary', icon: Clock, label: 'Weekly Summary', feature: 'weekly_summary' },
     { to: '/supervisor/student-reports', icon: FileText, label: 'Student Reports', feature: 'reports' },
     { to: '/chat', icon: MessageSquare, label: 'Chat', feature: 'chat' },
+    { to: '/supervisor/notifications', icon: Bell, label: 'Notifications' },
     { to: '/supervisor/profile', icon: User, label: 'Profile' },
   ],
 };

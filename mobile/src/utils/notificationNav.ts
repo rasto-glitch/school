@@ -1,5 +1,5 @@
 import { navigationRef } from '../navigation';
-import { parentApi, chatApi } from '../services/api';
+import { parentApi, supervisorApi, chatApi } from '../services/api';
 import { useAuthStore } from '../store/authStore';
 import type { Role } from '../types';
 
@@ -62,9 +62,42 @@ export async function openNotificationTarget(d: NotifDispatch): Promise<void> {
       return;
     }
 
+    if (role === 'supervisor') {
+      switch (d.type) {
+        case 'homework': {
+          if (!d.relatedId) break;
+          const res = await supervisorApi.getHomeworkById(d.relatedId);
+          (navigationRef as any).navigate('HomeworkDetail', { homework: res.data });
+          return;
+        }
+        case 'assignment': {
+          if (!d.relatedId) break;
+          const res = await supervisorApi.getAssignmentById(d.relatedId);
+          (navigationRef as any).navigate('AssignmentDetail', { assignment: res.data });
+          return;
+        }
+        case 'announcement': {
+          if (!d.relatedId) break;
+          const res = await supervisorApi.getAnnouncementById(d.relatedId);
+          (navigationRef as any).navigate('AnnouncementDetail', { announcement: res.data });
+          return;
+        }
+      }
+      try { (navigationRef as any).navigate('SupervisorNotifications'); } catch {}
+      return;
+    }
+
     if (role !== 'parent') {
       if (role === 'teacher' && (d.type === 'salary_due_soon' || d.type === 'salary_paid')) {
         (navigationRef as any).navigate('TeacherSalary');
+        return;
+      }
+      if (role === 'teacher' && d.type === 'announcement' && d.relatedId) {
+        (navigationRef as any).navigate('AnnouncementDetail', { announcementId: d.relatedId });
+        return;
+      }
+      if (role === 'teacher' && d.type === 'post' && d.relatedId) {
+        (navigationRef as any).navigate('PostDetail', { postId: d.relatedId });
         return;
       }
       const notifScreen = role === 'teacher' ? 'TeacherNotifications' : 'Notifications';

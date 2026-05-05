@@ -8,6 +8,7 @@ import DriverTabs from './DriverTabs';
 import DriverSettingsScreen from '../screens/driver/DriverSettingsScreen';
 import SupervisorTabs from './SupervisorTabs';
 import SupervisorSettingsScreen from '../screens/supervisor/SupervisorSettingsScreen';
+import SupervisorNotificationsScreen from '../screens/supervisor/SupervisorNotificationsScreen';
 import TeacherTabs from './TeacherTabs';
 import TeacherSettingsScreen from '../screens/teacher/TeacherSettingsScreen';
 import TeacherNotificationsScreen from '../screens/teacher/TeacherNotificationsScreen';
@@ -39,6 +40,7 @@ export type RootStackParamList = {
   DriverSettings: undefined;
   SupervisorTabs: undefined;
   SupervisorSettings: undefined;
+  SupervisorNotifications: undefined;
   TeacherTabs: undefined;
   TeacherSettings: undefined;
   TeacherNotifications: undefined;
@@ -100,6 +102,26 @@ export default function Navigation() {
               name="SupervisorSettings"
               component={SupervisorSettingsScreen}
               options={{ headerShown: true, headerTitle: 'Settings', headerBackTitle: 'Back', presentation: 'card' }}
+            />
+            <Stack.Screen
+              name="SupervisorNotifications"
+              component={SupervisorNotificationsScreen}
+              options={{ headerShown: true, headerTitle: 'Notifications', headerBackTitle: 'Back' }}
+            />
+            <Stack.Screen
+              name="AnnouncementDetail"
+              component={AnnouncementDetailScreen}
+              options={{ headerShown: true, headerTitle: 'Announcement', headerBackTitle: 'Back' }}
+            />
+            <Stack.Screen
+              name="HomeworkDetail"
+              component={HomeworkDetailScreen}
+              options={{ headerShown: true, headerTitle: 'Homework', headerBackTitle: 'Back' }}
+            />
+            <Stack.Screen
+              name="AssignmentDetail"
+              component={AssignmentDetailScreen}
+              options={{ headerShown: true, headerTitle: 'Assignment', headerBackTitle: 'Back' }}
             />
             <Stack.Screen
               name="Chat"

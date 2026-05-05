@@ -4,7 +4,7 @@ import {
   RefreshControl, TouchableOpacity, Alert,
 } from 'react-native';
 import { CardListSkeleton } from '../../components/Skeleton';
-import { useRoute, RouteProp, useFocusEffect } from '@react-navigation/native';
+import { useRoute, RouteProp, useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { BookOpen, ClipboardList, Trash2, Clock, FileText } from 'lucide-react-native';
@@ -35,6 +35,7 @@ export default function SupervisorContentScreen() {
   const { t } = useTranslation();
   const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
   const route = useRoute<RouteProp<{ params: { initialTab?: TabType } }, 'params'>>();
+  const navigation = useNavigation<any>();
   const initialTab = (route.params as { initialTab?: TabType } | undefined)?.initialTab;
   const { school } = useAuthStore();
   const feat = (key: string) => school?.features?.[key] !== false;
@@ -155,7 +156,15 @@ export default function SupervisorContentScreen() {
             </View>
           ) : (
             items.map(item => (
-              <View key={item.id} style={styles.card}>
+              <TouchableOpacity
+                key={item.id}
+                style={styles.card}
+                activeOpacity={0.85}
+                onPress={() => navigation.navigate(
+                  tab === 'homework' ? 'HomeworkDetail' : 'AssignmentDetail',
+                  tab === 'homework' ? { homework: item } : { assignment: item },
+                )}
+              >
                 <View style={styles.cardTop}>
                   <View style={[styles.iconBox, { backgroundColor: tab === 'homework' ? '#EFF6FF' : '#F0FDF4' }]}>
                     {tab === 'homework'
@@ -169,7 +178,7 @@ export default function SupervisorContentScreen() {
                     </Text>
                   </View>
                   <TouchableOpacity
-                    onPress={() => handleDelete(item)}
+                    onPress={(e) => { e.stopPropagation(); handleDelete(item); }}
                     style={styles.deleteBtn}
                     disabled={deletingId === item.id}
                   >
@@ -192,7 +201,7 @@ export default function SupervisorContentScreen() {
                   )}
                   <Text style={styles.dateText}>{new Date(item.createdAt).toLocaleDateString()}</Text>
                 </View>
-              </View>
+              </TouchableOpacity>
             ))
           )}
         </ScrollView>
