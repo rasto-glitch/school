@@ -5,6 +5,7 @@ import { toCC } from '../utils/transform';
 import { notify, notifyMany } from '../utils/notify';
 import { streamPaymentReceipt, streamYearSummary } from '../utils/receipts';
 import { streamArchivePaymentPdf, buildArchivePaymentXlsx, type ArchivePaymentExportData, type ArchivePlanEntry } from '../utils/paymentArchiveExport';
+import { logAudit } from '../utils/audit';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -202,6 +203,7 @@ export async function createPlan(req: AuthRequest, res: Response): Promise<void>
     if (cErr) { await supabase.from('fee_plans').delete().eq('id', plan.id); res.status(500).json({ error: cErr.message }); return; }
   }
 
+  await logAudit({ req, entityType: 'fee_plan', entityId: plan.id, action: 'create', after: plan, label: plan.name });
   res.status(201).json(toCC(plan));
 }
 
@@ -215,6 +217,8 @@ export async function updatePlan(req: AuthRequest, res: Response): Promise<void>
   const err = validatePlanBody(body);
   if (err) { res.status(400).json({ error: err }); return; }
 
+  const { data: before } = await supabase.from('fee_plans').select('*').eq('id', id).eq('school_id', schoolId).single();
+
   const { error: pErr } = await supabase.from('fee_plans').update({
     name: body.name,
     total_amount: body.totalAmount,
@@ -224,6 +228,9 @@ export async function updatePlan(req: AuthRequest, res: Response): Promise<void>
     is_active: body.isActive ?? true,
   }).eq('id', id).eq('school_id', schoolId);
   if (pErr) { res.status(500).json({ error: pErr.message }); return; }
+
+  const { data: after } = await supabase.from('fee_plans').select('*').eq('id', id).eq('school_id', schoolId).single();
+  await logAudit({ req, entityType: 'fee_plan', entityId: String(id), action: 'update', before: before || undefined, after: after || undefined, label: (after as { name?: string } | null)?.name ?? body.name });
 
   // Replace installments + class targets atomically (best effort — no transaction support via PostgREST)
   await supabase.from('fee_installments').delete().eq('fee_plan_id', id).eq('school_id', schoolId);
@@ -256,8 +263,10 @@ export async function deletePlan(req: AuthRequest, res: Response): Promise<void>
       return;
     }
   }
+  const { data: before } = await supabase.from('fee_plans').select('*').eq('id', id).eq('school_id', schoolId).single();
   const { error } = await supabase.from('fee_plans').delete().eq('id', id).eq('school_id', schoolId);
   if (error) { res.status(500).json({ error: error.message }); return; }
+  if (before) await logAudit({ req, entityType: 'fee_plan', entityId: String(id), action: 'delete', before, label: (before as { name?: string }).name });
   res.json({ success: true });
 }
 
@@ -306,8 +315,11 @@ export async function assignPlan(req: AuthRequest, res: Response): Promise<void>
     fee_plan_id: id,
     total_amount: plan.total_amount,
   }));
-  const { error } = await supabase.from('student_fees').insert(rows);
+  const { data: inserted, error } = await supabase.from('student_fees').insert(rows).select();
   if (error) { res.status(500).json({ error: error.message }); return; }
+  for (const row of (inserted || [])) {
+    await logAudit({ req, entityType: 'student_fee', entityId: (row as { id: string }).id, action: 'create', after: row as Record<string, unknown>, reason: 'Plan assigned' });
+  }
   res.json({ assigned: toInsert.length, skipped: studentIds.length - toInsert.length });
 }
 
@@ -513,7 +525,7 @@ export async function recordPayment(req: AuthRequest, res: Response): Promise<vo
   // Verify student_fee exists in this school
   const { data: sf } = await supabase
     .from('student_fees')
-    .select('id, students(parents(user_id))')
+    .select('id, students(full_name, parents(user_id))')
     .eq('id', id).eq('school_id', schoolId).single();
   if (!sf) { res.status(404).json({ error: 'Student fee not found' }); return; }
 
@@ -528,6 +540,9 @@ export async function recordPayment(req: AuthRequest, res: Response): Promise<vo
     recorded_by: userId,
   }).select().single();
   if (error) { res.status(500).json({ error: error.message }); return; }
+
+  const studentName = (sf as { students?: { full_name?: string } }).students?.full_name;
+  await logAudit({ req, entityType: 'fee_payment', entityId: data.id, action: 'create', after: data, label: studentName });
 
   // Notify the parent that a payment was recorded
   const parentUserId = (sf as any).students?.parents?.user_id;
@@ -551,8 +566,18 @@ export async function deletePayment(req: AuthRequest, res: Response): Promise<vo
   if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
 
   const { id } = req.params;
+  const { data: before } = await supabase
+    .from('fee_payments')
+    .select('*, student_fees(students(full_name))')
+    .eq('id', id).eq('school_id', schoolId).single();
   const { error } = await supabase.from('fee_payments').delete().eq('id', id).eq('school_id', schoolId);
   if (error) { res.status(500).json({ error: error.message }); return; }
+  if (before) {
+    const studentName = (before as { student_fees?: { students?: { full_name?: string } } }).student_fees?.students?.full_name;
+    const row: Record<string, unknown> = { ...(before as Record<string, unknown>) };
+    delete row.student_fees;
+    await logAudit({ req, entityType: 'fee_payment', entityId: String(id), action: 'delete', before: row, label: studentName });
+  }
   res.json({ success: true });
 }
 
@@ -570,8 +595,19 @@ export async function updateStudentFee(req: AuthRequest, res: Response): Promise
   if (typeof notes === 'string' || notes === null) upd.notes = notes;
   if (typeof totalAmount === 'number' && totalAmount >= 0) upd.total_amount = totalAmount;
 
+  const { data: before } = await supabase.from('student_fees')
+    .select('*, students(full_name)').eq('id', id).eq('school_id', schoolId).single();
+
   const { error } = await supabase.from('student_fees').update(upd).eq('id', id).eq('school_id', schoolId);
   if (error) { res.status(500).json({ error: error.message }); return; }
+
+  const { data: after } = await supabase.from('student_fees').select('*').eq('id', id).eq('school_id', schoolId).single();
+  const studentName = (before as { students?: { full_name?: string } } | null)?.students?.full_name;
+  if (before) {
+    const beforeRow: Record<string, unknown> = { ...(before as Record<string, unknown>) };
+    delete beforeRow.students;
+    await logAudit({ req, entityType: 'student_fee', entityId: String(id), action: 'update', before: beforeRow, after: after || undefined, label: studentName });
+  }
   res.json({ success: true });
 }
 

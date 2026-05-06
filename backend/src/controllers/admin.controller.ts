@@ -7,6 +7,7 @@ import { toCC } from '../utils/transform';
 import { notify, notifyMany } from '../utils/notify';
 import { loadArchiveSnapshot, streamPdf, buildXlsx } from '../utils/archiveExport';
 import { streamCredentialsPdf, type CredentialEntry } from '../utils/credentialsPdf';
+import { logAudit } from '../utils/audit';
 
 // True iff this school has the historical-records feature enabled. When off,
 // no archived/graduated student record may be created, read, or persisted —
@@ -150,6 +151,7 @@ export async function createStudent(req: AuthRequest, res: Response): Promise<vo
   }).select().single();
 
   if (error) { res.status(500).json({ error: error.message }); return; }
+  await logAudit({ req, entityType: 'student', entityId: data.id, action: 'create', after: data, label: data.full_name });
   res.status(201).json({ ...(toCC(data) as Record<string, unknown>), parentAccountCreated });
 }
 
@@ -157,6 +159,8 @@ export async function updateStudent(req: AuthRequest, res: Response): Promise<vo
   const { schoolId } = req.user!;
   const { id } = req.params;
   const { fullName, parentId, classId, driverId, homeAddress, emergencyContact, phoneNumber, dateOfBirth } = req.body;
+
+  const { data: before } = await supabase.from('students').select('*').eq('id', id).eq('school_id', schoolId).single();
 
   const { data, error } = await supabase.from('students')
     .update({
@@ -172,20 +176,25 @@ export async function updateStudent(req: AuthRequest, res: Response): Promise<vo
     .eq('id', id).eq('school_id', schoolId).select().single();
 
   if (error) { res.status(500).json({ error: error.message }); return; }
+  await logAudit({ req, entityType: 'student', entityId: String(id), action: 'update', before: before || undefined, after: data, label: data.full_name });
   res.json(toCC(data));
 }
 
 export async function deleteStudent(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
   const { id } = req.params;
+  const { data: before } = await supabase.from('students').select('*').eq('id', id).eq('school_id', schoolId).single();
   const { error } = await supabase.from('students').delete().eq('id', id).eq('school_id', schoolId);
   if (error) { res.status(500).json({ error: error.message }); return; }
+  if (before) await logAudit({ req, entityType: 'student', entityId: String(id), action: 'delete', before, label: (before as { full_name?: string }).full_name });
   res.json({ message: 'Student removed' });
 }
 
 export async function assignStudent(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
   const { studentId, newClassId, graduated } = req.body;
+
+  const { data: before } = await supabase.from('students').select('*').eq('id', studentId).eq('school_id', schoolId).single();
 
   // If the school doesn't keep historical records, "graduating" a student is
   // a hard delete — there's nowhere to retain them. Class reassignment can
@@ -194,6 +203,7 @@ export async function assignStudent(req: AuthRequest, res: Response): Promise<vo
     const { error } = await supabase.from('students')
       .delete().eq('id', studentId).eq('school_id', schoolId);
     if (error) { res.status(500).json({ error: error.message }); return; }
+    if (before) await logAudit({ req, entityType: 'student', entityId: studentId, action: 'delete', before, label: (before as { full_name?: string }).full_name, reason: 'Graduated (no archive)' });
     res.json({ deleted: true });
     return;
   }
@@ -206,6 +216,7 @@ export async function assignStudent(req: AuthRequest, res: Response): Promise<vo
     .update(update).eq('id', studentId).eq('school_id', schoolId).select().single();
 
   if (error) { res.status(500).json({ error: error.message }); return; }
+  await logAudit({ req, entityType: 'student', entityId: studentId, action: 'update', before: before || undefined, after: data, label: data.full_name, reason: graduated ? 'Graduated' : null });
   res.json(toCC(data));
 }
 
@@ -768,6 +779,7 @@ export async function archiveStudent(req: AuthRequest, res: Response): Promise<v
     return;
   }
 
+  await logAudit({ req, entityType: 'student', entityId: String(id), action: 'delete', before: student as Record<string, unknown>, label: student.full_name, reason: `Archived (${reason})` });
   res.json({ message: 'Student archived successfully' });
 }
 
@@ -2576,4 +2588,48 @@ export async function deleteTerm(req: AuthRequest, res: Response): Promise<void>
   const { error } = await supabase.from('terms').delete().eq('id', id).eq('school_id', schoolId);
   if (error) { res.status(500).json({ error: error.message }); return; }
   res.json({ message: 'Deleted' });
+}
+
+// ---- AUDIT LOGS (admin only) ----
+// Paginated list with optional filters: entity_type, entity_id, actor_id,
+// action, search (matches label/actor_username/reason), and date range.
+export async function getAuditLogs(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const {
+    entityType,
+    entityId,
+    actorId,
+    action,
+    search,
+    from,
+    to,
+    page = '1',
+    limit = '50',
+  } = req.query as Record<string, string>;
+
+  const pageNum = Math.max(1, parseInt(page) || 1);
+  const limNum = Math.min(200, Math.max(1, parseInt(limit) || 50));
+  const offset = (pageNum - 1) * limNum;
+
+  let q = supabase
+    .from('audit_logs')
+    .select('*', { count: 'exact' })
+    .eq('school_id', schoolId)
+    .order('created_at', { ascending: false })
+    .range(offset, offset + limNum - 1);
+
+  if (entityType) q = q.eq('entity_type', entityType);
+  if (entityId) q = q.eq('entity_id', entityId);
+  if (actorId) q = q.eq('actor_id', actorId);
+  if (action) q = q.eq('action', action);
+  if (from) q = q.gte('created_at', from);
+  if (to) q = q.lte('created_at', to);
+  if (search) {
+    const escaped = search.replace(/[%_]/g, m => `\\${m}`);
+    q = q.or(`label.ilike.%${escaped}%,actor_username.ilike.%${escaped}%,reason.ilike.%${escaped}%`);
+  }
+
+  const { data, error, count } = await q;
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json({ logs: toCC(data || []), total: count ?? 0, page: pageNum, limit: limNum });
 }

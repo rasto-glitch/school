@@ -216,6 +216,17 @@ export const adminApi = {
     fd.append('logo', file);
     return api.patch('/admin/school-logo', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
   },
+  getAuditLogs: (params: {
+    entityType?: string;
+    entityId?: string;
+    actorId?: string;
+    action?: string;
+    search?: string;
+    from?: string;
+    to?: string;
+    page?: number;
+    limit?: number;
+  } = {}) => api.get('/admin/audit-logs', { params }),
 };
 
 // ---- ACCOUNTING (premium tuition module) ----

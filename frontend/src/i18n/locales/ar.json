@@ -16,6 +16,7 @@
     "start_drive": "بدء القيادة",
     "students": "الطلاب",
     "archive": "الأرشيف",
+    "audit_log": "سجل التدقيق",
     "logout": "تسجيل الخروج"
   },
   "common": {
@@ -35,7 +36,40 @@
     "address": "العنوان",
     "call": "اتصال",
     "absent": "غائب",
-    "portal": "بوابة {{role}}"
+    "portal": "بوابة {{role}}",
+    "previous": "السابق",
+    "next": "التالي"
+  },
+  "audit": {
+    "title": "سجل التدقيق",
+    "subtitle": "جميع التغييرات المالية وسجلات الطلاب",
+    "searchPlaceholder": "ابحث بالاسم أو المستخدم أو السبب",
+    "allEntities": "كل الفئات",
+    "allActions": "كل الإجراءات",
+    "totalResults": "{{count}} نتيجة مطابقة",
+    "clearFilters": "مسح عوامل التصفية",
+    "noResults": "لا توجد إدخالات مطابقة",
+    "noChanges": "لم يتم تسجيل أي تغييرات على الحقول",
+    "changedFields": "الحقول المعدلة",
+    "created": "أُنشئ بالقيم",
+    "deleted": "السجل المحذوف",
+    "old": "القديم",
+    "new": "الجديد",
+    "unknownActor": "(مستخدم محذوف)",
+    "pageOf": "الصفحة {{page}} من {{totalPages}}",
+    "action": {
+      "create": "إنشاء",
+      "update": "تحديث",
+      "delete": "حذف"
+    },
+    "entity": {
+      "student": "طالب",
+      "fee_plan": "خطة رسوم",
+      "student_fee": "رسوم الطالب",
+      "fee_payment": "دفعة رسوم",
+      "staff_member": "موظف",
+      "staff_salary_payment": "دفعة راتب"
+    }
   },
   "dashboard": {
     "title": "آخر الأخبار",

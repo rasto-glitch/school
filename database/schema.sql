@@ -669,6 +669,35 @@ CREATE TABLE IF NOT EXISTS chat_access_log (
 CREATE INDEX IF NOT EXISTS idx_chat_access_log_school ON chat_access_log(school_id, accessed_at DESC);
 
 -- ============================================================
+-- AUDIT LOGS
+-- ============================================================
+-- Append-only record of admin/accountant mutations on financial + student data.
+-- Read by admins via the audit-log viewer page; never modified or deleted.
+-- `changes` is a JSONB diff: { field: { old, new } } for updates; full snapshot
+-- under `_row` key for create/delete (so the full record is recoverable).
+-- `label` is a human-readable name (e.g. student name, plan name) snapshotted
+-- so the audit trail stays meaningful even after the entity is deleted.
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  entity_type TEXT NOT NULL CHECK (entity_type IN (
+    'student','fee_plan','student_fee','fee_payment','staff_member','staff_salary_payment'
+  )),
+  entity_id UUID NOT NULL,
+  action TEXT NOT NULL CHECK (action IN ('create','update','delete')),
+  changes JSONB NOT NULL DEFAULT '{}'::jsonb,
+  actor_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  actor_username TEXT,
+  actor_role TEXT,
+  label TEXT,
+  reason TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_school ON audit_logs(school_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_entity ON audit_logs(school_id, entity_type, entity_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_actor ON audit_logs(school_id, actor_id, created_at DESC);
+
+-- ============================================================
 -- DEMO SCHOOL SEED
 -- ============================================================
 INSERT INTO schools (id, name, slug, abbreviation, primary_color, secondary_color, is_active)

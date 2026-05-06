@@ -16,6 +16,7 @@
     "start_drive": "دەستپێکردنی لێخوڕین",
     "students": "خوێندکاران",
     "archive": "ئەرشیف",
+    "audit_log": "تۆماری گۆڕانکارییەکان",
     "logout": "دەرچون"
   },
   "common": {
@@ -35,7 +36,40 @@
     "address": "ناونیشان",
     "call": "پەیوەندی",
     "absent": "غایب",
-    "portal": "دەرگای {{role}}"
+    "portal": "دەرگای {{role}}",
+    "previous": "پێشوو",
+    "next": "دواتر"
+  },
+  "audit": {
+    "title": "تۆماری گۆڕانکارییەکان",
+    "subtitle": "هەموو گۆڕانکارییە دارایی و تۆمارەکانی خوێندکار",
+    "searchPlaceholder": "گەڕان بە ناو، بەکارهێنەر، یان هۆکار",
+    "allEntities": "هەموو بابەتەکان",
+    "allActions": "هەموو کردارەکان",
+    "totalResults": "{{count}} ئەنجامی هاوتا",
+    "clearFilters": "پاککردنەوەی فلتەرەکان",
+    "noResults": "هیچ تۆمارێک نەدۆزرایەوە",
+    "noChanges": "هیچ گۆڕانکاریەک تۆمار نەکراوە",
+    "changedFields": "خانە گۆڕاوەکان",
+    "created": "دروستکراوە بە بەهاکانی",
+    "deleted": "تۆماری سڕاوە",
+    "old": "کۆن",
+    "new": "نوێ",
+    "unknownActor": "(بەکارهێنەری سڕاوە)",
+    "pageOf": "پەڕەی {{page}} لە {{totalPages}}",
+    "action": {
+      "create": "دروستکراوە",
+      "update": "نوێکراوە",
+      "delete": "سڕاوە"
+    },
+    "entity": {
+      "student": "خوێندکار",
+      "fee_plan": "پلانی کرێ",
+      "student_fee": "کرێی خوێندکار",
+      "fee_payment": "پارەدانی کرێ",
+      "staff_member": "ئەندامی ستاف",
+      "staff_salary_payment": "پارەدانی موچە"
+    }
   },
   "dashboard": {
     "title": "هەواڵەکان",

@@ -10,7 +10,7 @@ import {
   MapPin, Bell, User, Users, GraduationCap, Bus,
   Calendar, Settings, UserCog, LogOut, ChevronLeft, ChevronRight,
   FileText, Star, Clock, X, ClipboardCheck, MessageSquare, Archive,
-  CreditCard, Wallet,
+  CreditCard, Wallet, History,
 } from 'lucide-react';
 import type { Dispatch, SetStateAction } from 'react';
 import type { Role } from '../../types';
@@ -60,6 +60,7 @@ const navItems: Record<Role, NavItem[]> = {
     { to: '/accounting/staff', icon: Wallet, label: 'Staff Salaries', feature: 'tuition_fees' },
     { to: '/admin/notifications', icon: Bell, label: 'Notifications' },
     { to: '/admin/accounts', icon: UserCog, label: 'Accounts' },
+    { to: '/admin/audit-log', icon: History, label: 'Audit Log' },
     { to: '/admin/settings', icon: Settings, label: 'Settings' },
     { to: '/admin/profile', icon: User, label: 'Profile' },
   ],

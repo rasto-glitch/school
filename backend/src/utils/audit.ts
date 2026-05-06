@@ -1,0 +1,93 @@
+import { supabase } from '../config/supabase';
+import type { AuthRequest } from '../middleware/auth';
+
+export type AuditAction = 'create' | 'update' | 'delete';
+export type AuditEntityType =
+  | 'student'
+  | 'fee_plan'
+  | 'student_fee'
+  | 'fee_payment'
+  | 'staff_member'
+  | 'staff_salary_payment';
+
+interface LogParams {
+  req: AuthRequest;
+  entityType: AuditEntityType;
+  entityId: string;
+  action: AuditAction;
+  before?: Record<string, unknown> | null;
+  after?: Record<string, unknown> | null;
+  label?: string | null;
+  reason?: string | null;
+}
+
+// Fields excluded from diffs — either auto-managed or sensitive.
+const EXCLUDED_FIELDS = new Set(['created_at', 'updated_at', 'id']);
+
+function eq(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (a == null && b == null) return true;
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+function buildChanges(
+  action: AuditAction,
+  before: Record<string, unknown> | null | undefined,
+  after: Record<string, unknown> | null | undefined,
+): Record<string, unknown> {
+  if (action === 'create') {
+    if (!after) return {};
+    const row: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(after)) {
+      if (EXCLUDED_FIELDS.has(k)) continue;
+      row[k] = v;
+    }
+    return { _row: row };
+  }
+  if (action === 'delete') {
+    if (!before) return {};
+    const row: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(before)) {
+      if (EXCLUDED_FIELDS.has(k)) continue;
+      row[k] = v;
+    }
+    return { _row: row };
+  }
+  // update — diff non-excluded fields
+  const out: Record<string, { old: unknown; new: unknown }> = {};
+  const keys = new Set([...Object.keys(before || {}), ...Object.keys(after || {})]);
+  for (const k of keys) {
+    if (EXCLUDED_FIELDS.has(k)) continue;
+    const a = before?.[k];
+    const b = after?.[k];
+    if (!eq(a, b)) out[k] = { old: a ?? null, new: b ?? null };
+  }
+  return out;
+}
+
+// Best-effort write — failures must never block the user-facing mutation.
+// Logs to console so the operator notices but the request still succeeds.
+export async function logAudit(p: LogParams): Promise<void> {
+  try {
+    const user = p.req.user;
+    if (!user) return;
+    const changes = buildChanges(p.action, p.before, p.after);
+    if (p.action === 'update' && Object.keys(changes).length === 0) return;
+
+    const { error } = await supabase.from('audit_logs').insert({
+      school_id: user.schoolId,
+      entity_type: p.entityType,
+      entity_id: p.entityId,
+      action: p.action,
+      changes,
+      actor_id: user.userId,
+      actor_username: user.username,
+      actor_role: user.role,
+      label: p.label ?? null,
+      reason: p.reason ?? null,
+    });
+    if (error) console.error('[audit] insert failed:', error.message);
+  } catch (e) {
+    console.error('[audit] logAudit threw:', (e as Error).message);
+  }
+}

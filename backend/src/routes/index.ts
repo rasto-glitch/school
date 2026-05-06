@@ -129,6 +129,9 @@ export function createRouter(io: SocketServer) {
   router.delete('/admin/terms/:id', authenticate, authorize('admin'), (req, res) => admin.deleteTerm(req as AuthRequest, res));
   router.get('/teacher/terms', authenticate, authorize('teacher'), (req, res) => admin.getTerms(req as AuthRequest, res));
 
+  // Audit logs — admin only (financial + student-record change history)
+  router.get('/admin/audit-logs', authenticate, authorize('admin'), (req, res) => admin.getAuditLogs(req as AuthRequest, res));
+
   // ---- TEACHER ----
   router.get('/teacher/profile-data', authenticate, authorize('teacher'), (req, res) => teacher.getProfileData(req as AuthRequest, res));
   router.get('/teacher/homework', authenticate, authorize('teacher'), (req, res) => teacher.getHomework(req as AuthRequest, res));

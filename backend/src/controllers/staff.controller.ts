@@ -4,6 +4,7 @@ import type { AuthRequest } from '../middleware/auth';
 import { toCC } from '../utils/transform';
 import { notify, notifyMany } from '../utils/notify';
 import { streamStaffSalaryPdf, buildStaffSalaryXlsx, type StaffSalaryExportData } from '../utils/staffSalaryExport';
+import { logAudit } from '../utils/audit';
 
 // ── Premium gate (shares the tuition_fees flag) ────────────────────────
 
@@ -236,6 +237,7 @@ export async function createStaff(req: AuthRequest, res: Response): Promise<void
     return;
   }
 
+  await logAudit({ req, entityType: 'staff_member', entityId: data.id, action: 'create', after: data, label: data.full_name });
   res.status(201).json(toCC(data));
 }
 
@@ -272,12 +274,16 @@ export async function updateStaff(req: AuthRequest, res: Response): Promise<void
     }
   }
 
+  const { data: before } = await supabase.from('staff_members').select('*').eq('id', id).eq('school_id', schoolId).single();
+
   const { error } = await supabase.from('staff_members').update(upd).eq('id', id).eq('school_id', schoolId);
   if (error) {
     if (error.code === '23505') { res.status(409).json({ error: 'This user is already on the staff roster' }); return; }
     res.status(500).json({ error: error.message });
     return;
   }
+  const { data: after } = await supabase.from('staff_members').select('*').eq('id', id).eq('school_id', schoolId).single();
+  await logAudit({ req, entityType: 'staff_member', entityId: String(id), action: 'update', before: before || undefined, after: after || undefined, label: (after as { full_name?: string } | null)?.full_name });
   res.json({ success: true });
 }
 
@@ -287,8 +293,10 @@ export async function deleteStaff(req: AuthRequest, res: Response): Promise<void
   if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
 
   const { id } = req.params;
+  const { data: before } = await supabase.from('staff_members').select('*').eq('id', id).eq('school_id', schoolId).single();
   const { error } = await supabase.from('staff_members').delete().eq('id', id).eq('school_id', schoolId);
   if (error) { res.status(500).json({ error: error.message }); return; }
+  if (before) await logAudit({ req, entityType: 'staff_member', entityId: String(id), action: 'delete', before, label: (before as { full_name?: string }).full_name });
   res.json({ success: true });
 }
 
@@ -376,6 +384,8 @@ export async function recordStaffPayment(req: AuthRequest, res: Response): Promi
   }).select().single();
   if (error) { res.status(500).json({ error: error.message }); return; }
 
+  await logAudit({ req, entityType: 'staff_salary_payment', entityId: (data as { id: string }).id, action: 'create', after: data as Record<string, unknown>, label: staffRow.full_name });
+
   // Notify linked teacher (if any) that their salary was recorded
   const linkedUser = staffRow.user_id;
   if (linkedUser) {
@@ -400,8 +410,18 @@ export async function deleteStaffPayment(req: AuthRequest, res: Response): Promi
   if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
 
   const { id } = req.params;
+  const { data: before } = await supabase
+    .from('staff_salary_payments')
+    .select('*, staff_members(full_name)')
+    .eq('id', id).eq('school_id', schoolId).single();
   const { error } = await supabase.from('staff_salary_payments').delete().eq('id', id).eq('school_id', schoolId);
   if (error) { res.status(500).json({ error: error.message }); return; }
+  if (before) {
+    const label = (before as { staff_members?: { full_name?: string } }).staff_members?.full_name;
+    const row: Record<string, unknown> = { ...(before as Record<string, unknown>) };
+    delete row.staff_members;
+    await logAudit({ req, entityType: 'staff_salary_payment', entityId: String(id), action: 'delete', before: row, label });
+  }
   res.json({ success: true });
 }
 
@@ -449,6 +469,8 @@ export async function markStaffInsurancePaid(req: AuthRequest, res: Response): P
 
   const paidOn = body.paidOn || new Date().toISOString().slice(0, 10);
 
+  const { data: beforeIns } = await supabase.from('staff_members').select('*').eq('id', id).eq('school_id', schoolId).single();
+
   const { error } = await supabase.from('staff_members').update({
     insurance_paid_out: true,
     insurance_paid_out_at: paidOn,
@@ -457,6 +479,9 @@ export async function markStaffInsurancePaid(req: AuthRequest, res: Response): P
     insurance_paid_out_notes: body.notes?.trim() || null,
   }).eq('id', id).eq('school_id', schoolId);
   if (error) { res.status(500).json({ error: error.message }); return; }
+
+  const { data: afterIns } = await supabase.from('staff_members').select('*').eq('id', id).eq('school_id', schoolId).single();
+  await logAudit({ req, entityType: 'staff_member', entityId: id, action: 'update', before: beforeIns || undefined, after: afterIns || undefined, label: s.full_name, reason: 'Insurance paid out' });
 
   // Notify linked teacher (if any) that their insurance was paid out
   if (s.user_id) {
@@ -489,6 +514,8 @@ export async function reverseStaffInsurancePayout(req: AuthRequest, res: Respons
     return;
   }
 
+  const { data: beforeRev } = await supabase.from('staff_members').select('*').eq('id', id).eq('school_id', schoolId).single();
+
   const { error } = await supabase.from('staff_members').update({
     insurance_paid_out: false,
     insurance_paid_out_at: null,
@@ -497,6 +524,9 @@ export async function reverseStaffInsurancePayout(req: AuthRequest, res: Respons
     insurance_paid_out_notes: null,
   }).eq('id', id).eq('school_id', schoolId);
   if (error) { res.status(500).json({ error: error.message }); return; }
+
+  const { data: afterRev } = await supabase.from('staff_members').select('*').eq('id', id).eq('school_id', schoolId).single();
+  await logAudit({ req, entityType: 'staff_member', entityId: id, action: 'update', before: beforeRev || undefined, after: afterRev || undefined, label: (afterRev as { full_name?: string } | null)?.full_name, reason: 'Insurance payout reversed' });
   res.json({ success: true });
 }
 
@@ -518,6 +548,18 @@ export async function bulkSetNextPaymentDate(req: AuthRequest, res: Response): P
     return;
   }
 
+  // Snapshot the affected staff rows before updating, so each per-staff audit
+  // entry has accurate before/after values.
+  let beforeQ = supabase
+    .from('staff_members')
+    .select('*')
+    .eq('school_id', schoolId)
+    .eq('is_active', true);
+  if (Array.isArray(staffIds)) beforeQ = beforeQ.in('id', staffIds);
+  const { data: beforeRows } = await beforeQ;
+  const beforeById = new Map<string, Record<string, unknown>>();
+  for (const r of (beforeRows || []) as Record<string, unknown>[]) beforeById.set(r.id as string, r);
+
   let q = supabase
     .from('staff_members')
     .update({ next_payment_date: newDate })
@@ -533,8 +575,15 @@ export async function bulkSetNextPaymentDate(req: AuthRequest, res: Response): P
     q = q.in('id', staffIds);
   }
 
-  const { data, error } = await q.select('id');
+  const { data, error } = await q.select('*');
   if (error) { res.status(500).json({ error: error.message }); return; }
+
+  for (const row of (data || []) as Record<string, unknown>[]) {
+    const id = row.id as string;
+    const before = beforeById.get(id);
+    await logAudit({ req, entityType: 'staff_member', entityId: id, action: 'update', before, after: row, label: row.full_name as string | undefined, reason: 'Bulk next-payment-date update' });
+  }
+
   res.json({ updated: (data ?? []).length });
 }
 

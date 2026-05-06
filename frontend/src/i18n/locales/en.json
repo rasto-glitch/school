@@ -16,6 +16,7 @@
     "start_drive": "Start Drive",
     "students": "Students",
     "archive": "Archive",
+    "audit_log": "Audit Log",
     "logout": "Logout"
   },
   "common": {
@@ -35,7 +36,40 @@
     "address": "Address",
     "call": "Call",
     "absent": "Absent",
-    "portal": "{{role}} Portal"
+    "portal": "{{role}} Portal",
+    "previous": "Previous",
+    "next": "Next"
+  },
+  "audit": {
+    "title": "Audit Log",
+    "subtitle": "All financial and student-record changes",
+    "searchPlaceholder": "Search by name, user, or reason",
+    "allEntities": "All entities",
+    "allActions": "All actions",
+    "totalResults": "{{count}} matching entries",
+    "clearFilters": "Clear filters",
+    "noResults": "No audit entries match your filters",
+    "noChanges": "No field-level changes recorded",
+    "changedFields": "Changed fields",
+    "created": "Created with values",
+    "deleted": "Deleted record",
+    "old": "Old",
+    "new": "New",
+    "unknownActor": "(deleted user)",
+    "pageOf": "Page {{page}} of {{totalPages}}",
+    "action": {
+      "create": "Created",
+      "update": "Updated",
+      "delete": "Deleted"
+    },
+    "entity": {
+      "student": "Student",
+      "fee_plan": "Tuition Plan",
+      "student_fee": "Student Tuition",
+      "fee_payment": "Tuition Payment",
+      "staff_member": "Staff Member",
+      "staff_salary_payment": "Salary Payment"
+    }
   },
   "dashboard": {
     "title": "Feed",
