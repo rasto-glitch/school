@@ -123,18 +123,22 @@ export default function AuditLogPage() {
               className="pl-9"
             />
           </div>
-          <Select value={entityType} onChange={(e) => { setPage(1); setEntityType(e.target.value); }}>
-            <option value="">{t('audit.allEntities')}</option>
-            {ENTITY_TYPES.map(et => (
-              <option key={et} value={et}>{t(`audit.entity.${et}`)}</option>
-            ))}
-          </Select>
-          <Select value={action} onChange={(e) => { setPage(1); setAction(e.target.value); }}>
-            <option value="">{t('audit.allActions')}</option>
-            {ACTIONS.map(a => (
-              <option key={a} value={a}>{t(`audit.action.${a}`)}</option>
-            ))}
-          </Select>
+          <Select
+            value={entityType}
+            onChange={(e) => { setPage(1); setEntityType(e.target.value); }}
+            options={[
+              { value: '', label: t('audit.allEntities') },
+              ...ENTITY_TYPES.map(et => ({ value: et, label: t(`audit.entity.${et}`) })),
+            ]}
+          />
+          <Select
+            value={action}
+            onChange={(e) => { setPage(1); setAction(e.target.value); }}
+            options={[
+              { value: '', label: t('audit.allActions') },
+              ...ACTIONS.map(a => ({ value: a, label: t(`audit.action.${a}`) })),
+            ]}
+          />
           <div className="flex gap-2">
             <Input type="date" value={from} onChange={(e) => { setPage(1); setFrom(e.target.value); }} />
             <Input type="date" value={to} onChange={(e) => { setPage(1); setTo(e.target.value); }} />
