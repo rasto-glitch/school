@@ -77,6 +77,30 @@ function computeSiblingDiscount(planTotal: number, siblings: number, cfg: Siblin
     : tier.value;
 }
 
+// Scale each installment proportionally so they sum to the actual due amount
+// after adjustment + sibling discount. Pushes any rounding diff to the last
+// installment so the total matches exactly.
+function scaleInstallments<T extends { sequence: number; amount: number }>(
+  installments: T[],
+  totalDue: number,
+): (T & { effectiveAmount: number })[] {
+  if (installments.length === 0) return [];
+  const baseSum = installments.reduce((s, i) => s + Number(i.amount), 0);
+  const sorted = [...installments].sort((a, b) => a.sequence - b.sequence);
+  const scale = baseSum > 0 ? totalDue / baseSum : 1;
+  const scaled = sorted.map(i => ({
+    ...i,
+    effectiveAmount: Math.round(Number(i.amount) * scale * 100) / 100,
+  }));
+  const sumScaled = scaled.reduce((s, x) => s + x.effectiveAmount, 0);
+  const drift = Math.round((totalDue - sumScaled) * 100) / 100;
+  if (Math.abs(drift) >= 0.01 && scaled.length > 0) {
+    const last = scaled[scaled.length - 1];
+    last.effectiveAmount = Math.round((last.effectiveAmount + drift) * 100) / 100;
+  }
+  return scaled;
+}
+
 // Build a (parentId+academicYear)→count map for sibling-discount math.
 function buildSiblingCounts(rows: { student_id: string; parentId: string | null; academicYear: string | null }[]): Map<string, number> {
   const buckets = new Map<string, Set<string>>();
@@ -344,7 +368,7 @@ interface StudentFeeRow {
   paid: number;
   balance: number;
   status: Status;
-  installments: { id: string; sequence: number; amount: number; dueDate: string }[];
+  installments: { id: string; sequence: number; amount: number; effectiveAmount: number; dueDate: string }[];
   lockedFeatures: string[];
 }
 
@@ -428,7 +452,10 @@ async function buildStudentFeeRows(schoolId: string): Promise<StudentFeeRow[]> {
       paid,
       balance: Math.max(0, dueTotal - paid),
       status,
-      installments: installments.map(i => ({ id: i.id, sequence: i.sequence, amount: i.amount, dueDate: i.dueDate })),
+      installments: scaleInstallments(
+        installments.map(i => ({ id: i.id, sequence: i.sequence, amount: i.amount, dueDate: i.dueDate })),
+        dueTotal,
+      ),
       lockedFeatures: Array.from(locksByStudent.get(s.student_id) ?? []),
     };
   });
@@ -489,7 +516,7 @@ export async function getStudentFee(req: AuthRequest, res: Response): Promise<vo
 
   const { data: payments } = await supabase
     .from('fee_payments')
-    .select('id, amount, paid_on, method, reference, notes, recorded_by, created_at')
+    .select('id, amount, paid_on, method, reference, notes, unallocated_note, recorded_by, created_at')
     .eq('student_fee_id', id)
     .eq('school_id', schoolId)
     .order('paid_on', { ascending: false });
@@ -523,18 +550,25 @@ export async function getStudentFee(req: AuthRequest, res: Response): Promise<vo
 
   res.json({
     ...row,
-    payments: (payments ?? []).map(p => ({
-      id: (p as any).id,
-      amount: Number((p as any).amount),
-      paidOn: (p as any).paid_on,
-      method: (p as any).method,
-      reference: (p as any).reference,
-      notes: (p as any).notes,
-      recordedBy: (p as any).recorded_by,
-      recorderName: (p as any).recorded_by ? nameByUser.get((p as any).recorded_by) ?? null : null,
-      allocations: (allocsByPayment.get((p as any).id) ?? []).sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0)),
-      createdAt: (p as any).created_at,
-    })),
+    payments: (payments ?? []).map(p => {
+      const allocs = (allocsByPayment.get((p as any).id) ?? []).sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
+      const allocSum = allocs.reduce((s, a) => s + a.amount, 0);
+      const unallocatedAmount = Math.round((Number((p as any).amount) - allocSum) * 100) / 100;
+      return {
+        id: (p as any).id,
+        amount: Number((p as any).amount),
+        paidOn: (p as any).paid_on,
+        method: (p as any).method,
+        reference: (p as any).reference,
+        notes: (p as any).notes,
+        unallocatedNote: (p as any).unallocated_note ?? null,
+        unallocatedAmount: allocs.length > 0 && unallocatedAmount > 0 ? unallocatedAmount : 0,
+        recordedBy: (p as any).recorded_by,
+        recorderName: (p as any).recorded_by ? nameByUser.get((p as any).recorded_by) ?? null : null,
+        allocations: allocs,
+        createdAt: (p as any).created_at,
+      };
+    }),
   });
 }
 
@@ -546,14 +580,17 @@ export async function recordPayment(req: AuthRequest, res: Response): Promise<vo
   if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
 
   const { id } = req.params; // student_fee_id
-  const { amount, paidOn, method, reference, notes } = req.body;
+  const { amount, paidOn, method, reference, notes, unallocatedNote } = req.body;
   const rawAllocations = req.body.allocations;
 
   if (typeof amount !== 'number' || amount <= 0) { res.status(400).json({ error: 'amount must be a positive number' }); return; }
   if (!paidOn) { res.status(400).json({ error: 'paidOn is required' }); return; }
 
   // Validate allocations if provided. Each entry { installmentId, amount }.
+  // Allocations may sum to less than the payment total — the difference is the
+  // "unallocated / advance" portion, which requires an explanatory note.
   let allocations: { installmentId: string; amount: number }[] | null = null;
+  let storedUnallocatedNote: string | null = null;
   if (rawAllocations !== undefined && rawAllocations !== null) {
     if (!Array.isArray(rawAllocations)) { res.status(400).json({ error: 'allocations must be an array' }); return; }
     const cleaned: { installmentId: string; amount: number }[] = [];
@@ -565,7 +602,13 @@ export async function recordPayment(req: AuthRequest, res: Response): Promise<vo
     }
     if (cleaned.length > 0) {
       const sum = cleaned.reduce((s, a) => s + a.amount, 0);
-      if (Math.abs(sum - amount) > 0.01) { res.status(400).json({ error: 'Allocation amounts must sum to the payment amount' }); return; }
+      if (sum > amount + 0.01) { res.status(400).json({ error: 'Allocation amounts exceed the payment total' }); return; }
+      const unallocated = Math.round((amount - sum) * 100) / 100;
+      if (unallocated > 0.01) {
+        const trimmed = typeof unallocatedNote === 'string' ? unallocatedNote.trim() : '';
+        if (!trimmed) { res.status(400).json({ error: 'A note is required when an unallocated amount is recorded' }); return; }
+        storedUnallocatedNote = trimmed;
+      }
       allocations = cleaned;
     }
   }
@@ -598,6 +641,7 @@ export async function recordPayment(req: AuthRequest, res: Response): Promise<vo
     method: method ?? null,
     reference: reference ?? null,
     notes: notes ?? null,
+    unallocated_note: storedUnallocatedNote,
     recorded_by: userId,
   }).select().single();
   if (error) { res.status(500).json({ error: error.message }); return; }
@@ -888,7 +932,7 @@ export async function paymentReceiptPdf(req: AuthRequest, res: Response): Promis
   const { id } = req.params; // payment id
 
   const { data: payment } = await supabase
-    .from('fee_payments').select('id, student_fee_id, amount, paid_on, method, reference, notes, recorded_by, created_at')
+    .from('fee_payments').select('id, student_fee_id, amount, paid_on, method, reference, notes, unallocated_note, recorded_by, created_at')
     .eq('id', id).eq('school_id', schoolId).single();
   if (!payment) { res.status(404).json({ error: 'Payment not found' }); return; }
 
@@ -916,6 +960,12 @@ export async function paymentReceiptPdf(req: AuthRequest, res: Response): Promis
     amount: Number(a.amount),
   })).sort((a, b) => a.sequence - b.sequence);
 
+  const allocSum = allocations.reduce((s, a) => s + a.amount, 0);
+  const paymentAmount = Number((payment as any).amount);
+  const unallocatedAmount = allocations.length > 0
+    ? Math.max(0, Math.round((paymentAmount - allocSum) * 100) / 100)
+    : 0;
+
   // Recorder full name (name only — never username, per accountant-attribution requirement)
   let recorderName: string | null = null;
   if ((payment as any).recorded_by) {
@@ -934,7 +984,7 @@ export async function paymentReceiptPdf(req: AuthRequest, res: Response): Promis
     currency: ctx.currency,
     receiptNumber: `FEE-${(payment as any).id.slice(0, 8).toUpperCase()}`,
     paidOn: (payment as any).paid_on,
-    amount: Number((payment as any).amount),
+    amount: paymentAmount,
     method: (payment as any).method,
     reference: (payment as any).reference,
     notes: (payment as any).notes,
@@ -944,6 +994,8 @@ export async function paymentReceiptPdf(req: AuthRequest, res: Response): Promis
     paidBefore,
     recorderName,
     allocations,
+    unallocatedAmount,
+    unallocatedNote: (payment as any).unallocated_note ?? null,
   });
 }
 
@@ -961,7 +1013,7 @@ export async function studentFeeSummaryPdf(req: AuthRequest, res: Response): Pro
 
   const { data: payments } = await supabase
     .from('fee_payments')
-    .select('id, amount, paid_on, method, reference, recorded_by')
+    .select('id, amount, paid_on, method, reference, unallocated_note, recorded_by')
     .eq('student_fee_id', id)
     .eq('school_id', schoolId)
     .order('paid_on', { ascending: true });
@@ -1004,15 +1056,25 @@ export async function studentFeeSummaryPdf(req: AuthRequest, res: Response): Pro
     totalAmount: ctx.totalAmount,
     adjustment: ctx.adjustment,
     siblingDiscount: ctx.siblingDiscount,
-    payments: (payments ?? []).map(p => ({
-      id: (p as any).id,
-      paidOn: (p as any).paid_on,
-      amount: Number((p as any).amount),
-      method: (p as any).method,
-      reference: (p as any).reference,
-      recorderName: (p as any).recorded_by ? nameByUser.get((p as any).recorded_by) ?? null : null,
-      allocations: (allocsByPayment.get((p as any).id) ?? []).sort((a, b) => a.sequence - b.sequence),
-    })),
+    payments: (payments ?? []).map(p => {
+      const sortedAllocs = (allocsByPayment.get((p as any).id) ?? []).sort((a, b) => a.sequence - b.sequence);
+      const allocSum = sortedAllocs.reduce((s, a) => s + a.amount, 0);
+      const paymentAmount = Number((p as any).amount);
+      const unallocatedAmount = sortedAllocs.length > 0
+        ? Math.max(0, Math.round((paymentAmount - allocSum) * 100) / 100)
+        : 0;
+      return {
+        id: (p as any).id,
+        paidOn: (p as any).paid_on,
+        amount: paymentAmount,
+        method: (p as any).method,
+        reference: (p as any).reference,
+        recorderName: (p as any).recorded_by ? nameByUser.get((p as any).recorded_by) ?? null : null,
+        allocations: sortedAllocs,
+        unallocatedAmount,
+        unallocatedNote: (p as any).unallocated_note ?? null,
+      };
+    }),
   });
 }
 
@@ -1038,7 +1100,7 @@ export async function getParentFees(req: AuthRequest, res: Response): Promise<vo
   const sfIds = mine.map(r => r.id);
   const { data: payments } = await supabase
     .from('fee_payments')
-    .select('id, student_fee_id, amount, paid_on, method, reference, notes, recorded_by, created_at')
+    .select('id, student_fee_id, amount, paid_on, method, reference, notes, unallocated_note, recorded_by, created_at')
     .in('student_fee_id', sfIds.length ? sfIds : ['00000000-0000-0000-0000-000000000000'])
     .order('paid_on', { ascending: false });
 
@@ -1072,6 +1134,9 @@ export async function getParentFees(req: AuthRequest, res: Response): Promise<vo
   const paysBySf = new Map<string, any[]>();
   for (const p of payments ?? []) {
     const arr = paysBySf.get((p as any).student_fee_id) ?? [];
+    const sortedAllocs = (allocsByPayment.get((p as any).id) ?? []).sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
+    const allocSum = sortedAllocs.reduce((s, a) => s + a.amount, 0);
+    const unallocatedAmount = Math.round((Number((p as any).amount) - allocSum) * 100) / 100;
     arr.push({
       id: (p as any).id,
       amount: Number((p as any).amount),
@@ -1079,8 +1144,10 @@ export async function getParentFees(req: AuthRequest, res: Response): Promise<vo
       method: (p as any).method,
       reference: (p as any).reference,
       notes: (p as any).notes,
+      unallocatedNote: (p as any).unallocated_note ?? null,
+      unallocatedAmount: sortedAllocs.length > 0 && unallocatedAmount > 0 ? unallocatedAmount : 0,
       recorderName: (p as any).recorded_by ? nameByUser.get((p as any).recorded_by) ?? null : null,
-      allocations: (allocsByPayment.get((p as any).id) ?? []).sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0)),
+      allocations: sortedAllocs,
       createdAt: (p as any).created_at,
     });
     paysBySf.set((p as any).student_fee_id, arr);

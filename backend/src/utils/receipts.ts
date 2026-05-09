@@ -34,6 +34,8 @@ export interface PaymentReceiptData extends Common {
   paidBefore: number;
   recorderName: string | null;
   allocations: PaymentAllocationLine[];
+  unallocatedAmount: number;
+  unallocatedNote: string | null;
 }
 
 export interface YearSummaryPayment {
@@ -44,6 +46,8 @@ export interface YearSummaryPayment {
   reference: string | null;
   recorderName: string | null;
   allocations: PaymentAllocationLine[];
+  unallocatedAmount: number;
+  unallocatedNote: string | null;
 }
 
 export interface YearSummaryData extends Common {
@@ -143,6 +147,16 @@ export async function streamPaymentReceipt(stream: Writable, data: PaymentReceip
     extraY += 16 + lines.length * 14;
   }
 
+  if (data.unallocatedAmount > 0) {
+    doc.font('Helvetica').fontSize(10).fillColor(COLOR_MUTED).text(`Other / advance — ${fmt(data.unallocatedAmount, data.currency)}`, 40, extraY);
+    if (data.unallocatedNote) {
+      doc.font('Helvetica').fontSize(10).fillColor(COLOR_HEADING).text(data.unallocatedNote, 40, extraY + 12, { width: 515 });
+      extraY += 16 + Math.max(14, doc.heightOfString(data.unallocatedNote, { width: 515 }));
+    } else {
+      extraY += 18;
+    }
+  }
+
   if (data.notes) {
     doc.font('Helvetica').fontSize(10).fillColor(COLOR_MUTED).text('Notes', 40, extraY);
     doc.font('Helvetica').fontSize(10).fillColor(COLOR_HEADING).text(data.notes, 40, extraY + 12, { width: 515 });
@@ -233,10 +247,15 @@ export async function streamYearSummary(stream: Writable, data: YearSummaryData)
       if (p.allocations.length > 0) {
         parts.push(p.allocations.map(a => `Inst. ${a.sequence} ${fmt(a.amount, data.currency)}`).join(', '));
       }
+      if (p.unallocatedAmount > 0) {
+        const noteSuffix = p.unallocatedNote ? ` (${p.unallocatedNote})` : '';
+        parts.push(`Other ${fmt(p.unallocatedAmount, data.currency)}${noteSuffix}`);
+      }
       if (p.recorderName) parts.push(`Recorded by ${p.recorderName}`);
       if (parts.length > 0) {
         doc.font('Helvetica').fontSize(8).fillColor(COLOR_MUTED).text(parts.join(' · '), 40, y, { width: 515 });
-        y += 12;
+        const subHeight = Math.max(12, doc.heightOfString(parts.join(' · '), { width: 515 }));
+        y += subHeight;
       }
       y += 6;
 

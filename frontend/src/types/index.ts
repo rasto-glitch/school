@@ -248,6 +248,12 @@ export interface FeeInstallment {
   id: string;
   sequence: number;
   amount: number;
+  /**
+   * Amount after the student's adjustment + sibling discount have been
+   * proportionally applied. Equal to `amount` when there are no adjustments.
+   * Use this for any per-student installment display (modal, grid, etc.).
+   */
+  effectiveAmount: number;
   dueDate: string;
 }
 
@@ -281,6 +287,8 @@ export interface FeePayment {
   recordedBy?: string | null;
   recorderName?: string | null;
   allocations?: FeePaymentAllocation[];
+  unallocatedAmount?: number;
+  unallocatedNote?: string | null;
   createdAt?: string;
 }
 

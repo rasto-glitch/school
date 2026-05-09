@@ -62,6 +62,7 @@ export default function AdminTuitionStudentDetailPage() {
   // amount per installment ('' = not allocating to that one). Plus an "extra" lump field.
   const [allocAmounts, setAllocAmounts] = useState<Record<string, string>>({});
   const [extraAmount, setExtraAmount] = useState('');
+  const [extraNote, setExtraNote] = useState('');
 
   // adjustment form
   const [adjValue, setAdjValue] = useState('0');
@@ -104,9 +105,13 @@ export default function AdminTuitionStudentDetailPage() {
   const extraValid = extraAmount && !isNaN(extraNum) && extraNum > 0 ? extraNum : 0;
   const totalPay = allocSum + extraValid;
 
+  const hasInstallments = data.installments.length > 0;
+  const needsExtraNote = hasInstallments && allocations.length > 0 && extraValid > 0;
+
   const recordPayment = async () => {
     if (!id) return;
     if (totalPay <= 0) { toast.error('Enter a positive amount'); return; }
+    if (needsExtraNote && !extraNote.trim()) { toast.error('Please add a note explaining the other amount'); return; }
     setPaySaving(true);
     try {
       await feesApi.recordPayment(id, {
@@ -116,10 +121,11 @@ export default function AdminTuitionStudentDetailPage() {
         reference: payRef || undefined,
         notes: payNotes || undefined,
         allocations: allocations.length > 0 ? allocations : undefined,
+        unallocatedNote: needsExtraNote ? extraNote.trim() : undefined,
       });
       toast.success('Payment recorded');
       setShowPay(false);
-      setAllocAmounts({}); setExtraAmount(''); setPayRef(''); setPayNotes('');
+      setAllocAmounts({}); setExtraAmount(''); setExtraNote(''); setPayRef(''); setPayNotes('');
       await load();
     } catch (e: any) {
       toast.error(e.response?.data?.error || 'Failed to record payment');
@@ -218,8 +224,9 @@ export default function AdminTuitionStudentDetailPage() {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-4">
                 {data.installments.map(i => {
                   const paidThis = paidByInstallment.get(i.id) ?? 0;
-                  const fullyPaid = paidThis >= i.amount;
+                  const fullyPaid = paidThis >= i.effectiveAmount - 0.01;
                   const partial = paidThis > 0 && !fullyPaid;
+                  const adjusted = Math.abs(i.effectiveAmount - i.amount) >= 0.01;
                   return (
                     <div key={i.id} className={`rounded-lg px-3 py-2 text-xs border ${fullyPaid ? 'bg-emerald-50 border-emerald-200' : partial ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200'}`}>
                       <div className="flex items-center justify-between">
@@ -227,7 +234,8 @@ export default function AdminTuitionStudentDetailPage() {
                         {fullyPaid && <span className="text-emerald-700 font-medium">Paid</span>}
                         {partial && <span className="text-amber-700 font-medium">Partial</span>}
                       </div>
-                      <div className="font-semibold text-gray-900">{fmt(i.amount, data.currency)}</div>
+                      <div className="font-semibold text-gray-900">{fmt(i.effectiveAmount, data.currency)}</div>
+                      {adjusted && <div className="text-gray-400 text-[10px]">base {fmt(i.amount, data.currency)}</div>}
                       {paidThis > 0 && !fullyPaid && (
                         <div className="text-amber-700">{fmt(paidThis, data.currency)} paid</div>
                       )}
@@ -269,7 +277,15 @@ export default function AdminTuitionStudentDetailPage() {
                                 Inst. {a.sequence} · {fmt(a.amount, data.currency)}
                               </span>
                             ))}
+                            {(p.unallocatedAmount ?? 0) > 0 && (
+                              <span className="text-xs px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-100">
+                                Other · {fmt(p.unallocatedAmount ?? 0, data.currency)}
+                              </span>
+                            )}
                           </div>
+                        )}
+                        {p.unallocatedNote && (p.unallocatedAmount ?? 0) > 0 && (
+                          <div className="text-xs text-amber-700 mt-1 italic">"{p.unallocatedNote}"</div>
                         )}
                         <div className="flex items-center gap-2 flex-wrap text-xs text-gray-500 mt-1">
                           {p.recorderName && <span>By {p.recorderName}</span>}
@@ -332,24 +348,28 @@ export default function AdminTuitionStudentDetailPage() {
       {showPay && (
         <Modal isOpen onClose={() => setShowPay(false)} title="Record payment">
           <div className="space-y-3">
-            {data.installments.length > 0 && (
+            {hasInstallments && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Installments</label>
-                <p className="text-xs text-gray-500 mb-2">Enter the amount paid against each installment. You can pay one, several, or partials.</p>
+                <p className="text-xs text-gray-500 mb-2">
+                  Amounts shown reflect this student's adjustment and sibling discount. Enter the amount paid against each installment — you can pay one, several, or partials.
+                </p>
                 <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                   {data.installments.map(i => {
                     const alreadyPaid = paidByInstallment.get(i.id) ?? 0;
-                    const remainingThis = Math.max(0, i.amount - alreadyPaid);
+                    const remainingThis = Math.max(0, i.effectiveAmount - alreadyPaid);
                     const isPaid = remainingThis === 0;
+                    const adjusted = Math.abs(i.effectiveAmount - i.amount) >= 0.01;
                     return (
                       <div key={i.id} className={`rounded-lg border ${isPaid ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-50 border-gray-200'} px-3 py-2`}>
                         <div className="flex items-center justify-between gap-2 mb-1">
                           <div className="text-xs text-gray-600">
                             <span className="font-semibold text-gray-900">Installment {i.sequence}</span>
                             <span className="text-gray-500"> · due {i.dueDate}</span>
+                            {adjusted && <span className="text-gray-400"> · base {fmt(i.amount, data.currency)}</span>}
                           </div>
                           <div className="text-xs text-gray-500">
-                            {isPaid ? <span className="text-emerald-700 font-medium">Paid</span> : <>{fmt(remainingThis, data.currency)} left of {fmt(i.amount, data.currency)}</>}
+                            {isPaid ? <span className="text-emerald-700 font-medium">Paid</span> : <>{fmt(remainingThis, data.currency)} left of {fmt(i.effectiveAmount, data.currency)}</>}
                           </div>
                         </div>
                         {!isPaid && (
@@ -374,9 +394,22 @@ export default function AdminTuitionStudentDetailPage() {
                   onChange={e => setExtraAmount(e.target.value)}
                   placeholder="0.00"
                 />
+                {needsExtraNote && (
+                  <div className="mt-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Note for the other amount <span className="text-red-500">*</span></label>
+                    <p className="text-xs text-gray-500 mb-1">Required. Shown on the receipt and statement.</p>
+                    <textarea
+                      rows={2}
+                      value={extraNote}
+                      onChange={e => setExtraNote(e.target.value)}
+                      placeholder="e.g. advance for next month, late fee, transport"
+                      className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    />
+                  </div>
+                )}
               </div>
             )}
-            {data.installments.length === 0 && (
+            {!hasInstallments && (
               <Input
                 label={`Amount (${data.currency})`}
                 type="number"

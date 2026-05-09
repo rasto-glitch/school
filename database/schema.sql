@@ -886,6 +886,10 @@ CREATE TABLE IF NOT EXISTS fee_payments (
   method TEXT,
   reference TEXT,
   notes TEXT,
+  -- Note explaining any portion of `amount` that wasn't tied to a specific
+  -- installment (advance / misc fees). Required client-side when an
+  -- unallocated amount > 0 is recorded against a plan that has installments.
+  unallocated_note TEXT,
   recorded_by UUID REFERENCES users(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );

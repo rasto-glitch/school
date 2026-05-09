@@ -143,8 +143,9 @@ export default function TuitionPage() {
                           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
                             {r.installments.map(i => {
                               const paidThis = paidByInst.get(i.id) ?? 0;
-                              const fullyPaid = paidThis >= i.amount;
+                              const fullyPaid = paidThis >= i.effectiveAmount - 0.01;
                               const partial = paidThis > 0 && !fullyPaid;
+                              const adjusted = Math.abs(i.effectiveAmount - i.amount) >= 0.01;
                               return (
                                 <div key={i.id} className={`rounded-lg px-3 py-2 text-xs border ${fullyPaid ? 'bg-emerald-50 border-emerald-200' : partial ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200'}`}>
                                   <div className="flex items-center justify-between">
@@ -152,7 +153,8 @@ export default function TuitionPage() {
                                     {fullyPaid && <span className="text-emerald-700 font-medium">Paid</span>}
                                     {partial && <span className="text-amber-700 font-medium">Partial</span>}
                                   </div>
-                                  <div className="font-semibold text-gray-900">{fmt(i.amount, r.currency)}</div>
+                                  <div className="font-semibold text-gray-900">{fmt(i.effectiveAmount, r.currency)}</div>
+                                  {adjusted && <div className="text-gray-400 text-[10px]">base {fmt(i.amount, r.currency)}</div>}
                                   <div className="text-gray-500">due {i.dueDate}</div>
                                 </div>
                               );
@@ -180,7 +182,15 @@ export default function TuitionPage() {
                                           Inst. {a.sequence} · {fmt(a.amount, r.currency)}
                                         </span>
                                       ))}
+                                      {(p.unallocatedAmount ?? 0) > 0 && (
+                                        <span className="text-xs px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-100">
+                                          Other · {fmt(p.unallocatedAmount ?? 0, r.currency)}
+                                        </span>
+                                      )}
                                     </div>
+                                  )}
+                                  {p.unallocatedNote && (p.unallocatedAmount ?? 0) > 0 && (
+                                    <div className="text-xs text-amber-700 mt-1 italic">"{p.unallocatedNote}"</div>
                                   )}
                                   {p.recorderName && <div className="text-xs text-gray-500 mt-0.5">By {p.recorderName}</div>}
                                 </div>
