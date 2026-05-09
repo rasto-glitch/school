@@ -120,7 +120,8 @@ export async function streamPaymentReceipt(stream: Writable, data: PaymentReceip
   field(doc, 'Student', data.studentName, 320, 175, 235);
 
   const planLabel = data.academicYear ? `${data.planName} · ${data.academicYear}` : data.planName;
-  field(doc, 'Plan', planLabel, 40, 220, 515);
+  field(doc, 'Plan', planLabel, 40, 220, 250);
+  field(doc, 'Recorded by', data.recorderName ?? '—', 320, 220, 235);
 
   // Payment details box
   doc.moveTo(40, 270).lineTo(555, 270).strokeColor(COLOR_BORDER).stroke();
@@ -161,11 +162,6 @@ export async function streamPaymentReceipt(stream: Writable, data: PaymentReceip
     doc.font('Helvetica').fontSize(10).fillColor(COLOR_MUTED).text('Notes', 40, extraY);
     doc.font('Helvetica').fontSize(10).fillColor(COLOR_HEADING).text(data.notes, 40, extraY + 12, { width: 515 });
     extraY += 16 + Math.max(14, doc.heightOfString(data.notes, { width: 515 }));
-  }
-
-  if (data.recorderName) {
-    doc.font('Helvetica').fontSize(10).fillColor(COLOR_MUTED).text('Recorded by', 40, extraY);
-    doc.font('Helvetica-Bold').fontSize(10).fillColor(COLOR_HEADING).text(data.recorderName, 40, extraY + 12, { width: 515 });
   }
 
   // Balance summary
@@ -218,13 +214,14 @@ export async function streamYearSummary(stream: Writable, data: YearSummaryData)
   doc.moveTo(40, 220).lineTo(555, 220).strokeColor(COLOR_BORDER).stroke();
   doc.font('Helvetica-Bold').fontSize(12).fillColor(COLOR_HEADING).text('Payment history', 40, 235);
 
-  // Header row
+  // Header row — 5 columns: DATE | METHOD | REFERENCE | RECORDED BY | AMOUNT
   let y = 265;
   doc.font('Helvetica-Bold').fontSize(9).fillColor(COLOR_MUTED);
-  doc.text('DATE', 40, y, { width: 90 });
-  doc.text('METHOD', 130, y, { width: 100 });
-  doc.text('REFERENCE', 230, y, { width: 200 });
-  doc.text('AMOUNT', 430, y, { width: 125, align: 'right' });
+  doc.text('DATE', 40, y, { width: 70 });
+  doc.text('METHOD', 110, y, { width: 70 });
+  doc.text('REFERENCE', 180, y, { width: 130 });
+  doc.text('RECORDED BY', 310, y, { width: 130 });
+  doc.text('AMOUNT', 440, y, { width: 115, align: 'right' });
   y += 14;
   doc.moveTo(40, y).lineTo(555, y).strokeColor(COLOR_BORDER).stroke();
   y += 8;
@@ -236,13 +233,14 @@ export async function streamYearSummary(stream: Writable, data: YearSummaryData)
   } else {
     for (const p of data.payments) {
       doc.font('Helvetica').fontSize(10).fillColor(COLOR_HEADING);
-      doc.text(p.paidOn, 40, y, { width: 90 });
-      doc.text(p.method ? p.method[0].toUpperCase() + p.method.slice(1) : '—', 130, y, { width: 100 });
-      doc.text(p.reference || '—', 230, y, { width: 200, ellipsis: true });
-      doc.text(fmt(p.amount, data.currency), 430, y, { width: 125, align: 'right' });
+      doc.text(p.paidOn, 40, y, { width: 70 });
+      doc.text(p.method ? p.method[0].toUpperCase() + p.method.slice(1) : '—', 110, y, { width: 70 });
+      doc.text(p.reference || '—', 180, y, { width: 130, ellipsis: true });
+      doc.text(p.recorderName || '—', 310, y, { width: 130, ellipsis: true });
+      doc.text(fmt(p.amount, data.currency), 440, y, { width: 115, align: 'right' });
       y += 14;
 
-      // Sub-line: which installments + who recorded
+      // Sub-line: which installments + the unallocated portion / note
       const parts: string[] = [];
       if (p.allocations.length > 0) {
         parts.push(p.allocations.map(a => `Inst. ${a.sequence} ${fmt(a.amount, data.currency)}`).join(', '));
@@ -251,7 +249,6 @@ export async function streamYearSummary(stream: Writable, data: YearSummaryData)
         const noteSuffix = p.unallocatedNote ? ` (${p.unallocatedNote})` : '';
         parts.push(`Other ${fmt(p.unallocatedAmount, data.currency)}${noteSuffix}`);
       }
-      if (p.recorderName) parts.push(`Recorded by ${p.recorderName}`);
       if (parts.length > 0) {
         doc.font('Helvetica').fontSize(8).fillColor(COLOR_MUTED).text(parts.join(' · '), 40, y, { width: 515 });
         const subHeight = Math.max(12, doc.heightOfString(parts.join(' · '), { width: 515 }));

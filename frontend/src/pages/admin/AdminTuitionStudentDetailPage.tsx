@@ -270,6 +270,10 @@ export default function AdminTuitionStudentDetailPage() {
                           {p.method && <span className="text-xs text-gray-500">· {p.method}</span>}
                           {p.reference && <span className="text-xs text-gray-500">· ref {p.reference}</span>}
                         </div>
+                        <div className="text-xs text-gray-700 mt-0.5">
+                          <span className="text-gray-500">Recorded by </span>
+                          <span className="font-medium">{p.recorderName || '—'}</span>
+                        </div>
                         {p.allocations && p.allocations.length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-1">
                             {p.allocations.map(a => (
@@ -287,10 +291,7 @@ export default function AdminTuitionStudentDetailPage() {
                         {p.unallocatedNote && (p.unallocatedAmount ?? 0) > 0 && (
                           <div className="text-xs text-amber-700 mt-1 italic">"{p.unallocatedNote}"</div>
                         )}
-                        <div className="flex items-center gap-2 flex-wrap text-xs text-gray-500 mt-1">
-                          {p.recorderName && <span>By {p.recorderName}</span>}
-                          {p.notes && <span className="truncate">· {p.notes}</span>}
-                        </div>
+                        {p.notes && <div className="text-xs text-gray-500 mt-1 truncate">{p.notes}</div>}
                       </div>
                       <button onClick={() => downloadReceipt(p)} className="p-2 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg" title="Download receipt">
                         <FileDown className="w-4 h-4" />
