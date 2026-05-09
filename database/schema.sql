@@ -1018,11 +1018,9 @@ $$ LANGUAGE plpgsql;
 
 -- Drop any earlier registration so re-running this script reschedules cleanly.
 DO $$
-DECLARE jobid BIGINT;
 BEGIN
-  SELECT cron.jobid INTO jobid FROM cron.job WHERE jobname = 'cleanup_voided_records';
-  IF jobid IS NOT NULL THEN
-    PERFORM cron.unschedule(jobid);
+  IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'cleanup_voided_records') THEN
+    PERFORM cron.unschedule('cleanup_voided_records');
   END IF;
 END $$;
 
