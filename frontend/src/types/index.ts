@@ -264,6 +264,13 @@ export interface FeePlan {
   classIds: string[];
 }
 
+export interface FeePaymentAllocation {
+  installmentId: string;
+  sequence: number | null;
+  dueDate: string | null;
+  amount: number;
+}
+
 export interface FeePayment {
   id: string;
   amount: number;
@@ -272,6 +279,8 @@ export interface FeePayment {
   reference: string | null;
   notes: string | null;
   recordedBy?: string | null;
+  recorderName?: string | null;
+  allocations?: FeePaymentAllocation[];
   createdAt?: string;
 }
 

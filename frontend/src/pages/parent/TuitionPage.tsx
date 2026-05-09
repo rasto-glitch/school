@@ -134,17 +134,32 @@ export default function TuitionPage() {
                         <div className="h-full bg-primary-500" style={{ width: `${pct}%` }} />
                       </div>
 
-                      {r.installments.length > 0 && (
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
-                          {r.installments.map(i => (
-                            <div key={i.id} className="rounded-lg bg-gray-50 px-3 py-2 text-xs">
-                              <div className="text-gray-500">Installment {i.sequence}</div>
-                              <div className="font-semibold text-gray-900">{fmt(i.amount, r.currency)}</div>
-                              <div className="text-gray-500">due {i.dueDate}</div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                      {r.installments.length > 0 && (() => {
+                        const paidByInst = new Map<string, number>();
+                        for (const p of r.payments) {
+                          for (const a of p.allocations ?? []) paidByInst.set(a.installmentId, (paidByInst.get(a.installmentId) ?? 0) + a.amount);
+                        }
+                        return (
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+                            {r.installments.map(i => {
+                              const paidThis = paidByInst.get(i.id) ?? 0;
+                              const fullyPaid = paidThis >= i.amount;
+                              const partial = paidThis > 0 && !fullyPaid;
+                              return (
+                                <div key={i.id} className={`rounded-lg px-3 py-2 text-xs border ${fullyPaid ? 'bg-emerald-50 border-emerald-200' : partial ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200'}`}>
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-gray-500">Installment {i.sequence}</span>
+                                    {fullyPaid && <span className="text-emerald-700 font-medium">Paid</span>}
+                                    {partial && <span className="text-amber-700 font-medium">Partial</span>}
+                                  </div>
+                                  <div className="font-semibold text-gray-900">{fmt(i.amount, r.currency)}</div>
+                                  <div className="text-gray-500">due {i.dueDate}</div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
 
                       {r.payments.length > 0 && (
                         <div>
@@ -158,6 +173,16 @@ export default function TuitionPage() {
                                     <span className="text-xs text-gray-500">· {p.paidOn}</span>
                                     {p.method && <span className="text-xs text-gray-500">· {p.method}</span>}
                                   </div>
+                                  {p.allocations && p.allocations.length > 0 && (
+                                    <div className="flex flex-wrap gap-1 mt-1">
+                                      {p.allocations.map(a => (
+                                        <span key={a.installmentId} className="text-xs px-1.5 py-0.5 rounded bg-primary-50 text-primary-700 border border-primary-100">
+                                          Inst. {a.sequence} · {fmt(a.amount, r.currency)}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                  {p.recorderName && <div className="text-xs text-gray-500 mt-0.5">By {p.recorderName}</div>}
                                 </div>
                                 <button onClick={() => downloadReceipt(p.id)} className="p-2 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg" title="Download receipt">
                                   <FileDown className="w-4 h-4" />

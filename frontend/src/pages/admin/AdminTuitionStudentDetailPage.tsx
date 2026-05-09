@@ -54,12 +54,14 @@ export default function AdminTuitionStudentDetailPage() {
   const [showAdjust, setShowAdjust] = useState(false);
 
   // record-payment form
-  const [payAmount, setPayAmount] = useState('');
   const [payDate, setPayDate] = useState(new Date().toISOString().slice(0, 10));
   const [payMethod, setPayMethod] = useState('cash');
   const [payRef, setPayRef] = useState('');
   const [payNotes, setPayNotes] = useState('');
   const [paySaving, setPaySaving] = useState(false);
+  // amount per installment ('' = not allocating to that one). Plus an "extra" lump field.
+  const [allocAmounts, setAllocAmounts] = useState<Record<string, string>>({});
+  const [extraAmount, setExtraAmount] = useState('');
 
   // adjustment form
   const [adjValue, setAdjValue] = useState('0');
@@ -82,16 +84,42 @@ export default function AdminTuitionStudentDetailPage() {
   const due = data.totalAmount + data.adjustment - data.siblingDiscount;
   const remaining = Math.max(0, due - data.paid);
 
+  // How much has already been allocated to each installment from existing payments
+  const paidByInstallment = new Map<string, number>();
+  for (const p of data.payments) {
+    for (const a of p.allocations ?? []) {
+      paidByInstallment.set(a.installmentId, (paidByInstallment.get(a.installmentId) ?? 0) + a.amount);
+    }
+  }
+
+  const allocations = data ? data.installments
+    .map(i => {
+      const v = allocAmounts[i.id];
+      const n = Number(v);
+      return v && !isNaN(n) && n > 0 ? { installmentId: i.id, amount: n } : null;
+    })
+    .filter((x): x is { installmentId: string; amount: number } => !!x) : [];
+  const allocSum = allocations.reduce((s, a) => s + a.amount, 0);
+  const extraNum = Number(extraAmount);
+  const extraValid = extraAmount && !isNaN(extraNum) && extraNum > 0 ? extraNum : 0;
+  const totalPay = allocSum + extraValid;
+
   const recordPayment = async () => {
     if (!id) return;
-    const amount = Number(payAmount);
-    if (isNaN(amount) || amount <= 0) { toast.error('Enter a positive amount'); return; }
+    if (totalPay <= 0) { toast.error('Enter a positive amount'); return; }
     setPaySaving(true);
     try {
-      await feesApi.recordPayment(id, { amount, paidOn: payDate, method: payMethod, reference: payRef || undefined, notes: payNotes || undefined });
+      await feesApi.recordPayment(id, {
+        amount: totalPay,
+        paidOn: payDate,
+        method: payMethod,
+        reference: payRef || undefined,
+        notes: payNotes || undefined,
+        allocations: allocations.length > 0 ? allocations : undefined,
+      });
       toast.success('Payment recorded');
       setShowPay(false);
-      setPayAmount(''); setPayRef(''); setPayNotes('');
+      setAllocAmounts({}); setExtraAmount(''); setPayRef(''); setPayNotes('');
       await load();
     } catch (e: any) {
       toast.error(e.response?.data?.error || 'Failed to record payment');
@@ -188,13 +216,25 @@ export default function AdminTuitionStudentDetailPage() {
 
             {data.installments.length > 0 && (
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-4">
-                {data.installments.map(i => (
-                  <div key={i.id} className="rounded-lg bg-gray-50 px-3 py-2 text-xs">
-                    <div className="text-gray-500">Installment {i.sequence}</div>
-                    <div className="font-semibold text-gray-900">{fmt(i.amount, data.currency)}</div>
-                    <div className="text-gray-500">due {i.dueDate}</div>
-                  </div>
-                ))}
+                {data.installments.map(i => {
+                  const paidThis = paidByInstallment.get(i.id) ?? 0;
+                  const fullyPaid = paidThis >= i.amount;
+                  const partial = paidThis > 0 && !fullyPaid;
+                  return (
+                    <div key={i.id} className={`rounded-lg px-3 py-2 text-xs border ${fullyPaid ? 'bg-emerald-50 border-emerald-200' : partial ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200'}`}>
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-500">Installment {i.sequence}</span>
+                        {fullyPaid && <span className="text-emerald-700 font-medium">Paid</span>}
+                        {partial && <span className="text-amber-700 font-medium">Partial</span>}
+                      </div>
+                      <div className="font-semibold text-gray-900">{fmt(i.amount, data.currency)}</div>
+                      {paidThis > 0 && !fullyPaid && (
+                        <div className="text-amber-700">{fmt(paidThis, data.currency)} paid</div>
+                      )}
+                      <div className="text-gray-500">due {i.dueDate}</div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </Card>
@@ -222,7 +262,19 @@ export default function AdminTuitionStudentDetailPage() {
                           {p.method && <span className="text-xs text-gray-500">· {p.method}</span>}
                           {p.reference && <span className="text-xs text-gray-500">· ref {p.reference}</span>}
                         </div>
-                        {p.notes && <div className="text-xs text-gray-500 mt-0.5 truncate">{p.notes}</div>}
+                        {p.allocations && p.allocations.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {p.allocations.map(a => (
+                              <span key={a.installmentId} className="text-xs px-1.5 py-0.5 rounded bg-primary-50 text-primary-700 border border-primary-100">
+                                Inst. {a.sequence} · {fmt(a.amount, data.currency)}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        <div className="flex items-center gap-2 flex-wrap text-xs text-gray-500 mt-1">
+                          {p.recorderName && <span>By {p.recorderName}</span>}
+                          {p.notes && <span className="truncate">· {p.notes}</span>}
+                        </div>
                       </div>
                       <button onClick={() => downloadReceipt(p)} className="p-2 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg" title="Download receipt">
                         <FileDown className="w-4 h-4" />
@@ -280,7 +332,64 @@ export default function AdminTuitionStudentDetailPage() {
       {showPay && (
         <Modal isOpen onClose={() => setShowPay(false)} title="Record payment">
           <div className="space-y-3">
-            <Input label={`Amount (${data.currency})`} type="number" step="0.01" value={payAmount} onChange={e => setPayAmount(e.target.value)} autoFocus />
+            {data.installments.length > 0 && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Installments</label>
+                <p className="text-xs text-gray-500 mb-2">Enter the amount paid against each installment. You can pay one, several, or partials.</p>
+                <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                  {data.installments.map(i => {
+                    const alreadyPaid = paidByInstallment.get(i.id) ?? 0;
+                    const remainingThis = Math.max(0, i.amount - alreadyPaid);
+                    const isPaid = remainingThis === 0;
+                    return (
+                      <div key={i.id} className={`rounded-lg border ${isPaid ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-50 border-gray-200'} px-3 py-2`}>
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <div className="text-xs text-gray-600">
+                            <span className="font-semibold text-gray-900">Installment {i.sequence}</span>
+                            <span className="text-gray-500"> · due {i.dueDate}</span>
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {isPaid ? <span className="text-emerald-700 font-medium">Paid</span> : <>{fmt(remainingThis, data.currency)} left of {fmt(i.amount, data.currency)}</>}
+                          </div>
+                        </div>
+                        {!isPaid && (
+                          <Input
+                            type="number"
+                            step="0.01"
+                            placeholder={`0.00 (${data.currency})`}
+                            value={allocAmounts[i.id] ?? ''}
+                            onChange={e => setAllocAmounts(prev => ({ ...prev, [i.id]: e.target.value }))}
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <Input
+                  className="mt-2"
+                  label="Other amount (advance / unallocated)"
+                  type="number"
+                  step="0.01"
+                  value={extraAmount}
+                  onChange={e => setExtraAmount(e.target.value)}
+                  placeholder="0.00"
+                />
+              </div>
+            )}
+            {data.installments.length === 0 && (
+              <Input
+                label={`Amount (${data.currency})`}
+                type="number"
+                step="0.01"
+                value={extraAmount}
+                onChange={e => setExtraAmount(e.target.value)}
+                autoFocus
+              />
+            )}
+            <div className="flex items-center justify-between rounded-lg bg-primary-50 border border-primary-200 px-3 py-2">
+              <span className="text-sm font-medium text-primary-900">Total</span>
+              <span className="text-lg font-bold text-primary-900">{fmt(totalPay, data.currency)}</span>
+            </div>
             <Input label="Paid on" type="date" value={payDate} onChange={e => setPayDate(e.target.value)} />
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Method</label>
@@ -299,7 +408,7 @@ export default function AdminTuitionStudentDetailPage() {
             </div>
             <div className="flex gap-2 justify-end pt-2">
               <Button variant="ghost" onClick={() => setShowPay(false)}>Cancel</Button>
-              <Button onClick={recordPayment} loading={paySaving}>Record</Button>
+              <Button onClick={recordPayment} loading={paySaving} disabled={totalPay <= 0}>Record</Button>
             </div>
           </div>
         </Modal>

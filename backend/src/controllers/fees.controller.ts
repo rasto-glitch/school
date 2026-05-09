@@ -494,6 +494,33 @@ export async function getStudentFee(req: AuthRequest, res: Response): Promise<vo
     .eq('school_id', schoolId)
     .order('paid_on', { ascending: false });
 
+  const paymentIds = (payments ?? []).map(p => (p as any).id);
+  const recorderIds = Array.from(new Set((payments ?? []).map(p => (p as any).recorded_by).filter(Boolean)));
+  const [{ data: allocs }, { data: users }] = await Promise.all([
+    paymentIds.length
+      ? supabase
+          .from('fee_payment_allocations')
+          .select('fee_payment_id, fee_installment_id, amount, fee_installments(sequence, due_date)')
+          .in('fee_payment_id', paymentIds)
+      : Promise.resolve({ data: [] as any[] }),
+    recorderIds.length
+      ? supabase.from('users').select('id, full_name').in('id', recorderIds)
+      : Promise.resolve({ data: [] as any[] }),
+  ]);
+  const allocsByPayment = new Map<string, any[]>();
+  for (const a of (allocs ?? []) as any[]) {
+    const arr = allocsByPayment.get(a.fee_payment_id) ?? [];
+    arr.push({
+      installmentId: a.fee_installment_id,
+      amount: Number(a.amount),
+      sequence: a.fee_installments?.sequence ?? null,
+      dueDate: a.fee_installments?.due_date ?? null,
+    });
+    allocsByPayment.set(a.fee_payment_id, arr);
+  }
+  const nameByUser = new Map<string, string>();
+  for (const u of (users ?? []) as any[]) nameByUser.set(u.id, u.full_name);
+
   res.json({
     ...row,
     payments: (payments ?? []).map(p => ({
@@ -504,6 +531,8 @@ export async function getStudentFee(req: AuthRequest, res: Response): Promise<vo
       reference: (p as any).reference,
       notes: (p as any).notes,
       recordedBy: (p as any).recorded_by,
+      recorderName: (p as any).recorded_by ? nameByUser.get((p as any).recorded_by) ?? null : null,
+      allocations: (allocsByPayment.get((p as any).id) ?? []).sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0)),
       createdAt: (p as any).created_at,
     })),
   });
@@ -518,16 +547,48 @@ export async function recordPayment(req: AuthRequest, res: Response): Promise<vo
 
   const { id } = req.params; // student_fee_id
   const { amount, paidOn, method, reference, notes } = req.body;
+  const rawAllocations = req.body.allocations;
 
   if (typeof amount !== 'number' || amount <= 0) { res.status(400).json({ error: 'amount must be a positive number' }); return; }
   if (!paidOn) { res.status(400).json({ error: 'paidOn is required' }); return; }
 
+  // Validate allocations if provided. Each entry { installmentId, amount }.
+  let allocations: { installmentId: string; amount: number }[] | null = null;
+  if (rawAllocations !== undefined && rawAllocations !== null) {
+    if (!Array.isArray(rawAllocations)) { res.status(400).json({ error: 'allocations must be an array' }); return; }
+    const cleaned: { installmentId: string; amount: number }[] = [];
+    for (const a of rawAllocations) {
+      if (!a || typeof a.installmentId !== 'string' || typeof a.amount !== 'number' || a.amount <= 0) {
+        res.status(400).json({ error: 'Each allocation needs installmentId and a positive amount' }); return;
+      }
+      cleaned.push({ installmentId: a.installmentId, amount: a.amount });
+    }
+    if (cleaned.length > 0) {
+      const sum = cleaned.reduce((s, a) => s + a.amount, 0);
+      if (Math.abs(sum - amount) > 0.01) { res.status(400).json({ error: 'Allocation amounts must sum to the payment amount' }); return; }
+      allocations = cleaned;
+    }
+  }
+
   // Verify student_fee exists in this school
   const { data: sf } = await supabase
     .from('student_fees')
-    .select('id, students(full_name, parents(user_id))')
+    .select('id, fee_plan_id, students(full_name, parents(user_id))')
     .eq('id', id).eq('school_id', schoolId).single();
   if (!sf) { res.status(404).json({ error: 'Student fee not found' }); return; }
+
+  // If allocations were provided, verify every installment belongs to this fee's plan & school
+  if (allocations && allocations.length > 0) {
+    const { data: insts } = await supabase
+      .from('fee_installments')
+      .select('id, fee_plan_id')
+      .in('id', allocations.map(a => a.installmentId))
+      .eq('school_id', schoolId);
+    const validIds = new Set((insts ?? []).filter((i: any) => i.fee_plan_id === (sf as any).fee_plan_id).map((i: any) => i.id));
+    for (const a of allocations) {
+      if (!validIds.has(a.installmentId)) { res.status(400).json({ error: 'Allocation references an installment from a different plan' }); return; }
+    }
+  }
 
   const { data, error } = await supabase.from('fee_payments').insert({
     school_id: schoolId,
@@ -541,8 +602,24 @@ export async function recordPayment(req: AuthRequest, res: Response): Promise<vo
   }).select().single();
   if (error) { res.status(500).json({ error: error.message }); return; }
 
+  if (allocations && allocations.length > 0) {
+    const { error: aErr } = await supabase.from('fee_payment_allocations').insert(
+      allocations.map(a => ({
+        school_id: schoolId,
+        fee_payment_id: data.id,
+        fee_installment_id: a.installmentId,
+        amount: a.amount,
+      })),
+    );
+    if (aErr) {
+      // Roll back the parent payment so the ledger doesn't drift
+      await supabase.from('fee_payments').delete().eq('id', data.id);
+      res.status(500).json({ error: aErr.message }); return;
+    }
+  }
+
   const studentName = (sf as { students?: { full_name?: string } }).students?.full_name;
-  await logAudit({ req, entityType: 'fee_payment', entityId: data.id, action: 'create', after: data, label: studentName });
+  await logAudit({ req, entityType: 'fee_payment', entityId: data.id, action: 'create', after: { ...data, allocations }, label: studentName });
 
   // Notify the parent that a payment was recorded
   const parentUserId = (sf as any).students?.parents?.user_id;
@@ -811,7 +888,7 @@ export async function paymentReceiptPdf(req: AuthRequest, res: Response): Promis
   const { id } = req.params; // payment id
 
   const { data: payment } = await supabase
-    .from('fee_payments').select('id, student_fee_id, amount, paid_on, method, reference, notes, created_at')
+    .from('fee_payments').select('id, student_fee_id, amount, paid_on, method, reference, notes, recorded_by, created_at')
     .eq('id', id).eq('school_id', schoolId).single();
   if (!payment) { res.status(404).json({ error: 'Payment not found' }); return; }
 
@@ -827,6 +904,24 @@ export async function paymentReceiptPdf(req: AuthRequest, res: Response): Promis
     .eq('student_fee_id', (payment as any).student_fee_id)
     .lt('created_at', (payment as any).created_at ?? new Date().toISOString());
   const paidBefore = (priorRows ?? []).reduce((s, p) => s + Number((p as any).amount), 0);
+
+  // Allocation breakdown for this specific payment
+  const { data: allocs } = await supabase
+    .from('fee_payment_allocations')
+    .select('amount, fee_installments(sequence, due_date)')
+    .eq('fee_payment_id', (payment as any).id);
+  const allocations = (allocs ?? []).map((a: any) => ({
+    sequence: a.fee_installments?.sequence ?? 0,
+    dueDate: a.fee_installments?.due_date ?? '',
+    amount: Number(a.amount),
+  })).sort((a, b) => a.sequence - b.sequence);
+
+  // Recorder full name (name only — never username, per accountant-attribution requirement)
+  let recorderName: string | null = null;
+  if ((payment as any).recorded_by) {
+    const { data: u } = await supabase.from('users').select('full_name').eq('id', (payment as any).recorded_by).single();
+    recorderName = (u as any)?.full_name ?? null;
+  }
 
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `inline; filename="receipt-${(payment as any).id.slice(0, 8)}.pdf"`);
@@ -847,6 +942,8 @@ export async function paymentReceiptPdf(req: AuthRequest, res: Response): Promis
     adjustment: ctx.adjustment,
     siblingDiscount: ctx.siblingDiscount,
     paidBefore,
+    recorderName,
+    allocations,
   });
 }
 
@@ -864,10 +961,36 @@ export async function studentFeeSummaryPdf(req: AuthRequest, res: Response): Pro
 
   const { data: payments } = await supabase
     .from('fee_payments')
-    .select('id, amount, paid_on, method, reference')
+    .select('id, amount, paid_on, method, reference, recorded_by')
     .eq('student_fee_id', id)
     .eq('school_id', schoolId)
     .order('paid_on', { ascending: true });
+
+  const paymentIds = (payments ?? []).map(p => (p as any).id);
+  const recorderIds = Array.from(new Set((payments ?? []).map(p => (p as any).recorded_by).filter(Boolean)));
+  const [{ data: allocs }, { data: users }] = await Promise.all([
+    paymentIds.length
+      ? supabase
+          .from('fee_payment_allocations')
+          .select('fee_payment_id, amount, fee_installments(sequence, due_date)')
+          .in('fee_payment_id', paymentIds)
+      : Promise.resolve({ data: [] as any[] }),
+    recorderIds.length
+      ? supabase.from('users').select('id, full_name').in('id', recorderIds)
+      : Promise.resolve({ data: [] as any[] }),
+  ]);
+  const allocsByPayment = new Map<string, { sequence: number; dueDate: string; amount: number }[]>();
+  for (const a of (allocs ?? []) as any[]) {
+    const arr = allocsByPayment.get(a.fee_payment_id) ?? [];
+    arr.push({
+      sequence: a.fee_installments?.sequence ?? 0,
+      dueDate: a.fee_installments?.due_date ?? '',
+      amount: Number(a.amount),
+    });
+    allocsByPayment.set(a.fee_payment_id, arr);
+  }
+  const nameByUser = new Map<string, string>();
+  for (const u of (users ?? []) as any[]) nameByUser.set(u.id, u.full_name);
 
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `inline; filename="tuition-statement-${id.slice(0, 8)}.pdf"`);
@@ -887,6 +1010,8 @@ export async function studentFeeSummaryPdf(req: AuthRequest, res: Response): Pro
       amount: Number((p as any).amount),
       method: (p as any).method,
       reference: (p as any).reference,
+      recorderName: (p as any).recorded_by ? nameByUser.get((p as any).recorded_by) ?? null : null,
+      allocations: (allocsByPayment.get((p as any).id) ?? []).sort((a, b) => a.sequence - b.sequence),
     })),
   });
 }
@@ -913,9 +1038,36 @@ export async function getParentFees(req: AuthRequest, res: Response): Promise<vo
   const sfIds = mine.map(r => r.id);
   const { data: payments } = await supabase
     .from('fee_payments')
-    .select('id, student_fee_id, amount, paid_on, method, reference, notes, created_at')
+    .select('id, student_fee_id, amount, paid_on, method, reference, notes, recorded_by, created_at')
     .in('student_fee_id', sfIds.length ? sfIds : ['00000000-0000-0000-0000-000000000000'])
     .order('paid_on', { ascending: false });
+
+  const paymentIds = (payments ?? []).map(p => (p as any).id);
+  const recorderIds = Array.from(new Set((payments ?? []).map(p => (p as any).recorded_by).filter(Boolean)));
+  const [{ data: allocs }, { data: users }] = await Promise.all([
+    paymentIds.length
+      ? supabase
+          .from('fee_payment_allocations')
+          .select('fee_payment_id, fee_installment_id, amount, fee_installments(sequence, due_date)')
+          .in('fee_payment_id', paymentIds)
+      : Promise.resolve({ data: [] as any[] }),
+    recorderIds.length
+      ? supabase.from('users').select('id, full_name').in('id', recorderIds)
+      : Promise.resolve({ data: [] as any[] }),
+  ]);
+  const allocsByPayment = new Map<string, any[]>();
+  for (const a of (allocs ?? []) as any[]) {
+    const arr = allocsByPayment.get(a.fee_payment_id) ?? [];
+    arr.push({
+      installmentId: a.fee_installment_id,
+      amount: Number(a.amount),
+      sequence: a.fee_installments?.sequence ?? null,
+      dueDate: a.fee_installments?.due_date ?? null,
+    });
+    allocsByPayment.set(a.fee_payment_id, arr);
+  }
+  const nameByUser = new Map<string, string>();
+  for (const u of (users ?? []) as any[]) nameByUser.set(u.id, u.full_name);
 
   const paysBySf = new Map<string, any[]>();
   for (const p of payments ?? []) {
@@ -927,6 +1079,8 @@ export async function getParentFees(req: AuthRequest, res: Response): Promise<vo
       method: (p as any).method,
       reference: (p as any).reference,
       notes: (p as any).notes,
+      recorderName: (p as any).recorded_by ? nameByUser.get((p as any).recorded_by) ?? null : null,
+      allocations: (allocsByPayment.get((p as any).id) ?? []).sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0)),
       createdAt: (p as any).created_at,
     });
     paysBySf.set((p as any).student_fee_id, arr);

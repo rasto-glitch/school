@@ -892,6 +892,21 @@ CREATE TABLE IF NOT EXISTS fee_payments (
 CREATE INDEX IF NOT EXISTS idx_fee_payments_student_fee ON fee_payments(student_fee_id, paid_on DESC);
 CREATE INDEX IF NOT EXISTS idx_fee_payments_school ON fee_payments(school_id);
 
+-- One payment can be split across multiple installments. One installment can
+-- receive multiple partial payments. Rows are optional — a payment with no
+-- allocation rows is treated as an "unallocated" lump sum.
+CREATE TABLE IF NOT EXISTS fee_payment_allocations (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  fee_payment_id UUID NOT NULL REFERENCES fee_payments(id) ON DELETE CASCADE,
+  fee_installment_id UUID NOT NULL REFERENCES fee_installments(id) ON DELETE CASCADE,
+  amount NUMERIC(12,2) NOT NULL CHECK (amount > 0),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_fpa_payment ON fee_payment_allocations(fee_payment_id);
+CREATE INDEX IF NOT EXISTS idx_fpa_installment ON fee_payment_allocations(fee_installment_id);
+CREATE INDEX IF NOT EXISTS idx_fpa_school ON fee_payment_allocations(school_id);
+
 -- ============================================================
 -- STAFF SALARIES (premium feature, gated by school.features.tuition_fees)
 -- ============================================================

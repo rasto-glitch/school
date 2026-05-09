@@ -15,6 +15,12 @@ interface Common {
   currency: string;
 }
 
+export interface PaymentAllocationLine {
+  sequence: number;
+  dueDate: string;
+  amount: number;
+}
+
 export interface PaymentReceiptData extends Common {
   receiptNumber: string;
   paidOn: string;
@@ -26,13 +32,25 @@ export interface PaymentReceiptData extends Common {
   adjustment: number;
   siblingDiscount: number;
   paidBefore: number;
+  recorderName: string | null;
+  allocations: PaymentAllocationLine[];
+}
+
+export interface YearSummaryPayment {
+  id: string;
+  paidOn: string;
+  amount: number;
+  method: string | null;
+  reference: string | null;
+  recorderName: string | null;
+  allocations: PaymentAllocationLine[];
 }
 
 export interface YearSummaryData extends Common {
   totalAmount: number;
   adjustment: number;
   siblingDiscount: number;
-  payments: { id: string; paidOn: string; amount: number; method: string | null; reference: string | null }[];
+  payments: YearSummaryPayment[];
 }
 
 // PDFKit's default font (Helvetica) handles ASCII + Latin-1 well but not
@@ -114,13 +132,30 @@ export async function streamPaymentReceipt(stream: Writable, data: PaymentReceip
   doc.font('Helvetica').fontSize(10).fillColor(COLOR_MUTED).text('Amount paid', 320, 310, { width: 235, align: 'right' });
   doc.font('Helvetica-Bold').fontSize(18).fillColor(COLOR_ACCENT).text(amountLine, 320, 320, { width: 235, align: 'right' });
 
+  // Allocation breakdown — which installment(s) this payment covers
+  let extraY = 360;
+  if (data.allocations.length > 0) {
+    doc.font('Helvetica').fontSize(10).fillColor(COLOR_MUTED).text('Applied to', 40, extraY);
+    const lines = data.allocations.map(a =>
+      `Installment ${a.sequence}${a.dueDate ? ` (due ${a.dueDate})` : ''} — ${fmt(a.amount, data.currency)}`,
+    );
+    doc.font('Helvetica-Bold').fontSize(10).fillColor(COLOR_HEADING).text(lines.join('\n'), 40, extraY + 12, { width: 515 });
+    extraY += 16 + lines.length * 14;
+  }
+
   if (data.notes) {
-    doc.font('Helvetica').fontSize(10).fillColor(COLOR_MUTED).text('Notes', 40, 360);
-    doc.font('Helvetica').fontSize(10).fillColor(COLOR_HEADING).text(data.notes, 40, 372, { width: 515 });
+    doc.font('Helvetica').fontSize(10).fillColor(COLOR_MUTED).text('Notes', 40, extraY);
+    doc.font('Helvetica').fontSize(10).fillColor(COLOR_HEADING).text(data.notes, 40, extraY + 12, { width: 515 });
+    extraY += 16 + Math.max(14, doc.heightOfString(data.notes, { width: 515 }));
+  }
+
+  if (data.recorderName) {
+    doc.font('Helvetica').fontSize(10).fillColor(COLOR_MUTED).text('Recorded by', 40, extraY);
+    doc.font('Helvetica-Bold').fontSize(10).fillColor(COLOR_HEADING).text(data.recorderName, 40, extraY + 12, { width: 515 });
   }
 
   // Balance summary
-  const yStart = 430;
+  const yStart = 470;
   doc.moveTo(40, yStart - 10).lineTo(555, yStart - 10).strokeColor(COLOR_BORDER).stroke();
   doc.font('Helvetica-Bold').fontSize(12).fillColor(COLOR_HEADING).text('Account summary', 40, yStart);
 
@@ -191,7 +226,20 @@ export async function streamYearSummary(stream: Writable, data: YearSummaryData)
       doc.text(p.method ? p.method[0].toUpperCase() + p.method.slice(1) : '—', 130, y, { width: 100 });
       doc.text(p.reference || '—', 230, y, { width: 200, ellipsis: true });
       doc.text(fmt(p.amount, data.currency), 430, y, { width: 125, align: 'right' });
-      y += 18;
+      y += 14;
+
+      // Sub-line: which installments + who recorded
+      const parts: string[] = [];
+      if (p.allocations.length > 0) {
+        parts.push(p.allocations.map(a => `Inst. ${a.sequence} ${fmt(a.amount, data.currency)}`).join(', '));
+      }
+      if (p.recorderName) parts.push(`Recorded by ${p.recorderName}`);
+      if (parts.length > 0) {
+        doc.font('Helvetica').fontSize(8).fillColor(COLOR_MUTED).text(parts.join(' · '), 40, y, { width: 515 });
+        y += 12;
+      }
+      y += 6;
+
       totalPaid += p.amount;
       if (y > 700) {
         doc.addPage();
