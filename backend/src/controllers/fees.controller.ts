@@ -531,7 +531,7 @@ export async function getStudentFee(req: AuthRequest, res: Response): Promise<vo
           .in('fee_payment_id', paymentIds)
       : Promise.resolve({ data: [] as any[] }),
     recorderIds.length
-      ? supabase.from('users').select('id, full_name').in('id', recorderIds)
+      ? supabase.from('users').select('id, first_name, last_name').in('id', recorderIds)
       : Promise.resolve({ data: [] as any[] }),
   ]);
   const allocsByPayment = new Map<string, any[]>();
@@ -546,7 +546,10 @@ export async function getStudentFee(req: AuthRequest, res: Response): Promise<vo
     allocsByPayment.set(a.fee_payment_id, arr);
   }
   const nameByUser = new Map<string, string>();
-  for (const u of (users ?? []) as any[]) nameByUser.set(u.id, u.full_name);
+  for (const u of (users ?? []) as any[]) {
+    const name = `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim();
+    if (name) nameByUser.set(u.id, name);
+  }
 
   res.json({
     ...row,
@@ -969,8 +972,11 @@ export async function paymentReceiptPdf(req: AuthRequest, res: Response): Promis
   // Recorder full name (name only — never username, per accountant-attribution requirement)
   let recorderName: string | null = null;
   if ((payment as any).recorded_by) {
-    const { data: u } = await supabase.from('users').select('full_name').eq('id', (payment as any).recorded_by).single();
-    recorderName = (u as any)?.full_name ?? null;
+    const { data: u } = await supabase.from('users').select('first_name, last_name').eq('id', (payment as any).recorded_by).single();
+    if (u) {
+      const joined = `${(u as any).first_name ?? ''} ${(u as any).last_name ?? ''}`.trim();
+      recorderName = joined || null;
+    }
   }
 
   res.setHeader('Content-Type', 'application/pdf');
@@ -1028,7 +1034,7 @@ export async function studentFeeSummaryPdf(req: AuthRequest, res: Response): Pro
           .in('fee_payment_id', paymentIds)
       : Promise.resolve({ data: [] as any[] }),
     recorderIds.length
-      ? supabase.from('users').select('id, full_name').in('id', recorderIds)
+      ? supabase.from('users').select('id, first_name, last_name').in('id', recorderIds)
       : Promise.resolve({ data: [] as any[] }),
   ]);
   const allocsByPayment = new Map<string, { sequence: number; dueDate: string; amount: number }[]>();
@@ -1042,7 +1048,10 @@ export async function studentFeeSummaryPdf(req: AuthRequest, res: Response): Pro
     allocsByPayment.set(a.fee_payment_id, arr);
   }
   const nameByUser = new Map<string, string>();
-  for (const u of (users ?? []) as any[]) nameByUser.set(u.id, u.full_name);
+  for (const u of (users ?? []) as any[]) {
+    const name = `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim();
+    if (name) nameByUser.set(u.id, name);
+  }
 
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `inline; filename="tuition-statement-${id.slice(0, 8)}.pdf"`);
@@ -1114,7 +1123,7 @@ export async function getParentFees(req: AuthRequest, res: Response): Promise<vo
           .in('fee_payment_id', paymentIds)
       : Promise.resolve({ data: [] as any[] }),
     recorderIds.length
-      ? supabase.from('users').select('id, full_name').in('id', recorderIds)
+      ? supabase.from('users').select('id, first_name, last_name').in('id', recorderIds)
       : Promise.resolve({ data: [] as any[] }),
   ]);
   const allocsByPayment = new Map<string, any[]>();
@@ -1129,7 +1138,10 @@ export async function getParentFees(req: AuthRequest, res: Response): Promise<vo
     allocsByPayment.set(a.fee_payment_id, arr);
   }
   const nameByUser = new Map<string, string>();
-  for (const u of (users ?? []) as any[]) nameByUser.set(u.id, u.full_name);
+  for (const u of (users ?? []) as any[]) {
+    const name = `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim();
+    if (name) nameByUser.set(u.id, name);
+  }
 
   const paysBySf = new Map<string, any[]>();
   for (const p of payments ?? []) {
