@@ -48,6 +48,7 @@ export function createRouter(io: SocketServer) {
   router.get('/admin/students/:id/brief', authenticate, authorize('admin'), (req, res) => admin.getStudentBrief(req as AuthRequest, res));
   router.post('/admin/students/:id/archive', authenticate, authorize('admin'), (req, res) => admin.archiveStudent(req as AuthRequest, res));
   router.get('/admin/archived-students', authenticate, authorize('admin'), (req, res) => admin.getArchivedStudents(req as AuthRequest, res));
+  router.get('/admin/archived-students/search', authenticate, authorize('admin'), (req, res) => admin.searchArchivedStudents(req as AuthRequest, res));
   router.get('/admin/archived-students/:id', authenticate, authorize('admin'), (req, res) => admin.getArchivedStudent(req as AuthRequest, res));
   router.get('/admin/archive/export.pdf', authenticate, authorize('admin'), (req, res) => admin.exportArchivePdf(req as AuthRequest, res));
   router.get('/admin/archive/export.xlsx', authenticate, authorize('admin'), (req, res) => admin.exportArchiveXlsx(req as AuthRequest, res));
@@ -86,6 +87,8 @@ export function createRouter(io: SocketServer) {
   router.get('/admin/accounts/credentials.pdf', authenticate, authorize('admin'), (req, res) => admin.exportCredentialsPdf(req as AuthRequest, res));
   router.get('/admin/reset-requests', authenticate, authorize('admin'), (req, res) => admin.getResetRequests(req as AuthRequest, res));
   router.post('/admin/users/:userId/reset-password', authenticate, authorize('admin'), (req, res) => admin.resetUserPassword(req as AuthRequest, res));
+  router.get('/admin/users/inactive/search', authenticate, authorize('admin'), (req, res) => admin.searchInactiveUsers(req as AuthRequest, res));
+  router.post('/admin/users/:userId/reactivate', authenticate, authorize('admin'), (req, res) => admin.reactivateUser(req as AuthRequest, res));
 
   router.get('/admin/appointments/pending-count', authenticate, authorize('admin'), (req, res) => admin.getPendingAppointmentCount(req as AuthRequest, res));
   router.get('/admin/appointments', authenticate, authorize('admin'), (req, res) => admin.getAppointments(req as AuthRequest, res));

@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
-import { Search, User } from 'lucide-react';
+import { Search, User, History } from 'lucide-react';
 import { adminApi } from '../../services/api';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
@@ -10,6 +10,18 @@ import EmptyState from '../../components/common/EmptyState';
 import type { Student, Report, Grade, Mark } from '../../types';
 import { format, parseISO, differenceInYears } from 'date-fns';
 
+interface ArchivedSnapshot {
+  id: string;
+  fullName: string;
+  dateOfBirth: string | null;
+  enrollmentDate: string | null;
+  departureDate: string;
+  reason: string;
+  parentFullName: string | null;
+  parentPhone: string | null;
+  classesAttended: { year: string; classId: string; className: string }[];
+}
+
 export default function StudentBriefPage() {
   const [searchParams] = useSearchParams();
   const [students, setStudents] = useState<Student[]>([]);
@@ -17,6 +29,7 @@ export default function StudentBriefPage() {
   const [selectedSubject, setSelectedSubject] = useState('');
   const [selectedYear, setSelectedYear] = useState('');
   const [brief, setBrief] = useState<{ student: any; reports: Report[]; grades: Grade[] } | null>(null);
+  const [previousEnrollment, setPreviousEnrollment] = useState<ArchivedSnapshot | null>(null);
   const [search, setSearch] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -27,12 +40,21 @@ export default function StudentBriefPage() {
   }, []);
 
   useEffect(() => {
-    if (!selectedStudentId) { setBrief(null); return; }
+    if (!selectedStudentId) { setBrief(null); setPreviousEnrollment(null); return; }
     setLoading(true);
     setSelectedYear('');
     setSelectedSubject('');
+    setPreviousEnrollment(null);
     adminApi.getStudentBrief(selectedStudentId)
-      .then(r => setBrief(r.data))
+      .then(r => {
+        setBrief(r.data);
+        const archiveId = r.data?.student?.previousArchiveId;
+        if (archiveId) {
+          adminApi.getArchivedStudent(archiveId)
+            .then(a => setPreviousEnrollment(a.data as ArchivedSnapshot))
+            .catch(() => setPreviousEnrollment(null));
+        }
+      })
       .finally(() => setLoading(false));
   }, [selectedStudentId]);
 
@@ -237,6 +259,31 @@ export default function StudentBriefPage() {
                 </div>
               </div>
             </Card>
+
+            {previousEnrollment && (
+              <Card>
+                <div className="flex items-start gap-3">
+                  <div className="p-2 rounded-lg bg-amber-100 flex-shrink-0">
+                    <History className="w-4 h-4 text-amber-700" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-gray-900">Previous enrollment</div>
+                    <div className="text-sm text-gray-700 mt-0.5">
+                      {previousEnrollment.fullName} · {previousEnrollment.reason} on {previousEnrollment.departureDate}
+                      {previousEnrollment.classesAttended.length > 0 && (
+                        <> · last class: {previousEnrollment.classesAttended[previousEnrollment.classesAttended.length - 1].className}</>
+                      )}
+                    </div>
+                    <div className="text-xs text-gray-500 mt-0.5">
+                      {previousEnrollment.parentFullName && <>Parent on file: {previousEnrollment.parentFullName}{previousEnrollment.parentPhone && ` · ${previousEnrollment.parentPhone}`}</>}
+                    </div>
+                    <Link to={`/admin/archive?id=${previousEnrollment.id}`} className="inline-block mt-2 text-sm text-primary-600 font-medium hover:underline">
+                      View full archived record →
+                    </Link>
+                  </div>
+                </div>
+              </Card>
+            )}
 
             {/* Grades */}
             <div>

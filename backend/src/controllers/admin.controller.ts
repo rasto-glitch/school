@@ -42,7 +42,20 @@ export async function getStudents(req: AuthRequest, res: Response): Promise<void
 
 export async function createStudent(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
-  const { fullName, parentId, classId, driverId, homeAddress, emergencyContact, phoneNumber, dateOfBirth, residenceType, blockNumber } = req.body;
+  const { fullName, parentId, classId, driverId, homeAddress, emergencyContact, phoneNumber, dateOfBirth, residenceType, blockNumber, previousArchiveId } = req.body;
+
+  // If linking to a previously-archived enrollment, verify the archive row belongs to this school.
+  let resolvedPreviousArchiveId: string | null = null;
+  if (previousArchiveId) {
+    const { data: archive } = await supabase
+      .from('archived_students')
+      .select('id')
+      .eq('id', previousArchiveId)
+      .eq('school_id', schoolId)
+      .single();
+    if (!archive) { res.status(400).json({ error: 'Archived student record not found' }); return; }
+    resolvedPreviousArchiveId = previousArchiveId;
+  }
 
   let resolvedParentId: string | null = parentId || null;
   let parentAccountCreated: { username: string; password: string; fullName: string } | null = null;
@@ -148,6 +161,7 @@ export async function createStudent(req: AuthRequest, res: Response): Promise<vo
     emergency_contact: emergencyContact,
     phone_number: phoneNumber,
     date_of_birth: dateOfBirth || null,
+    previous_archive_id: resolvedPreviousArchiveId,
   }).select().single();
 
   if (error) { res.status(500).json({ error: error.message }); return; }
@@ -823,6 +837,33 @@ export async function getArchivedStudent(req: AuthRequest, res: Response): Promi
 
   if (error || !data) { res.status(404).json({ error: 'Archived record not found' }); return; }
   res.json(toCC(data));
+}
+
+// Search archived students for the "returning student" prompt on the
+// add-student form. Fuzzy-matches by name (and optional date of birth).
+// Returns a small candidate list so the admin can pick one to link.
+export async function searchArchivedStudents(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  if (!(await hasArchiveFeature(schoolId))) {
+    res.json([]);
+    return;
+  }
+  const name = String(req.query.name ?? '').trim();
+  const dob = String(req.query.dob ?? '').trim();
+  if (name.length < 2) { res.json([]); return; }
+
+  let query = supabase
+    .from('archived_students')
+    .select('id, full_name, date_of_birth, departure_date, reason, parent_full_name, parent_phone, classes_attended')
+    .eq('school_id', schoolId)
+    .ilike('full_name', `%${name}%`)
+    .order('departure_date', { ascending: false })
+    .limit(8);
+  if (dob) query = query.eq('date_of_birth', dob);
+
+  const { data, error } = await query;
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json(toCC(data ?? []));
 }
 
 // ---- CLASSES ----
@@ -1986,6 +2027,67 @@ export async function resetUserPassword(req: AuthRequest, res: Response): Promis
     .eq('user_id', userId).eq('school_id', schoolId).eq('status', 'pending');
   notify({ schoolId, userId: userId as string, title: 'Password Reset', message: 'Your password has been reset by the school administrator. Please log in with your new credentials.', type: 'system' }).catch(() => {});
   res.json({ message: 'Password reset successfully' });
+}
+
+// Search inactive (is_active = false) users by name + role for the
+// "returning teacher / driver / parent" prompt on the create-staff form.
+// Returns a small candidate list so the admin can pick one to reactivate.
+export async function searchInactiveUsers(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const name = String(req.query.name ?? '').trim();
+  const role = String(req.query.role ?? '').trim();
+  if (name.length < 2 || !role) { res.json([]); return; }
+  if (!['teacher', 'driver', 'parent', 'supervisor', 'reception', 'accountant'].includes(role)) {
+    res.status(400).json({ error: 'Invalid role' }); return;
+  }
+
+  const { data, error } = await supabase
+    .from('users')
+    .select('id, first_name, last_name, username, role, is_active')
+    .eq('school_id', schoolId)
+    .eq('role', role)
+    .eq('is_active', false)
+    .or(`first_name.ilike.%${name}%,last_name.ilike.%${name}%,username.ilike.%${name}%`)
+    .limit(8);
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json(toCC(data ?? []));
+}
+
+// Reactivate a previously deactivated user (returning teacher/driver/parent etc).
+// Flips is_active = true and bumps password_changed_at so existing tokens are
+// invalidated. Caller may pass `newPassword` to set fresh credentials at the
+// same time; otherwise a separate reset must follow.
+export async function reactivateUser(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { userId } = req.params;
+  const { newPassword } = req.body as { newPassword?: string };
+
+  const { data: user } = await supabase
+    .from('users')
+    .select('id, username, first_name, last_name, role, is_active')
+    .eq('id', userId).eq('school_id', schoolId).single();
+  if (!user) { res.status(404).json({ error: 'User not found' }); return; }
+  if (user.is_active) { res.status(409).json({ error: 'User is already active' }); return; }
+
+  const updates: Record<string, unknown> = {
+    is_active: true,
+    password_changed_at: new Date().toISOString(),
+  };
+  if (newPassword) {
+    if (newPassword.length < 6) { res.status(400).json({ error: 'Password must be at least 6 characters' }); return; }
+    const rounds = parseInt(process.env.BCRYPT_ROUNDS || '10');
+    updates.password_hash = await bcrypt.hash(newPassword, rounds);
+  }
+
+  const { error } = await supabase.from('users').update(updates).eq('id', userId).eq('school_id', schoolId);
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json({
+    message: 'User reactivated',
+    username: user.username,
+    fullName: `${user.first_name ?? ''} ${user.last_name ?? ''}`.trim(),
+    role: user.role,
+    passwordReset: !!newPassword,
+  });
 }
 
 // ---- SCHOOL SETTINGS ----

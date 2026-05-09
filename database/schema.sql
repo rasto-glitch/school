@@ -997,3 +997,33 @@ CREATE INDEX IF NOT EXISTS idx_staff_salary_payments_voided ON staff_salary_paym
 -- ============================================================
 ALTER TABLE students ADD COLUMN IF NOT EXISTS previous_archive_id UUID REFERENCES archived_students(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS idx_students_previous_archive ON students(previous_archive_id) WHERE previous_archive_id IS NOT NULL;
+
+-- ============================================================
+-- VOID RETENTION CLEANUP
+-- Hard-deletes voided records older than the retention window.
+-- Audit log rows persist independently, so the paper trail outlives the row.
+-- Runs nightly at 03:15 UTC via pg_cron. Window is 30 days; change the
+-- `INTERVAL '30 days'` literal in the function body to adjust.
+-- ============================================================
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+
+CREATE OR REPLACE FUNCTION cleanup_voided_records() RETURNS void AS $$
+BEGIN
+  DELETE FROM fee_payments         WHERE voided_at IS NOT NULL AND voided_at < NOW() - INTERVAL '30 days';
+  DELETE FROM fee_plans            WHERE voided_at IS NOT NULL AND voided_at < NOW() - INTERVAL '30 days';
+  DELETE FROM staff_salary_payments WHERE voided_at IS NOT NULL AND voided_at < NOW() - INTERVAL '30 days';
+  DELETE FROM staff_members        WHERE voided_at IS NOT NULL AND voided_at < NOW() - INTERVAL '30 days';
+END;
+$$ LANGUAGE plpgsql;
+
+-- Drop any earlier registration so re-running this script reschedules cleanly.
+DO $$
+DECLARE jobid BIGINT;
+BEGIN
+  SELECT cron.jobid INTO jobid FROM cron.job WHERE jobname = 'cleanup_voided_records';
+  IF jobid IS NOT NULL THEN
+    PERFORM cron.unschedule(jobid);
+  END IF;
+END $$;
+
+SELECT cron.schedule('cleanup_voided_records', '15 3 * * *', $$SELECT cleanup_voided_records();$$);

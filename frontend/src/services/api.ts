@@ -152,6 +152,8 @@ export const adminApi = {
   archiveStudent: (id: string, data: { reason: string; departureDate: string }) => api.post(`/admin/students/${id}/archive`, data),
   getArchivedStudents: (search?: string) => api.get('/admin/archived-students', { params: search ? { search } : {} }),
   getArchivedStudent: (id: string) => api.get(`/admin/archived-students/${id}`),
+  searchArchivedStudents: (name: string, dob?: string) =>
+    api.get('/admin/archived-students/search', { params: { name, ...(dob ? { dob } : {}) } }),
   exportArchivePdf: () => api.get('/admin/archive/export.pdf', { responseType: 'blob' }),
   exportArchiveXlsx: () => api.get('/admin/archive/export.xlsx', { responseType: 'blob' }),
   getParents: () => api.get('/admin/parents'),
@@ -185,6 +187,10 @@ export const adminApi = {
   getResetRequests: () => api.get('/admin/reset-requests'),
   resetUserPassword: (userId: string, newPassword: string) =>
     api.post(`/admin/users/${userId}/reset-password`, { newPassword }),
+  searchInactiveUsers: (name: string, role: 'teacher' | 'driver' | 'parent' | 'supervisor' | 'reception' | 'accountant') =>
+    api.get('/admin/users/inactive/search', { params: { name, role } }),
+  reactivateUser: (userId: string, newPassword?: string) =>
+    api.post(`/admin/users/${userId}/reactivate`, newPassword ? { newPassword } : {}),
   getPendingAppointmentCount: () => api.get('/admin/appointments/pending-count'),
   getAppointments: () => api.get('/admin/appointments'),
   respondToAppointment: (id: string, data: object) => api.put(`/admin/appointments/${id}`, data),

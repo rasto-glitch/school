@@ -1,14 +1,17 @@
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'react-toastify';
-import { Search } from 'lucide-react';
+import { Search, History } from 'lucide-react';
 import { adminApi } from '../../services/api';
+import { useDebounce } from '../../hooks/useDebounce';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
 import Input from '../../components/common/Input';
 import Select from '../../components/common/Select';
 import Button from '../../components/common/Button';
 import type { Class, Driver, Student } from '../../types';
+
+interface InactiveUser { id: string; firstName: string; lastName: string; username: string; role: string; }
 
 export default function DriversManagement() {
   const [drivers, setDrivers] = useState<Driver[]>([]);
@@ -22,6 +25,11 @@ export default function DriversManagement() {
 
   const addForm = useForm<{ fullName: string; phoneNumber: string; emergencyContact: string; licenseNumber: string; busNumber: string; age: string; username: string; password: string; vehicleType: string }>();
   const editForm = useForm<{ fullName: string; phoneNumber: string; emergencyContact: string; licenseNumber: string; busNumber: string; age: string; remove: boolean; vehicleType: string }>();
+
+  const watchedAddName = addForm.watch('fullName');
+  const debouncedAddName = useDebounce(watchedAddName ?? '', 350);
+  const [inactiveMatches, setInactiveMatches] = useState<InactiveUser[]>([]);
+  const [reactivatingId, setReactivatingId] = useState<string | null>(null);
   const [addStudentIds, setAddStudentIds] = useState<string[]>([]);
   const [editStudentIds, setEditStudentIds] = useState<string[]>([]);
   const [editStudentsDirty, setEditStudentsDirty] = useState(false);
@@ -36,6 +44,31 @@ export default function DriversManagement() {
     adminApi.getClasses().then(r => setClasses(r.data || []));
   };
   useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    const name = (debouncedAddName ?? '').trim();
+    if (name.length < 2) { setInactiveMatches([]); return; }
+    adminApi.searchInactiveUsers(name, 'driver')
+      .then(r => setInactiveMatches((r.data ?? []) as InactiveUser[]))
+      .catch(() => setInactiveMatches([]));
+  }, [debouncedAddName]);
+
+  const reactivateInactive = async (u: InactiveUser) => {
+    if (!confirm(`Reactivate ${u.firstName} ${u.lastName} (${u.username})?`)) return;
+    const newPassword = prompt('Set a new password (or leave blank to keep the existing one):', '');
+    if (newPassword === null) return;
+    setReactivatingId(u.id);
+    try {
+      const r = await adminApi.reactivateUser(u.id, newPassword.trim() || undefined);
+      const tail = r.data?.passwordReset ? ` New password: ${newPassword}` : '';
+      toast.success(`Driver reactivated. Login: ${u.username}.${tail}`, { autoClose: 8000 });
+      addForm.reset();
+      setInactiveMatches([]);
+      load();
+    } catch (e: any) {
+      toast.error(e.response?.data?.error || 'Failed to reactivate');
+    } finally { setReactivatingId(null); }
+  };
 
   useEffect(() => {
     if (!selectedDriverId) return;
@@ -192,6 +225,28 @@ export default function DriversManagement() {
           <h2 className="font-semibold text-gray-900 mb-4">Add Driver</h2>
           <form onSubmit={addForm.handleSubmit(onAdd)} className="space-y-3">
             <Input placeholder="Full Name" {...addForm.register('fullName', { required: true })} />
+            {inactiveMatches.length > 0 && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                <div className="flex items-center gap-2 text-sm text-amber-900 font-medium mb-2">
+                  <History className="w-4 h-4" /> Previously deactivated match{inactiveMatches.length > 1 ? 'es' : ''}
+                </div>
+                <div className="space-y-1.5">
+                  {inactiveMatches.map(u => (
+                    <button
+                      key={u.id}
+                      type="button"
+                      onClick={() => reactivateInactive(u)}
+                      disabled={reactivatingId === u.id}
+                      className="w-full text-left bg-white hover:bg-amber-100 border border-amber-200 rounded px-3 py-2 text-sm disabled:opacity-50"
+                    >
+                      <div className="font-medium text-gray-900">{u.firstName} {u.lastName}</div>
+                      <div className="text-xs text-gray-600">{u.username} · click to reactivate</div>
+                    </button>
+                  ))}
+                </div>
+                <div className="text-xs text-amber-700 mt-2">If this is a returning driver, click their record to reactivate. Otherwise just continue filling in the form for a new driver.</div>
+              </div>
+            )}
             <Input placeholder="Primary Phone Number" {...addForm.register('phoneNumber')} />
             <Input placeholder="Emergency Contact" {...addForm.register('emergencyContact')} />
             <Input placeholder="Licence Number" {...addForm.register('licenseNumber')} />

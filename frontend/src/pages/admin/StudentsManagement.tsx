@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'react-toastify';
-import { Search, Paperclip } from 'lucide-react';
+import { Search, Paperclip, History, X } from 'lucide-react';
 import { adminApi } from '../../services/api';
 import { useDebounce } from '../../hooks/useDebounce';
 import { useAuthStore } from '../../store/authStore';
@@ -13,6 +13,16 @@ import Button from '../../components/common/Button';
 import type { Student, Class } from '../../types';
 
 interface Parent { id: string; fullName: string; phoneNumber?: string; }
+
+interface ArchivedCandidate {
+  id: string;
+  fullName: string;
+  dateOfBirth: string | null;
+  departureDate: string;
+  reason: string;
+  parentFullName: string | null;
+  parentPhone: string | null;
+}
 
 export default function StudentsManagement() {
   const archiveEnabled = useAuthStore(s => s.school?.features?.archive === true);
@@ -36,6 +46,15 @@ export default function StudentsManagement() {
   const addForm = useForm<{ fullName: string; parentId: string; phoneNumber: string; emergencyContact: string; homeAddress: string; classId: string; dateOfBirth: string; residenceType: string; blockNumber: string }>();
   const editForm = useForm<{ fullName: string; parentId: string; phoneNumber: string; emergencyContact: string; homeAddress: string; classId: string; dateOfBirth: string; residenceType: string; blockNumber: string }>();
 
+  // Returning-student search: as the admin types the name, surface archived
+  // matches so they can link the new record to a previous enrollment.
+  const watchedName = addForm.watch('fullName');
+  const watchedDob = addForm.watch('dateOfBirth');
+  const debouncedAddName = useDebounce(watchedName ?? '', 350);
+  const [archivedMatches, setArchivedMatches] = useState<ArchivedCandidate[]>([]);
+  const [linkedArchiveId, setLinkedArchiveId] = useState<string | null>(null);
+  const [linkedArchiveLabel, setLinkedArchiveLabel] = useState<string>('');
+
   const debouncedSearch = useDebounce(search, 400);
 
   const load = () => {
@@ -50,6 +69,28 @@ export default function StudentsManagement() {
     adminApi.getParents().then(r => setParents(r.data || []));
   }, []);
   useEffect(() => { load(); }, [debouncedSearch, classFilter]);
+
+  // Once linked, don't keep searching — the admin already chose a candidate.
+  useEffect(() => {
+    if (!archiveEnabled || linkedArchiveId) { setArchivedMatches([]); return; }
+    const name = (debouncedAddName ?? '').trim();
+    if (name.length < 2) { setArchivedMatches([]); return; }
+    adminApi.searchArchivedStudents(name, watchedDob || undefined)
+      .then(r => setArchivedMatches((r.data ?? []) as ArchivedCandidate[]))
+      .catch(() => setArchivedMatches([]));
+  }, [debouncedAddName, watchedDob, archiveEnabled, linkedArchiveId]);
+
+  const linkArchiveCandidate = (c: ArchivedCandidate) => {
+    addForm.setValue('fullName', c.fullName);
+    if (c.dateOfBirth) addForm.setValue('dateOfBirth', c.dateOfBirth);
+    setLinkedArchiveId(c.id);
+    setLinkedArchiveLabel(`${c.fullName} · departed ${c.departureDate}`);
+    setArchivedMatches([]);
+  };
+  const clearArchiveLink = () => {
+    setLinkedArchiveId(null);
+    setLinkedArchiveLabel('');
+  };
 
   useEffect(() => {
     if (!editStudentId) return;
@@ -81,6 +122,7 @@ export default function StudentsManagement() {
         dateOfBirth: data.dateOfBirth || undefined,
         residenceType: data.residenceType || undefined,
         blockNumber: data.blockNumber || undefined,
+        previousArchiveId: linkedArchiveId || undefined,
       });
       if (data.parentId && (data.residenceType || data.blockNumber)) {
         await adminApi.updateParent(data.parentId, { residenceType: data.residenceType || null, blockNumber: data.blockNumber || null }).catch(() => {});
@@ -93,6 +135,7 @@ export default function StudentsManagement() {
         toast.success('Student added!');
       }
       addForm.reset();
+      clearArchiveLink();
       load();
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Failed to add student');
@@ -240,6 +283,42 @@ export default function StudentsManagement() {
             <h2 className="font-bold text-gray-900 mb-4 text-center">Add Student</h2>
             <form onSubmit={addForm.handleSubmit(onAdd)} className="space-y-3">
               <Input placeholder="Full Name" {...addForm.register('fullName', { required: true })} />
+              {linkedArchiveId ? (
+                <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm">
+                  <History className="w-4 h-4 text-amber-700 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-amber-900">Linking to previous enrollment</div>
+                    <div className="text-amber-800 truncate">{linkedArchiveLabel}</div>
+                  </div>
+                  <button type="button" onClick={clearArchiveLink} className="p-1 text-amber-700 hover:bg-amber-100 rounded">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : archivedMatches.length > 0 ? (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2 text-sm text-amber-900 font-medium mb-2">
+                    <History className="w-4 h-4" /> Previously archived match{archivedMatches.length > 1 ? 'es' : ''}
+                  </div>
+                  <div className="space-y-1.5">
+                    {archivedMatches.map(c => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => linkArchiveCandidate(c)}
+                        className="w-full text-left bg-white hover:bg-amber-100 border border-amber-200 rounded px-3 py-2 text-sm"
+                      >
+                        <div className="font-medium text-gray-900">{c.fullName}</div>
+                        <div className="text-xs text-gray-600">
+                          {c.dateOfBirth && <>DOB {c.dateOfBirth} · </>}
+                          {c.reason} on {c.departureDate}
+                          {c.parentFullName && <> · parent {c.parentFullName}</>}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="text-xs text-amber-700 mt-2">Click a match if this is a returning student. Otherwise just keep typing.</div>
+                </div>
+              ) : null}
               <Select options={parents.map(p => ({ value: p.id, label: p.fullName }))} placeholder="Select Parent / Guardian" {...addForm.register('parentId')} />
               <Input placeholder="Primary Phone Number" {...addForm.register('phoneNumber')} />
               <Input placeholder="Emergency Contact" {...addForm.register('emergencyContact')} />
