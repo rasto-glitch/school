@@ -194,6 +194,8 @@ export function createRouter(io: SocketServer) {
   router.post('/accounting/plans', authenticate, authorize(...accountingRW), (req, res) => fees.createPlan(req as AuthRequest, res));
   router.put('/accounting/plans/:id', authenticate, authorize(...accountingRW), (req, res) => fees.updatePlan(req as AuthRequest, res));
   router.delete('/accounting/plans/:id', authenticate, authorize(...accountingRW), (req, res) => fees.deletePlan(req as AuthRequest, res));
+  router.post('/accounting/plans/:id/unvoid', authenticate, authorize(...accountingRW), (req, res) => fees.unvoidPlan(req as AuthRequest, res));
+  router.get('/accounting/plans/voided', authenticate, authorize(...accountingRW), (req, res) => fees.listVoidedPlans(req as AuthRequest, res));
   router.post('/accounting/plans/:id/assign', authenticate, authorize(...accountingRW), (req, res) => fees.assignPlan(req as AuthRequest, res));
 
   router.get('/accounting/students', authenticate, authorize(...accountingRO), (req, res) => fees.listStudentFees(req as AuthRequest, res));
@@ -202,6 +204,8 @@ export function createRouter(io: SocketServer) {
   router.patch('/accounting/student-fees/:id', authenticate, authorize(...accountingRW), (req, res) => fees.updateStudentFee(req as AuthRequest, res));
   router.post('/accounting/student-fees/:id/payments', authenticate, authorize(...accountingRW), (req, res) => fees.recordPayment(req as AuthRequest, res));
   router.delete('/accounting/payments/:id', authenticate, authorize(...accountingRW), (req, res) => fees.deletePayment(req as AuthRequest, res));
+  router.post('/accounting/payments/:id/unvoid', authenticate, authorize(...accountingRW), (req, res) => fees.unvoidPayment(req as AuthRequest, res));
+  router.get('/accounting/payments/voided', authenticate, authorize(...accountingRW), (req, res) => fees.listVoidedPayments(req as AuthRequest, res));
 
   router.get('/accounting/setup', authenticate, authorize(...accountingRW), (req, res) => fees.getAccountingSetup(req as AuthRequest, res));
   router.get('/accounting/config', authenticate, authorize(...accountingRO), (req, res) => fees.getConfig(req as AuthRequest, res));
@@ -231,9 +235,13 @@ export function createRouter(io: SocketServer) {
   router.post('/accounting/staff', authenticate, authorize(...accountingRW), (req, res) => staff.createStaff(req as AuthRequest, res));
   router.put('/accounting/staff/:id', authenticate, authorize(...accountingRW), (req, res) => staff.updateStaff(req as AuthRequest, res));
   router.delete('/accounting/staff/:id', authenticate, authorize(...accountingRW), (req, res) => staff.deleteStaff(req as AuthRequest, res));
+  router.get('/accounting/staff/voided', authenticate, authorize(...accountingRW), (req, res) => staff.listVoidedStaff(req as AuthRequest, res));
+  router.post('/accounting/staff/:id/unvoid', authenticate, authorize(...accountingRW), (req, res) => staff.unvoidStaff(req as AuthRequest, res));
   router.get('/accounting/staff/:id/payments', authenticate, authorize(...accountingRW), (req, res) => staff.listStaffPayments(req as AuthRequest, res));
   router.post('/accounting/staff/:id/payments', authenticate, authorize(...accountingRW), (req, res) => staff.recordStaffPayment(req as AuthRequest, res));
   router.delete('/accounting/staff-payments/:id', authenticate, authorize(...accountingRW), (req, res) => staff.deleteStaffPayment(req as AuthRequest, res));
+  router.post('/accounting/staff-payments/:id/unvoid', authenticate, authorize(...accountingRW), (req, res) => staff.unvoidStaffPayment(req as AuthRequest, res));
+  router.get('/accounting/staff-payments/voided', authenticate, authorize(...accountingRW), (req, res) => staff.listVoidedStaffPayments(req as AuthRequest, res));
   // Static paths first so they aren't shadowed by the :id routes below.
   router.post('/accounting/staff/notify-due-all', authenticate, authorize(...accountingRW), (req, res) => staff.notifyAllStaffDue(req as AuthRequest, res));
   router.post('/accounting/staff/bulk-next-payment', authenticate, authorize(...accountingRW), (req, res) => staff.bulkSetNextPaymentDate(req as AuthRequest, res));

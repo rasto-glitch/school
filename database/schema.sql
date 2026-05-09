@@ -963,3 +963,37 @@ ALTER TABLE staff_salary_payments ADD COLUMN IF NOT EXISTS insurance_amount NUME
 ALTER TABLE staff_salary_payments ADD COLUMN IF NOT EXISTS insurance_percentage NUMERIC(5,2);
 CREATE INDEX IF NOT EXISTS idx_staff_salary_payments_staff ON staff_salary_payments(staff_id, paid_on DESC);
 CREATE INDEX IF NOT EXISTS idx_staff_salary_payments_school ON staff_salary_payments(school_id);
+
+-- ============================================================
+-- VOID / SOFT-DELETE COLUMNS
+-- Replace hard DELETE on financial + staff records with reversible "void".
+-- Reads must filter `voided_at IS NULL` to hide voided rows from normal views.
+-- A retention cron (see below) hard-deletes after the configured window.
+-- ============================================================
+ALTER TABLE fee_plans              ADD COLUMN IF NOT EXISTS voided_at   TIMESTAMPTZ;
+ALTER TABLE fee_plans              ADD COLUMN IF NOT EXISTS voided_by   UUID REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE fee_plans              ADD COLUMN IF NOT EXISTS void_reason TEXT;
+CREATE INDEX IF NOT EXISTS idx_fee_plans_voided ON fee_plans(school_id, voided_at) WHERE voided_at IS NOT NULL;
+
+ALTER TABLE fee_payments           ADD COLUMN IF NOT EXISTS voided_at   TIMESTAMPTZ;
+ALTER TABLE fee_payments           ADD COLUMN IF NOT EXISTS voided_by   UUID REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE fee_payments           ADD COLUMN IF NOT EXISTS void_reason TEXT;
+CREATE INDEX IF NOT EXISTS idx_fee_payments_voided ON fee_payments(school_id, voided_at) WHERE voided_at IS NOT NULL;
+
+ALTER TABLE staff_members          ADD COLUMN IF NOT EXISTS voided_at   TIMESTAMPTZ;
+ALTER TABLE staff_members          ADD COLUMN IF NOT EXISTS voided_by   UUID REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE staff_members          ADD COLUMN IF NOT EXISTS void_reason TEXT;
+CREATE INDEX IF NOT EXISTS idx_staff_members_voided ON staff_members(school_id, voided_at) WHERE voided_at IS NOT NULL;
+
+ALTER TABLE staff_salary_payments  ADD COLUMN IF NOT EXISTS voided_at   TIMESTAMPTZ;
+ALTER TABLE staff_salary_payments  ADD COLUMN IF NOT EXISTS voided_by   UUID REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE staff_salary_payments  ADD COLUMN IF NOT EXISTS void_reason TEXT;
+CREATE INDEX IF NOT EXISTS idx_staff_salary_payments_voided ON staff_salary_payments(school_id, voided_at) WHERE voided_at IS NOT NULL;
+
+-- ============================================================
+-- STUDENT RE-ENROLLMENT LINK
+-- When an archived student returns, the new students row links back to the
+-- archived snapshot so admins can view the previous enrollment history.
+-- ============================================================
+ALTER TABLE students ADD COLUMN IF NOT EXISTS previous_archive_id UUID REFERENCES archived_students(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_students_previous_archive ON students(previous_archive_id) WHERE previous_archive_id IS NOT NULL;

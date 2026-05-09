@@ -79,6 +79,7 @@ async function fetchStaffWithLastPayment(schoolId: string): Promise<{ active: un
     .from('staff_members')
     .select('id, school_id, user_id, full_name, position, salary_amount, currency, next_payment_date, is_active, insurance_percentage, insurance_paid_out, insurance_paid_out_at, insurance_paid_out_amount, insurance_paid_out_currency, insurance_paid_out_notes, created_at, users(is_active)')
     .eq('school_id', schoolId)
+    .is('voided_at', null)
     .order('is_active', { ascending: false })
     .order('next_payment_date', { ascending: true, nullsFirst: false })
     .order('full_name');
@@ -92,6 +93,7 @@ async function fetchStaffWithLastPayment(schoolId: string): Promise<{ active: un
     .from('staff_salary_payments')
     .select('staff_id, amount, currency, paid_on, period_label, insurance_amount')
     .in('staff_id', ids)
+    .is('voided_at', null)
     .order('paid_on', { ascending: false });
 
   const lastByStaff = new Map<string, { amount: number; currency: string; paidOn: string; periodLabel: string | null; insuranceAmount: number }>();
@@ -180,6 +182,7 @@ export async function getStaffSetup(req: AuthRequest, res: Response): Promise<vo
     .from('staff_members')
     .select('user_id')
     .eq('school_id', schoolId)
+    .is('voided_at', null)
     .not('user_id', 'is', null);
   const linkedUserIds = new Set(((linkedRes.data ?? []) as { user_id: string }[]).map(r => r.user_id));
 
@@ -274,7 +277,8 @@ export async function updateStaff(req: AuthRequest, res: Response): Promise<void
     }
   }
 
-  const { data: before } = await supabase.from('staff_members').select('*').eq('id', id).eq('school_id', schoolId).single();
+  const { data: before } = await supabase.from('staff_members').select('*').eq('id', id).eq('school_id', schoolId).is('voided_at', null).single();
+  if (!before) { res.status(404).json({ error: 'Staff member not found' }); return; }
 
   const { error } = await supabase.from('staff_members').update(upd).eq('id', id).eq('school_id', schoolId);
   if (error) {
@@ -288,16 +292,65 @@ export async function updateStaff(req: AuthRequest, res: Response): Promise<void
 }
 
 export async function deleteStaff(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId, userId } = req.user!;
+  const guard = await ensurePremium(schoolId);
+  if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
+
+  const { id } = req.params;
+  const reason = (req.body?.reason as string | undefined)?.trim() || null;
+  const { data: before } = await supabase.from('staff_members').select('*').eq('id', id).eq('school_id', schoolId).is('voided_at', null).single();
+  if (!before) { res.status(404).json({ error: 'Staff member not found' }); return; }
+  const { data: after, error } = await supabase
+    .from('staff_members')
+    .update({ voided_at: new Date().toISOString(), voided_by: userId, void_reason: reason })
+    .eq('id', id).eq('school_id', schoolId).select().single();
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  await logAudit({ req, entityType: 'staff_member', entityId: String(id), action: 'update', before, after, label: (before as { full_name?: string }).full_name, reason: reason ?? undefined });
+  res.json({ success: true });
+}
+
+export async function unvoidStaff(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
   const guard = await ensurePremium(schoolId);
   if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
 
   const { id } = req.params;
   const { data: before } = await supabase.from('staff_members').select('*').eq('id', id).eq('school_id', schoolId).single();
-  const { error } = await supabase.from('staff_members').delete().eq('id', id).eq('school_id', schoolId);
+  if (!before || !(before as any).voided_at) { res.status(404).json({ error: 'Voided staff member not found' }); return; }
+  const { data: after, error } = await supabase
+    .from('staff_members')
+    .update({ voided_at: null, voided_by: null, void_reason: null })
+    .eq('id', id).eq('school_id', schoolId).select().single();
   if (error) { res.status(500).json({ error: error.message }); return; }
-  if (before) await logAudit({ req, entityType: 'staff_member', entityId: String(id), action: 'delete', before, label: (before as { full_name?: string }).full_name });
+  await logAudit({ req, entityType: 'staff_member', entityId: String(id), action: 'update', before, after, label: (before as { full_name?: string }).full_name });
   res.json({ success: true });
+}
+
+export async function listVoidedStaff(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const guard = await ensurePremium(schoolId);
+  if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
+
+  const { data, error } = await supabase
+    .from('staff_members')
+    .select('id, full_name, position, salary_amount, currency, voided_at, voided_by, void_reason')
+    .eq('school_id', schoolId)
+    .not('voided_at', 'is', null)
+    .order('voided_at', { ascending: false });
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  const voiderIds = Array.from(new Set((data ?? []).map((p: any) => p.voided_by).filter(Boolean)));
+  const { data: users } = voiderIds.length
+    ? await supabase.from('users').select('id, first_name, last_name').in('id', voiderIds)
+    : { data: [] as any[] };
+  const nameByUser = new Map<string, string>();
+  for (const u of (users ?? []) as any[]) {
+    const name = `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim();
+    if (name) nameByUser.set(u.id, name);
+  }
+  res.json((data ?? []).map((p: any) => ({
+    ...(toCC(p) as Record<string, unknown>),
+    voidedByName: p.voided_by ? nameByUser.get(p.voided_by) ?? null : null,
+  })));
 }
 
 // ── Salary payments ────────────────────────────────────────────────────
@@ -309,13 +362,14 @@ export async function listStaffPayments(req: AuthRequest, res: Response): Promis
 
   const { id } = req.params;
   // Verify the staff row belongs to this school
-  const { data: staff } = await supabase.from('staff_members').select('id').eq('id', id).eq('school_id', schoolId).single();
+  const { data: staff } = await supabase.from('staff_members').select('id').eq('id', id).eq('school_id', schoolId).is('voided_at', null).single();
   if (!staff) { res.status(404).json({ error: 'Staff member not found' }); return; }
 
   const { data, error } = await supabase
     .from('staff_salary_payments')
     .select('id, amount, currency, paid_on, period_label, notes, insurance_amount, insurance_percentage, recorded_by, created_at')
     .eq('staff_id', id)
+    .is('voided_at', null)
     .order('paid_on', { ascending: false });
   if (error) { res.status(500).json({ error: error.message }); return; }
   res.json(toCC(data ?? []));
@@ -335,7 +389,7 @@ export async function recordStaffPayment(req: AuthRequest, res: Response): Promi
   const { data: staff } = await supabase
     .from('staff_members')
     .select('id, user_id, full_name, currency, insurance_percentage')
-    .eq('id', id).eq('school_id', schoolId).single();
+    .eq('id', id).eq('school_id', schoolId).is('voided_at', null).single();
   if (!staff) { res.status(404).json({ error: 'Staff member not found' }); return; }
 
   const staffRow = staff as { user_id: string | null; full_name: string; currency: string; insurance_percentage: number | null };
@@ -405,6 +459,30 @@ export async function recordStaffPayment(req: AuthRequest, res: Response): Promi
 }
 
 export async function deleteStaffPayment(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId, userId } = req.user!;
+  const guard = await ensurePremium(schoolId);
+  if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
+
+  const { id } = req.params;
+  const reason = (req.body?.reason as string | undefined)?.trim() || null;
+  const { data: before } = await supabase
+    .from('staff_salary_payments')
+    .select('*, staff_members(full_name)')
+    .eq('id', id).eq('school_id', schoolId).is('voided_at', null).single();
+  if (!before) { res.status(404).json({ error: 'Payment not found' }); return; }
+  const { data: after, error } = await supabase
+    .from('staff_salary_payments')
+    .update({ voided_at: new Date().toISOString(), voided_by: userId, void_reason: reason })
+    .eq('id', id).eq('school_id', schoolId).select().single();
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  const label = (before as { staff_members?: { full_name?: string } }).staff_members?.full_name;
+  const beforeRow: Record<string, unknown> = { ...(before as Record<string, unknown>) };
+  delete beforeRow.staff_members;
+  await logAudit({ req, entityType: 'staff_salary_payment', entityId: String(id), action: 'update', before: beforeRow, after, label, reason: reason ?? undefined });
+  res.json({ success: true });
+}
+
+export async function unvoidStaffPayment(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
   const guard = await ensurePremium(schoolId);
   if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
@@ -414,15 +492,55 @@ export async function deleteStaffPayment(req: AuthRequest, res: Response): Promi
     .from('staff_salary_payments')
     .select('*, staff_members(full_name)')
     .eq('id', id).eq('school_id', schoolId).single();
-  const { error } = await supabase.from('staff_salary_payments').delete().eq('id', id).eq('school_id', schoolId);
+  if (!before || !(before as any).voided_at) { res.status(404).json({ error: 'Voided payment not found' }); return; }
+  const { data: after, error } = await supabase
+    .from('staff_salary_payments')
+    .update({ voided_at: null, voided_by: null, void_reason: null })
+    .eq('id', id).eq('school_id', schoolId).select().single();
   if (error) { res.status(500).json({ error: error.message }); return; }
-  if (before) {
-    const label = (before as { staff_members?: { full_name?: string } }).staff_members?.full_name;
-    const row: Record<string, unknown> = { ...(before as Record<string, unknown>) };
-    delete row.staff_members;
-    await logAudit({ req, entityType: 'staff_salary_payment', entityId: String(id), action: 'delete', before: row, label });
-  }
+  const label = (before as { staff_members?: { full_name?: string } }).staff_members?.full_name;
+  const beforeRow: Record<string, unknown> = { ...(before as Record<string, unknown>) };
+  delete beforeRow.staff_members;
+  await logAudit({ req, entityType: 'staff_salary_payment', entityId: String(id), action: 'update', before: beforeRow, after, label });
   res.json({ success: true });
+}
+
+export async function listVoidedStaffPayments(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const guard = await ensurePremium(schoolId);
+  if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
+
+  const { data, error } = await supabase
+    .from('staff_salary_payments')
+    .select('id, amount, currency, paid_on, period_label, notes, insurance_amount, voided_at, voided_by, void_reason, staff_id, staff_members(full_name)')
+    .eq('school_id', schoolId)
+    .not('voided_at', 'is', null)
+    .order('voided_at', { ascending: false });
+  if (error) { res.status(500).json({ error: error.message }); return; }
+
+  const voiderIds = Array.from(new Set((data ?? []).map((p: any) => p.voided_by).filter(Boolean)));
+  const { data: users } = voiderIds.length
+    ? await supabase.from('users').select('id, first_name, last_name').in('id', voiderIds)
+    : { data: [] as any[] };
+  const nameByUser = new Map<string, string>();
+  for (const u of (users ?? []) as any[]) {
+    const name = `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim();
+    if (name) nameByUser.set(u.id, name);
+  }
+  res.json((data ?? []).map((p: any) => ({
+    id: p.id,
+    amount: Number(p.amount),
+    currency: p.currency,
+    paidOn: p.paid_on,
+    periodLabel: p.period_label,
+    notes: p.notes,
+    insuranceAmount: Number(p.insurance_amount) || 0,
+    voidedAt: p.voided_at,
+    voidReason: p.void_reason,
+    voidedByName: p.voided_by ? nameByUser.get(p.voided_by) ?? null : null,
+    staffId: p.staff_id,
+    staffName: p.staff_members?.full_name ?? null,
+  })));
 }
 
 // ── Insurance payout (admin/accountant only, archived staff) ──────────
@@ -431,7 +549,8 @@ async function sumInsuranceHeld(staffId: string, currency: string): Promise<numb
   const { data } = await supabase
     .from('staff_salary_payments')
     .select('insurance_amount, currency')
-    .eq('staff_id', staffId);
+    .eq('staff_id', staffId)
+    .is('voided_at', null);
   let total = 0;
   for (const r of (data ?? []) as { insurance_amount: number; currency: string }[]) {
     if (r.currency === currency) total += Number(r.insurance_amount) || 0;
@@ -450,7 +569,7 @@ export async function markStaffInsurancePaid(req: AuthRequest, res: Response): P
   const { data: staff } = await supabase
     .from('staff_members')
     .select('id, user_id, full_name, currency, insurance_paid_out')
-    .eq('id', id).eq('school_id', schoolId).single();
+    .eq('id', id).eq('school_id', schoolId).is('voided_at', null).single();
   if (!staff) { res.status(404).json({ error: 'Staff member not found' }); return; }
 
   const s = staff as { user_id: string | null; full_name: string; currency: string; insurance_paid_out: boolean };
@@ -469,7 +588,7 @@ export async function markStaffInsurancePaid(req: AuthRequest, res: Response): P
 
   const paidOn = body.paidOn || new Date().toISOString().slice(0, 10);
 
-  const { data: beforeIns } = await supabase.from('staff_members').select('*').eq('id', id).eq('school_id', schoolId).single();
+  const { data: beforeIns } = await supabase.from('staff_members').select('*').eq('id', id).eq('school_id', schoolId).is('voided_at', null).single();
 
   const { error } = await supabase.from('staff_members').update({
     insurance_paid_out: true,
@@ -507,14 +626,14 @@ export async function reverseStaffInsurancePayout(req: AuthRequest, res: Respons
   const { data: staff } = await supabase
     .from('staff_members')
     .select('id, insurance_paid_out')
-    .eq('id', id).eq('school_id', schoolId).single();
+    .eq('id', id).eq('school_id', schoolId).is('voided_at', null).single();
   if (!staff) { res.status(404).json({ error: 'Staff member not found' }); return; }
   if (!(staff as { insurance_paid_out: boolean }).insurance_paid_out) {
     res.status(409).json({ error: 'Insurance has not been paid out' });
     return;
   }
 
-  const { data: beforeRev } = await supabase.from('staff_members').select('*').eq('id', id).eq('school_id', schoolId).single();
+  const { data: beforeRev } = await supabase.from('staff_members').select('*').eq('id', id).eq('school_id', schoolId).is('voided_at', null).single();
 
   const { error } = await supabase.from('staff_members').update({
     insurance_paid_out: false,
@@ -554,6 +673,7 @@ export async function bulkSetNextPaymentDate(req: AuthRequest, res: Response): P
     .from('staff_members')
     .select('*')
     .eq('school_id', schoolId)
+    .is('voided_at', null)
     .eq('is_active', true);
   if (Array.isArray(staffIds)) beforeQ = beforeQ.in('id', staffIds);
   const { data: beforeRows } = await beforeQ;
@@ -564,6 +684,7 @@ export async function bulkSetNextPaymentDate(req: AuthRequest, res: Response): P
     .from('staff_members')
     .update({ next_payment_date: newDate })
     .eq('school_id', schoolId)
+    .is('voided_at', null)
     .eq('is_active', true);
 
   if (Array.isArray(staffIds)) {
@@ -598,7 +719,7 @@ export async function notifyStaffDue(req: AuthRequest, res: Response): Promise<v
   const { data: staff } = await supabase
     .from('staff_members')
     .select('id, user_id, full_name, salary_amount, currency, next_payment_date, is_active')
-    .eq('id', id).eq('school_id', schoolId).single();
+    .eq('id', id).eq('school_id', schoolId).is('voided_at', null).single();
   if (!staff) { res.status(404).json({ error: 'Staff member not found' }); return; }
 
   const s = staff as { user_id: string | null; salary_amount: number; currency: string; next_payment_date: string | null; is_active: boolean };
@@ -634,6 +755,7 @@ export async function notifyAllStaffDue(req: AuthRequest, res: Response): Promis
     .from('staff_members')
     .select('id, user_id, full_name, salary_amount, currency, next_payment_date, is_active, users(is_active)')
     .eq('school_id', schoolId)
+    .is('voided_at', null)
     .eq('is_active', true)
     .not('user_id', 'is', null);
   if (error) { res.status(500).json({ error: error.message }); return; }
@@ -673,7 +795,7 @@ async function buildExportData(schoolId: string, staffId: string): Promise<Staff
   const { data: staff } = await supabase
     .from('staff_members')
     .select('id, user_id, full_name, position, salary_amount, currency, next_payment_date, is_active, insurance_percentage, insurance_paid_out, insurance_paid_out_at, insurance_paid_out_amount, insurance_paid_out_currency, insurance_paid_out_notes, users(is_active)')
-    .eq('id', staffId).eq('school_id', schoolId).single();
+    .eq('id', staffId).eq('school_id', schoolId).is('voided_at', null).single();
   if (!staff) return null;
 
   const s = staff as RawStaffRow;
@@ -687,6 +809,7 @@ async function buildExportData(schoolId: string, staffId: string): Promise<Staff
     .from('staff_salary_payments')
     .select('amount, currency, paid_on, period_label, notes, insurance_amount, insurance_percentage')
     .eq('staff_id', staffId)
+    .is('voided_at', null)
     .order('paid_on', { ascending: false });
 
   const { data: school } = await supabase
@@ -770,6 +893,7 @@ export async function getMyStaffInfo(req: AuthRequest, res: Response): Promise<v
     .from('staff_members')
     .select('id, full_name, position, salary_amount, currency, next_payment_date, is_active, insurance_percentage, insurance_paid_out, insurance_paid_out_at, insurance_paid_out_amount, insurance_paid_out_currency, insurance_paid_out_notes, created_at')
     .eq('school_id', schoolId)
+    .is('voided_at', null)
     .eq('user_id', userId)
     .maybeSingle();
 
@@ -780,6 +904,7 @@ export async function getMyStaffInfo(req: AuthRequest, res: Response): Promise<v
     .from('staff_salary_payments')
     .select('id, amount, currency, paid_on, period_label, notes, insurance_amount, insurance_percentage, created_at')
     .eq('staff_id', staffRow.id)
+    .is('voided_at', null)
     .order('paid_on', { ascending: false });
 
   let insuranceHeld = 0;

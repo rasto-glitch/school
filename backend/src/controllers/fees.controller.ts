@@ -127,6 +127,7 @@ export async function listPlans(req: AuthRequest, res: Response): Promise<void> 
     .from('fee_plans')
     .select('id, name, total_amount, currency, applies_to, academic_year, is_active, created_at')
     .eq('school_id', schoolId)
+    .is('voided_at', null)
     .order('created_at', { ascending: false });
   if (error) { res.status(500).json({ error: error.message }); return; }
 
@@ -241,7 +242,8 @@ export async function updatePlan(req: AuthRequest, res: Response): Promise<void>
   const err = validatePlanBody(body);
   if (err) { res.status(400).json({ error: err }); return; }
 
-  const { data: before } = await supabase.from('fee_plans').select('*').eq('id', id).eq('school_id', schoolId).single();
+  const { data: before } = await supabase.from('fee_plans').select('*').eq('id', id).eq('school_id', schoolId).is('voided_at', null).single();
+  if (!before) { res.status(404).json({ error: 'Plan not found' }); return; }
 
   const { error: pErr } = await supabase.from('fee_plans').update({
     name: body.name,
@@ -272,26 +274,76 @@ export async function updatePlan(req: AuthRequest, res: Response): Promise<void>
 }
 
 export async function deletePlan(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId, userId } = req.user!;
+  const guard = await ensurePremium(schoolId);
+  if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
+
+  const { id } = req.params;
+  const reason = (req.body?.reason as string | undefined)?.trim() || null;
+  const { data: before } = await supabase.from('fee_plans').select('*').eq('id', id).eq('school_id', schoolId).is('voided_at', null).single();
+  if (!before) { res.status(404).json({ error: 'Plan not found' }); return; }
+  // Block void if any non-voided payment has been recorded against any student_fee under this plan.
+  const { data: sfs } = await supabase.from('student_fees').select('id').eq('school_id', schoolId).eq('fee_plan_id', id);
+  if (sfs && sfs.length) {
+    const sfIds = sfs.map(s => (s as any).id);
+    const { count } = await supabase.from('fee_payments').select('id', { count: 'exact', head: true }).in('student_fee_id', sfIds).is('voided_at', null);
+    if ((count ?? 0) > 0) {
+      res.status(409).json({ error: 'Cannot void a plan with recorded payments. Void those payments first, or mark the plan inactive instead.' });
+      return;
+    }
+  }
+  const { data: after, error } = await supabase
+    .from('fee_plans')
+    .update({ voided_at: new Date().toISOString(), voided_by: userId, void_reason: reason })
+    .eq('id', id).eq('school_id', schoolId).select().single();
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  await logAudit({ req, entityType: 'fee_plan', entityId: String(id), action: 'update', before, after, label: (before as { name?: string }).name, reason: reason ?? undefined });
+  res.json({ success: true });
+}
+
+export async function unvoidPlan(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
   const guard = await ensurePremium(schoolId);
   if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
 
   const { id } = req.params;
-  // Block delete if any payment has been recorded against any student_fee under this plan.
-  const { data: sfs } = await supabase.from('student_fees').select('id').eq('school_id', schoolId).eq('fee_plan_id', id);
-  if (sfs && sfs.length) {
-    const sfIds = sfs.map(s => (s as any).id);
-    const { count } = await supabase.from('fee_payments').select('id', { count: 'exact', head: true }).in('student_fee_id', sfIds);
-    if ((count ?? 0) > 0) {
-      res.status(409).json({ error: 'Cannot delete a plan with recorded payments. Mark it inactive instead.' });
-      return;
-    }
-  }
   const { data: before } = await supabase.from('fee_plans').select('*').eq('id', id).eq('school_id', schoolId).single();
-  const { error } = await supabase.from('fee_plans').delete().eq('id', id).eq('school_id', schoolId);
+  if (!before || !(before as any).voided_at) { res.status(404).json({ error: 'Voided plan not found' }); return; }
+  const { data: after, error } = await supabase
+    .from('fee_plans')
+    .update({ voided_at: null, voided_by: null, void_reason: null })
+    .eq('id', id).eq('school_id', schoolId).select().single();
   if (error) { res.status(500).json({ error: error.message }); return; }
-  if (before) await logAudit({ req, entityType: 'fee_plan', entityId: String(id), action: 'delete', before, label: (before as { name?: string }).name });
+  await logAudit({ req, entityType: 'fee_plan', entityId: String(id), action: 'update', before, after, label: (before as { name?: string }).name });
   res.json({ success: true });
+}
+
+export async function listVoidedPlans(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const guard = await ensurePremium(schoolId);
+  if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
+
+  const { data, error } = await supabase
+    .from('fee_plans')
+    .select('id, name, total_amount, currency, applies_to, academic_year, is_active, created_at, voided_at, voided_by, void_reason')
+    .eq('school_id', schoolId)
+    .not('voided_at', 'is', null)
+    .order('voided_at', { ascending: false });
+  if (error) { res.status(500).json({ error: error.message }); return; }
+
+  const voiderIds = Array.from(new Set((data ?? []).map((p: any) => p.voided_by).filter(Boolean)));
+  const { data: users } = voiderIds.length
+    ? await supabase.from('users').select('id, first_name, last_name').in('id', voiderIds)
+    : { data: [] as any[] };
+  const nameByUser = new Map<string, string>();
+  for (const u of (users ?? []) as any[]) {
+    const name = `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim();
+    if (name) nameByUser.set(u.id, name);
+  }
+  res.json((data ?? []).map((p: any) => ({
+    ...(toCC(p) as Record<string, unknown>),
+    voidedByName: p.voided_by ? nameByUser.get(p.voided_by) ?? null : null,
+  })));
 }
 
 // Assign a plan to students (all / by class / explicit). Creates student_fees rows
@@ -305,7 +357,7 @@ export async function assignPlan(req: AuthRequest, res: Response): Promise<void>
   const { studentIds: bodyStudentIds } = req.body as { studentIds?: string[] };
 
   const { data: plan } = await supabase
-    .from('fee_plans').select('id, total_amount, applies_to').eq('id', id).eq('school_id', schoolId).single();
+    .from('fee_plans').select('id, total_amount, applies_to').eq('id', id).eq('school_id', schoolId).is('voided_at', null).single();
   if (!plan) { res.status(404).json({ error: 'Plan not found' }); return; }
 
   let studentIds: string[] = [];
@@ -392,7 +444,7 @@ async function buildStudentFeeRows(schoolId: string): Promise<StudentFeeRow[]> {
 
   const [{ data: insts }, { data: pays }, { data: locks }] = await Promise.all([
     supabase.from('fee_installments').select('fee_plan_id, id, sequence, amount, due_date').in('fee_plan_id', planIds.length ? planIds : ['00000000-0000-0000-0000-000000000000']),
-    supabase.from('fee_payments').select('student_fee_id, amount').in('student_fee_id', sfIds.length ? sfIds : ['00000000-0000-0000-0000-000000000000']),
+    supabase.from('fee_payments').select('student_fee_id, amount').in('student_fee_id', sfIds.length ? sfIds : ['00000000-0000-0000-0000-000000000000']).is('voided_at', null),
     supabase.from('student_access_locks').select('student_id, feature').in('student_id', studentIds.length ? studentIds : ['00000000-0000-0000-0000-000000000000']),
   ]);
 
@@ -519,6 +571,7 @@ export async function getStudentFee(req: AuthRequest, res: Response): Promise<vo
     .select('id, amount, paid_on, method, reference, notes, unallocated_note, recorded_by, created_at')
     .eq('student_fee_id', id)
     .eq('school_id', schoolId)
+    .is('voided_at', null)
     .order('paid_on', { ascending: false });
 
   const paymentIds = (payments ?? []).map(p => (p as any).id);
@@ -685,6 +738,30 @@ export async function recordPayment(req: AuthRequest, res: Response): Promise<vo
 }
 
 export async function deletePayment(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId, userId } = req.user!;
+  const guard = await ensurePremium(schoolId);
+  if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
+
+  const { id } = req.params;
+  const reason = (req.body?.reason as string | undefined)?.trim() || null;
+  const { data: before } = await supabase
+    .from('fee_payments')
+    .select('*, student_fees(students(full_name))')
+    .eq('id', id).eq('school_id', schoolId).is('voided_at', null).single();
+  if (!before) { res.status(404).json({ error: 'Payment not found' }); return; }
+  const { data: after, error } = await supabase
+    .from('fee_payments')
+    .update({ voided_at: new Date().toISOString(), voided_by: userId, void_reason: reason })
+    .eq('id', id).eq('school_id', schoolId).select().single();
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  const studentName = (before as { student_fees?: { students?: { full_name?: string } } }).student_fees?.students?.full_name;
+  const beforeRow: Record<string, unknown> = { ...(before as Record<string, unknown>) };
+  delete beforeRow.student_fees;
+  await logAudit({ req, entityType: 'fee_payment', entityId: String(id), action: 'update', before: beforeRow, after, label: studentName, reason: reason ?? undefined });
+  res.json({ success: true });
+}
+
+export async function unvoidPayment(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
   const guard = await ensurePremium(schoolId);
   if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
@@ -694,15 +771,57 @@ export async function deletePayment(req: AuthRequest, res: Response): Promise<vo
     .from('fee_payments')
     .select('*, student_fees(students(full_name))')
     .eq('id', id).eq('school_id', schoolId).single();
-  const { error } = await supabase.from('fee_payments').delete().eq('id', id).eq('school_id', schoolId);
+  if (!before || !(before as any).voided_at) { res.status(404).json({ error: 'Voided payment not found' }); return; }
+  const { data: after, error } = await supabase
+    .from('fee_payments')
+    .update({ voided_at: null, voided_by: null, void_reason: null })
+    .eq('id', id).eq('school_id', schoolId).select().single();
   if (error) { res.status(500).json({ error: error.message }); return; }
-  if (before) {
-    const studentName = (before as { student_fees?: { students?: { full_name?: string } } }).student_fees?.students?.full_name;
-    const row: Record<string, unknown> = { ...(before as Record<string, unknown>) };
-    delete row.student_fees;
-    await logAudit({ req, entityType: 'fee_payment', entityId: String(id), action: 'delete', before: row, label: studentName });
-  }
+  const studentName = (before as { student_fees?: { students?: { full_name?: string } } }).student_fees?.students?.full_name;
+  const beforeRow: Record<string, unknown> = { ...(before as Record<string, unknown>) };
+  delete beforeRow.student_fees;
+  await logAudit({ req, entityType: 'fee_payment', entityId: String(id), action: 'update', before: beforeRow, after, label: studentName });
   res.json({ success: true });
+}
+
+export async function listVoidedPayments(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const guard = await ensurePremium(schoolId);
+  if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
+
+  const { data, error } = await supabase
+    .from('fee_payments')
+    .select('id, amount, paid_on, method, reference, notes, voided_at, voided_by, void_reason, student_fee_id, student_fees(students(id, full_name), fee_plans(name, currency))')
+    .eq('school_id', schoolId)
+    .not('voided_at', 'is', null)
+    .order('voided_at', { ascending: false });
+  if (error) { res.status(500).json({ error: error.message }); return; }
+
+  const voiderIds = Array.from(new Set((data ?? []).map((p: any) => p.voided_by).filter(Boolean)));
+  const { data: users } = voiderIds.length
+    ? await supabase.from('users').select('id, first_name, last_name').in('id', voiderIds)
+    : { data: [] as any[] };
+  const nameByUser = new Map<string, string>();
+  for (const u of (users ?? []) as any[]) {
+    const name = `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim();
+    if (name) nameByUser.set(u.id, name);
+  }
+  res.json((data ?? []).map((p: any) => ({
+    id: p.id,
+    amount: Number(p.amount),
+    paidOn: p.paid_on,
+    method: p.method,
+    reference: p.reference,
+    notes: p.notes,
+    voidedAt: p.voided_at,
+    voidReason: p.void_reason,
+    voidedByName: p.voided_by ? nameByUser.get(p.voided_by) ?? null : null,
+    studentFeeId: p.student_fee_id,
+    studentId: p.student_fees?.students?.id ?? null,
+    studentName: p.student_fees?.students?.full_name ?? null,
+    planName: p.student_fees?.fee_plans?.name ?? null,
+    currency: p.student_fees?.fee_plans?.currency ?? 'USD',
+  })));
 }
 
 // ── Adjustments (admin only) ────────────────────────────────────────────
@@ -936,7 +1055,7 @@ export async function paymentReceiptPdf(req: AuthRequest, res: Response): Promis
 
   const { data: payment } = await supabase
     .from('fee_payments').select('id, student_fee_id, amount, paid_on, method, reference, notes, unallocated_note, recorded_by, created_at')
-    .eq('id', id).eq('school_id', schoolId).single();
+    .eq('id', id).eq('school_id', schoolId).is('voided_at', null).single();
   if (!payment) { res.status(404).json({ error: 'Payment not found' }); return; }
 
   const auth = await authorizeReceipt(req, (payment as any).student_fee_id);
@@ -949,6 +1068,7 @@ export async function paymentReceiptPdf(req: AuthRequest, res: Response): Promis
   const { data: priorRows } = await supabase
     .from('fee_payments').select('amount, created_at')
     .eq('student_fee_id', (payment as any).student_fee_id)
+    .is('voided_at', null)
     .lt('created_at', (payment as any).created_at ?? new Date().toISOString());
   const paidBefore = (priorRows ?? []).reduce((s, p) => s + Number((p as any).amount), 0);
 
@@ -1022,6 +1142,7 @@ export async function studentFeeSummaryPdf(req: AuthRequest, res: Response): Pro
     .select('id, amount, paid_on, method, reference, unallocated_note, recorded_by')
     .eq('student_fee_id', id)
     .eq('school_id', schoolId)
+    .is('voided_at', null)
     .order('paid_on', { ascending: true });
 
   const paymentIds = (payments ?? []).map(p => (p as any).id);
@@ -1111,6 +1232,7 @@ export async function getParentFees(req: AuthRequest, res: Response): Promise<vo
     .from('fee_payments')
     .select('id, student_fee_id, amount, paid_on, method, reference, notes, unallocated_note, recorded_by, created_at')
     .in('student_fee_id', sfIds.length ? sfIds : ['00000000-0000-0000-0000-000000000000'])
+    .is('voided_at', null)
     .order('paid_on', { ascending: false });
 
   const paymentIds = (payments ?? []).map(p => (p as any).id);
@@ -1226,6 +1348,7 @@ async function plansFromGraduated(schoolId: string, studentId: string): Promise<
         .from('fee_payments')
         .select('student_fee_id, amount, paid_on, method, reference, notes')
         .in('student_fee_id', sfIds)
+        .is('voided_at', null)
         .order('paid_on', { ascending: true })
     : { data: [] as any[] };
   const paysBySf = new Map<string, any[]>();
@@ -1319,6 +1442,7 @@ export async function listArchivePaymentRecords(req: AuthRequest, res: Response)
         .from('fee_payments')
         .select('student_fee_id, amount')
         .in('student_fee_id', gradSfIds)
+        .is('voided_at', null)
     : { data: [] as any[] };
 
   const paidBySf = new Map<string, number>();

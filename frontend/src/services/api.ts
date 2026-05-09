@@ -237,7 +237,9 @@ export const feesApi = {
   listPlans: () => api.get('/accounting/plans'),
   createPlan: (data: object) => api.post('/accounting/plans', data),
   updatePlan: (id: string, data: object) => api.put(`/accounting/plans/${id}`, data),
-  deletePlan: (id: string) => api.delete(`/accounting/plans/${id}`),
+  deletePlan: (id: string, reason?: string) => api.delete(`/accounting/plans/${id}`, { data: { reason } }),
+  unvoidPlan: (id: string) => api.post(`/accounting/plans/${id}/unvoid`),
+  listVoidedPlans: () => api.get('/accounting/plans/voided'),
   assignPlan: (id: string, data?: { studentIds?: string[] }) => api.post(`/accounting/plans/${id}/assign`, data ?? {}),
   // Students / families
   listStudentFees: () => api.get('/accounting/students'),
@@ -247,7 +249,9 @@ export const feesApi = {
     api.patch(`/accounting/student-fees/${id}`, data),
   recordPayment: (studentFeeId: string, data: { amount: number; paidOn: string; method?: string; reference?: string; notes?: string; allocations?: { installmentId: string; amount: number }[]; unallocatedNote?: string }) =>
     api.post(`/accounting/student-fees/${studentFeeId}/payments`, data),
-  deletePayment: (paymentId: string) => api.delete(`/accounting/payments/${paymentId}`),
+  deletePayment: (paymentId: string, reason?: string) => api.delete(`/accounting/payments/${paymentId}`, { data: { reason } }),
+  unvoidPayment: (paymentId: string) => api.post(`/accounting/payments/${paymentId}/unvoid`),
+  listVoidedPayments: () => api.get('/accounting/payments/voided'),
   // Config
   getConfig: () => api.get('/accounting/config'),
   updateConfig: (data: object) => api.put('/accounting/config', data),
@@ -302,11 +306,15 @@ export const staffApi = {
     isActive: boolean;
     insurancePercentage: number | null;
   }>) => api.put(`/accounting/staff/${id}`, data),
-  remove: (id: string) => api.delete(`/accounting/staff/${id}`),
+  remove: (id: string, reason?: string) => api.delete(`/accounting/staff/${id}`, { data: { reason } }),
+  unvoid: (id: string) => api.post(`/accounting/staff/${id}/unvoid`),
+  listVoided: () => api.get('/accounting/staff/voided'),
   listPayments: (id: string) => api.get(`/accounting/staff/${id}/payments`),
   recordPayment: (id: string, data: { amount: number; currency?: string; paidOn: string; periodLabel?: string | null; notes?: string | null; insuranceAmount?: number | null; insurancePercentage?: number | null }) =>
     api.post(`/accounting/staff/${id}/payments`, data),
-  deletePayment: (paymentId: string) => api.delete(`/accounting/staff-payments/${paymentId}`),
+  deletePayment: (paymentId: string, reason?: string) => api.delete(`/accounting/staff-payments/${paymentId}`, { data: { reason } }),
+  unvoidPayment: (paymentId: string) => api.post(`/accounting/staff-payments/${paymentId}/unvoid`),
+  listVoidedPayments: () => api.get('/accounting/staff-payments/voided'),
   notifyDue: (id: string) => api.post(`/accounting/staff/${id}/notify-due`),
   notifyAllDue: (data?: { title?: string; message?: string; dueWithinDays?: number }) =>
     api.post('/accounting/staff/notify-due-all', data ?? {}),

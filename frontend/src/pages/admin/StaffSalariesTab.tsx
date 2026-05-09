@@ -9,7 +9,33 @@ import Modal from '../../components/common/Modal';
 import { Plus, Trash2, Pencil, Users as UsersIcon, BellRing, Receipt, History, Megaphone, Archive as ArchiveIcon, RotateCcw, FileDown, FileSpreadsheet, Shield, ShieldCheck, CalendarClock } from 'lucide-react';
 import type { StaffMember, StaffSalaryPayment, StaffSetupTeacher } from '../../types';
 
-type SubTab = 'active' | 'archive';
+type SubTab = 'active' | 'archive' | 'voided';
+
+interface VoidedStaffRow {
+  id: string;
+  fullName: string;
+  position: string | null;
+  salaryAmount: number;
+  currency: string;
+  voidedAt: string;
+  voidReason: string | null;
+  voidedByName: string | null;
+}
+
+interface VoidedStaffPaymentRow {
+  id: string;
+  amount: number;
+  currency: string;
+  paidOn: string;
+  periodLabel: string | null;
+  notes: string | null;
+  insuranceAmount: number;
+  voidedAt: string;
+  voidReason: string | null;
+  voidedByName: string | null;
+  staffId: string;
+  staffName: string | null;
+}
 
 interface StaffForm {
   id?: string;
@@ -111,6 +137,9 @@ export default function StaffSalariesTab() {
   const [subTab, setSubTab] = useState<SubTab>('active');
   const [active, setActive] = useState<StaffMember[] | null>(null);
   const [archived, setArchived] = useState<StaffMember[] | null>(null);
+  const [voidedStaff, setVoidedStaff] = useState<VoidedStaffRow[] | null>(null);
+  const [voidedPayments, setVoidedPayments] = useState<VoidedStaffPaymentRow[] | null>(null);
+  const [unvoidBusy, setUnvoidBusy] = useState<string | null>(null);
   const [teachers, setTeachers] = useState<StaffSetupTeacher[]>([]);
   const [editing, setEditing] = useState<StaffForm | null>(null);
   const [saving, setSaving] = useState(false);
@@ -149,11 +178,44 @@ export default function StaffSalariesTab() {
     setTeachers(r.data.teachers as StaffSetupTeacher[]);
   };
   const loadAll = () => Promise.all([loadActive(), loadArchive()]);
+  const loadVoided = async () => {
+    const [s, p] = await Promise.all([staffApi.listVoided(), staffApi.listVoidedPayments()]);
+    setVoidedStaff(s.data as VoidedStaffRow[]);
+    setVoidedPayments(p.data as VoidedStaffPaymentRow[]);
+  };
 
   useEffect(() => {
     loadAll().catch((e: any) => toast.error(e.response?.data?.error || 'Failed to load staff'));
     loadSetup().catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (subTab === 'voided' && (voidedStaff === null || voidedPayments === null)) {
+      loadVoided().catch((e: any) => toast.error(e.response?.data?.error || 'Failed to load voided records'));
+    }
+  }, [subTab]);
+
+  const unvoidStaff = async (id: string) => {
+    if (!confirm('Restore this voided staff member?')) return;
+    setUnvoidBusy(id);
+    try {
+      await staffApi.unvoid(id);
+      toast.success('Staff member restored');
+      await Promise.all([loadVoided(), loadAll()]);
+    } catch (e: any) { toast.error(e.response?.data?.error || 'Failed to restore'); }
+    finally { setUnvoidBusy(null); }
+  };
+
+  const unvoidStaffPayment = async (id: string) => {
+    if (!confirm("Restore this voided payment? It will reappear in the staff member's payment history.")) return;
+    setUnvoidBusy(id);
+    try {
+      await staffApi.unvoidPayment(id);
+      toast.success('Payment restored');
+      await loadVoided();
+    } catch (e: any) { toast.error(e.response?.data?.error || 'Failed to restore'); }
+    finally { setUnvoidBusy(null); }
+  };
 
   const openNew = () => setEditing({ ...empty });
   const openEdit = (s: StaffMember) => setEditing({
@@ -476,6 +538,10 @@ export default function StaffSalariesTab() {
           onClick={() => setSubTab('archive')}
           className={`px-4 py-1.5 text-sm font-medium rounded-lg transition-colors ${subTab === 'archive' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
         >Archive{archived && ` (${archived.length})`}</button>
+        <button
+          onClick={() => setSubTab('voided')}
+          className={`px-4 py-1.5 text-sm font-medium rounded-lg transition-colors ${subTab === 'voided' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+        >Voided{voidedStaff && voidedPayments && ` (${voidedStaff.length + voidedPayments.length})`}</button>
       </div>
 
       {subTab === 'active' && (
@@ -495,7 +561,72 @@ export default function StaffSalariesTab() {
         </div>
       )}
 
-      {list === null ? <LoadingSpinner /> : list.length === 0 ? (
+      {subTab === 'voided' && (
+        <div>
+          <p className="text-sm text-gray-500 mb-4">Voided staff records and salary payments. Click <span className="font-medium">Restore</span> to bring an item back. After the retention window these are permanently deleted.</p>
+          {voidedStaff === null || voidedPayments === null ? <LoadingSpinner /> : (voidedStaff.length === 0 && voidedPayments.length === 0) ? (
+            <EmptyState title="Nothing voided" description="Staff or payments you delete will appear here so you can recover them." icon={<ArchiveIcon className="w-8 h-8 text-gray-400" />} />
+          ) : (
+            <div className="space-y-6">
+              {voidedPayments.length > 0 && (
+                <div>
+                  <h4 className="font-semibold text-gray-900 mb-2">Voided payments ({voidedPayments.length})</h4>
+                  <div className="space-y-2">
+                    {voidedPayments.map(p => (
+                      <div key={p.id} className="bg-white rounded-2xl border border-gray-200 p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-semibold text-gray-900">{fmtMoney(p.amount, p.currency)}</span>
+                              <span className="text-xs text-gray-500">· {p.paidOn}</span>
+                              {p.periodLabel && <span className="text-xs text-gray-500">· {p.periodLabel}</span>}
+                            </div>
+                            <div className="text-sm text-gray-700 mt-0.5">{p.staffName ?? '(unknown staff)'}</div>
+                            <div className="text-xs text-gray-500 mt-1">
+                              Voided {new Date(p.voidedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                              {p.voidedByName && <> by <span className="font-medium text-gray-700">{p.voidedByName}</span></>}
+                            </div>
+                            {p.voidReason && <div className="text-xs text-rose-700 italic mt-1">"{p.voidReason}"</div>}
+                          </div>
+                          <Button size="sm" variant="secondary" onClick={() => unvoidStaffPayment(p.id)} disabled={unvoidBusy === p.id} icon={<RotateCcw className="w-4 h-4" />}>Restore</Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {voidedStaff.length > 0 && (
+                <div>
+                  <h4 className="font-semibold text-gray-900 mb-2">Voided staff ({voidedStaff.length})</h4>
+                  <div className="space-y-2">
+                    {voidedStaff.map(s => (
+                      <div key={s.id} className="bg-white rounded-2xl border border-gray-200 p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-semibold text-gray-900">{s.fullName}</span>
+                              {s.position && <span className="text-xs text-gray-500">· {s.position}</span>}
+                              <span className="text-sm text-gray-700">{fmtMoney(s.salaryAmount, s.currency)}</span>
+                            </div>
+                            <div className="text-xs text-gray-500 mt-1">
+                              Voided {new Date(s.voidedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                              {s.voidedByName && <> by <span className="font-medium text-gray-700">{s.voidedByName}</span></>}
+                            </div>
+                            {s.voidReason && <div className="text-xs text-rose-700 italic mt-1">"{s.voidReason}"</div>}
+                          </div>
+                          <Button size="sm" variant="secondary" onClick={() => unvoidStaff(s.id)} disabled={unvoidBusy === s.id} icon={<RotateCcw className="w-4 h-4" />}>Restore</Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {subTab !== 'voided' && (list === null ? <LoadingSpinner /> : list.length === 0 ? (
         subTab === 'active' ? (
           <EmptyState title="No staff yet" description="Add a teacher or custom employee to start tracking salaries." icon={<UsersIcon className="w-8 h-8 text-gray-400" />} />
         ) : (
@@ -590,7 +721,7 @@ export default function StaffSalariesTab() {
             );
           })}
         </div>
-      )}
+      ))}
 
       {editing && (
         <Modal isOpen onClose={() => setEditing(null)} title={editing.id ? 'Edit staff' : 'Add staff'} size="lg">
