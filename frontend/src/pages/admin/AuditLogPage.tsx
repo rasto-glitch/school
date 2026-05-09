@@ -46,10 +46,78 @@ const ACTION_STYLES: Record<string, { bg: string; text: string; Icon: typeof Plu
 };
 
 function formatValue(v: unknown): string {
-  if (v === null || v === undefined) return '—';
+  if (v === null || v === undefined || v === '') return '—';
   if (typeof v === 'object') return JSON.stringify(v);
-  if (typeof v === 'boolean') return v ? 'true' : 'false';
+  if (typeof v === 'boolean') return v ? 'Yes' : 'No';
+  if (typeof v === 'string') {
+    // Detect ISO date / timestamp strings and humanize.
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(v)) {
+      const d = new Date(v);
+      if (!isNaN(d.getTime())) return format(d, 'MMM d, yyyy h:mm a');
+    }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(v)) {
+      const d = new Date(v + 'T00:00:00');
+      if (!isNaN(d.getTime())) return format(d, 'MMM d, yyyy');
+    }
+  }
   return String(v);
+}
+
+// Convert camelCase or snake_case keys to "Sentence case".
+function humanizeKey(k: string): string {
+  const spaced = k.replace(/_/g, ' ').replace(/([a-z0-9])([A-Z])/g, '$1 $2');
+  const lower = spaced.toLowerCase().trim();
+  return lower.charAt(0).toUpperCase() + lower.slice(1);
+}
+
+// Friendly verbs for known boolean flags so a single flip reads as a status,
+// not as `isActive Old true New false`.
+const FLAG_LABELS: Record<string, { onTrue: string; onFalse: string }> = {
+  isActive: { onTrue: 'Restored / activated', onFalse: 'Archived / deactivated' },
+  isGraduated: { onTrue: 'Marked as graduated', onFalse: 'Marked as not graduated' },
+  isPublished: { onTrue: 'Published', onFalse: 'Unpublished' },
+  isOpen: { onTrue: 'Opened', onFalse: 'Closed' },
+  isDeleted: { onTrue: 'Marked as deleted', onFalse: 'Restored' },
+  isArchived: { onTrue: 'Archived', onFalse: 'Restored from archive' },
+};
+
+// Returns a one-line friendly sentence for a boolean flip, or null if the
+// values aren't a boolean flip.
+function flagFlipSentence(key: string, oldV: unknown, newV: unknown): string | null {
+  if (typeof oldV !== 'boolean' || typeof newV !== 'boolean') return null;
+  if (oldV === newV) return null;
+  const labels = FLAG_LABELS[key];
+  if (labels) return newV ? labels.onTrue : labels.onFalse;
+  return `${humanizeKey(key)}: ${oldV ? 'Yes' : 'No'} → ${newV ? 'Yes' : 'No'}`;
+}
+
+// If an update boils down to a single recognized flag flip, return the
+// friendly verb so the row header reads "Archived" instead of "Updated".
+interface AuditLogLite {
+  action: 'create' | 'update' | 'delete';
+  changes: Record<string, unknown>;
+}
+interface LogSummary {
+  text: string;
+  bg: string;
+  text_: string;
+}
+function summarizeLog(log: AuditLogLite): LogSummary | null {
+  if (log.action !== 'update') return null;
+  const entries = Object.entries(log.changes || {});
+  if (entries.length !== 1) return null;
+  const [k, v] = entries[0];
+  const change = v as { old: unknown; new: unknown };
+  const sentence = flagFlipSentence(k, change.old, change.new);
+  if (!sentence) return null;
+  const labels = FLAG_LABELS[k];
+  if (!labels) return null;
+  const newVal = change.new as boolean;
+  return {
+    text: newVal ? labels.onTrue : labels.onFalse,
+    bg: newVal ? 'bg-emerald-100' : 'bg-rose-100',
+    text_: newVal ? 'text-emerald-700' : 'text-rose-700',
+  };
 }
 
 export default function AuditLogPage() {
@@ -164,6 +232,7 @@ export default function AuditLogPage() {
             const isOpen = expanded.has(log.id);
             const styles = ACTION_STYLES[log.action];
             const ActionIcon = styles.Icon;
+            const summary = summarizeLog(log);
             return (
               <Card key={log.id} className="!p-0 overflow-hidden">
                 <button onClick={() => toggle(log.id)} className="w-full flex items-start gap-3 p-4 hover:bg-gray-50 text-left">
@@ -172,8 +241,8 @@ export default function AuditLogPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className={`text-xs font-semibold px-2 py-0.5 rounded ${styles.bg} ${styles.text}`}>
-                        {t(`audit.action.${log.action}`)}
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded ${summary ? `${summary.bg} ${summary.text_}` : `${styles.bg} ${styles.text}`}`}>
+                        {summary ? summary.text : t(`audit.action.${log.action}`)}
                       </span>
                       <span className="text-sm text-gray-500">
                         {t(`audit.entity.${log.entityType}`)}
@@ -246,7 +315,7 @@ function ChangesView({ log }: { log: AuditLog }) {
         </div>
         {entries.map(([k, v]) => (
           <div key={k} className="grid grid-cols-3 gap-2 text-sm">
-            <span className="text-gray-500 font-mono">{k}</span>
+            <span className="text-gray-600">{humanizeKey(k)}</span>
             <span className="col-span-2 text-gray-900 break-all">{formatValue(v)}</span>
           </div>
         ))}
@@ -254,29 +323,57 @@ function ChangesView({ log }: { log: AuditLog }) {
     );
   }
 
+  // Split entries into boolean-flip flags and regular field diffs so flips
+  // can render as friendly status sentences instead of old/new pairs.
+  const flips: { key: string; sentence: string; newVal: boolean }[] = [];
+  const regular: [string, { old: unknown; new: unknown }][] = [];
+  for (const [k, v] of entries) {
+    const change = v as { old: unknown; new: unknown };
+    const sentence = flagFlipSentence(k, change.old, change.new);
+    if (sentence) flips.push({ key: k, sentence, newVal: change.new as boolean });
+    else regular.push([k, change]);
+  }
+
   return (
-    <div className="space-y-2">
-      <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-        {t('audit.changedFields')}
-      </div>
-      {entries.map(([k, v]) => {
-        const change = v as { old: unknown; new: unknown };
-        return (
-          <div key={k} className="grid grid-cols-3 gap-2 text-sm items-start">
-            <span className="text-gray-500 font-mono pt-0.5">{k}</span>
-            <div className="col-span-2 space-y-0.5">
-              <div className="flex gap-2 items-baseline">
-                <span className="text-xs text-red-600 font-medium w-10 flex-shrink-0">{t('audit.old')}</span>
-                <span className="text-gray-700 line-through break-all">{formatValue(change.old)}</span>
-              </div>
-              <div className="flex gap-2 items-baseline">
-                <span className="text-xs text-green-600 font-medium w-10 flex-shrink-0">{t('audit.new')}</span>
-                <span className="text-gray-900 font-medium break-all">{formatValue(change.new)}</span>
+    <div className="space-y-3">
+      {flips.length > 0 && (
+        <div className="space-y-1.5">
+          {flips.map(f => (
+            <div
+              key={f.key}
+              className={`inline-flex items-center gap-2 text-sm font-medium px-3 py-1.5 rounded-lg border ${
+                f.newVal
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                  : 'bg-rose-50 text-rose-800 border-rose-200'
+              }`}
+            >
+              {f.sentence}
+            </div>
+          ))}
+        </div>
+      )}
+      {regular.length > 0 && (
+        <div className="space-y-2">
+          <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+            {t('audit.changedFields')}
+          </div>
+          {regular.map(([k, change]) => (
+            <div key={k} className="grid grid-cols-3 gap-2 text-sm items-start">
+              <span className="text-gray-600 pt-0.5">{humanizeKey(k)}</span>
+              <div className="col-span-2 space-y-0.5">
+                <div className="flex gap-2 items-baseline">
+                  <span className="text-xs text-red-600 font-medium w-10 flex-shrink-0">{t('audit.old')}</span>
+                  <span className="text-gray-700 line-through break-all">{formatValue(change.old)}</span>
+                </div>
+                <div className="flex gap-2 items-baseline">
+                  <span className="text-xs text-green-600 font-medium w-10 flex-shrink-0">{t('audit.new')}</span>
+                  <span className="text-gray-900 font-medium break-all">{formatValue(change.new)}</span>
+                </div>
               </div>
             </div>
-          </div>
-        );
-      })}
+          ))}
+        </div>
+      )}
     </div>
   );
 }
