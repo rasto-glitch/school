@@ -77,7 +77,7 @@ function userIsActive(joined: RawStaffRow['users']): boolean | null {
 async function fetchStaffWithLastPayment(schoolId: string): Promise<{ active: unknown[]; archived: unknown[] }> {
   const { data: staff, error } = await supabase
     .from('staff_members')
-    .select('id, school_id, user_id, full_name, position, salary_amount, currency, next_payment_date, is_active, insurance_percentage, insurance_paid_out, insurance_paid_out_at, insurance_paid_out_amount, insurance_paid_out_currency, insurance_paid_out_notes, created_at, users(is_active)')
+    .select('id, school_id, user_id, full_name, position, salary_amount, currency, next_payment_date, is_active, insurance_percentage, insurance_paid_out, insurance_paid_out_at, insurance_paid_out_amount, insurance_paid_out_currency, insurance_paid_out_notes, created_at, users!staff_members_user_id_fkey(is_active)')
     .eq('school_id', schoolId)
     .is('voided_at', null)
     .order('is_active', { ascending: false })
@@ -753,7 +753,7 @@ export async function notifyAllStaffDue(req: AuthRequest, res: Response): Promis
 
   const { data: staff, error } = await supabase
     .from('staff_members')
-    .select('id, user_id, full_name, salary_amount, currency, next_payment_date, is_active, users(is_active)')
+    .select('id, user_id, full_name, salary_amount, currency, next_payment_date, is_active, users!staff_members_user_id_fkey(is_active)')
     .eq('school_id', schoolId)
     .is('voided_at', null)
     .eq('is_active', true)
@@ -794,7 +794,7 @@ export async function notifyAllStaffDue(req: AuthRequest, res: Response): Promis
 async function buildExportData(schoolId: string, staffId: string): Promise<StaffSalaryExportData | null> {
   const { data: staff } = await supabase
     .from('staff_members')
-    .select('id, user_id, full_name, position, salary_amount, currency, next_payment_date, is_active, insurance_percentage, insurance_paid_out, insurance_paid_out_at, insurance_paid_out_amount, insurance_paid_out_currency, insurance_paid_out_notes, users(is_active)')
+    .select('id, user_id, full_name, position, salary_amount, currency, next_payment_date, is_active, insurance_percentage, insurance_paid_out, insurance_paid_out_at, insurance_paid_out_amount, insurance_paid_out_currency, insurance_paid_out_notes, users!staff_members_user_id_fkey(is_active)')
     .eq('id', staffId).eq('school_id', schoolId).is('voided_at', null).single();
   if (!staff) return null;
 
