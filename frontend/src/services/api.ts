@@ -480,6 +480,10 @@ export const ledgerApi = {
       categories: LedgerCategoryTotal[];
       defaultCurrency: string;
     }>('/accounting/ledger', { params }),
+  downloadPdf: (params?: { startDate?: string; endDate?: string; sources?: string; currency?: string }) =>
+    api.get('/accounting/ledger/export.pdf', { params, responseType: 'blob' }),
+  downloadXlsx: (params?: { startDate?: string; endDate?: string; sources?: string; currency?: string }) =>
+    api.get('/accounting/ledger/export.xlsx', { params, responseType: 'blob' }),
 };
 
 export interface ArchiveListItem {

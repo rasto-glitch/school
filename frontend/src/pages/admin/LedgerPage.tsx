@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-toastify';
-import { Calendar, TrendingUp, TrendingDown, Wallet, Download, Filter as FilterIcon, BookOpen } from 'lucide-react';
+import { Calendar, TrendingUp, TrendingDown, Wallet, FileText, FileSpreadsheet, Filter as FilterIcon, BookOpen } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { ledgerApi, type LedgerRow, type LedgerCurrencyTotal, type LedgerCategoryTotal } from '../../services/api';
 import PageLayout from '../../components/layout/PageLayout';
@@ -34,35 +34,13 @@ const SOURCE_LABELS: Record<SourceKey, string> = {
   expense: 'Expenses',
 };
 
-function csvEscape(value: string): string {
-  if (value.includes(',') || value.includes('"') || value.includes('\n')) {
-    return `"${value.replace(/"/g, '""')}"`;
-  }
-  return value;
-}
-
-function downloadCsv(rows: LedgerRow[], filename: string) {
-  const header = ['Date', 'Type', 'Source', 'Category', 'Description', 'Amount', 'Currency', 'Reference'];
-  const lines = [
-    header.join(','),
-    ...rows.map(r => [
-      r.date,
-      r.type,
-      r.source,
-      csvEscape(r.category),
-      csvEscape(r.description),
-      String(r.amount),
-      r.currency,
-      csvEscape(r.reference ?? ''),
-    ].join(',')),
-  ];
-  const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+function saveBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
   a.download = filename;
   a.click();
-  URL.revokeObjectURL(url);
+  URL.revokeObjectURL(a.href);
 }
 
 export default function LedgerPage() {
@@ -116,6 +94,26 @@ export default function LedgerPage() {
     if (!rows) return [];
     return typeFilter === 'all' ? rows : rows.filter(r => r.type === typeFilter);
   }, [rows, typeFilter]);
+
+  const [exporting, setExporting] = useState<'pdf' | 'xlsx' | null>(null);
+  const exportLedger = async (kind: 'pdf' | 'xlsx') => {
+    const enabled = (Object.keys(enabledSources) as SourceKey[]).filter(k => enabledSources[k]);
+    if (enabled.length === 0) { toast.info('Pick at least one source first'); return; }
+    setExporting(kind);
+    try {
+      const params = {
+        startDate: startDate || undefined,
+        endDate: endDate || undefined,
+        sources: enabled.join(','),
+        currency: currencyFilter || undefined,
+      };
+      const r = kind === 'pdf' ? await ledgerApi.downloadPdf(params) : await ledgerApi.downloadXlsx(params);
+      const tag = `${startDate || 'all'}-to-${endDate || 'now'}`;
+      saveBlob(r.data as Blob, `ledger-${tag}.${kind}`);
+    } catch (e: any) {
+      toast.error(e.response?.data?.error || `Failed to export ${kind.toUpperCase()}`);
+    } finally { setExporting(null); }
+  };
 
   const setQuickRange = (kind: 'this_month' | 'last_month' | 'ytd' | 'last_30' | 'last_90') => {
     const now = new Date();
@@ -303,15 +301,28 @@ export default function LedgerPage() {
             <h3 className="font-semibold text-gray-900">Entries</h3>
             {rows && <span className="text-xs text-gray-500">({visibleRows.length})</span>}
           </div>
-          <Button
-            size="sm"
-            variant="ghost"
-            icon={<Download className="w-4 h-4" />}
-            onClick={() => downloadCsv(visibleRows, `ledger-${startDate || 'all'}-to-${endDate || 'now'}.csv`)}
-            disabled={!rows || visibleRows.length === 0}
-          >
-            Export CSV
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={<FileText className="w-4 h-4" />}
+              onClick={() => exportLedger('pdf')}
+              loading={exporting === 'pdf'}
+              disabled={!rows || visibleRows.length === 0 || exporting !== null}
+            >
+              PDF
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={<FileSpreadsheet className="w-4 h-4" />}
+              onClick={() => exportLedger('xlsx')}
+              loading={exporting === 'xlsx'}
+              disabled={!rows || visibleRows.length === 0 || exporting !== null}
+            >
+              Excel
+            </Button>
+          </div>
         </div>
 
         {rows === null ? <LoadingSpinner /> : visibleRows.length === 0 ? (

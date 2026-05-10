@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { supabase } from '../config/supabase';
 import type { AuthRequest } from '../middleware/auth';
+import { streamLedgerPdf, buildLedgerXlsx } from '../utils/ledgerExport';
 
 // Aggregate ledger across all financial entry sources:
 //   - fee_payments        → income  (Tuition)
@@ -35,6 +36,15 @@ interface CategoryTotal {
   currency: string;
 }
 
+interface LedgerAggregate {
+  rows: LedgerRow[];
+  totals: CurrencyTotals[];
+  categories: CategoryTotal[];
+  defaultCurrency: string;
+  startDate: string | null;
+  endDate: string | null;
+}
+
 async function ensurePremium(schoolId: string): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
   const { data } = await supabase.from('schools').select('features').eq('id', schoolId).single();
   if ((data?.features as Record<string, boolean> | null)?.tuition_fees !== true) {
@@ -49,15 +59,16 @@ async function getDefaultCurrency(schoolId: string): Promise<string> {
   return cfg.currency ?? 'USD';
 }
 
-export async function getLedger(req: AuthRequest, res: Response): Promise<void> {
-  const { schoolId } = req.user!;
-  const guard = await ensurePremium(schoolId);
-  if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
+async function getSchoolMeta(schoolId: string): Promise<{ name: string; logoUrl: string | null }> {
+  const { data } = await supabase.from('schools').select('name, logo_url').eq('id', schoolId).single();
+  return { name: data?.name ?? 'School', logoUrl: (data as { logo_url?: string | null })?.logo_url ?? null };
+}
 
-  const { startDate, endDate, sources, currency } = req.query as {
-    startDate?: string; endDate?: string; sources?: string; currency?: string;
-  };
-  // sources is a comma-separated list: 'fee_payment,staff_salary_payment,expense'
+async function buildLedger(
+  schoolId: string,
+  filters: { startDate?: string; endDate?: string; sources?: string; currency?: string },
+): Promise<{ ok: true; data: LedgerAggregate } | { ok: false; status: number; error: string }> {
+  const { startDate, endDate, sources, currency } = filters;
   const wantSources = (sources?.split(',').map(s => s.trim()).filter(Boolean) ?? []) as Array<LedgerRow['source']>;
   const include = (s: LedgerRow['source']) => wantSources.length === 0 || wantSources.includes(s);
 
@@ -74,7 +85,7 @@ export async function getLedger(req: AuthRequest, res: Response): Promise<void> 
     if (startDate) q = q.gte('paid_on', startDate);
     if (endDate) q = q.lte('paid_on', endDate);
     const { data, error } = await q;
-    if (error) { res.status(500).json({ error: `Tuition: ${error.message}` }); return; }
+    if (error) return { ok: false, status: 500, error: `Tuition: ${error.message}` };
     for (const p of (data ?? []) as any[]) {
       const studentName = p.student_fees?.students?.full_name ?? 'Student';
       rows.push({
@@ -101,7 +112,7 @@ export async function getLedger(req: AuthRequest, res: Response): Promise<void> 
     if (startDate) q = q.gte('paid_on', startDate);
     if (endDate) q = q.lte('paid_on', endDate);
     const { data, error } = await q;
-    if (error) { res.status(500).json({ error: `Salaries: ${error.message}` }); return; }
+    if (error) return { ok: false, status: 500, error: `Salaries: ${error.message}` };
     for (const p of (data ?? []) as any[]) {
       const name = p.staff?.full_name ?? 'Staff';
       const ins = Number(p.insurance_amount) || 0;
@@ -132,7 +143,7 @@ export async function getLedger(req: AuthRequest, res: Response): Promise<void> 
     if (startDate) q = q.gte('expense_date', startDate);
     if (endDate) q = q.lte('expense_date', endDate);
     const { data, error } = await q;
-    if (error) { res.status(500).json({ error: `Expenses: ${error.message}` }); return; }
+    if (error) return { ok: false, status: 500, error: `Expenses: ${error.message}` };
     for (const e of (data ?? []) as any[]) {
       rows.push({
         id: `ex:${e.id}`,
@@ -148,10 +159,7 @@ export async function getLedger(req: AuthRequest, res: Response): Promise<void> 
     }
   }
 
-  // Optional currency filter
   const filtered = currency ? rows.filter(r => r.currency === currency) : rows;
-
-  // Sort newest-first by date, then secondary by source for stable ordering
   filtered.sort((a, b) => {
     if (a.date !== b.date) return a.date < b.date ? 1 : -1;
     return a.source.localeCompare(b.source);
@@ -184,10 +192,78 @@ export async function getLedger(req: AuthRequest, res: Response): Promise<void> 
     c.amount += r.amount;
   }
 
-  res.json({
-    rows: filtered,
-    totals: Array.from(totalsByCurrency.values()).sort((a, b) => a.currency.localeCompare(b.currency)),
-    categories: Array.from(catMap.values()).sort((a, b) => b.amount - a.amount),
-    defaultCurrency,
+  return {
+    ok: true,
+    data: {
+      rows: filtered,
+      totals: Array.from(totalsByCurrency.values()).sort((a, b) => a.currency.localeCompare(b.currency)),
+      categories: Array.from(catMap.values()).sort((a, b) => b.amount - a.amount),
+      defaultCurrency,
+      startDate: startDate ?? null,
+      endDate: endDate ?? null,
+    },
+  };
+}
+
+export async function getLedger(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const guard = await ensurePremium(schoolId);
+  if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
+
+  const result = await buildLedger(schoolId, req.query as Record<string, string>);
+  if (!result.ok) { res.status(result.status).json({ error: result.error }); return; }
+  res.json(result.data);
+}
+
+export async function exportLedgerPdf(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const guard = await ensurePremium(schoolId);
+  if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
+
+  const result = await buildLedger(schoolId, req.query as Record<string, string>);
+  if (!result.ok) { res.status(result.status).json({ error: result.error }); return; }
+  const meta = await getSchoolMeta(schoolId);
+
+  const tag = `${result.data.startDate ?? 'all'}_to_${result.data.endDate ?? 'now'}`;
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="ledger-${tag}.pdf"`);
+  await streamLedgerPdf(res, {
+    schoolName: meta.name,
+    schoolLogoUrl: meta.logoUrl,
+    startDate: result.data.startDate,
+    endDate: result.data.endDate,
+    rows: result.data.rows.map(r => ({
+      date: r.date, type: r.type, source: r.source, category: r.category,
+      description: r.description, amount: r.amount, currency: r.currency, reference: r.reference,
+    })),
+    totals: result.data.totals,
+    categories: result.data.categories,
   });
+}
+
+export async function exportLedgerXlsx(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const guard = await ensurePremium(schoolId);
+  if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
+
+  const result = await buildLedger(schoolId, req.query as Record<string, string>);
+  if (!result.ok) { res.status(result.status).json({ error: result.error }); return; }
+  const meta = await getSchoolMeta(schoolId);
+
+  const buf = buildLedgerXlsx({
+    schoolName: meta.name,
+    schoolLogoUrl: meta.logoUrl,
+    startDate: result.data.startDate,
+    endDate: result.data.endDate,
+    rows: result.data.rows.map(r => ({
+      date: r.date, type: r.type, source: r.source, category: r.category,
+      description: r.description, amount: r.amount, currency: r.currency, reference: r.reference,
+    })),
+    totals: result.data.totals,
+    categories: result.data.categories,
+  });
+  const tag = `${result.data.startDate ?? 'all'}_to_${result.data.endDate ?? 'now'}`;
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="ledger-${tag}.xlsx"`);
+  res.send(buf);
 }

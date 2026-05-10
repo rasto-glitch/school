@@ -279,6 +279,8 @@ export function createRouter(io: SocketServer) {
 
   // Ledger — aggregate read across tuition, salaries, expenses
   router.get('/accounting/ledger', authenticate, authorize(...accountingRW), (req, res) => ledger.getLedger(req as AuthRequest, res));
+  router.get('/accounting/ledger/export.pdf', authenticate, authorize(...accountingRW), (req, res) => ledger.exportLedgerPdf(req as AuthRequest, res));
+  router.get('/accounting/ledger/export.xlsx', authenticate, authorize(...accountingRW), (req, res) => ledger.exportLedgerXlsx(req as AuthRequest, res));
 
   // Teacher self-service: read-only "my salary"
   router.get('/teacher/salary', authenticate, authorize('teacher'), (req, res) => staff.getMyStaffInfo(req as AuthRequest, res));
