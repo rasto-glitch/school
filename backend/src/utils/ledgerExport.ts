@@ -48,7 +48,6 @@ const COLOR_MUTED = '#6B7280';
 const COLOR_BORDER = '#E5E7EB';
 const COLOR_INCOME = '#047857';
 const COLOR_EXPENSE = '#BE123C';
-const COLOR_ACCENT = '#4F46E5';
 
 const SOURCE_LABEL: Record<LedgerExportRow['source'], string> = {
   fee_payment: 'Tuition',
@@ -78,42 +77,65 @@ export async function streamLedgerPdf(stream: Writable, data: LedgerExportData):
   const doc = new PDFDocument({ margin: 40, size: 'A4' });
   doc.pipe(stream);
 
+  const M = 40;
+  const CONTENT_W = 515; // 595 (A4 width) - 80 margins
+  const PAGE_BOTTOM = 800;
+
   const logoBuf = await fetchLogoBuffer(data.schoolLogoUrl);
   if (logoBuf) {
-    try { doc.image(logoBuf, 40, 40, { fit: [60, 60] }); } catch { /* invalid */ }
+    try { doc.image(logoBuf, M, M, { fit: [60, 60] }); } catch { /* invalid */ }
   }
   doc.font('Helvetica-Bold').fontSize(18).fillColor(COLOR_HEADING).text(data.schoolName, 110, 48);
-  const range = `${data.startDate ?? '…'} → ${data.endDate ?? '…'}`;
+  // Use ASCII separator — pdfkit's default WinAnsi encoding can't render U+2192.
+  const range = `${data.startDate ?? '...'} to ${data.endDate ?? '...'}`;
   doc.font('Helvetica').fontSize(10).fillColor(COLOR_MUTED).text(`Ledger · ${range}`, 110, 72);
-  doc.moveTo(40, 112).lineTo(555, 112).strokeColor(COLOR_BORDER).lineWidth(1).stroke();
+  doc.moveTo(M, 112).lineTo(M + CONTENT_W, 112).strokeColor(COLOR_BORDER).lineWidth(1).stroke();
 
   let y = 128;
+  const ensureSpace = (need: number) => {
+    if (y + need > PAGE_BOTTOM - 20) {
+      doc.addPage();
+      y = M + 20;
+    }
+  };
 
-  // ── Per-currency summary cards (stacked) ──────────────────────────────
-  doc.font('Helvetica').fontSize(8).fillColor(COLOR_MUTED).text('SUMMARY', 40, y);
+  // ── SUMMARY (one block per currency, two rows each) ──────────────────
+  doc.font('Helvetica').fontSize(8).fillColor(COLOR_MUTED).text('SUMMARY', M, y);
   y += 14;
   if (data.totals.length === 0) {
-    doc.font('Helvetica').fontSize(11).fillColor(COLOR_MUTED).text('No entries in this range.', 40, y, { width: 515, align: 'center' });
+    doc.font('Helvetica').fontSize(11).fillColor(COLOR_MUTED).text('No entries in this range.', M, y, { width: CONTENT_W, align: 'center' });
     doc.end();
     return;
   }
   for (const t of data.totals) {
-    if (y > 740) { doc.addPage(); y = 60; }
-    doc.font('Helvetica-Bold').fontSize(11).fillColor(COLOR_HEADING).text(t.currency, 40, y);
-    doc.font('Helvetica').fontSize(10).fillColor(COLOR_MUTED).text(`${t.count} ${t.count === 1 ? 'entry' : 'entries'}`, 100, y);
-    doc.font('Helvetica').fontSize(10).fillColor(COLOR_INCOME).text(`Income ${fmt(t.income, t.currency)}`, 200, y, { width: 130 });
-    doc.font('Helvetica').fontSize(10).fillColor(COLOR_EXPENSE).text(`Expense ${fmt(t.expense, t.currency)}`, 330, y, { width: 130 });
-    doc.font('Helvetica-Bold').fontSize(10).fillColor(t.net >= 0 ? COLOR_INCOME : COLOR_EXPENSE)
-      .text(`Net ${fmt(t.net, t.currency)}`, 460, y, { width: 95, align: 'right' });
-    y += 16;
+    ensureSpace(40);
+    // Row 1: currency label (left) + entry count (right)
+    doc.font('Helvetica-Bold').fontSize(13).fillColor(COLOR_HEADING).text(t.currency, M, y, { width: 200, lineBreak: false });
+    doc.font('Helvetica').fontSize(10).fillColor(COLOR_MUTED).text(
+      `${t.count} ${t.count === 1 ? 'entry' : 'entries'}`,
+      M + CONTENT_W - 100, y + 3, { width: 100, align: 'right', lineBreak: false },
+    );
+    y += 18;
+    // Row 2: three equal cells — Income | Expense | Net
+    const colW = (CONTENT_W - 20) / 3;  // 165 each, 10px gutters
+    const c1 = M;
+    const c2 = M + colW + 10;
+    const c3 = M + (colW + 10) * 2;
+    doc.font('Helvetica').fontSize(8).fillColor(COLOR_MUTED).text('INCOME', c1, y, { width: colW, lineBreak: false });
+    doc.font('Helvetica').fontSize(8).fillColor(COLOR_MUTED).text('EXPENSE', c2, y, { width: colW, lineBreak: false });
+    doc.font('Helvetica').fontSize(8).fillColor(COLOR_MUTED).text('NET', c3, y, { width: colW, lineBreak: false });
+    doc.font('Helvetica-Bold').fontSize(11).fillColor(COLOR_INCOME).text(fmt(t.income, t.currency), c1, y + 11, { width: colW, lineBreak: false });
+    doc.font('Helvetica-Bold').fontSize(11).fillColor(COLOR_EXPENSE).text(fmt(t.expense, t.currency), c2, y + 11, { width: colW, lineBreak: false });
+    doc.font('Helvetica-Bold').fontSize(11).fillColor(t.net >= 0 ? COLOR_INCOME : COLOR_EXPENSE)
+      .text(fmt(t.net, t.currency), c3, y + 11, { width: colW, lineBreak: false });
+    y += 30;
   }
-  y += 6;
-  doc.moveTo(40, y).lineTo(555, y).strokeColor(COLOR_BORDER).stroke();
+  doc.moveTo(M, y).lineTo(M + CONTENT_W, y).strokeColor(COLOR_BORDER).stroke();
   y += 12;
 
-  // ── Category breakdown ───────────────────────────────────────────────
+  // ── BY CATEGORY (two columns: Income on left, Expense on right) ──────
   if (data.categories.length > 0) {
-    doc.font('Helvetica').fontSize(8).fillColor(COLOR_MUTED).text('BY CATEGORY', 40, y);
+    doc.font('Helvetica').fontSize(8).fillColor(COLOR_MUTED).text('BY CATEGORY', M, y);
     y += 14;
     const byCurrency = new Map<string, LedgerExportCategory[]>();
     for (const c of data.categories) {
@@ -121,80 +143,109 @@ export async function streamLedgerPdf(stream: Writable, data: LedgerExportData):
       a.push(c);
       byCurrency.set(c.currency, a);
     }
+    const colW = (CONTENT_W - 30) / 2;  // 242 each, 30px gutter
+    const amountW = 110;
+    const labelW = colW - amountW;
+    const leftX = M;
+    const rightX = M + colW + 30;
+
     for (const [currency, list] of byCurrency) {
-      if (y > 740) { doc.addPage(); y = 60; }
+      ensureSpace(36);
       if (byCurrency.size > 1) {
-        doc.font('Helvetica-Bold').fontSize(9).fillColor(COLOR_MUTED).text(currency, 40, y);
-        y += 12;
+        doc.font('Helvetica-Bold').fontSize(10).fillColor(COLOR_HEADING).text(currency, M, y, { lineBreak: false });
+        y += 14;
       }
       const income = list.filter(c => c.type === 'income');
       const expense = list.filter(c => c.type === 'expense');
-      const left = 40, right = 300;
-      const startY = y;
-
-      let yL = startY;
-      doc.font('Helvetica-Bold').fontSize(9).fillColor(COLOR_INCOME).text('Income', left, yL);
-      yL += 12;
+      doc.font('Helvetica-Bold').fontSize(9).fillColor(COLOR_INCOME).text('Income', leftX, y, { lineBreak: false });
+      doc.font('Helvetica-Bold').fontSize(9).fillColor(COLOR_EXPENSE).text('Expense', rightX, y, { lineBreak: false });
+      const headerRowY = y + 12;
+      let yL = headerRowY, yR = headerRowY;
+      const rowH = 14;
       for (const c of income) {
-        if (yL > 760) { doc.addPage(); yL = 60; }
-        doc.font('Helvetica').fontSize(10).fillColor(COLOR_HEADING).text(c.category, left, yL, { width: 180 });
-        doc.font('Helvetica').fontSize(10).fillColor(COLOR_INCOME).text(fmt(c.amount, c.currency), left + 180, yL, { width: 70, align: 'right' });
-        yL += 14;
+        if (yL + rowH > PAGE_BOTTOM - 20) { doc.addPage(); yL = M + 20; }
+        doc.font('Helvetica').fontSize(10).fillColor(COLOR_HEADING).text(c.category, leftX, yL, { width: labelW, ellipsis: true, lineBreak: false });
+        doc.font('Helvetica').fontSize(10).fillColor(COLOR_INCOME).text(fmt(c.amount, c.currency), leftX + labelW, yL, { width: amountW, align: 'right', lineBreak: false });
+        yL += rowH;
       }
-
-      let yR = startY;
-      doc.font('Helvetica-Bold').fontSize(9).fillColor(COLOR_EXPENSE).text('Expense', right, yR);
-      yR += 12;
       for (const c of expense) {
-        if (yR > 760) { doc.addPage(); yR = 60; }
-        doc.font('Helvetica').fontSize(10).fillColor(COLOR_HEADING).text(c.category, right, yR, { width: 180 });
-        doc.font('Helvetica').fontSize(10).fillColor(COLOR_EXPENSE).text(fmt(c.amount, c.currency), right + 180, yR, { width: 70, align: 'right' });
-        yR += 14;
+        if (yR + rowH > PAGE_BOTTOM - 20) { doc.addPage(); yR = M + 20; }
+        doc.font('Helvetica').fontSize(10).fillColor(COLOR_HEADING).text(c.category, rightX, yR, { width: labelW, ellipsis: true, lineBreak: false });
+        doc.font('Helvetica').fontSize(10).fillColor(COLOR_EXPENSE).text(fmt(c.amount, c.currency), rightX + labelW, yR, { width: amountW, align: 'right', lineBreak: false });
+        yR += rowH;
+      }
+      if (income.length === 0) {
+        doc.font('Helvetica').fontSize(10).fillColor(COLOR_MUTED).text('—', leftX, headerRowY, { lineBreak: false });
+      }
+      if (expense.length === 0) {
+        doc.font('Helvetica').fontSize(10).fillColor(COLOR_MUTED).text('—', rightX, headerRowY, { lineBreak: false });
       }
       y = Math.max(yL, yR) + 6;
     }
-    doc.moveTo(40, y).lineTo(555, y).strokeColor(COLOR_BORDER).stroke();
+    doc.moveTo(M, y).lineTo(M + CONTENT_W, y).strokeColor(COLOR_BORDER).stroke();
     y += 12;
   }
 
-  // ── Entries table ─────────────────────────────────────────────────────
-  doc.font('Helvetica').fontSize(8).fillColor(COLOR_MUTED).text('ENTRIES', 40, y);
+  // ── ENTRIES (table with dynamic row heights to handle wrapping) ──────
+  doc.font('Helvetica').fontSize(8).fillColor(COLOR_MUTED).text('ENTRIES', M, y);
   y += 14;
+
+  // Column widths — tuned so even "IQD 2,700,000.00" fits IN/OUT without wrapping.
+  const COL_DATE = 55, COL_SOURCE = 45, COL_CATEGORY = 60, COL_DESC = 170, COL_IN = 90, COL_OUT = 95;
+  const X_DATE = M;
+  const X_SOURCE = X_DATE + COL_DATE;
+  const X_CATEGORY = X_SOURCE + COL_SOURCE;
+  const X_DESC = X_CATEGORY + COL_CATEGORY;
+  const X_IN = X_DESC + COL_DESC;
+  const X_OUT = X_IN + COL_IN;
+
   const drawHeader = () => {
     doc.font('Helvetica-Bold').fontSize(8).fillColor(COLOR_MUTED);
-    doc.text('DATE', 40, y, { width: 60 });
-    doc.text('SOURCE', 100, y, { width: 60 });
-    doc.text('CATEGORY', 160, y, { width: 80 });
-    doc.text('DESCRIPTION', 240, y, { width: 200 });
-    doc.text('IN', 440, y, { width: 55, align: 'right' });
-    doc.text('OUT', 500, y, { width: 55, align: 'right' });
+    doc.text('DATE', X_DATE, y, { width: COL_DATE, lineBreak: false });
+    doc.text('SOURCE', X_SOURCE, y, { width: COL_SOURCE, lineBreak: false });
+    doc.text('CATEGORY', X_CATEGORY, y, { width: COL_CATEGORY, lineBreak: false });
+    doc.text('DESCRIPTION', X_DESC, y, { width: COL_DESC, lineBreak: false });
+    doc.text('IN', X_IN, y, { width: COL_IN, align: 'right', lineBreak: false });
+    doc.text('OUT', X_OUT, y, { width: COL_OUT, align: 'right', lineBreak: false });
     y += 12;
-    doc.moveTo(40, y).lineTo(555, y).strokeColor(COLOR_BORDER).stroke();
+    doc.moveTo(M, y).lineTo(M + CONTENT_W, y).strokeColor(COLOR_BORDER).stroke();
     y += 6;
   };
   drawHeader();
 
   for (const r of data.rows) {
-    if (y > 770) { doc.addPage(); y = 60; drawHeader(); }
+    // Measure desc + reference height to pick a row height that won't overlap.
+    doc.font('Helvetica').fontSize(9);
+    const descH = doc.heightOfString(r.description, { width: COL_DESC });
+    doc.font('Helvetica-Oblique').fontSize(8);
+    const refH = r.reference ? doc.heightOfString(r.reference, { width: COL_DESC }) : 0;
+    const rowH = Math.max(14, descH + (r.reference ? refH + 2 : 0) + 4);
+
+    if (y + rowH > PAGE_BOTTOM - 20) { doc.addPage(); y = M + 20; drawHeader(); }
+
     doc.font('Helvetica').fontSize(9).fillColor(COLOR_HEADING);
-    doc.text(r.date, 40, y, { width: 60 });
-    doc.text(SOURCE_LABEL[r.source], 100, y, { width: 60 });
-    doc.text(r.category, 160, y, { width: 80, ellipsis: true });
-    const desc = r.reference ? `${r.description} — ${r.reference}` : r.description;
-    doc.text(desc, 240, y, { width: 200, ellipsis: true });
-    if (r.type === 'income') {
-      doc.fillColor(COLOR_INCOME).text(fmt(r.amount, r.currency), 440, y, { width: 55, align: 'right' });
-      doc.text('', 500, y, { width: 55, align: 'right' });
-    } else {
-      doc.text('', 440, y, { width: 55, align: 'right' });
-      doc.fillColor(COLOR_EXPENSE).text(fmt(r.amount, r.currency), 500, y, { width: 55, align: 'right' });
+    doc.text(r.date, X_DATE, y, { width: COL_DATE, lineBreak: false });
+    doc.text(SOURCE_LABEL[r.source], X_SOURCE, y, { width: COL_SOURCE, lineBreak: false });
+    doc.text(r.category, X_CATEGORY, y, { width: COL_CATEGORY, ellipsis: true, lineBreak: false });
+    doc.text(r.description, X_DESC, y, { width: COL_DESC });
+    if (r.reference) {
+      doc.font('Helvetica-Oblique').fontSize(8).fillColor(COLOR_MUTED)
+        .text(r.reference, X_DESC, y + descH + 1, { width: COL_DESC });
     }
-    y += 14;
+    if (r.type === 'income') {
+      doc.font('Helvetica').fontSize(9).fillColor(COLOR_INCOME)
+        .text(fmt(r.amount, r.currency), X_IN, y, { width: COL_IN, align: 'right', lineBreak: false });
+    } else {
+      doc.font('Helvetica').fontSize(9).fillColor(COLOR_EXPENSE)
+        .text(fmt(r.amount, r.currency), X_OUT, y, { width: COL_OUT, align: 'right', lineBreak: false });
+    }
+    y += rowH;
   }
 
+  // Footer — pinned to current page bottom, lineBreak:false stops auto page-add.
   doc.font('Helvetica').fontSize(9).fillColor(COLOR_MUTED).text(
     `Generated by ${data.schoolName} · ${new Date().toISOString().split('T')[0]}`,
-    40, 800, { width: 515, align: 'center' },
+    M, doc.page.height - 25, { width: CONTENT_W, align: 'center', lineBreak: false },
   );
   doc.end();
 }
