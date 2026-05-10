@@ -333,6 +333,155 @@ export const staffApi = {
   reverseInsurancePayout: (id: string) => api.post(`/accounting/staff/${id}/insurance/reverse`),
 };
 
+// ---- EXPENSES + LEDGER (premium accounting) ----
+export interface ExpenseCategory {
+  id: string;
+  name: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ExpenseTemplate {
+  id: string;
+  categoryId: string | null;
+  name: string;
+  amount: number;
+  currency: string;
+  cadence: 'monthly' | 'quarterly' | 'yearly';
+  nextDueDate: string | null;
+  vendor: string | null;
+  notes: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  category?: { id: string; name: string } | null;
+}
+
+export interface ExpenseRow {
+  id: string;
+  categoryId: string | null;
+  templateId: string | null;
+  name: string;
+  amount: number;
+  currency: string;
+  expenseDate: string;
+  vendor: string | null;
+  paymentMethod: string | null;
+  notes: string | null;
+  voidedAt: string | null;
+  voidReason: string | null;
+  createdAt: string;
+  category?: { id: string; name: string } | null;
+  template?: { id: string; name: string; cadence: string } | null;
+}
+
+export const expensesApi = {
+  // Categories
+  listCategories: () => api.get<ExpenseCategory[]>('/accounting/expense-categories'),
+  createCategory: (data: { name: string }) => api.post<ExpenseCategory>('/accounting/expense-categories', data),
+  updateCategory: (id: string, data: { name?: string; isActive?: boolean }) =>
+    api.patch<ExpenseCategory>(`/accounting/expense-categories/${id}`, data),
+  deleteCategory: (id: string) => api.delete(`/accounting/expense-categories/${id}`),
+
+  // Recurring templates
+  listTemplates: () => api.get<ExpenseTemplate[]>('/accounting/expense-templates'),
+  createTemplate: (data: {
+    name: string;
+    amount: number;
+    currency?: string;
+    cadence: 'monthly' | 'quarterly' | 'yearly';
+    nextDueDate?: string | null;
+    categoryId?: string | null;
+    vendor?: string | null;
+    notes?: string | null;
+  }) => api.post<ExpenseTemplate>('/accounting/expense-templates', data),
+  updateTemplate: (id: string, data: Partial<{
+    name: string;
+    amount: number;
+    currency: string;
+    cadence: 'monthly' | 'quarterly' | 'yearly';
+    nextDueDate: string | null;
+    categoryId: string | null;
+    vendor: string | null;
+    notes: string | null;
+    isActive: boolean;
+  }>) => api.patch<ExpenseTemplate>(`/accounting/expense-templates/${id}`, data),
+  deleteTemplate: (id: string) => api.delete(`/accounting/expense-templates/${id}`),
+  recordTemplate: (id: string, data?: { expenseDate?: string; amount?: number; notes?: string | null; paymentMethod?: string | null }) =>
+    api.post<{ expense: ExpenseRow; nextDueDate: string }>(`/accounting/expense-templates/${id}/record`, data ?? {}),
+
+  // Expenses
+  list: (params?: { startDate?: string; endDate?: string; categoryId?: string; kind?: 'recurring' | 'one_time' | 'all' }) =>
+    api.get<ExpenseRow[]>('/accounting/expenses', { params }),
+  create: (data: {
+    name: string;
+    amount: number;
+    currency?: string;
+    expenseDate: string;
+    categoryId?: string | null;
+    vendor?: string | null;
+    paymentMethod?: string | null;
+    notes?: string | null;
+  }) => api.post<ExpenseRow>('/accounting/expenses', data),
+  update: (id: string, data: Partial<{
+    name: string;
+    amount: number;
+    currency: string;
+    expenseDate: string;
+    categoryId: string | null;
+    vendor: string | null;
+    paymentMethod: string | null;
+    notes: string | null;
+  }>) => api.patch<ExpenseRow>(`/accounting/expenses/${id}`, data),
+  void: (id: string, reason?: string) => api.delete(`/accounting/expenses/${id}`, { data: { reason } }),
+  unvoid: (id: string) => api.post(`/accounting/expenses/${id}/unvoid`),
+  listVoided: () => api.get<(ExpenseRow & { voidedByName: string | null })[]>('/accounting/expenses/voided'),
+};
+
+// ---- LEDGER (aggregate read) ----
+export interface LedgerRow {
+  id: string;
+  date: string;
+  type: 'income' | 'expense';
+  source: 'fee_payment' | 'staff_salary_payment' | 'expense';
+  category: string;
+  description: string;
+  amount: number;
+  currency: string;
+  reference: string | null;
+}
+
+export interface LedgerCurrencyTotal {
+  currency: string;
+  income: number;
+  expense: number;
+  net: number;
+  count: number;
+}
+
+export interface LedgerCategoryTotal {
+  category: string;
+  type: 'income' | 'expense';
+  amount: number;
+  currency: string;
+}
+
+export const ledgerApi = {
+  get: (params?: {
+    startDate?: string;
+    endDate?: string;
+    sources?: string;
+    currency?: string;
+  }) =>
+    api.get<{
+      rows: LedgerRow[];
+      totals: LedgerCurrencyTotal[];
+      categories: LedgerCategoryTotal[];
+      defaultCurrency: string;
+    }>('/accounting/ledger', { params }),
+};
+
 export interface ArchiveListItem {
   kind: 'archived' | 'graduated';
   id: string;

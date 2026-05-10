@@ -10,7 +10,7 @@ import {
   MapPin, Bell, User, Users, GraduationCap, Bus,
   Calendar, Settings, UserCog, LogOut, ChevronLeft, ChevronRight,
   FileText, Star, Clock, X, ClipboardCheck, MessageSquare, Archive,
-  CreditCard, Wallet, History,
+  CreditCard, Wallet, History, Receipt, BookOpenCheck,
 } from 'lucide-react';
 import type { Dispatch, SetStateAction } from 'react';
 import type { Role } from '../../types';
@@ -58,6 +58,8 @@ const navItems: Record<Role, NavItem[]> = {
     { to: '/admin/announcements', icon: Megaphone, label: 'Announcements', feature: 'announcements' },
     { to: '/accounting', icon: CreditCard, label: 'Tuition', feature: 'tuition_fees', end: true },
     { to: '/accounting/staff', icon: Wallet, label: 'Staff Salaries', feature: 'tuition_fees' },
+    { to: '/accounting/expenses', icon: Receipt, label: 'Expenses', feature: 'tuition_fees' },
+    { to: '/accounting/ledger', icon: BookOpenCheck, label: 'Ledger', feature: 'tuition_fees' },
     { to: '/admin/notifications', icon: Bell, label: 'Notifications' },
     { to: '/admin/accounts', icon: UserCog, label: 'Accounts' },
     { to: '/admin/audit-log', icon: History, label: 'Audit Log' },
@@ -73,6 +75,8 @@ const navItems: Record<Role, NavItem[]> = {
   accountant: [
     { to: '/accounting', icon: CreditCard, label: 'Tuition', feature: 'tuition_fees', end: true },
     { to: '/accounting/staff', icon: Wallet, label: 'Staff Salaries', feature: 'tuition_fees' },
+    { to: '/accounting/expenses', icon: Receipt, label: 'Expenses', feature: 'tuition_fees' },
+    { to: '/accounting/ledger', icon: BookOpenCheck, label: 'Ledger', feature: 'tuition_fees' },
     { to: '/accounting/profile', icon: User, label: 'Profile' },
   ],
   driver: [

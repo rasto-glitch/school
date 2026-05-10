@@ -681,7 +681,8 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
   entity_type TEXT NOT NULL CHECK (entity_type IN (
-    'student','fee_plan','student_fee','fee_payment','staff_member','staff_salary_payment'
+    'student','fee_plan','student_fee','fee_payment','staff_member','staff_salary_payment',
+    'expense_category','expense_template','expense'
   )),
   entity_id UUID NOT NULL,
   action TEXT NOT NULL CHECK (action IN ('create','update','delete')),
@@ -999,6 +1000,69 @@ ALTER TABLE students ADD COLUMN IF NOT EXISTS previous_archive_id UUID REFERENCE
 CREATE INDEX IF NOT EXISTS idx_students_previous_archive ON students(previous_archive_id) WHERE previous_archive_id IS NOT NULL;
 
 -- ============================================================
+-- EXPENSES (premium accounting module)
+-- Categories are admin-configurable per school (chart of accounts).
+-- Recurring templates are reusable definitions; each "Record" click creates
+-- a one-row expense entry and bumps next_due_date forward by the cadence.
+-- All entries are voidable; voided rows are excluded from reads and the
+-- ledger, then hard-deleted by cleanup_voided_records after 30 days.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS expense_categories (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (school_id, name)
+);
+CREATE INDEX IF NOT EXISTS idx_expense_categories_school ON expense_categories(school_id, is_active);
+
+CREATE TABLE IF NOT EXISTS expense_recurring_templates (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  category_id UUID REFERENCES expense_categories(id) ON DELETE SET NULL,
+  name TEXT NOT NULL,
+  amount NUMERIC(12,2) NOT NULL CHECK (amount >= 0),
+  currency TEXT NOT NULL DEFAULT 'USD',
+  cadence TEXT NOT NULL CHECK (cadence IN ('monthly','quarterly','yearly')),
+  next_due_date DATE,
+  vendor TEXT,
+  notes TEXT,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_expense_templates_school ON expense_recurring_templates(school_id, is_active);
+CREATE INDEX IF NOT EXISTS idx_expense_templates_category ON expense_recurring_templates(category_id) WHERE category_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_expense_templates_next_due ON expense_recurring_templates(school_id, next_due_date) WHERE is_active AND next_due_date IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS expenses (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  category_id UUID REFERENCES expense_categories(id) ON DELETE SET NULL,
+  template_id UUID REFERENCES expense_recurring_templates(id) ON DELETE SET NULL,
+  name TEXT NOT NULL,
+  amount NUMERIC(12,2) NOT NULL CHECK (amount >= 0),
+  currency TEXT NOT NULL DEFAULT 'USD',
+  expense_date DATE NOT NULL,
+  vendor TEXT,
+  payment_method TEXT,
+  notes TEXT,
+  recorded_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  voided_at TIMESTAMPTZ,
+  voided_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  void_reason TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_expenses_school_date ON expenses(school_id, expense_date DESC) WHERE voided_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_expenses_category ON expenses(category_id) WHERE category_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_expenses_template ON expenses(template_id) WHERE template_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_expenses_voided ON expenses(school_id, voided_at) WHERE voided_at IS NOT NULL;
+
+-- ============================================================
 -- VOID RETENTION CLEANUP
 -- Hard-deletes voided records older than the retention window.
 -- Audit log rows persist independently, so the paper trail outlives the row.
@@ -1013,6 +1077,7 @@ BEGIN
   DELETE FROM fee_plans            WHERE voided_at IS NOT NULL AND voided_at < NOW() - INTERVAL '30 days';
   DELETE FROM staff_salary_payments WHERE voided_at IS NOT NULL AND voided_at < NOW() - INTERVAL '30 days';
   DELETE FROM staff_members        WHERE voided_at IS NOT NULL AND voided_at < NOW() - INTERVAL '30 days';
+  DELETE FROM expenses             WHERE voided_at IS NOT NULL AND voided_at < NOW() - INTERVAL '30 days';
 END;
 $$ LANGUAGE plpgsql;
 

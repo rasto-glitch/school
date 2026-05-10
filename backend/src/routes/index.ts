@@ -12,6 +12,8 @@ import * as reception from '../controllers/reception.controller';
 import * as pub from '../controllers/public.controller';
 import * as fees from '../controllers/fees.controller';
 import * as staff from '../controllers/staff.controller';
+import * as expenses from '../controllers/expenses.controller';
+import * as ledger from '../controllers/ledger.controller';
 import { authenticate, authorize } from '../middleware/auth';
 import type { AuthRequest } from '../middleware/auth';
 import { Server as SocketServer } from 'socket.io';
@@ -253,6 +255,30 @@ export function createRouter(io: SocketServer) {
   router.get('/accounting/staff/:id/export.xlsx', authenticate, authorize(...accountingRW), (req, res) => staff.exportStaffSalaryXlsx(req as AuthRequest, res));
   router.post('/accounting/staff/:id/insurance/pay', authenticate, authorize(...accountingRW), (req, res) => staff.markStaffInsurancePaid(req as AuthRequest, res));
   router.post('/accounting/staff/:id/insurance/reverse', authenticate, authorize(...accountingRW), (req, res) => staff.reverseStaffInsurancePayout(req as AuthRequest, res));
+
+  // Expense categories — chart of accounts per school
+  router.get('/accounting/expense-categories', authenticate, authorize(...accountingRW), (req, res) => expenses.listCategories(req as AuthRequest, res));
+  router.post('/accounting/expense-categories', authenticate, authorize(...accountingRW), (req, res) => expenses.createCategory(req as AuthRequest, res));
+  router.patch('/accounting/expense-categories/:id', authenticate, authorize(...accountingRW), (req, res) => expenses.updateCategory(req as AuthRequest, res));
+  router.delete('/accounting/expense-categories/:id', authenticate, authorize(...accountingRW), (req, res) => expenses.deleteCategory(req as AuthRequest, res));
+
+  // Recurring expense templates
+  router.get('/accounting/expense-templates', authenticate, authorize(...accountingRW), (req, res) => expenses.listTemplates(req as AuthRequest, res));
+  router.post('/accounting/expense-templates', authenticate, authorize(...accountingRW), (req, res) => expenses.createTemplate(req as AuthRequest, res));
+  router.patch('/accounting/expense-templates/:id', authenticate, authorize(...accountingRW), (req, res) => expenses.updateTemplate(req as AuthRequest, res));
+  router.delete('/accounting/expense-templates/:id', authenticate, authorize(...accountingRW), (req, res) => expenses.deleteTemplate(req as AuthRequest, res));
+  router.post('/accounting/expense-templates/:id/record', authenticate, authorize(...accountingRW), (req, res) => expenses.recordTemplate(req as AuthRequest, res));
+
+  // Expenses (one-time and recurring-records). Voided list before :id to avoid path conflict.
+  router.get('/accounting/expenses/voided', authenticate, authorize(...accountingRW), (req, res) => expenses.listVoidedExpenses(req as AuthRequest, res));
+  router.get('/accounting/expenses', authenticate, authorize(...accountingRW), (req, res) => expenses.listExpenses(req as AuthRequest, res));
+  router.post('/accounting/expenses', authenticate, authorize(...accountingRW), (req, res) => expenses.createExpense(req as AuthRequest, res));
+  router.patch('/accounting/expenses/:id', authenticate, authorize(...accountingRW), (req, res) => expenses.updateExpense(req as AuthRequest, res));
+  router.delete('/accounting/expenses/:id', authenticate, authorize(...accountingRW), (req, res) => expenses.voidExpense(req as AuthRequest, res));
+  router.post('/accounting/expenses/:id/unvoid', authenticate, authorize(...accountingRW), (req, res) => expenses.unvoidExpense(req as AuthRequest, res));
+
+  // Ledger — aggregate read across tuition, salaries, expenses
+  router.get('/accounting/ledger', authenticate, authorize(...accountingRW), (req, res) => ledger.getLedger(req as AuthRequest, res));
 
   // Teacher self-service: read-only "my salary"
   router.get('/teacher/salary', authenticate, authorize('teacher'), (req, res) => staff.getMyStaffInfo(req as AuthRequest, res));

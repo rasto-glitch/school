@@ -8,7 +8,10 @@ export type AuditEntityType =
   | 'student_fee'
   | 'fee_payment'
   | 'staff_member'
-  | 'staff_salary_payment';
+  | 'staff_salary_payment'
+  | 'expense_category'
+  | 'expense_template'
+  | 'expense';
 
 interface LogParams {
   req: AuthRequest;

@@ -57,6 +57,8 @@ import AdminWeeklySummaryPage from './pages/admin/AdminWeeklySummaryPage';
 import SettingsPage from './pages/admin/SettingsPage';
 import AdminTuitionPage from './pages/admin/AdminTuitionPage';
 import AdminTuitionStudentDetailPage from './pages/admin/AdminTuitionStudentDetailPage';
+import ExpensesPage from './pages/admin/ExpensesPage';
+import LedgerPage from './pages/admin/LedgerPage';
 import ParentAppointmentsPage from './pages/parent/AppointmentsPage';
 import ParentTuitionPage from './pages/parent/TuitionPage';
 import WriteAssignmentsPage from './pages/teacher/WriteAssignmentsPage';
@@ -210,6 +212,8 @@ export default function App() {
         {/* Accounting Portal — premium tuition module. Shared by admin, accountant, reception (read-only via backend). */}
         <Route path="/accounting" element={<ProtectedRoute allowedRoles={['admin', 'accountant', 'reception']}><AdminTuitionPage /></ProtectedRoute>} />
         <Route path="/accounting/staff" element={<ProtectedRoute allowedRoles={['admin', 'accountant']}><AdminTuitionPage /></ProtectedRoute>} />
+        <Route path="/accounting/expenses" element={<ProtectedRoute allowedRoles={['admin', 'accountant']}><ExpensesPage /></ProtectedRoute>} />
+        <Route path="/accounting/ledger" element={<ProtectedRoute allowedRoles={['admin', 'accountant']}><LedgerPage /></ProtectedRoute>} />
         <Route path="/accounting/student/:id" element={<ProtectedRoute allowedRoles={['admin', 'accountant', 'reception']}><AdminTuitionStudentDetailPage /></ProtectedRoute>} />
         <Route path="/accounting/profile" element={<ProtectedRoute allowedRoles={['accountant']}><ProfilePage /></ProtectedRoute>} />
 

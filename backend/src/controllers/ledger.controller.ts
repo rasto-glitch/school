@@ -1,0 +1,193 @@
+import { Response } from 'express';
+import { supabase } from '../config/supabase';
+import type { AuthRequest } from '../middleware/auth';
+
+// Aggregate ledger across all financial entry sources:
+//   - fee_payments        → income  (Tuition)
+//   - staff_salary_payments → expense (Salary)
+//   - expenses            → expense (Operating expenses)
+// Voided rows are excluded. Date-range filtered on each source's natural date.
+
+interface LedgerRow {
+  id: string;
+  date: string;             // YYYY-MM-DD
+  type: 'income' | 'expense';
+  source: 'fee_payment' | 'staff_salary_payment' | 'expense';
+  category: string;         // "Tuition", "Salary", or expense category name (or "Uncategorized")
+  description: string;
+  amount: number;
+  currency: string;
+  reference: string | null; // method / reference / vendor — secondary detail
+}
+
+interface CurrencyTotals {
+  currency: string;
+  income: number;
+  expense: number;
+  net: number;
+  count: number;
+}
+
+interface CategoryTotal {
+  category: string;
+  type: 'income' | 'expense';
+  amount: number;
+  currency: string;
+}
+
+async function ensurePremium(schoolId: string): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
+  const { data } = await supabase.from('schools').select('features').eq('id', schoolId).single();
+  if ((data?.features as Record<string, boolean> | null)?.tuition_fees !== true) {
+    return { ok: false, status: 403, error: 'Accounting module is not enabled for this school.' };
+  }
+  return { ok: true };
+}
+
+async function getDefaultCurrency(schoolId: string): Promise<string> {
+  const { data } = await supabase.from('schools').select('tuition_config').eq('id', schoolId).single();
+  const cfg = (data?.tuition_config as { currency?: string } | null) ?? {};
+  return cfg.currency ?? 'USD';
+}
+
+export async function getLedger(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const guard = await ensurePremium(schoolId);
+  if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
+
+  const { startDate, endDate, sources, currency } = req.query as {
+    startDate?: string; endDate?: string; sources?: string; currency?: string;
+  };
+  // sources is a comma-separated list: 'fee_payment,staff_salary_payment,expense'
+  const wantSources = (sources?.split(',').map(s => s.trim()).filter(Boolean) ?? []) as Array<LedgerRow['source']>;
+  const include = (s: LedgerRow['source']) => wantSources.length === 0 || wantSources.includes(s);
+
+  const defaultCurrency = await getDefaultCurrency(schoolId);
+  const rows: LedgerRow[] = [];
+
+  // ── Tuition payments ──
+  if (include('fee_payment')) {
+    let q = supabase
+      .from('fee_payments')
+      .select('id, amount, paid_on, method, reference, notes, student_fee_id, student_fees(student_id, students(full_name))')
+      .eq('school_id', schoolId)
+      .is('voided_at', null);
+    if (startDate) q = q.gte('paid_on', startDate);
+    if (endDate) q = q.lte('paid_on', endDate);
+    const { data, error } = await q;
+    if (error) { res.status(500).json({ error: `Tuition: ${error.message}` }); return; }
+    for (const p of (data ?? []) as any[]) {
+      const studentName = p.student_fees?.students?.full_name ?? 'Student';
+      rows.push({
+        id: `fp:${p.id}`,
+        date: p.paid_on,
+        type: 'income',
+        source: 'fee_payment',
+        category: 'Tuition',
+        description: `Tuition payment — ${studentName}`,
+        amount: Number(p.amount) || 0,
+        currency: defaultCurrency,
+        reference: [p.method, p.reference].filter(Boolean).join(' · ') || null,
+      });
+    }
+  }
+
+  // ── Staff salary payments ──
+  if (include('staff_salary_payment')) {
+    let q = supabase
+      .from('staff_salary_payments')
+      .select('id, amount, currency, paid_on, period_label, notes, insurance_amount, staff:staff_members(full_name, position)')
+      .eq('school_id', schoolId)
+      .is('voided_at', null);
+    if (startDate) q = q.gte('paid_on', startDate);
+    if (endDate) q = q.lte('paid_on', endDate);
+    const { data, error } = await q;
+    if (error) { res.status(500).json({ error: `Salaries: ${error.message}` }); return; }
+    for (const p of (data ?? []) as any[]) {
+      const name = p.staff?.full_name ?? 'Staff';
+      const ins = Number(p.insurance_amount) || 0;
+      // The cash that left the school = amount + insurance withheld? Actually
+      // the existing salary form posts `amount` as net paid out and `insurance_amount`
+      // is held aside. We treat `amount` as the cash expense for the ledger.
+      rows.push({
+        id: `ssp:${p.id}`,
+        date: p.paid_on,
+        type: 'expense',
+        source: 'staff_salary_payment',
+        category: 'Salary',
+        description: `Salary — ${name}${p.period_label ? ` (${p.period_label})` : ''}`,
+        amount: Number(p.amount) || 0,
+        currency: p.currency || defaultCurrency,
+        reference: ins > 0 ? `Insurance held: ${ins}` : null,
+      });
+    }
+  }
+
+  // ── Operating expenses ──
+  if (include('expense')) {
+    let q = supabase
+      .from('expenses')
+      .select('id, name, amount, currency, expense_date, vendor, payment_method, notes, category:expense_categories(name)')
+      .eq('school_id', schoolId)
+      .is('voided_at', null);
+    if (startDate) q = q.gte('expense_date', startDate);
+    if (endDate) q = q.lte('expense_date', endDate);
+    const { data, error } = await q;
+    if (error) { res.status(500).json({ error: `Expenses: ${error.message}` }); return; }
+    for (const e of (data ?? []) as any[]) {
+      rows.push({
+        id: `ex:${e.id}`,
+        date: e.expense_date,
+        type: 'expense',
+        source: 'expense',
+        category: e.category?.name ?? 'Uncategorized',
+        description: e.name,
+        amount: Number(e.amount) || 0,
+        currency: e.currency || defaultCurrency,
+        reference: [e.vendor, e.payment_method].filter(Boolean).join(' · ') || null,
+      });
+    }
+  }
+
+  // Optional currency filter
+  const filtered = currency ? rows.filter(r => r.currency === currency) : rows;
+
+  // Sort newest-first by date, then secondary by source for stable ordering
+  filtered.sort((a, b) => {
+    if (a.date !== b.date) return a.date < b.date ? 1 : -1;
+    return a.source.localeCompare(b.source);
+  });
+
+  // Totals per currency
+  const totalsByCurrency = new Map<string, CurrencyTotals>();
+  for (const r of filtered) {
+    let t = totalsByCurrency.get(r.currency);
+    if (!t) {
+      t = { currency: r.currency, income: 0, expense: 0, net: 0, count: 0 };
+      totalsByCurrency.set(r.currency, t);
+    }
+    if (r.type === 'income') t.income += r.amount;
+    else t.expense += r.amount;
+    t.net = t.income - t.expense;
+    t.count += 1;
+  }
+
+  // Category breakdown per currency
+  const catKey = (cur: string, cat: string, type: 'income' | 'expense') => `${cur}|${type}|${cat}`;
+  const catMap = new Map<string, CategoryTotal>();
+  for (const r of filtered) {
+    const k = catKey(r.currency, r.category, r.type);
+    let c = catMap.get(k);
+    if (!c) {
+      c = { category: r.category, type: r.type, amount: 0, currency: r.currency };
+      catMap.set(k, c);
+    }
+    c.amount += r.amount;
+  }
+
+  res.json({
+    rows: filtered,
+    totals: Array.from(totalsByCurrency.values()).sort((a, b) => a.currency.localeCompare(b.currency)),
+    categories: Array.from(catMap.values()).sort((a, b) => b.amount - a.amount),
+    defaultCurrency,
+  });
+}
