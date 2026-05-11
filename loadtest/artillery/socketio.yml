@@ -1,0 +1,37 @@
+# Socket.io load test — driver fan-out path.
+# Each parent VU opens a socket, calls watchDriver, idles. The k6 driver scenario
+# pushes locations via REST, and the backend fans events out over these sockets.
+# Run BOTH this and `k6 run loadtest/k6/driver.js` together for realistic socket pressure.
+#
+# Run: BASE_WS=https://your-test-backend artillery run loadtest/artillery/socketio.yml
+
+config:
+  target: "{{ $processEnvironment.BASE_WS }}"
+  phases:
+    - duration: 60
+      arrivalRate: 5
+      rampTo: 50
+      name: "Ramp parents onto sockets"
+    - duration: 600
+      arrivalRate: 50
+      name: "Hold idle parent sockets"
+  variables:
+    abbr: "load"
+    password: "Test1234!"
+    # Comma-separated driver UUIDs to subscribe to. Populate from the seed.
+    # Quick query: SELECT string_agg(id::text, ',') FROM drivers WHERE school_id = (SELECT id FROM schools WHERE abbreviation='LOAD');
+    driverIds: "{{ $processEnvironment.DRIVER_IDS }}"
+  engines:
+    socketio-v3:
+      query: "token={{ jwt }}"
+  processor: "./socketio-processor.js"
+
+scenarios:
+  - name: "Parent listens for bus proximity"
+    engine: socketio-v3
+    flow:
+      - function: "preLogin"           # logs in via REST, stashes jwt + a random driverId
+      - emit:
+          channel: "watchDriver"
+          data: "{{ driverId }}"
+      - think: 600                     # idle 10 min while drivers fan out events

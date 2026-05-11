@@ -53,9 +53,10 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Rate limiting
 
 // Strict limiter for login — 10 attempts per 15 minutes per IP
+// LOADTEST: temporarily raised to 100000. Revert before re-locking prod.
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10,
+  max: 100000,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many login attempts. Please wait 15 minutes before trying again.' },
@@ -93,9 +94,10 @@ const publicLimiter = rateLimit({
 app.use('/api/schools', publicLimiter);
 
 // General backstop for all other API routes — 200 requests per minute per IP
+// LOADTEST: temporarily raised to 100000. Revert before re-locking prod.
 const apiLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 200,
+  max: 100000,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many requests. Please slow down.' },
