@@ -94,6 +94,11 @@ export async function updateLocation(req: AuthRequest, res: Response, io?: Socke
     const { data: students } = await studentsQuery;
 
     if (students) {
+      // Accumulate threshold-crossings and dispatch in a single batched notifyMany at the end.
+      // Calling notifyMany per student inside this loop turned every location POST into
+      // N sequential DB round-trips (3-5s p95 with 60 students).
+      const pendingNotifs: { schoolId: string; userId: string; title: string; message: string; type: string }[] = [];
+
       for (const student of students) {
         const parent = Array.isArray(student.parents) ? student.parents[0] : student.parents;
         if (!parent?.user_id) continue;
@@ -138,11 +143,15 @@ export async function updateLocation(req: AuthRequest, res: Response, io?: Socke
         }
 
         if (notifTitle) {
-          await notifyMany([{ schoolId, userId: parent.user_id, title: notifTitle, message: notifMsg, type: 'bus' }]);
+          pendingNotifs.push({ schoolId, userId: parent.user_id, title: notifTitle, message: notifMsg, type: 'bus' });
           if (io) {
             io.to(`school:${schoolId}:user:${parent.user_id}`).emit('busAlert', { title: notifTitle, message: notifMsg, latitude, longitude });
           }
         }
+      }
+
+      if (pendingNotifs.length > 0) {
+        await notifyMany(pendingNotifs);
       }
     }
   }

@@ -93,11 +93,48 @@ export async function notifyMany(payloads: NotifyPayload[]): Promise<void> {
   );
   if (insertError) console.error('[notifyMany] notifications insert failed', { count: payloads.length, type: payloads[0]?.type, error: insertError.message });
 
-  // Socket + push per user
+  // Batched device_tokens lookup — one query for all recipients instead of N
+  const userIds = Array.from(new Set(payloads.map(p => p.userId)));
+  const tokensByUser = new Map<string, { token: string; language: string | null }[]>();
+  if (userIds.length > 0) {
+    const { data: tokenRows } = await supabase
+      .from('device_tokens')
+      .select('user_id, token, language')
+      .in('user_id', userIds);
+    for (const t of (tokenRows ?? []) as { user_id: string; token: string; language: string | null }[]) {
+      const arr = tokensByUser.get(t.user_id) ?? [];
+      arr.push({ token: t.token, language: t.language });
+      tokensByUser.set(t.user_id, arr);
+    }
+  }
+
+  // Socket + push per user (push dispatched in parallel using the pre-fetched tokens)
   await Promise.all(payloads.map(p => {
     if (_io) _io.to(`school:${p.schoolId}:user:${p.userId}`).emit('notification', { title: p.title, message: p.message, type: p.type });
-    return sendPush(p.userId, p.title, p.message, p.type ?? 'general', p.relatedId ? { relatedId: p.relatedId } : undefined);
+    const tokens = tokensByUser.get(p.userId);
+    if (!tokens || tokens.length === 0) return Promise.resolve();
+    return sendPushWithTokens(tokens, p.title, p.message, p.type ?? 'general', p.relatedId ? { relatedId: p.relatedId } : undefined);
   }));
+}
+
+async function sendPushWithTokens(
+  tokens: { token: string; language: string | null }[],
+  title: string,
+  body: string,
+  type: string,
+  extraData?: Record<string, string>,
+): Promise<void> {
+  const messages = tokens.map((t) => {
+    const { title: tTitle, body: tBody } = translatePush(title, body, type, t.language ?? 'en');
+    return { to: t.token, title: tTitle, body: tBody, data: { type, ...extraData }, sound: 'default', channelId: 'default', priority: 'high' };
+  });
+  try {
+    await fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'Accept-Encoding': 'gzip, deflate' },
+      body: JSON.stringify(messages.length === 1 ? messages[0] : messages),
+    });
+  } catch {}
 }
 
 /**

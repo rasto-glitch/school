@@ -27,6 +27,13 @@ export default function () {
   const { token } = loginAs('driver', vuIndex(DRIVER_POOL));
   const h = authHeaders(token);
 
+  // First iteration of this VU: start the drive so bus-location reads work and
+  // proximityState resets cleanly. Empty studentRides → backend defaults to "all on bus".
+  if (__ITER === 0) {
+    http.post(`${BASE_URL}/api/driver/start`, JSON.stringify({ studentRides: [] }),
+      { ...h, tags: { name: 'driver.start' } });
+  }
+
   // Drift the lat/long slightly each tick so proximity calculations actually move
   const drift = (__ITER % 200) * 0.0001;
   const body = {

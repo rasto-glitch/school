@@ -26,7 +26,7 @@ export const options = {
   scenarios: {
     parents:  { executor: 'ramping-vus', exec: 'parentFlow',  startVUs: 0, stages: [{ duration: RAMP, target: parentVUs  }, { duration: DURATION, target: parentVUs  }, { duration: '30s', target: 0 }] },
     teachers: { executor: 'ramping-vus', exec: 'teacherFlow', startVUs: 0, stages: [{ duration: RAMP, target: teacherVUs }, { duration: DURATION, target: teacherVUs }, { duration: '30s', target: 0 }] },
-    drivers:  { executor: 'constant-vus', exec: 'driverFlow', vus: driverVUs, duration: DURATION, startTime: '30s' },
+    drivers:  { executor: 'constant-vus', exec: 'driverFlow', vus: driverVUs, duration: DURATION },
     admins:   { executor: 'ramping-vus', exec: 'adminFlow',   startVUs: 0, stages: [{ duration: RAMP, target: adminVUs   }, { duration: DURATION, target: adminVUs   }, { duration: '30s', target: 0 }] },
   },
   thresholds: {
@@ -77,6 +77,10 @@ export function teacherFlow() {
 export function driverFlow() {
   const { token } = loginAs('driver', vuIndex(DRIVER_POOL));
   const h = authHeaders(token);
+  if (__ITER === 0) {
+    http.post(`${BASE_URL}/api/driver/start`, JSON.stringify({ studentRides: [] }),
+      { ...h, tags: { name: 'driver.start' } });
+  }
   const drift = (__ITER % 200) * 0.0001;
   http.post(`${BASE_URL}/api/driver/location`, JSON.stringify({
     latitude: 50.110 + drift + (Math.random() - 0.5) * 0.0005,
@@ -87,7 +91,7 @@ export function driverFlow() {
 }
 
 export function adminFlow() {
-  const { token } = loginAs('admin', 1); // single seeded admin
+  const { token } = loginAs('admin'); // single seeded admin (no suffix)
   const h = authHeaders(token);
   http.batch([
     ['GET', `${BASE_URL}/api/admin/students`,                       null, { ...h, tags: { name: 'admin.students' } }],
