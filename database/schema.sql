@@ -463,6 +463,30 @@ INSERT INTO subject_teachers (school_id, subject_id, teacher_id)
 SELECT school_id, id, teacher_id FROM subjects WHERE teacher_id IS NOT NULL
 ON CONFLICT (subject_id, teacher_id) DO NOTHING;
 
+-- Per-class curriculum: "teacher T teaches subject S to class C". This is the fine-grained
+-- source of truth; subject_teachers / teachers.subject / subjects.teacher_id are caches
+-- recomputed from it (see admin.controller helpers).
+CREATE TABLE IF NOT EXISTS class_subject_teachers (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  class_id UUID NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+  subject_id UUID NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+  teacher_id UUID NOT NULL REFERENCES teachers(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(class_id, subject_id, teacher_id)
+);
+CREATE INDEX IF NOT EXISTS idx_cst_class ON class_subject_teachers(class_id);
+CREATE INDEX IF NOT EXISTS idx_cst_teacher ON class_subject_teachers(teacher_id);
+CREATE INDEX IF NOT EXISTS idx_cst_subject ON class_subject_teachers(subject_id);
+
+-- Backfill: each existing teacher↔subject link applies to every class that teacher is on.
+-- (Teachers with no teacher_classes rows get nothing here — fill them in via the Curriculum UI.)
+INSERT INTO class_subject_teachers (school_id, class_id, subject_id, teacher_id)
+SELECT st.school_id, tc.class_id, st.subject_id, st.teacher_id
+FROM subject_teachers st
+JOIN teacher_classes tc ON tc.teacher_id = st.teacher_id
+ON CONFLICT (class_id, subject_id, teacher_id) DO NOTHING;
+
 -- ============================================================
 -- ATTENDANCE
 -- ============================================================

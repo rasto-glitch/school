@@ -82,6 +82,11 @@ export function createRouter(io: SocketServer) {
   router.put('/admin/subjects/:id', authenticate, authorize('admin'), (req, res) => admin.updateSubject(req as AuthRequest, res));
   router.delete('/admin/subjects/:id', authenticate, authorize('admin'), (req, res) => admin.deleteSubject(req as AuthRequest, res));
 
+  // Curriculum: class ↔ subject ↔ teacher rows
+  router.get('/admin/curriculum', authenticate, authorize('admin'), (req, res) => admin.getCurriculum(req as AuthRequest, res));
+  router.post('/admin/curriculum', authenticate, authorize('admin'), (req, res) => admin.addCurriculumRow(req as AuthRequest, res));
+  router.delete('/admin/curriculum/:id', authenticate, authorize('admin'), (req, res) => admin.deleteCurriculumRow(req as AuthRequest, res));
+
   router.post('/admin/accounts', authenticate, authorize('admin'), (req, res) => admin.createAccount(req as AuthRequest, res));
   router.get('/admin/accounts', authenticate, authorize('admin'), (req, res) => admin.getAccounts(req as AuthRequest, res));
   router.put('/admin/accounts/:userId', authenticate, authorize('admin'), (req, res) => admin.updateAccount(req as AuthRequest, res));

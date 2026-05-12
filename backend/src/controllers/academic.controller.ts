@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { supabase } from '../config/supabase';
 import type { AuthRequest } from '../middleware/auth';
 import { notifyMany } from '../utils/notify';
+import { subjectAllowedForClass } from '../utils/curriculum';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -266,6 +267,9 @@ export async function createPost(req: AuthRequest, res: Response): Promise<void>
       const info = await getTeacherInfo(userId);
       if (!info) { res.status(403).json({ error: 'Teacher record not found' }); return; }
       if (!classId) { res.status(400).json({ error: 'classId required for teacher posts' }); return; }
+      if (subject && !(await subjectAllowedForClass(schoolId, info.id, classId, subject))) {
+        res.status(403).json({ error: `You aren't assigned to teach ${subject} for this class.` }); return;
+      }
 
       const { data, error } = await supabase
         .from('academic_posts')
@@ -467,27 +471,37 @@ export async function getClasses(req: AuthRequest, res: Response): Promise<void>
 }
 
 // Returns the logged-in author's display info for prefilling post forms.
-// For teachers, includes the resolved subject (subjects table > teachers.subject).
+// For teachers, includes the resolved subject(s) and a per-class subject map ("teaching").
 export async function getMe(req: AuthRequest, res: Response): Promise<void> {
   const { userId, role, schoolId } = req.user!;
   try {
     if (role !== 'teacher') {
-      res.json({ role, subject: null });
+      res.json({ role, subject: null, subjects: [], teaching: [] });
       return;
     }
     const { data: teacher } = await supabase
       .from('teachers')
-      .select('id, subject, subject_teachers(created_at, subjects(id, name))')
+      .select('id, subject, class_subject_teachers(class_id, subject_id, subjects(id, name))')
       .eq('user_id', userId)
       .eq('school_id', schoolId)
       .single();
-    if (!teacher) { res.json({ role, subject: null }); return; }
-    const links = (((teacher as any).subject_teachers ?? []) as any[])
-      .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))
-      .map(r => r.subjects).filter(Boolean);
-    const subjects = links.map((s: any) => ({ id: s.id, name: s.name }));
+    if (!teacher) { res.json({ role, subject: null, subjects: [], teaching: [] }); return; }
+    const teachingMap = new Map<string, { id: string; name: string }[]>();
+    const allSubjects = new Map<string, string>();
+    for (const r of (((teacher as any).class_subject_teachers ?? []) as any[])) {
+      const sid = r.subject_id, sname = r.subjects?.name;
+      if (!sid || !sname) continue;
+      allSubjects.set(sid, sname);
+      if (r.class_id) {
+        const arr = teachingMap.get(r.class_id) ?? [];
+        if (!arr.some(s => s.id === sid)) arr.push({ id: sid, name: sname });
+        teachingMap.set(r.class_id, arr);
+      }
+    }
+    const subjects = Array.from(allSubjects, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+    const teaching = Array.from(teachingMap, ([classId, subs]) => ({ classId, subjects: subs.sort((a, b) => a.name.localeCompare(b.name)) }));
     const resolvedSubject = subjects.map(s => s.name).join(', ') || (teacher as any).subject || null;
-    res.json({ role, subject: resolvedSubject, subjects });
+    res.json({ role, subject: resolvedSubject, subjects, teaching });
   } catch {
     res.status(500).json({ error: 'Failed to fetch profile' });
   }

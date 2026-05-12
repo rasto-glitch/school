@@ -919,34 +919,49 @@ export async function deleteClass(req: AuthRequest, res: Response): Promise<void
   const { data: cls } = await supabase.from('classes').select('id').eq('id', id).eq('school_id', schoolId).single();
   if (!cls) { res.status(404).json({ error: 'Class not found' }); return; }
 
+  // Curriculum rows for this class cascade away; remember the teachers/subjects involved to refresh caches.
+  const { data: cstRows } = await supabase.from('class_subject_teachers')
+    .select('teacher_id, subject_id').eq('school_id', schoolId).eq('class_id', id);
+  const affTeachers = Array.from(new Set(((cstRows ?? []) as any[]).map(r => r.teacher_id)));
+  const affSubjects = Array.from(new Set(((cstRows ?? []) as any[]).map(r => r.subject_id)));
+
   // Students with this class_id will have class_id set to NULL automatically (ON DELETE SET NULL)
   const { error } = await supabase.from('classes').delete().eq('id', id).eq('school_id', schoolId);
   if (error) { res.status(500).json({ error: error.message }); return; }
+  await recomputeCaches(schoolId, { teacherIds: affTeachers, subjectIds: affSubjects });
   res.json({ message: 'Class deleted. Students have been unassigned but not removed.' });
 }
 
-// ---- SUBJECT <-> TEACHER LINKS (many-to-many) ----
-// `subject_teachers` is the source of truth. `teachers.subject` (text) and
-// `subjects.teacher_id` are kept as denormalized "primary"/display caches so older
-// readers (teacher profile, schedule embeds, weekly summary) keep working unchanged.
+// ---- CURRICULUM (class ↔ subject ↔ teacher) ----
+// `class_subject_teachers` is the source of truth. `subject_teachers` (distinct teacher↔subject
+// pairs), `teachers.subject` (comma-joined text) and `subjects.teacher_id` (a "primary" teacher)
+// are caches recomputed from it so legacy readers keep working unchanged.
 
-// Recompute teachers.subject from this teacher's current subject links (comma-joined, oldest first).
-async function refreshTeacherSubjectText(schoolId: string, teacherId: string): Promise<void> {
+// Rebuild the subject_teachers rows + teachers.subject text cache for one teacher.
+async function recomputeTeacherCaches(schoolId: string, teacherId: string): Promise<void> {
   const { data } = await supabase
-    .from('subject_teachers')
-    .select('created_at, subjects(name)')
+    .from('class_subject_teachers')
+    .select('subject_id, subjects(name)')
     .eq('school_id', schoolId)
-    .eq('teacher_id', teacherId)
-    .order('created_at', { ascending: true });
-  const names = ((data ?? []) as any[]).map(r => r.subjects?.name).filter(Boolean);
+    .eq('teacher_id', teacherId);
+  const rows = (data ?? []) as any[];
+  const subjectIds = Array.from(new Set(rows.map(r => r.subject_id).filter(Boolean)));
+  const names = Array.from(new Set(rows.map(r => r.subjects?.name).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+
+  await supabase.from('subject_teachers').delete().eq('school_id', schoolId).eq('teacher_id', teacherId);
+  if (subjectIds.length) {
+    await supabase.from('subject_teachers').insert(
+      subjectIds.map(sid => ({ school_id: schoolId, subject_id: sid, teacher_id: teacherId }))
+    );
+  }
   await supabase.from('teachers').update({ subject: names.length ? names.join(', ') : null })
     .eq('id', teacherId).eq('school_id', schoolId);
 }
 
-// Recompute subjects.teacher_id ("primary teacher") from the link table (oldest link first).
-async function refreshSubjectPrimaryTeacher(schoolId: string, subjectId: string): Promise<void> {
+// Recompute subjects.teacher_id ("primary teacher" — oldest curriculum row) for one subject.
+async function recomputeSubjectPrimary(schoolId: string, subjectId: string): Promise<void> {
   const { data } = await supabase
-    .from('subject_teachers')
+    .from('class_subject_teachers')
     .select('teacher_id')
     .eq('school_id', schoolId)
     .eq('subject_id', subjectId)
@@ -957,55 +972,65 @@ async function refreshSubjectPrimaryTeacher(schoolId: string, subjectId: string)
     .eq('id', subjectId).eq('school_id', schoolId);
 }
 
-// Replace the full set of teachers assigned to a subject.
-async function setSubjectTeachers(schoolId: string, subjectId: string, teacherIds: string[]): Promise<void> {
-  const { data: prev } = await supabase.from('subject_teachers').select('teacher_id')
-    .eq('school_id', schoolId).eq('subject_id', subjectId);
-  const prevIds = ((prev ?? []) as any[]).map(r => r.teacher_id);
-
-  await supabase.from('subject_teachers').delete().eq('school_id', schoolId).eq('subject_id', subjectId);
-  const cleanIds = Array.from(new Set(teacherIds.filter(Boolean)));
-  if (cleanIds.length) {
-    await supabase.from('subject_teachers').insert(
-      cleanIds.map(tid => ({ school_id: schoolId, subject_id: subjectId, teacher_id: tid }))
-    );
-  }
-  await refreshSubjectPrimaryTeacher(schoolId, subjectId);
-  await Promise.all(Array.from(new Set([...prevIds, ...cleanIds])).map(tid => refreshTeacherSubjectText(schoolId, tid)));
+async function recomputeCaches(schoolId: string, opts: { teacherIds?: string[]; subjectIds?: string[] }): Promise<void> {
+  await Promise.all([
+    ...Array.from(new Set((opts.teacherIds ?? []).filter(Boolean))).map(tid => recomputeTeacherCaches(schoolId, tid)),
+    ...Array.from(new Set((opts.subjectIds ?? []).filter(Boolean))).map(sid => recomputeSubjectPrimary(schoolId, sid)),
+  ]);
 }
 
-// Replace the full set of subjects assigned to a teacher.
-async function setTeacherSubjects(schoolId: string, teacherId: string, subjectIds: string[]): Promise<void> {
-  const { data: prev } = await supabase.from('subject_teachers').select('subject_id')
-    .eq('school_id', schoolId).eq('teacher_id', teacherId);
-  const prevIds = ((prev ?? []) as any[]).map(r => r.subject_id);
-
-  await supabase.from('subject_teachers').delete().eq('school_id', schoolId).eq('teacher_id', teacherId);
-  const cleanIds = Array.from(new Set(subjectIds.filter(Boolean)));
-  if (cleanIds.length) {
-    await supabase.from('subject_teachers').insert(
-      cleanIds.map(sid => ({ school_id: schoolId, subject_id: sid, teacher_id: teacherId }))
-    );
-  }
-  await refreshTeacherSubjectText(schoolId, teacherId);
-  await Promise.all(Array.from(new Set([...prevIds, ...cleanIds])).map(sid => refreshSubjectPrimaryTeacher(schoolId, sid)));
+// Make sure a teacher_classes row exists for (teacher, class) — teaching a subject in a class
+// implies the teacher can see that class's students.
+async function ensureTeacherClass(teacherId: string, classId: string): Promise<void> {
+  const { data: existing } = await supabase.from('teacher_classes')
+    .select('id').eq('teacher_id', teacherId).eq('class_id', classId).limit(1).maybeSingle();
+  if (!existing) await supabase.from('teacher_classes').insert({ teacher_id: teacherId, class_id: classId });
 }
 
-// Resolve subject *names* to ids (creating any that don't exist) — used when a caller
-// sends subject names rather than ids.
-async function resolveSubjectIds(schoolId: string, names: string[]): Promise<string[]> {
-  const clean = Array.from(new Set(names.map(n => (n || '').trim()).filter(Boolean)));
-  if (!clean.length) return [];
-  const { data: existing } = await supabase.from('subjects').select('id, name')
-    .eq('school_id', schoolId).in('name', clean);
-  const byName = new Map<string, string>(((existing ?? []) as any[]).map(r => [r.name, r.id]));
-  const missing = clean.filter(n => !byName.has(n));
-  if (missing.length) {
-    const { data: created } = await supabase.from('subjects')
-      .insert(missing.map(name => ({ school_id: schoolId, name }))).select('id, name');
-    for (const r of ((created ?? []) as any[])) byName.set(r.name, r.id);
-  }
-  return clean.map(n => byName.get(n)!).filter(Boolean);
+// ---- CURRICULUM endpoints ----
+// GET /admin/curriculum — every (class, subject, teacher) row for the school.
+export async function getCurriculum(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { data, error } = await supabase
+    .from('class_subject_teachers')
+    .select('id, class_id, subject_id, teacher_id, classes(name), subjects(name), teachers(full_name)')
+    .eq('school_id', schoolId);
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  const rows = ((data ?? []) as any[]).map(r => ({
+    id: r.id,
+    classId: r.class_id,
+    className: r.classes?.name ?? null,
+    subjectId: r.subject_id,
+    subjectName: r.subjects?.name ?? null,
+    teacherId: r.teacher_id,
+    teacherName: r.teachers?.full_name ?? null,
+  }));
+  res.json(rows);
+}
+
+// POST /admin/curriculum  { classId, subjectId, teacherId }
+export async function addCurriculumRow(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { classId, subjectId, teacherId } = req.body;
+  if (!classId || !subjectId || !teacherId) { res.status(400).json({ error: 'classId, subjectId and teacherId are required' }); return; }
+  const { data, error } = await supabase.from('class_subject_teachers')
+    .upsert({ school_id: schoolId, class_id: classId, subject_id: subjectId, teacher_id: teacherId }, { onConflict: 'class_id,subject_id,teacher_id' })
+    .select('id').single();
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  await ensureTeacherClass(teacherId, classId);
+  await recomputeCaches(schoolId, { teacherIds: [teacherId], subjectIds: [subjectId] });
+  res.status(201).json({ id: data.id });
+}
+
+// DELETE /admin/curriculum/:id
+export async function deleteCurriculumRow(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { id } = req.params;
+  const { data: row } = await supabase.from('class_subject_teachers')
+    .select('teacher_id, subject_id').eq('id', id).eq('school_id', schoolId).maybeSingle();
+  await supabase.from('class_subject_teachers').delete().eq('id', id).eq('school_id', schoolId);
+  if (row) await recomputeCaches(schoolId, { teacherIds: [(row as any).teacher_id], subjectIds: [(row as any).subject_id] });
+  res.json({ message: 'Removed' });
 }
 
 // ---- TEACHERS ----
@@ -1022,13 +1047,23 @@ export async function getTeachers(req: AuthRequest, res: Response): Promise<void
 
   const { data, error } = await supabase
     .from('teachers')
-    .select('*, users(id, username, email, phone), teacher_classes(class_id, classes(name)), subject_teachers(subject_id, subjects(id, name))')
+    .select('*, users(id, username, email, phone), teacher_classes(class_id, classes(name)), class_subject_teachers(class_id, subject_id, classes(name), subjects(id, name))')
     .eq('school_id', schoolId)
     .in('user_id', activeUserIds.length > 0 ? activeUserIds : ['00000000-0000-0000-0000-000000000000']);
   if (error) { res.status(500).json({ error: error.message }); return; }
   const teachers = ((data ?? []) as any[]).map(t => {
-    const subjects = (t.subject_teachers ?? []).map((st: any) => st.subjects).filter(Boolean);
-    const { subject_teachers: _st, ...rest } = t;
+    // group curriculum rows into subjects: [{ id, name, classes: [{ id, name }] }]
+    const bySubject = new Map<string, { id: string; name: string; classes: { id: string; name: string }[] }>();
+    for (const r of (t.class_subject_teachers ?? [])) {
+      const sid = r.subject_id, sname = r.subjects?.name;
+      if (!sid || !sname) continue;
+      if (!bySubject.has(sid)) bySubject.set(sid, { id: sid, name: sname, classes: [] });
+      if (r.class_id && !bySubject.get(sid)!.classes.some(c => c.id === r.class_id)) {
+        bySubject.get(sid)!.classes.push({ id: r.class_id, name: r.classes?.name ?? '' });
+      }
+    }
+    const subjects = Array.from(bySubject.values()).sort((a, b) => a.name.localeCompare(b.name));
+    const { class_subject_teachers: _cst, ...rest } = t;
     return { ...rest, subjects };
   });
   res.json(toCC(teachers));
@@ -1036,7 +1071,7 @@ export async function getTeachers(req: AuthRequest, res: Response): Promise<void
 
 export async function createTeacher(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
-  const { fullName, phoneNumber, emergencyContact, subject, subjectIds, subjectNames, classIds, classId, username, password } = req.body;
+  const { fullName, phoneNumber, emergencyContact, classIds, classId, username, password } = req.body;
 
   const { data: schoolData } = await supabase.from('schools').select('abbreviation').eq('id', schoolId).single();
   const abbrev = (schoolData?.abbreviation || '').toLowerCase();
@@ -1076,19 +1111,10 @@ export async function createTeacher(req: AuthRequest, res: Response): Promise<vo
     full_name: fullName,
     phone_number: phoneNumber || null,
     emergency_contact: emergencyContact || null,
-    subject: subject || null,
+    subject: null, // populated from the curriculum (class ↔ subject ↔ teacher) once assigned
   }).select().single();
 
   if (teacherErr) { res.status(500).json({ error: teacherErr.message }); return; }
-
-  // Link the teacher to their subject(s). Accepts subjectIds[], subjectNames[], or the
-  // legacy single `subject` name. setTeacherSubjects also refreshes the teachers.subject cache.
-  let subjIds: string[] = Array.isArray(subjectIds) ? subjectIds.filter(Boolean) : [];
-  if (!subjIds.length) {
-    const names = Array.isArray(subjectNames) ? subjectNames : (subject ? [subject] : []);
-    if (names.length) subjIds = await resolveSubjectIds(schoolId, names);
-  }
-  if (subjIds.length) await setTeacherSubjects(schoolId, teacher.id, subjIds);
 
   const idsToAssign: string[] = Array.isArray(classIds) ? classIds : classId ? [classId] : [];
   if (idsToAssign.length > 0) {
@@ -1101,7 +1127,7 @@ export async function createTeacher(req: AuthRequest, res: Response): Promise<vo
 export async function updateTeacher(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
   const { id } = req.params;
-  const { fullName, phoneNumber, emergencyContact, subject, subjectIds, subjectNames, classIds, remove } = req.body;
+  const { fullName, phoneNumber, emergencyContact, classIds, remove } = req.body;
 
   if (remove) {
     const { data: teacher } = await supabase.from('teachers').select('user_id').eq('id', id).single();
@@ -1114,9 +1140,6 @@ export async function updateTeacher(req: AuthRequest, res: Response): Promise<vo
   if (fullName) updateFields.full_name = fullName;
   if (phoneNumber !== undefined) updateFields.phone_number = phoneNumber || null;
   if (emergencyContact !== undefined) updateFields.emergency_contact = emergencyContact || null;
-  // teachers.subject is now a derived cache — only let an explicit `subject` string through
-  // when no structured subjectIds/subjectNames were sent (kept for backward compat).
-  if (subject !== undefined && subjectIds === undefined && subjectNames === undefined) updateFields.subject = subject || null;
 
   const { data, error } = Object.keys(updateFields).length
     ? await supabase.from('teachers').update(updateFields).eq('id', id).eq('school_id', schoolId).select().single()
@@ -1124,24 +1147,26 @@ export async function updateTeacher(req: AuthRequest, res: Response): Promise<vo
 
   if (error) { res.status(500).json({ error: error.message }); return; }
 
-  // Replace this teacher's subject links (accepts subjectIds[], subjectNames[], or legacy `subject`).
-  if (subjectIds !== undefined || subjectNames !== undefined || subject !== undefined) {
-    let subjIds: string[];
-    if (Array.isArray(subjectIds)) subjIds = subjectIds.filter(Boolean);
-    else if (Array.isArray(subjectNames)) subjIds = await resolveSubjectIds(schoolId, subjectNames);
-    else subjIds = subject ? await resolveSubjectIds(schoolId, [subject]) : [];
-    await setTeacherSubjects(schoolId, String(id), subjIds);
-  }
+  // Handle the teacher's class list. teachers.subject / curriculum rows are scoped per class,
+  // so dropping a class also drops any curriculum rows the teacher had for it.
+  if (classIds !== undefined) {
+    const nextClassIds: string[] = Array.isArray(classIds) ? classIds.filter(Boolean) : (classIds ? [classIds] : []);
+    const { data: prevRows } = await supabase.from('teacher_classes').select('class_id').eq('teacher_id', id);
+    const removedClassIds = ((prevRows ?? []) as any[]).map(r => r.class_id).filter(cid => !nextClassIds.includes(cid));
 
-  // Handle multiple class assignments
-  if (Array.isArray(classIds)) {
     await supabase.from('teacher_classes').delete().eq('teacher_id', id);
-    if (classIds.length > 0) {
-      await supabase.from('teacher_classes').insert(classIds.map((cid: string) => ({ teacher_id: id, class_id: cid })));
+    if (nextClassIds.length) {
+      await supabase.from('teacher_classes').insert(nextClassIds.map(cid => ({ teacher_id: id, class_id: cid })));
     }
-  } else if (classIds) {
-    await supabase.from('teacher_classes').delete().eq('teacher_id', id);
-    await supabase.from('teacher_classes').insert({ teacher_id: id, class_id: classIds });
+    if (removedClassIds.length) {
+      // collect subjects affected before deleting, so we can refresh their primary-teacher cache
+      const { data: affectedRows } = await supabase.from('class_subject_teachers')
+        .select('subject_id').eq('school_id', schoolId).eq('teacher_id', id).in('class_id', removedClassIds);
+      const affectedSubjectIds = ((affectedRows ?? []) as any[]).map(r => r.subject_id);
+      await supabase.from('class_subject_teachers').delete()
+        .eq('school_id', schoolId).eq('teacher_id', id).in('class_id', removedClassIds);
+      await recomputeCaches(schoolId, { teacherIds: [String(id)], subjectIds: affectedSubjectIds });
+    }
   }
 
   res.json(toCC(data));
@@ -1900,27 +1925,32 @@ export async function deleteDriver(req: AuthRequest, res: Response): Promise<voi
 }
 
 // ---- SUBJECTS ----
+// Subjects are just a school-defined catalogue of names; teacher assignment lives in the
+// curriculum (class ↔ subject ↔ teacher). getSubjects surfaces the derived teacher list
+// (with the classes each teaches it to) for the read-only Subjects tab.
 export async function getSubjects(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
   const { data, error } = await supabase
     .from('subjects')
-    .select('id, name, school_id, created_at, teacher_id, subject_teachers(teacher_id, teachers(id, full_name))')
+    .select('id, name, school_id, created_at, teacher_id, class_subject_teachers(teacher_id, class_id, teachers(id, full_name), classes(name))')
     .eq('school_id', schoolId)
     .order('name');
   if (error) { res.status(500).json({ error: error.message }); return; }
   const subjects = ((data ?? []) as any[]).map(s => {
-    const teachers = (s.subject_teachers ?? []).map((st: any) => st.teachers).filter(Boolean);
-    const { subject_teachers: _st, ...rest } = s;
+    const byTeacher = new Map<string, { id: string; fullName: string; classes: { id: string; name: string }[] }>();
+    for (const r of (s.class_subject_teachers ?? [])) {
+      const tid = r.teacher_id, tname = r.teachers?.full_name;
+      if (!tid || !tname) continue;
+      if (!byTeacher.has(tid)) byTeacher.set(tid, { id: tid, fullName: tname, classes: [] });
+      if (r.class_id && !byTeacher.get(tid)!.classes.some(c => c.id === r.class_id)) {
+        byTeacher.get(tid)!.classes.push({ id: r.class_id, name: r.classes?.name ?? '' });
+      }
+    }
+    const teachers = Array.from(byTeacher.values()).sort((a, b) => a.fullName.localeCompare(b.fullName));
+    const { class_subject_teachers: _cst, ...rest } = s;
     return { ...rest, teachers };
   });
   res.json(toCC(subjects));
-}
-
-// Normalize the teacher list out of a request body: accepts teacherIds[] or legacy single teacherId.
-function teacherIdsFromBody(body: any): string[] | undefined {
-  if (Array.isArray(body.teacherIds)) return body.teacherIds.filter(Boolean);
-  if (body.teacherId !== undefined) return body.teacherId ? [body.teacherId] : [];
-  return undefined;
 }
 
 export async function createSubject(req: AuthRequest, res: Response): Promise<void> {
@@ -1931,8 +1961,6 @@ export async function createSubject(req: AuthRequest, res: Response): Promise<vo
     school_id: schoolId, name: String(name).trim(), teacher_id: null,
   }).select().single();
   if (error) { res.status(500).json({ error: error.message }); return; }
-  const tids = teacherIdsFromBody(req.body);
-  if (tids && tids.length) await setSubjectTeachers(schoolId, data.id, tids);
   res.status(201).json(toCC(data));
 }
 
@@ -1940,29 +1968,22 @@ export async function updateSubject(req: AuthRequest, res: Response): Promise<vo
   const { schoolId } = req.user!;
   const { id } = req.params;
   const { name } = req.body;
-
-  const updateFields: Record<string, unknown> = {};
-  if (name !== undefined && String(name).trim()) updateFields.name = String(name).trim();
-
-  const { data, error } = Object.keys(updateFields).length
-    ? await supabase.from('subjects').update(updateFields).eq('id', id).eq('school_id', schoolId).select().single()
-    : await supabase.from('subjects').select('*').eq('id', id).eq('school_id', schoolId).single();
+  if (!name || !String(name).trim()) { res.status(400).json({ error: 'Subject name is required' }); return; }
+  const { data, error } = await supabase.from('subjects')
+    .update({ name: String(name).trim() }).eq('id', id).eq('school_id', schoolId).select().single();
   if (error) { res.status(500).json({ error: error.message }); return; }
-
-  const tids = teacherIdsFromBody(req.body);
-  if (tids !== undefined) await setSubjectTeachers(schoolId, String(id), tids);
   res.json(toCC(data));
 }
 
 export async function deleteSubject(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
   const { id } = req.params;
-  // Note which teachers were on this subject so we can refresh their cached subject text after.
-  const { data: links } = await supabase.from('subject_teachers').select('teacher_id')
+  // Teachers who taught this subject — refresh their cached subject text after the cascade delete.
+  const { data: links } = await supabase.from('class_subject_teachers').select('teacher_id')
     .eq('school_id', schoolId).eq('subject_id', id);
-  const teacherIds = ((links ?? []) as any[]).map(r => r.teacher_id);
-  await supabase.from('subjects').delete().eq('id', id).eq('school_id', schoolId); // cascades subject_teachers rows
-  await Promise.all(teacherIds.map((tid: string) => refreshTeacherSubjectText(schoolId, tid)));
+  const teacherIds = Array.from(new Set(((links ?? []) as any[]).map(r => r.teacher_id)));
+  await supabase.from('subjects').delete().eq('id', id).eq('school_id', schoolId); // cascades class_subject_teachers + subject_teachers
+  await Promise.all(teacherIds.map((tid: string) => recomputeTeacherCaches(schoolId, tid)));
   res.json({ message: 'Subject deleted' });
 }
 

@@ -3,28 +3,39 @@ import { supabase } from '../config/supabase';
 import type { AuthRequest } from '../middleware/auth';
 import { toCC } from '../utils/transform';
 import { notify, notifyMany } from '../utils/notify';
+import { subjectAllowedForClass } from '../utils/curriculum';
 
 // ---- TEACHER PROFILE ----
 export async function getProfileData(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId, userId } = req.user!;
   const { data, error } = await supabase
     .from('teachers')
-    .select('id, full_name, subject, teacher_classes(class_id, classes(name)), subject_teachers(created_at, subjects(id, name))')
+    .select('id, full_name, subject, teacher_classes(class_id, classes(name)), class_subject_teachers(class_id, subject_id, subjects(id, name))')
     .eq('user_id', userId)
     .eq('school_id', schoolId)
     .single();
   if (error || !data) { res.status(404).json({ error: 'Teacher profile not found' }); return; }
 
-  // subject_teachers is the source of truth (a teacher can teach several subjects);
-  // teachers.subject is the comma-joined cache used as a fallback for legacy rows.
-  const links = (((data as any).subject_teachers ?? []) as any[])
-    .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))
-    .map(r => r.subjects).filter(Boolean);
-  const subjects = links.map((s: any) => ({ id: s.id, name: s.name }));
+  // Derive the flat subject list + the per-class subject map ("teaching") from the curriculum
+  // (class ↔ subject ↔ teacher). teachers.subject is a comma-joined fallback for legacy rows.
+  const teachingMap = new Map<string, { id: string; name: string }[]>();
+  const allSubjects = new Map<string, string>();
+  for (const r of (((data as any).class_subject_teachers ?? []) as any[])) {
+    const sid = r.subject_id, sname = r.subjects?.name;
+    if (!sid || !sname) continue;
+    allSubjects.set(sid, sname);
+    if (r.class_id) {
+      const arr = teachingMap.get(r.class_id) ?? [];
+      if (!arr.some(s => s.id === sid)) arr.push({ id: sid, name: sname });
+      teachingMap.set(r.class_id, arr);
+    }
+  }
+  const subjects = Array.from(allSubjects, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+  const teaching = Array.from(teachingMap, ([classId, subs]) => ({ classId, subjects: subs.sort((a, b) => a.name.localeCompare(b.name)) }));
   const resolvedSubject = subjects.map(s => s.name).join(', ') || (data as any).subject || null;
 
-  const { subject_teachers: _st, ...rest } = data as any;
-  res.json({ ...(toCC(rest) as object), subject: resolvedSubject, subjects });
+  const { class_subject_teachers: _cst, ...rest } = data as any;
+  res.json({ ...(toCC(rest) as object), subject: resolvedSubject, subjects, teaching });
 }
 
 // ---- HOMEWORK ----
@@ -65,6 +76,9 @@ export async function createHomework(req: AuthRequest, res: Response): Promise<v
 
   const { data: teacher } = await supabase.from('teachers').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
   if (!teacher) { res.status(404).json({ error: 'Teacher not found' }); return; }
+  if (!(await subjectAllowedForClass(schoolId, teacher.id, classId, subject))) {
+    res.status(403).json({ error: `You aren't assigned to teach ${subject} for this class.` }); return;
+  }
 
   const { data, error } = await supabase.from('homework').insert({
     school_id: schoolId,
@@ -151,6 +165,9 @@ export async function createAssignment(req: AuthRequest, res: Response): Promise
 
   const { data: teacher } = await supabase.from('teachers').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
   if (!teacher) { res.status(404).json({ error: 'Teacher not found' }); return; }
+  if (!(await subjectAllowedForClass(schoolId, teacher.id, classId, subject))) {
+    res.status(403).json({ error: `You aren't assigned to teach ${subject} for this class.` }); return;
+  }
 
   const { data, error } = await supabase.from('assignments').insert({
     school_id: schoolId,
@@ -201,11 +218,15 @@ export async function createReport(req: AuthRequest, res: Response): Promise<voi
   const { schoolId, userId } = req.user!;
   const { studentId, subject, attendanceNotes, behaviorNotes, marks, teacherNotes } = req.body;
 
-  const [{ data: teacher }, { data: school }] = await Promise.all([
+  const [{ data: teacher }, { data: school }, { data: studentRow }] = await Promise.all([
     supabase.from('teachers').select('id').eq('user_id', userId).eq('school_id', schoolId).single(),
     supabase.from('schools').select('current_academic_year').eq('id', schoolId).single(),
+    supabase.from('students').select('class_id').eq('id', studentId).eq('school_id', schoolId).maybeSingle(),
   ]);
   if (!teacher) { res.status(404).json({ error: 'Teacher not found' }); return; }
+  if (!(await subjectAllowedForClass(schoolId, teacher.id, (studentRow as any)?.class_id, subject))) {
+    res.status(403).json({ error: `You aren't assigned to teach ${subject} for this student's class.` }); return;
+  }
 
   const { data, error } = await supabase.from('reports').insert({
     school_id: schoolId,
@@ -244,6 +265,9 @@ export async function upsertGrade(req: AuthRequest, res: Response): Promise<void
     supabase.from('schools').select('current_academic_year').eq('id', schoolId).single(),
   ]);
   if (!teacherRes.data) { res.status(404).json({ error: 'Teacher not found' }); return; }
+  if (!(await subjectAllowedForClass(schoolId, teacherRes.data.id, classId, subject))) {
+    res.status(403).json({ error: `You aren't assigned to teach ${subject} for this class.` }); return;
+  }
   const academicYear = schoolRes.data?.current_academic_year || null;
 
   const { data, error } = await supabase.from('grades').upsert({
@@ -280,11 +304,12 @@ export async function getGrades(req: AuthRequest, res: Response): Promise<void> 
   const { data: teacher } = await supabase.from('teachers').select('id, subject').eq('user_id', userId).eq('school_id', schoolId).single();
   if (!teacher) { res.status(404).json({ error: 'Teacher not found' }); return; }
 
+  // All grades this teacher recorded for the student (across whichever subjects they teach).
   const { data, error } = await supabase.from('grades')
     .select('id, subject, marks, grading_period, academic_year, created_at')
     .eq('school_id', schoolId)
     .eq('student_id', studentId)
-    .eq('subject', teacher.subject)
+    .eq('teacher_id', teacher.id)
     .order('grading_period');
 
   if (error) { res.status(500).json({ error: error.message }); return; }
