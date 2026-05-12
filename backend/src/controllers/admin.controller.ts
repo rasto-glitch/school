@@ -993,6 +993,13 @@ export async function createTeacher(req: AuthRequest, res: Response): Promise<vo
 
   if (teacherErr) { res.status(500).json({ error: teacherErr.message }); return; }
 
+  // Mirror the subject onto the subjects table so the assignment is a real
+  // link (shows up in Classes/Subjects), not just a text label on the teacher.
+  if (subject) {
+    await supabase.from('subjects')
+      .upsert({ school_id: schoolId, name: subject, teacher_id: teacher.id }, { onConflict: 'school_id,name' });
+  }
+
   const idsToAssign: string[] = Array.isArray(classIds) ? classIds : classId ? [classId] : [];
   if (idsToAssign.length > 0) {
     await supabase.from('teacher_classes').insert(idsToAssign.map(cid => ({ teacher_id: teacher.id, class_id: cid })));
@@ -1024,6 +1031,17 @@ export async function updateTeacher(req: AuthRequest, res: Response): Promise<vo
     .eq('id', id).eq('school_id', schoolId).select().single();
 
   if (error) { res.status(500).json({ error: error.message }); return; }
+
+  // Keep the subjects table in sync: detach this teacher from any subject they
+  // previously held, then (re)attach the newly chosen one — so the Teachers tab
+  // creates the same bidirectional link the Classes/Subjects tab does.
+  if (subject !== undefined) {
+    await supabase.from('subjects').update({ teacher_id: null }).eq('teacher_id', id).eq('school_id', schoolId);
+    if (subject) {
+      await supabase.from('subjects')
+        .upsert({ school_id: schoolId, name: subject, teacher_id: id }, { onConflict: 'school_id,name' });
+    }
+  }
 
   // Handle multiple class assignments
   if (Array.isArray(classIds)) {
