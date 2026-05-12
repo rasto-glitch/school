@@ -42,7 +42,8 @@ export interface Teacher {
   id: string;
   fullName: string;
   phoneNumber?: string;
-  subject?: string;
+  subject?: string; // comma-joined display cache of `subjects`
+  subjects?: { id: string; name: string }[];
   emergencyContact?: string;
   profilePicture?: string;
   teacherClasses?: { classId: string; classes: { name: string } }[];

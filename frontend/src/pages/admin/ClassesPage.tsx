@@ -1,16 +1,17 @@
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'react-toastify';
-import { BookOpen, Plus, Search, Tag, Trash2 } from 'lucide-react';
+import { BookOpen, Plus, Search, Tag, Trash2, Users } from 'lucide-react';
 import { adminApi } from '../../services/api';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
 import Input from '../../components/common/Input';
 import Select from '../../components/common/Select';
 import Button from '../../components/common/Button';
+import Modal from '../../components/common/Modal';
 import type { Class, Student, Teacher } from '../../types';
 
-interface Subject { id: string; name: string; teacherId?: string; teachers?: { fullName?: string; full_name?: string } }
+interface Subject { id: string; name: string; teacherId?: string; teachers?: { id: string; fullName: string }[] }
 
 
 export default function ClassesPage() {
@@ -22,8 +23,12 @@ export default function ClassesPage() {
   const [creating, setCreating] = useState(false);
   const [creatingSubject, setCreatingSubject] = useState(false);
   const [newSubjectName, setNewSubjectName] = useState('');
-  const [newSubjectTeacherId, setNewSubjectTeacherId] = useState('');
+  const [newSubjectTeacherIds, setNewSubjectTeacherIds] = useState<string[]>([]);
   const [assignStudentSearch, setAssignStudentSearch] = useState('');
+  // Modal for managing the teachers assigned to a subject
+  const [editingSubject, setEditingSubject] = useState<Subject | null>(null);
+  const [editingTeacherIds, setEditingTeacherIds] = useState<string[]>([]);
+  const [savingTeachers, setSavingTeachers] = useState(false);
 
   const { register, handleSubmit, reset } = useForm<{ name: string; gradeLevel: string; academicYear: string; assignStudents: string }>();
 
@@ -51,14 +56,17 @@ export default function ClassesPage() {
     }
   };
 
+  const toggleId = (id: string, list: string[], setter: (v: string[]) => void) =>
+    setter(list.includes(id) ? list.filter(x => x !== id) : [...list, id]);
+
   const onCreateSubject = async () => {
     if (!newSubjectName.trim()) { toast.error('Enter a subject name'); return; }
     setCreatingSubject(true);
     try {
-      await adminApi.createSubject({ name: newSubjectName.trim(), teacherId: newSubjectTeacherId || undefined });
+      await adminApi.createSubject({ name: newSubjectName.trim(), teacherIds: newSubjectTeacherIds });
       toast.success('Subject created!');
       setNewSubjectName('');
-      setNewSubjectTeacherId('');
+      setNewSubjectTeacherIds([]);
       loadSubjects();
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Failed to create subject');
@@ -72,10 +80,26 @@ export default function ClassesPage() {
     loadSubjects();
   };
 
-  const onAssignTeacher = async (subjectId: string, teacherId: string) => {
-    await adminApi.updateSubject(subjectId, { teacherId: teacherId || null });
-    loadSubjects();
-    toast.success('Teacher assigned to subject');
+  const openTeacherModal = (s: Subject) => {
+    setEditingSubject(s);
+    setEditingTeacherIds((s.teachers || []).map(t => t.id));
+  };
+
+  const saveTeacherModal = async () => {
+    if (!editingSubject) return;
+    setSavingTeachers(true);
+    try {
+      await adminApi.updateSubject(editingSubject.id, { name: editingSubject.name, teacherIds: editingTeacherIds });
+      toast.success('Teachers updated');
+      setEditingSubject(null);
+      loadSubjects();
+      // teacher.subject text caches changed too
+      adminApi.getTeachers().then(r => setTeachers(r.data || []));
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to update teachers');
+    } finally {
+      setSavingTeachers(false);
+    }
   };
 
   return (
@@ -205,13 +229,21 @@ export default function ClassesPage() {
             </div>
             <div className="space-y-3">
               <Input label="Subject Name" placeholder="Subject name (e.g. Mathematics)" value={newSubjectName} onChange={e => setNewSubjectName(e.target.value)} />
-              <Select
-                label="Assign Teacher"
-                options={teachers.map(t => ({ value: t.id, label: t.fullName || '' }))}
-                placeholder="Assign teacher (optional)"
-                value={newSubjectTeacherId}
-                onChange={e => setNewSubjectTeacherId(e.target.value)}
-              />
+              <div>
+                <p className="text-sm font-medium text-gray-700 mb-2">Assign Teachers <span className="text-gray-400 font-normal">(optional, you can pick several)</span></p>
+                {teachers.length === 0 ? (
+                  <p className="text-xs text-gray-400">No teachers yet</p>
+                ) : (
+                  <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-xl p-2 space-y-1">
+                    {teachers.map(t => (
+                      <label key={t.id} className="flex items-center gap-2 cursor-pointer p-1 hover:bg-gray-50 rounded-lg">
+                        <input type="checkbox" checked={newSubjectTeacherIds.includes(t.id)} onChange={() => toggleId(t.id, newSubjectTeacherIds, setNewSubjectTeacherIds)} className="w-4 h-4 text-primary-600" />
+                        <span className="text-sm text-gray-800">{t.fullName}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
               <Button onClick={onCreateSubject} loading={creatingSubject} fullWidth icon={<Plus className="w-4 h-4" />}>Add Subject</Button>
             </div>
           </Card>
@@ -223,31 +255,52 @@ export default function ClassesPage() {
               <p className="text-sm text-gray-500 text-center py-4">No subjects yet</p>
             ) : (
               <div className="space-y-2 max-h-[32rem] overflow-y-auto">
-                {subjects.map(s => (
-                  <div key={s.id} className="flex items-center gap-2 p-2 bg-gray-50 rounded-xl">
-                    <span className="flex-1 text-sm font-medium text-gray-900">{s.name}</span>
-                    <div className="w-36">
-                      <select
-                        className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white"
-                        value={s.teacherId || ''}
-                        onChange={e => onAssignTeacher(s.id, e.target.value)}
+                {subjects.map(s => {
+                  const names = (s.teachers || []).map(t => t.fullName);
+                  return (
+                    <div key={s.id} className="flex items-center gap-2 p-2 bg-gray-50 rounded-xl">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900">{s.name}</p>
+                        <p className="text-xs text-gray-500 truncate">{names.length ? names.join(', ') : 'No teachers assigned'}</p>
+                      </div>
+                      <button
+                        onClick={() => openTeacherModal(s)}
+                        className="flex items-center gap-1 text-xs text-primary-600 hover:bg-primary-50 rounded-lg px-2 py-1 whitespace-nowrap"
                       >
-                        <option value="">No teacher</option>
-                        {teachers.map(t => (
-                          <option key={t.id} value={t.id}>{t.fullName}</option>
-                        ))}
-                      </select>
+                        <Users className="w-3.5 h-3.5" /> {names.length} teacher{names.length === 1 ? '' : 's'}
+                      </button>
+                      <button onClick={() => onDeleteSubject(s.id)} className="p-1 hover:bg-red-50 rounded-lg">
+                        <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                      </button>
                     </div>
-                    <button onClick={() => onDeleteSubject(s.id)} className="p-1 hover:bg-red-50 rounded-lg">
-                      <Trash2 className="w-3.5 h-3.5 text-red-400" />
-                    </button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </Card>
         </div>
       )}
+
+      <Modal isOpen={!!editingSubject} onClose={() => setEditingSubject(null)} title={editingSubject ? `Teachers for ${editingSubject.name}` : ''}>
+        {teachers.length === 0 ? (
+          <p className="text-sm text-gray-500">No teachers yet. Add teachers first.</p>
+        ) : (
+          <div className="space-y-3">
+            <div className="max-h-72 overflow-y-auto border border-gray-200 rounded-xl p-2 space-y-1">
+              {teachers.map(t => (
+                <label key={t.id} className="flex items-center gap-2 cursor-pointer p-1.5 hover:bg-gray-50 rounded-lg">
+                  <input type="checkbox" checked={editingTeacherIds.includes(t.id)} onChange={() => toggleId(t.id, editingTeacherIds, setEditingTeacherIds)} className="w-4 h-4 text-primary-600" />
+                  <span className="text-sm text-gray-800">{t.fullName}</span>
+                </label>
+              ))}
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button type="button" variant="secondary" onClick={() => setEditingSubject(null)}>Cancel</Button>
+              <Button type="button" loading={savingTeachers} onClick={saveTeacherModal}>Save</Button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </PageLayout>
   );
 }

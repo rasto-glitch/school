@@ -55,7 +55,11 @@ export default function AdminTeachersListPage() {
                   </div>
                   <div className="min-w-0">
                     <p className="font-semibold text-gray-900">{t.fullName}</p>
-                    {t.subject && <Badge color="primary">{t.subject}</Badge>}
+                    {t.subjects && t.subjects.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {t.subjects.map(s => <Badge key={s.id} color="primary">{s.name}</Badge>)}
+                      </div>
+                    ) : t.subject ? <Badge color="primary">{t.subject}</Badge> : null}
                     <p className="text-xs text-gray-500 mt-1">{t.phoneNumber || '—'}</p>
                     {(t as any).teacherClasses?.length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-1">

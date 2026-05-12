@@ -5,6 +5,7 @@ import { useAuthStore } from '../store/authStore';
 interface TeacherProfile {
   id: string;
   subject: string | null;
+  subjects: { id: string; name: string }[];
   fullName: string;
   teacherClasses: { classId: string; classes: { name: string } }[];
 }
@@ -22,8 +23,9 @@ export function useTeacherProfile() {
         const data = r.data;
         setProfile({
           id: data.id,
-          // Backend now merges subjects-table assignment + teachers.subject field
+          // teachers.subject is the comma-joined cache; `subjects` is the structured list.
           subject: data.subject || null,
+          subjects: Array.isArray(data.subjects) ? data.subjects : [],
           fullName: data.fullName || data.full_name || '',
           teacherClasses: data.teacherClasses || [],
         });
@@ -34,5 +36,5 @@ export function useTeacherProfile() {
       .finally(() => setLoading(false));
   }, [user?.id]);
 
-  return { profile, subject: profile?.subject || '', loading };
+  return { profile, subject: profile?.subject || '', subjects: profile?.subjects || [], loading };
 }

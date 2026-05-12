@@ -441,10 +441,27 @@ CREATE TABLE IF NOT EXISTS subjects (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
-  teacher_id UUID REFERENCES teachers(id) ON DELETE SET NULL,
+  teacher_id UUID REFERENCES teachers(id) ON DELETE SET NULL,  -- legacy "primary teacher" pointer; subject_teachers is the source of truth
   created_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(school_id, name)
 );
+
+-- Many-to-many: a subject can be taught by several teachers, a teacher can teach several subjects.
+CREATE TABLE IF NOT EXISTS subject_teachers (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  subject_id UUID NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+  teacher_id UUID NOT NULL REFERENCES teachers(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(subject_id, teacher_id)
+);
+CREATE INDEX IF NOT EXISTS idx_subject_teachers_subject ON subject_teachers(subject_id);
+CREATE INDEX IF NOT EXISTS idx_subject_teachers_teacher ON subject_teachers(teacher_id);
+
+-- Backfill the join table from the legacy single-teacher column (safe to re-run).
+INSERT INTO subject_teachers (school_id, subject_id, teacher_id)
+SELECT school_id, id, teacher_id FROM subjects WHERE teacher_id IS NOT NULL
+ON CONFLICT (subject_id, teacher_id) DO NOTHING;
 
 -- ============================================================
 -- ATTENDANCE

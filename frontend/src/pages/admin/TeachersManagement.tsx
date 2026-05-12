@@ -22,8 +22,10 @@ export default function TeachersManagement() {
   const [addSubmitting, setAddSubmitting] = useState(false);
   const [editSubmitting, setEditSubmitting] = useState(false);
 
-  const addForm = useForm<{ fullName: string; phoneNumber: string; emergencyContact: string; subject: string; classId: string; username: string; password: string }>();
-  const editForm = useForm<{ fullName: string; phoneNumber: string; emergencyContact: string; subject: string; classId: string; remove: boolean }>();
+  const addForm = useForm<{ fullName: string; phoneNumber: string; emergencyContact: string; classId: string; username: string; password: string }>();
+  const editForm = useForm<{ fullName: string; phoneNumber: string; emergencyContact: string; classId: string; remove: boolean }>();
+  const [addSubjectIds, setAddSubjectIds] = useState<string[]>([]);
+  const [editSubjectIds, setEditSubjectIds] = useState<string[]>([]);
 
   const watchedAddName = addForm.watch('fullName');
   const debouncedAddName = useDebounce(watchedAddName ?? '', 350);
@@ -70,7 +72,7 @@ export default function TeachersManagement() {
     editForm.setValue('fullName', t.fullName);
     editForm.setValue('phoneNumber', t.phoneNumber || '');
     editForm.setValue('emergencyContact', t.emergencyContact || '');
-    editForm.setValue('subject', t.subject || '');
+    setEditSubjectIds((t.subjects || []).map(s => s.id));
     const existingClassIds = ((t as any).teacherClasses || []).map((tc: any) => tc.classId);
     setEditClassIds(existingClassIds);
   }, [selectedTeacherId, teachers]);
@@ -82,7 +84,7 @@ export default function TeachersManagement() {
         fullName: data.fullName,
         phoneNumber: data.phoneNumber,
         emergencyContact: data.emergencyContact,
-        subject: data.subject,
+        subjectIds: addSubjectIds,
         classIds: addClassIds,
         username: data.username || undefined,
         password: data.password || undefined,
@@ -90,6 +92,8 @@ export default function TeachersManagement() {
       const tempPw = res.data?.tempPassword || 'Teacher@123';
       toast.success(`Teacher added! Login: ${res.data?.username} / Password: ${tempPw}`);
       addForm.reset();
+      setAddSubjectIds([]);
+      setAddClassIds([]);
       load();
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Failed to add teacher');
@@ -110,7 +114,7 @@ export default function TeachersManagement() {
     if (!selectedTeacherId) { toast.error('Select a teacher first'); return; }
     setEditSubmitting(true);
     try {
-      await adminApi.updateTeacher(selectedTeacherId, { ...data, classIds: editClassIds });
+      await adminApi.updateTeacher(selectedTeacherId, { ...data, classIds: editClassIds, subjectIds: editSubjectIds });
       toast.success('Teacher updated!');
       load();
     } catch (err: any) {
@@ -129,6 +133,8 @@ export default function TeachersManagement() {
       toast.success('Teacher deactivated');
       setSelectedTeacherId('');
       editForm.reset();
+      setEditSubjectIds([]);
+      setEditClassIds([]);
       load();
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Failed to remove teacher');
@@ -170,11 +176,21 @@ export default function TeachersManagement() {
               )}
               <Input placeholder="Primary Phone Number" {...addForm.register('phoneNumber')} />
               <Input placeholder="Emergency Contact" {...addForm.register('emergencyContact')} />
-              <Select
-                options={subjects.map(s => ({ value: s.name, label: s.name }))}
-                placeholder="Select Subject"
-                {...addForm.register('subject')}
-              />
+              <div>
+                <p className="text-sm font-medium text-gray-700 mb-2">Subject(s)</p>
+                {subjects.length === 0 ? (
+                  <p className="text-xs text-gray-400">No subjects yet — create them in Class Management → Subjects.</p>
+                ) : (
+                  <div className="max-h-32 overflow-y-auto border border-gray-200 rounded-xl p-2 space-y-1">
+                    {subjects.map(s => (
+                      <label key={s.id} className="flex items-center gap-2 cursor-pointer p-1 hover:bg-gray-50 rounded-lg">
+                        <input type="checkbox" checked={addSubjectIds.includes(s.id)} onChange={() => toggleClass(s.id, addSubjectIds, setAddSubjectIds)} className="w-4 h-4 text-primary-600" />
+                        <span className="text-sm text-gray-800">{s.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
               <div>
                 <p className="text-sm font-medium text-gray-700 mb-2">Assign Class(es)</p>
                 <div className="max-h-32 overflow-y-auto border border-gray-200 rounded-xl p-2 space-y-1">
@@ -206,11 +222,21 @@ export default function TeachersManagement() {
               <Input placeholder="Full Name" {...editForm.register('fullName')} />
               <Input placeholder="Primary Phone Number" {...editForm.register('phoneNumber')} />
               <Input placeholder="Emergency Contact" {...editForm.register('emergencyContact')} />
-              <Select
-                options={subjects.map(s => ({ value: s.name, label: s.name }))}
-                placeholder="Select Subject"
-                {...editForm.register('subject')}
-              />
+              <div>
+                <p className="text-sm font-medium text-gray-700 mb-2">Subject(s)</p>
+                {subjects.length === 0 ? (
+                  <p className="text-xs text-gray-400">No subjects yet — create them in Class Management → Subjects.</p>
+                ) : (
+                  <div className="max-h-32 overflow-y-auto border border-gray-200 rounded-xl p-2 space-y-1">
+                    {subjects.map(s => (
+                      <label key={s.id} className="flex items-center gap-2 cursor-pointer p-1 hover:bg-gray-50 rounded-lg">
+                        <input type="checkbox" checked={editSubjectIds.includes(s.id)} onChange={() => toggleClass(s.id, editSubjectIds, setEditSubjectIds)} className="w-4 h-4 text-primary-600" />
+                        <span className="text-sm text-gray-800">{s.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
               <div>
                 <p className="text-sm font-medium text-gray-700 mb-2">Assign Class(es)</p>
                 <div className="max-h-32 overflow-y-auto border border-gray-200 rounded-xl p-2 space-y-1">

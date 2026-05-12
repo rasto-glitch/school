@@ -9,26 +9,22 @@ export async function getProfileData(req: AuthRequest, res: Response): Promise<v
   const { schoolId, userId } = req.user!;
   const { data, error } = await supabase
     .from('teachers')
-    .select('id, full_name, subject, teacher_classes(class_id, classes(name))')
+    .select('id, full_name, subject, teacher_classes(class_id, classes(name)), subject_teachers(created_at, subjects(id, name))')
     .eq('user_id', userId)
     .eq('school_id', schoolId)
     .single();
   if (error || !data) { res.status(404).json({ error: 'Teacher profile not found' }); return; }
 
-  // Also look up subject from the subjects table (admin-assigned)
-  const { data: subjectRow } = await supabase
-    .from('subjects')
-    .select('name')
-    .eq('teacher_id', data.id)
-    .eq('school_id', schoolId)
-    .limit(1)
-    .maybeSingle();
+  // subject_teachers is the source of truth (a teacher can teach several subjects);
+  // teachers.subject is the comma-joined cache used as a fallback for legacy rows.
+  const links = (((data as any).subject_teachers ?? []) as any[])
+    .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))
+    .map(r => r.subjects).filter(Boolean);
+  const subjects = links.map((s: any) => ({ id: s.id, name: s.name }));
+  const resolvedSubject = subjects.map(s => s.name).join(', ') || (data as any).subject || null;
 
-  // Prefer subjects-table name, fall back to teachers.subject text field
-  const resolvedSubject = subjectRow?.name || (data as any).subject || null;
-
-  const profile = { ...(toCC(data) as object), subject: resolvedSubject };
-  res.json(profile);
+  const { subject_teachers: _st, ...rest } = data as any;
+  res.json({ ...(toCC(rest) as object), subject: resolvedSubject, subjects });
 }
 
 // ---- HOMEWORK ----

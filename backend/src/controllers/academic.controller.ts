@@ -477,20 +477,17 @@ export async function getMe(req: AuthRequest, res: Response): Promise<void> {
     }
     const { data: teacher } = await supabase
       .from('teachers')
-      .select('id, subject')
+      .select('id, subject, subject_teachers(created_at, subjects(id, name))')
       .eq('user_id', userId)
       .eq('school_id', schoolId)
       .single();
     if (!teacher) { res.json({ role, subject: null }); return; }
-    const { data: subjectRow } = await supabase
-      .from('subjects')
-      .select('name')
-      .eq('teacher_id', teacher.id)
-      .eq('school_id', schoolId)
-      .limit(1)
-      .maybeSingle();
-    const resolvedSubject = subjectRow?.name || (teacher as any).subject || null;
-    res.json({ role, subject: resolvedSubject });
+    const links = (((teacher as any).subject_teachers ?? []) as any[])
+      .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))
+      .map(r => r.subjects).filter(Boolean);
+    const subjects = links.map((s: any) => ({ id: s.id, name: s.name }));
+    const resolvedSubject = subjects.map(s => s.name).join(', ') || (teacher as any).subject || null;
+    res.json({ role, subject: resolvedSubject, subjects });
   } catch {
     res.status(500).json({ error: 'Failed to fetch profile' });
   }
