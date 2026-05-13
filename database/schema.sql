@@ -723,7 +723,8 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
   entity_type TEXT NOT NULL CHECK (entity_type IN (
     'student','fee_plan','student_fee','fee_payment','staff_member','staff_salary_payment',
-    'expense_category','expense_template','expense'
+    'expense_category','expense_template','expense',
+    'accounting_period','payment_account','fx_rate','late_fee'
   )),
   entity_id UUID NOT NULL,
   action TEXT NOT NULL CHECK (action IN ('create','update','delete')),
@@ -1131,3 +1132,102 @@ BEGIN
 END $$;
 
 SELECT cron.schedule('cleanup_voided_records', '15 3 * * *', $$SELECT cleanup_voided_records();$$);
+
+-- ============================================================
+-- ACCOUNTING UPGRADES (mirror of migration 009)
+-- Receipt numbers, currency on payments, tax/withholding, refund linkage,
+-- fee-plan kind, late fees, accounting periods, payment accounts, FX rates,
+-- daily cron for late-fee + recurring-expense auto-record.
+-- ============================================================
+ALTER TABLE fee_payments ADD COLUMN IF NOT EXISTS receipt_number INT;
+ALTER TABLE fee_payments ADD COLUMN IF NOT EXISTS receipt_year   INT;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_fee_payments_receipt
+  ON fee_payments(school_id, receipt_year, receipt_number)
+  WHERE receipt_number IS NOT NULL;
+
+ALTER TABLE fee_payments ADD COLUMN IF NOT EXISTS currency TEXT NOT NULL DEFAULT 'USD';
+
+ALTER TABLE fee_payments          ADD COLUMN IF NOT EXISTS tax_amount NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (tax_amount >= 0);
+ALTER TABLE fee_payments          ADD COLUMN IF NOT EXISTS tax_label  TEXT;
+ALTER TABLE expenses              ADD COLUMN IF NOT EXISTS tax_amount NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (tax_amount >= 0);
+ALTER TABLE expenses              ADD COLUMN IF NOT EXISTS tax_label  TEXT;
+ALTER TABLE staff_salary_payments ADD COLUMN IF NOT EXISTS tax_amount NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (tax_amount >= 0);
+ALTER TABLE staff_salary_payments ADD COLUMN IF NOT EXISTS tax_label  TEXT;
+
+ALTER TABLE fee_payments ADD COLUMN IF NOT EXISTS is_refund            BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE fee_payments ADD COLUMN IF NOT EXISTS refund_of_payment_id UUID REFERENCES fee_payments(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_fee_payments_refund_of ON fee_payments(refund_of_payment_id) WHERE refund_of_payment_id IS NOT NULL;
+
+ALTER TABLE fee_plans ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'tuition'
+  CHECK (kind IN ('tuition','transport','lunch','uniform','exam','registration','other'));
+CREATE INDEX IF NOT EXISTS idx_fee_plans_kind ON fee_plans(school_id, kind, is_active);
+
+ALTER TABLE fee_plans ADD COLUMN IF NOT EXISTS late_fee_enabled    BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE fee_plans ADD COLUMN IF NOT EXISTS late_fee_type       TEXT CHECK (late_fee_type IS NULL OR late_fee_type IN ('fixed','percent'));
+ALTER TABLE fee_plans ADD COLUMN IF NOT EXISTS late_fee_amount     NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (late_fee_amount >= 0);
+ALTER TABLE fee_plans ADD COLUMN IF NOT EXISTS late_fee_grace_days INT NOT NULL DEFAULT 0 CHECK (late_fee_grace_days >= 0);
+
+CREATE TABLE IF NOT EXISTS student_fee_late_fees (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  student_fee_id UUID NOT NULL REFERENCES student_fees(id) ON DELETE CASCADE,
+  fee_installment_id UUID NOT NULL REFERENCES fee_installments(id) ON DELETE CASCADE,
+  amount NUMERIC(12,2) NOT NULL CHECK (amount >= 0),
+  applied_on DATE NOT NULL DEFAULT CURRENT_DATE,
+  voided_at TIMESTAMPTZ,
+  voided_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  void_reason TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (student_fee_id, fee_installment_id)
+);
+CREATE INDEX IF NOT EXISTS idx_late_fees_school ON student_fee_late_fees(school_id);
+CREATE INDEX IF NOT EXISTS idx_late_fees_student_fee ON student_fee_late_fees(student_fee_id) WHERE voided_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS accounting_periods (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  period_start DATE NOT NULL,
+  period_end   DATE NOT NULL,
+  closed_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  closed_by    UUID REFERENCES users(id) ON DELETE SET NULL,
+  reopened_at  TIMESTAMPTZ,
+  reopened_by  UUID REFERENCES users(id) ON DELETE SET NULL,
+  reopen_reason TEXT,
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  CHECK (period_end >= period_start),
+  UNIQUE (school_id, period_start, period_end)
+);
+CREATE INDEX IF NOT EXISTS idx_accounting_periods_school
+  ON accounting_periods(school_id, period_start DESC) WHERE reopened_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS payment_accounts (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('cash','bank','wallet','other')),
+  currency TEXT NOT NULL DEFAULT 'USD',
+  opening_balance NUMERIC(12,2) NOT NULL DEFAULT 0,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (school_id, name)
+);
+CREATE INDEX IF NOT EXISTS idx_payment_accounts_school ON payment_accounts(school_id, is_active);
+
+ALTER TABLE fee_payments          ADD COLUMN IF NOT EXISTS payment_account_id UUID REFERENCES payment_accounts(id) ON DELETE SET NULL;
+ALTER TABLE staff_salary_payments ADD COLUMN IF NOT EXISTS payment_account_id UUID REFERENCES payment_accounts(id) ON DELETE SET NULL;
+ALTER TABLE expenses              ADD COLUMN IF NOT EXISTS payment_account_id UUID REFERENCES payment_accounts(id) ON DELETE SET NULL;
+
+CREATE TABLE IF NOT EXISTS fx_rates (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  from_currency TEXT NOT NULL,
+  to_currency   TEXT NOT NULL,
+  rate          NUMERIC(18,8) NOT NULL CHECK (rate > 0),
+  effective_from DATE NOT NULL DEFAULT CURRENT_DATE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (school_id, from_currency, to_currency, effective_from)
+);
+CREATE INDEX IF NOT EXISTS idx_fx_rates_lookup
+  ON fx_rates(school_id, from_currency, to_currency, effective_from DESC);

@@ -13,12 +13,7 @@ import EmptyState from '../../components/common/EmptyState';
 
 type SourceKey = 'fee_payment' | 'staff_salary_payment' | 'expense';
 
-function fmt(amount: number, currency: string) {
-  const sym: Record<string, string> = { USD: '$', EUR: '€', GBP: '£' };
-  const s = sym[currency] ?? '';
-  const n = (Number(amount) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  return s ? `${s}${n}` : `${currency} ${n}`;
-}
+import { fmtMoney as fmt } from '../../utils/money';
 
 function firstOfMonthISO(): string {
   const d = new Date();

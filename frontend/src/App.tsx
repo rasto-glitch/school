@@ -59,6 +59,14 @@ import AdminTuitionPage from './pages/admin/AdminTuitionPage';
 import AdminTuitionStudentDetailPage from './pages/admin/AdminTuitionStudentDetailPage';
 import ExpensesPage from './pages/admin/ExpensesPage';
 import LedgerPage from './pages/admin/LedgerPage';
+import AccountingDashboardPage from './pages/admin/AccountingDashboardPage';
+import ArAgingPage from './pages/admin/ArAgingPage';
+import ProfitLossPage from './pages/admin/ProfitLossPage';
+import CashFlowForecastPage from './pages/admin/CashFlowForecastPage';
+import TaxReportPage from './pages/admin/TaxReportPage';
+import AccountingPeriodsPage from './pages/admin/AccountingPeriodsPage';
+import PaymentAccountsPage from './pages/admin/PaymentAccountsPage';
+import FxRatesPage from './pages/admin/FxRatesPage';
 import ParentAppointmentsPage from './pages/parent/AppointmentsPage';
 import ParentTuitionPage from './pages/parent/TuitionPage';
 import WriteAssignmentsPage from './pages/teacher/WriteAssignmentsPage';
@@ -211,10 +219,18 @@ export default function App() {
 
         {/* Accounting Portal — premium tuition module. Shared by admin, accountant, reception (read-only via backend). */}
         <Route path="/accounting" element={<ProtectedRoute allowedRoles={['admin', 'accountant', 'reception']}><AdminTuitionPage /></ProtectedRoute>} />
+        <Route path="/accounting/dashboard" element={<ProtectedRoute allowedRoles={['admin', 'accountant']}><AccountingDashboardPage /></ProtectedRoute>} />
         <Route path="/accounting/staff" element={<ProtectedRoute allowedRoles={['admin', 'accountant']}><AdminTuitionPage /></ProtectedRoute>} />
         <Route path="/accounting/expenses" element={<ProtectedRoute allowedRoles={['admin', 'accountant']}><ExpensesPage /></ProtectedRoute>} />
         <Route path="/accounting/ledger" element={<ProtectedRoute allowedRoles={['admin', 'accountant']}><LedgerPage /></ProtectedRoute>} />
         <Route path="/accounting/student/:id" element={<ProtectedRoute allowedRoles={['admin', 'accountant', 'reception']}><AdminTuitionStudentDetailPage /></ProtectedRoute>} />
+        <Route path="/accounting/reports/ar-aging" element={<ProtectedRoute allowedRoles={['admin', 'accountant']}><ArAgingPage /></ProtectedRoute>} />
+        <Route path="/accounting/reports/profit-loss" element={<ProtectedRoute allowedRoles={['admin', 'accountant']}><ProfitLossPage /></ProtectedRoute>} />
+        <Route path="/accounting/reports/cash-flow" element={<ProtectedRoute allowedRoles={['admin', 'accountant']}><CashFlowForecastPage /></ProtectedRoute>} />
+        <Route path="/accounting/reports/tax" element={<ProtectedRoute allowedRoles={['admin', 'accountant']}><TaxReportPage /></ProtectedRoute>} />
+        <Route path="/accounting/periods" element={<ProtectedRoute allowedRoles={['admin', 'accountant']}><AccountingPeriodsPage /></ProtectedRoute>} />
+        <Route path="/accounting/payment-accounts" element={<ProtectedRoute allowedRoles={['admin', 'accountant']}><PaymentAccountsPage /></ProtectedRoute>} />
+        <Route path="/accounting/fx-rates" element={<ProtectedRoute allowedRoles={['admin', 'accountant']}><FxRatesPage /></ProtectedRoute>} />
         <Route path="/accounting/profile" element={<ProtectedRoute allowedRoles={['accountant']}><ProfilePage /></ProtectedRoute>} />
 
         {/* Driver Portal */}

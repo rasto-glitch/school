@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-toastify';
 import { Plus, RotateCcw, Edit2, Trash2, Tag, Repeat, Receipt, Archive, Calendar, History as HistoryIcon } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
-import { expensesApi, type ExpenseCategory, type ExpenseTemplate, type ExpenseRow } from '../../services/api';
+import { expensesApi, accountingApi, type ExpenseCategory, type ExpenseTemplate, type ExpenseRow, type PaymentAccount } from '../../services/api';
+import { fmtMoney as fmt } from '../../utils/money';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
@@ -12,13 +13,6 @@ import LoadingSpinner from '../../components/common/LoadingSpinner';
 import EmptyState from '../../components/common/EmptyState';
 
 type Tab = 'recurring' | 'one_time' | 'categories' | 'voided';
-
-function fmt(amount: number, currency: string) {
-  const sym: Record<string, string> = { USD: '$', EUR: '€', GBP: '£' };
-  const s = sym[currency] ?? '';
-  const n = (Number(amount) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  return s ? `${s}${n}` : `${currency} ${n}`;
-}
 
 function formatDateTime(iso: string | null): string {
   if (!iso) return '';
@@ -536,7 +530,15 @@ function ExpenseForm({ expense, categories, onClose, onSaved }: {
   const [vendor, setVendor] = useState(expense?.vendor ?? '');
   const [paymentMethod, setPaymentMethod] = useState(expense?.paymentMethod ?? '');
   const [notes, setNotes] = useState(expense?.notes ?? '');
+  const [taxAmount, setTaxAmount] = useState(expense ? String((expense as any).taxAmount ?? '') : '');
+  const [taxLabel, setTaxLabel] = useState((expense as any)?.taxLabel ?? '');
+  const [paymentAccountId, setPaymentAccountId] = useState<string>((expense as any)?.paymentAccountId ?? '');
+  const [accounts, setAccounts] = useState<PaymentAccount[]>([]);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    accountingApi.listPaymentAccounts().then(r => setAccounts(r.data.filter(a => a.isActive))).catch(() => {});
+  }, []);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -553,6 +555,9 @@ function ExpenseForm({ expense, categories, onClose, onSaved }: {
       vendor: vendor.trim() || null,
       paymentMethod: paymentMethod.trim() || null,
       notes: notes.trim() || null,
+      taxAmount: Number(taxAmount) || 0,
+      taxLabel: taxLabel.trim() || null,
+      paymentAccountId: paymentAccountId || null,
     };
     try {
       if (isEdit) await expensesApi.update(expense!.id, payload);
@@ -582,6 +587,15 @@ function ExpenseForm({ expense, categories, onClose, onSaved }: {
         <Input label="Date" type="date" value={expenseDate} onChange={e => setExpenseDate(e.target.value)} required />
         <Input label="Vendor / payee" value={vendor} onChange={e => setVendor(e.target.value)} placeholder="(optional)" />
         <Input label="Payment method" value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)} placeholder="cash, transfer, card..." />
+        <Select
+          label="Paid from (optional)"
+          options={accounts.map(a => ({ value: a.id, label: `${a.name} (${a.kind} · ${a.currency})` }))}
+          placeholder={accounts.length ? '— No specific account —' : '(Add payment accounts to track per-till balances)'}
+          value={paymentAccountId}
+          onChange={e => setPaymentAccountId(e.target.value)}
+        />
+        <Input label="Tax / VAT (optional)" type="number" step="0.01" min="0" value={taxAmount} onChange={e => setTaxAmount(e.target.value)} placeholder="0.00" />
+        <Input label="Tax label" value={taxLabel} onChange={e => setTaxLabel(e.target.value)} placeholder="VAT 5%, etc." />
         <Input label="Notes" value={notes} onChange={e => setNotes(e.target.value)} placeholder="(optional)" />
         <div className="md:col-span-2 flex gap-2 justify-end mt-2">
           <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>

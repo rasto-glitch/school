@@ -6,13 +6,7 @@ import LoadingSpinner from '../../components/common/LoadingSpinner';
 import EmptyState from '../../components/common/EmptyState';
 import Modal from '../../components/common/Modal';
 import { Archive, Search, FileSpreadsheet, FileText, GraduationCap } from 'lucide-react';
-
-function fmt(amount: number, currency: string) {
-  const sym: Record<string, string> = { USD: '$', EUR: '€', GBP: '£' };
-  const s = sym[currency] ?? '';
-  const n = amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  return s ? `${s}${n}` : `${currency} ${n}`;
-}
+import { fmtMoney as fmt } from '../../utils/money';
 
 function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);

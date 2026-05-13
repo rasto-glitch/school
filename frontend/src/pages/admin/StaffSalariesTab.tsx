@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { staffApi } from '../../services/api';
+import { fmtMoney } from '../../utils/money';
 import { toast } from 'react-toastify';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
@@ -69,6 +70,9 @@ interface PaymentForm {
   insurancePercentage: string;
   insuranceAmount: string;
   insuranceTouched: boolean;
+  taxAmount: string;
+  taxLabel: string;
+  paymentAccountId: string;
 }
 
 interface InsurancePayoutForm {
@@ -97,12 +101,6 @@ const emptyMass: MassReminderForm = {
   dueWithinDays: '7',
 };
 
-function fmtMoney(amount: number, currency: string) {
-  const sym: Record<string, string> = { USD: '$', EUR: '€', GBP: '£' };
-  const s = sym[currency] ?? '';
-  const n = amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  return s ? `${s}${n}` : `${currency} ${n}`;
-}
 
 function daysUntil(dateStr: string | null): number | null {
   if (!dateStr) return null;
@@ -331,6 +329,9 @@ export default function StaffSalariesTab() {
       insurancePercentage: s.insurancePercentage !== null && s.insurancePercentage !== undefined ? String(s.insurancePercentage) : '',
       insuranceAmount: insAmt > 0 ? String(insAmt) : '',
       insuranceTouched: false,
+      taxAmount: '',
+      taxLabel: '',
+      paymentAccountId: '',
     });
   };
 
@@ -364,6 +365,9 @@ export default function StaffSalariesTab() {
         notes: paymentForm.notes.trim() || null,
         insuranceAmount: insAmt,
         insurancePercentage: insPct,
+        taxAmount: Number(paymentForm.taxAmount) || 0,
+        taxLabel: paymentForm.taxLabel.trim() || null,
+        paymentAccountId: paymentForm.paymentAccountId || null,
       });
       toast.success('Payment recorded');
       setPaymentTarget(null);
@@ -863,6 +867,22 @@ export default function StaffSalariesTab() {
                 </div>
               </div>
 
+              <div className="grid grid-cols-2 gap-3">
+                <Input
+                  label="Tax / withholding (optional)"
+                  type="number"
+                  step="0.01"
+                  value={paymentForm.taxAmount}
+                  onChange={e => setPaymentForm({ ...paymentForm, taxAmount: e.target.value })}
+                  placeholder="0.00"
+                />
+                <Input
+                  label="Tax label"
+                  value={paymentForm.taxLabel}
+                  onChange={e => setPaymentForm({ ...paymentForm, taxLabel: e.target.value })}
+                  placeholder="Income tax, etc."
+                />
+              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Notes (optional)</label>
                 <textarea

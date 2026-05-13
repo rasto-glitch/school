@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { feesApi } from '../../services/api';
+import { feesApi, accountingApi, type PaymentAccount } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
+import { fmtMoney as fmt } from '../../utils/money';
 import { toast } from 'react-toastify';
 import PageLayout from '../../components/layout/PageLayout';
 import Button from '../../components/common/Button';
@@ -9,7 +10,7 @@ import Input from '../../components/common/Input';
 import Card from '../../components/common/Card';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import Modal from '../../components/common/Modal';
-import { ArrowLeft, Plus, Trash2, Lock, Unlock, FileDown, Pencil } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Lock, Unlock, FileDown, Pencil, Undo2 } from 'lucide-react';
 import type { StudentFeeRow, FeePayment, FeeStatus } from '../../types';
 
 interface StudentFeeDetail extends StudentFeeRow { payments: FeePayment[] }
@@ -23,13 +24,6 @@ const STATUS_COLOR: Record<FeeStatus, string> = {
   due_soon: 'bg-amber-50 text-amber-700 border-amber-200',
   overdue: 'bg-rose-50 text-rose-700 border-rose-200',
 };
-
-function fmt(amount: number, currency: string) {
-  const sym: Record<string, string> = { USD: '$', EUR: '€', GBP: '£' };
-  const s = sym[currency] ?? '';
-  const n = amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  return s ? `${s}${n}` : `${currency} ${n}`;
-}
 
 function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
@@ -52,17 +46,29 @@ export default function AdminTuitionStudentDetailPage() {
   const [data, setData] = useState<StudentFeeDetail | null>(null);
   const [showPay, setShowPay] = useState(false);
   const [showAdjust, setShowAdjust] = useState(false);
+  const [refundOf, setRefundOf] = useState<FeePayment | null>(null);
+  const [accounts, setAccounts] = useState<PaymentAccount[]>([]);
 
   // record-payment form
   const [payDate, setPayDate] = useState(new Date().toISOString().slice(0, 10));
   const [payMethod, setPayMethod] = useState('cash');
   const [payRef, setPayRef] = useState('');
   const [payNotes, setPayNotes] = useState('');
+  const [payTaxAmount, setPayTaxAmount] = useState('');
+  const [payTaxLabel, setPayTaxLabel] = useState('');
+  const [payAccountId, setPayAccountId] = useState<string>('');
   const [paySaving, setPaySaving] = useState(false);
   // amount per installment ('' = not allocating to that one). Plus an "extra" lump field.
   const [allocAmounts, setAllocAmounts] = useState<Record<string, string>>({});
   const [extraAmount, setExtraAmount] = useState('');
   const [extraNote, setExtraNote] = useState('');
+
+  // refund form
+  const [refundAmount, setRefundAmount] = useState('');
+  const [refundDate, setRefundDate] = useState(new Date().toISOString().slice(0, 10));
+  const [refundMethod, setRefundMethod] = useState('cash');
+  const [refundNotes, setRefundNotes] = useState('');
+  const [refundBusy, setRefundBusy] = useState(false);
 
   // adjustment form
   const [adjValue, setAdjValue] = useState('0');
@@ -78,6 +84,7 @@ export default function AdminTuitionStudentDetailPage() {
   useEffect(() => {
     if (!id) return;
     load().catch((e: any) => toast.error(e.response?.data?.error || 'Failed to load'));
+    accountingApi.listPaymentAccounts().then(r => setAccounts(r.data.filter(a => a.isActive))).catch(() => {});
   }, [id]);
 
   if (!data) return <PageLayout title="Tuition"><LoadingSpinner /></PageLayout>;
@@ -122,10 +129,14 @@ export default function AdminTuitionStudentDetailPage() {
         notes: payNotes || undefined,
         allocations: allocations.length > 0 ? allocations : undefined,
         unallocatedNote: needsExtraNote ? extraNote.trim() : undefined,
+        taxAmount: Number(payTaxAmount) || 0,
+        taxLabel: payTaxLabel || undefined,
+        paymentAccountId: payAccountId || null,
       });
       toast.success('Payment recorded');
       setShowPay(false);
       setAllocAmounts({}); setExtraAmount(''); setExtraNote(''); setPayRef(''); setPayNotes('');
+      setPayTaxAmount(''); setPayTaxLabel(''); setPayAccountId('');
       await load();
     } catch (e: any) {
       toast.error(e.response?.data?.error || 'Failed to record payment');
@@ -154,6 +165,27 @@ export default function AdminTuitionStudentDetailPage() {
       const r = await feesApi.downloadStudentFeeSummary(id);
       downloadBlob(r.data, `tuition-statement-${id.slice(0, 8)}.pdf`);
     } catch (e: any) { toast.error(e.response?.data?.error || 'Failed'); }
+  };
+
+  const submitRefund = async () => {
+    if (!refundOf) return;
+    const amt = Number(refundAmount);
+    if (!isFinite(amt) || amt <= 0) { toast.error('Enter a positive refund amount'); return; }
+    setRefundBusy(true);
+    try {
+      await feesApi.refundPayment(refundOf.id, {
+        amount: amt,
+        refundedOn: refundDate,
+        method: refundMethod || undefined,
+        notes: refundNotes || undefined,
+      });
+      toast.success('Refund recorded');
+      setRefundOf(null);
+      setRefundAmount(''); setRefundNotes('');
+      await load();
+    } catch (e: any) {
+      toast.error(e.response?.data?.error || 'Failed to refund');
+    } finally { setRefundBusy(false); }
   };
 
   const saveAdjustment = async () => {
@@ -262,13 +294,18 @@ export default function AdminTuitionStudentDetailPage() {
               <Card className="!p-0">
                 <div className="divide-y divide-gray-100">
                   {data.payments.map(p => (
-                    <div key={p.id} className="flex items-center gap-3 px-4 py-3">
+                    <div key={p.id} className={`flex items-center gap-3 px-4 py-3 ${p.isRefund ? 'bg-rose-50/30' : ''}`}>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-semibold text-gray-900">{fmt(p.amount, data.currency)}</span>
+                          <span className={`font-semibold ${p.isRefund ? 'text-rose-700' : 'text-gray-900'}`}>{p.isRefund ? '−' : ''}{fmt(p.amount, p.currency || data.currency)}</span>
                           <span className="text-xs text-gray-500">· {p.paidOn}</span>
+                          {p.isRefund && <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-rose-100 text-rose-700">Refund</span>}
+                          {p.receiptYear && p.receiptNumber && (
+                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">RCP-{p.receiptYear}-{String(p.receiptNumber).padStart(5, '0')}</span>
+                          )}
                           {p.method && <span className="text-xs text-gray-500">· {p.method}</span>}
                           {p.reference && <span className="text-xs text-gray-500">· ref {p.reference}</span>}
+                          {(p.taxAmount ?? 0) > 0 && <span className="text-xs text-gray-500">· tax {fmt(p.taxAmount ?? 0, p.currency || data.currency)}{p.taxLabel ? ` (${p.taxLabel})` : ''}</span>}
                         </div>
                         <div className="text-xs text-gray-700 mt-0.5">
                           <span className="text-gray-500">Recorded by </span>
@@ -296,6 +333,11 @@ export default function AdminTuitionStudentDetailPage() {
                       <button onClick={() => downloadReceipt(p)} className="p-2 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg" title="Download receipt">
                         <FileDown className="w-4 h-4" />
                       </button>
+                      {canWrite && !p.isRefund && (
+                        <button onClick={() => { setRefundOf(p); setRefundAmount(String(p.amount)); }} className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg" title="Refund">
+                          <Undo2 className="w-4 h-4" />
+                        </button>
+                      )}
                       {canWrite && (
                         <button onClick={() => deletePayment(p.id)} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg" title="Void">
                           <Trash2 className="w-4 h-4" />
@@ -436,6 +478,19 @@ export default function AdminTuitionStudentDetailPage() {
               </select>
             </div>
             <Input label="Reference (optional)" value={payRef} onChange={e => setPayRef(e.target.value)} placeholder="Receipt no., transfer ID…" />
+            {accounts.length > 0 && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Deposit into (optional)</label>
+                <select value={payAccountId} onChange={e => setPayAccountId(e.target.value)} className="w-full border border-gray-300 rounded-xl px-4 py-2.5 bg-white min-h-[44px] focus:outline-none focus:ring-2 focus:ring-primary-500">
+                  <option value="">— No specific account —</option>
+                  {accounts.map(a => <option key={a.id} value={a.id}>{a.name} ({a.kind} · {a.currency})</option>)}
+                </select>
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-3">
+              <Input label="Tax / withholding (optional)" type="number" step="0.01" value={payTaxAmount} onChange={e => setPayTaxAmount(e.target.value)} placeholder="0.00" />
+              <Input label="Tax label" value={payTaxLabel} onChange={e => setPayTaxLabel(e.target.value)} placeholder="VAT 5%, etc." />
+            </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Notes (optional)</label>
               <textarea rows={2} value={payNotes} onChange={e => setPayNotes(e.target.value)} className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500" />
@@ -443,6 +498,36 @@ export default function AdminTuitionStudentDetailPage() {
             <div className="flex gap-2 justify-end pt-2">
               <Button variant="ghost" onClick={() => setShowPay(false)}>Cancel</Button>
               <Button onClick={recordPayment} loading={paySaving} disabled={totalPay <= 0}>Record</Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {refundOf && (
+        <Modal isOpen onClose={() => setRefundOf(null)} title={`Refund payment of ${fmt(refundOf.amount, refundOf.currency || data.currency)}`}>
+          <div className="space-y-3">
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2">
+              The original payment is preserved. The refund is recorded as a separate negative event and a new receipt is issued.
+            </p>
+            <Input label="Refund amount" type="number" step="0.01" value={refundAmount} onChange={e => setRefundAmount(e.target.value)} />
+            <Input label="Refunded on" type="date" value={refundDate} onChange={e => setRefundDate(e.target.value)} />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Method</label>
+              <select value={refundMethod} onChange={e => setRefundMethod(e.target.value)} className="w-full border border-gray-300 rounded-xl px-4 py-2.5 bg-white min-h-[44px] focus:outline-none focus:ring-2 focus:ring-primary-500">
+                <option value="cash">Cash</option>
+                <option value="bank">Bank deposit</option>
+                <option value="transfer">Bank transfer</option>
+                <option value="card">Card</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Notes (optional)</label>
+              <textarea rows={2} value={refundNotes} onChange={e => setRefundNotes(e.target.value)} className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="Why is this being refunded?" />
+            </div>
+            <div className="flex gap-2 justify-end pt-2">
+              <Button variant="ghost" onClick={() => setRefundOf(null)} disabled={refundBusy}>Cancel</Button>
+              <Button onClick={submitRefund} loading={refundBusy} icon={<Undo2 className="w-4 h-4" />}>Refund</Button>
             </div>
           </div>
         </Modal>

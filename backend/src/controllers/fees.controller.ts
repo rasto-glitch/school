@@ -6,6 +6,8 @@ import { notify, notifyMany } from '../utils/notify';
 import { streamPaymentReceipt, streamYearSummary } from '../utils/receipts';
 import { streamArchivePaymentPdf, buildArchivePaymentXlsx, type ArchivePaymentExportData, type ArchivePlanEntry } from '../utils/paymentArchiveExport';
 import { logAudit } from '../utils/audit';
+import { assertPeriodOpen } from '../utils/period';
+import { allocateReceiptNumber } from '../utils/receiptNumber';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -125,7 +127,7 @@ export async function listPlans(req: AuthRequest, res: Response): Promise<void> 
 
   const { data: plans, error } = await supabase
     .from('fee_plans')
-    .select('id, name, total_amount, currency, applies_to, academic_year, is_active, created_at')
+    .select('id, name, total_amount, currency, applies_to, academic_year, is_active, kind, late_fee_enabled, late_fee_type, late_fee_amount, late_fee_grace_days, created_at')
     .eq('school_id', schoolId)
     .is('voided_at', null)
     .order('created_at', { ascending: false });
@@ -158,11 +160,19 @@ export async function listPlans(req: AuthRequest, res: Response): Promise<void> 
     appliesTo: p.applies_to,
     academicYear: p.academic_year,
     isActive: p.is_active,
+    kind: (p as any).kind ?? 'tuition',
+    lateFeeEnabled: (p as any).late_fee_enabled ?? false,
+    lateFeeType: (p as any).late_fee_type ?? null,
+    lateFeeAmount: Number((p as any).late_fee_amount ?? 0),
+    lateFeeGraceDays: Number((p as any).late_fee_grace_days ?? 0),
     createdAt: p.created_at,
     installments: installmentsByPlan.get(p.id) ?? [],
     classIds: classesByPlan.get(p.id) ?? [],
   })));
 }
+
+type FeePlanKind = 'tuition' | 'transport' | 'lunch' | 'uniform' | 'exam' | 'registration' | 'other';
+const FEE_PLAN_KINDS: FeePlanKind[] = ['tuition', 'transport', 'lunch', 'uniform', 'exam', 'registration', 'other'];
 
 interface PlanWriteBody {
   name: string;
@@ -173,17 +183,36 @@ interface PlanWriteBody {
   academicYear?: string;
   installments: { sequence: number; amount: number; dueDate: string }[];
   isActive?: boolean;
+  kind?: FeePlanKind;
+  lateFeeEnabled?: boolean;
+  lateFeeType?: 'fixed' | 'percent' | null;
+  lateFeeAmount?: number;
+  lateFeeGraceDays?: number;
 }
 
 function validatePlanBody(body: any): string | null {
   if (!body?.name || typeof body.name !== 'string') return 'name is required';
   if (typeof body.totalAmount !== 'number' || body.totalAmount < 0) return 'totalAmount must be a non-negative number';
   if (!['all', 'classes', 'manual'].includes(body.appliesTo)) return 'appliesTo must be all|classes|manual';
-  if (!Array.isArray(body.installments) || body.installments.length === 0) return 'installments must be a non-empty array';
-  const sumI = body.installments.reduce((s: number, i: any) => s + Number(i.amount), 0);
-  if (Math.abs(sumI - body.totalAmount) > 0.01) return 'installments must sum to totalAmount';
+  // Installments are optional for one-off fees (exam, uniform, registration);
+  // if omitted, the plan is treated as a single lump-sum due immediately.
+  if (body.installments !== undefined) {
+    if (!Array.isArray(body.installments)) return 'installments must be an array';
+    if (body.installments.length > 0) {
+      const sumI = body.installments.reduce((s: number, i: any) => s + Number(i.amount), 0);
+      if (Math.abs(sumI - body.totalAmount) > 0.01) return 'installments must sum to totalAmount';
+    }
+  }
   if (body.appliesTo === 'classes' && (!Array.isArray(body.classIds) || body.classIds.length === 0)) {
     return 'classIds must be a non-empty array when appliesTo=classes';
+  }
+  if (body.kind !== undefined && !FEE_PLAN_KINDS.includes(body.kind)) {
+    return `kind must be one of ${FEE_PLAN_KINDS.join(', ')}`;
+  }
+  if (body.lateFeeEnabled) {
+    if (body.lateFeeType !== 'fixed' && body.lateFeeType !== 'percent') return 'lateFeeType must be fixed|percent when late fees are enabled';
+    if (typeof body.lateFeeAmount !== 'number' || body.lateFeeAmount < 0) return 'lateFeeAmount must be a non-negative number';
+    if (body.lateFeeGraceDays !== undefined && (typeof body.lateFeeGraceDays !== 'number' || body.lateFeeGraceDays < 0)) return 'lateFeeGraceDays must be a non-negative number';
   }
   return null;
 }
@@ -208,11 +237,16 @@ export async function createPlan(req: AuthRequest, res: Response): Promise<void>
     applies_to: body.appliesTo,
     academic_year: body.academicYear ?? null,
     is_active: body.isActive ?? true,
+    kind: body.kind ?? 'tuition',
+    late_fee_enabled: body.lateFeeEnabled ?? false,
+    late_fee_type: body.lateFeeEnabled ? body.lateFeeType ?? null : null,
+    late_fee_amount: body.lateFeeEnabled ? body.lateFeeAmount ?? 0 : 0,
+    late_fee_grace_days: body.lateFeeEnabled ? body.lateFeeGraceDays ?? 0 : 0,
   }).select().single();
   if (pErr || !plan) { res.status(500).json({ error: pErr?.message ?? 'Failed to create plan' }); return; }
 
-  if (body.installments.length) {
-    const rows = body.installments.map(i => ({
+  if ((body.installments ?? []).length) {
+    const rows = (body.installments ?? []).map(i => ({
       school_id: schoolId,
       fee_plan_id: plan.id,
       sequence: i.sequence,
@@ -252,6 +286,11 @@ export async function updatePlan(req: AuthRequest, res: Response): Promise<void>
     applies_to: body.appliesTo,
     academic_year: body.academicYear ?? null,
     is_active: body.isActive ?? true,
+    kind: body.kind ?? 'tuition',
+    late_fee_enabled: body.lateFeeEnabled ?? false,
+    late_fee_type: body.lateFeeEnabled ? body.lateFeeType ?? null : null,
+    late_fee_amount: body.lateFeeEnabled ? body.lateFeeAmount ?? 0 : 0,
+    late_fee_grace_days: body.lateFeeEnabled ? body.lateFeeGraceDays ?? 0 : 0,
   }).eq('id', id).eq('school_id', schoolId);
   if (pErr) { res.status(500).json({ error: pErr.message }); return; }
 
@@ -260,8 +299,8 @@ export async function updatePlan(req: AuthRequest, res: Response): Promise<void>
 
   // Replace installments + class targets atomically (best effort — no transaction support via PostgREST)
   await supabase.from('fee_installments').delete().eq('fee_plan_id', id).eq('school_id', schoolId);
-  if (body.installments.length) {
-    await supabase.from('fee_installments').insert(body.installments.map(i => ({
+  if ((body.installments ?? []).length) {
+    await supabase.from('fee_installments').insert((body.installments ?? []).map(i => ({
       school_id: schoolId, fee_plan_id: id, sequence: i.sequence, amount: i.amount, due_date: i.dueDate,
     })));
   }
@@ -417,11 +456,13 @@ interface StudentFeeRow {
   totalAmount: number;
   adjustment: number;
   siblingDiscount: number;
+  lateFees: number;
   paid: number;
   balance: number;
   status: Status;
   installments: { id: string; sequence: number; amount: number; effectiveAmount: number; dueDate: string }[];
   lockedFeatures: string[];
+  kind?: string;
 }
 
 async function buildStudentFeeRows(schoolId: string): Promise<StudentFeeRow[]> {
@@ -433,7 +474,7 @@ async function buildStudentFeeRows(schoolId: string): Promise<StudentFeeRow[]> {
     .select(`
       id, student_id, total_amount, adjustment, fee_plan_id,
       students!inner(id, full_name, parent_id, classes(name), parents(id, full_name, user_id)),
-      fee_plans!inner(id, name, currency, academic_year)
+      fee_plans!inner(id, name, currency, academic_year, kind)
     `)
     .eq('school_id', schoolId);
   if (error || !sfs) return [];
@@ -442,10 +483,11 @@ async function buildStudentFeeRows(schoolId: string): Promise<StudentFeeRow[]> {
   const studentIds = Array.from(new Set(sfs.map(s => (s as any).student_id)));
   const sfIds = sfs.map(s => (s as any).id);
 
-  const [{ data: insts }, { data: pays }, { data: locks }] = await Promise.all([
+  const [{ data: insts }, { data: pays }, { data: locks }, { data: lateFees }] = await Promise.all([
     supabase.from('fee_installments').select('fee_plan_id, id, sequence, amount, due_date').in('fee_plan_id', planIds.length ? planIds : ['00000000-0000-0000-0000-000000000000']),
-    supabase.from('fee_payments').select('student_fee_id, amount').in('student_fee_id', sfIds.length ? sfIds : ['00000000-0000-0000-0000-000000000000']).is('voided_at', null),
+    supabase.from('fee_payments').select('student_fee_id, amount, is_refund').in('student_fee_id', sfIds.length ? sfIds : ['00000000-0000-0000-0000-000000000000']).is('voided_at', null),
     supabase.from('student_access_locks').select('student_id, feature').in('student_id', studentIds.length ? studentIds : ['00000000-0000-0000-0000-000000000000']),
+    supabase.from('student_fee_late_fees').select('student_fee_id, amount').in('student_fee_id', sfIds.length ? sfIds : ['00000000-0000-0000-0000-000000000000']).is('voided_at', null),
   ]);
 
   const instByPlan = new Map<string, { id: string; sequence: number; amount: number; dueDate: string; due_date: string }[]>();
@@ -454,9 +496,15 @@ async function buildStudentFeeRows(schoolId: string): Promise<StudentFeeRow[]> {
     arr.push({ id: (i as any).id, sequence: (i as any).sequence, amount: Number((i as any).amount), dueDate: (i as any).due_date, due_date: (i as any).due_date });
     instByPlan.set((i as any).fee_plan_id, arr);
   }
+  // "Paid" = positive payments minus refunds (both stored as positive amounts on fee_payments).
   const paidBySf = new Map<string, number>();
   for (const p of pays ?? []) {
-    paidBySf.set((p as any).student_fee_id, (paidBySf.get((p as any).student_fee_id) ?? 0) + Number((p as any).amount));
+    const sign = (p as any).is_refund ? -1 : 1;
+    paidBySf.set((p as any).student_fee_id, (paidBySf.get((p as any).student_fee_id) ?? 0) + sign * Number((p as any).amount));
+  }
+  const lateFeesBySf = new Map<string, number>();
+  for (const lf of lateFees ?? []) {
+    lateFeesBySf.set((lf as any).student_fee_id, (lateFeesBySf.get((lf as any).student_fee_id) ?? 0) + Number((lf as any).amount));
   }
   const locksByStudent = new Map<string, Set<string>>();
   for (const l of locks ?? []) {
@@ -482,7 +530,8 @@ async function buildStudentFeeRows(schoolId: string): Promise<StudentFeeRow[]> {
     const parentId = s.students?.parent_id ?? null;
     const siblings = parentId ? siblingCounts.get(`${parentId}::${academicYear ?? ''}`) ?? 1 : 1;
     const siblingDiscount = computeSiblingDiscount(totalAmount, siblings, cfg.siblingDiscount);
-    const dueTotal = totalAmount + adjustment - siblingDiscount;
+    const lateFees = Math.round((lateFeesBySf.get(s.id) ?? 0) * 100) / 100;
+    const dueTotal = totalAmount + adjustment - siblingDiscount + lateFees;
     const status = computeStatus(installments, paid, dueTotal, today);
 
     return {
@@ -498,9 +547,11 @@ async function buildStudentFeeRows(schoolId: string): Promise<StudentFeeRow[]> {
       planName: s.fee_plans?.name ?? '',
       academicYear,
       currency: s.fee_plans?.currency ?? cfg.currency,
+      kind: s.fee_plans?.kind ?? 'tuition',
       totalAmount,
       adjustment,
       siblingDiscount,
+      lateFees,
       paid,
       balance: Math.max(0, dueTotal - paid),
       status,
@@ -547,7 +598,7 @@ export async function listFamilies(req: AuthRequest, res: Response): Promise<voi
     parentName: g.parentName,
     parentUserId: g.parentUserId,
     students: g.students,
-    totalDue: g.students.reduce((s, r) => s + (r.totalAmount + r.adjustment - r.siblingDiscount), 0),
+    totalDue: g.students.reduce((s, r) => s + (r.totalAmount + r.adjustment - r.siblingDiscount + r.lateFees), 0),
     totalPaid: g.students.reduce((s, r) => s + r.paid, 0),
     totalBalance: g.students.reduce((s, r) => s + r.balance, 0),
     currency: g.students[0]?.currency ?? 'USD',
@@ -568,7 +619,7 @@ export async function getStudentFee(req: AuthRequest, res: Response): Promise<vo
 
   const { data: payments } = await supabase
     .from('fee_payments')
-    .select('id, amount, paid_on, method, reference, notes, unallocated_note, recorded_by, created_at')
+    .select('id, amount, paid_on, method, reference, notes, unallocated_note, recorded_by, created_at, currency, tax_amount, tax_label, payment_account_id, receipt_year, receipt_number, is_refund, refund_of_payment_id')
     .eq('student_fee_id', id)
     .eq('school_id', schoolId)
     .is('voided_at', null)
@@ -623,6 +674,14 @@ export async function getStudentFee(req: AuthRequest, res: Response): Promise<vo
         recorderName: (p as any).recorded_by ? nameByUser.get((p as any).recorded_by) ?? null : null,
         allocations: allocs,
         createdAt: (p as any).created_at,
+        currency: (p as any).currency ?? null,
+        taxAmount: Number((p as any).tax_amount ?? 0),
+        taxLabel: (p as any).tax_label ?? null,
+        paymentAccountId: (p as any).payment_account_id ?? null,
+        receiptYear: (p as any).receipt_year ?? null,
+        receiptNumber: (p as any).receipt_number ?? null,
+        isRefund: !!(p as any).is_refund,
+        refundOfPaymentId: (p as any).refund_of_payment_id ?? null,
       };
     }),
   });
@@ -636,11 +695,16 @@ export async function recordPayment(req: AuthRequest, res: Response): Promise<vo
   if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
 
   const { id } = req.params; // student_fee_id
-  const { amount, paidOn, method, reference, notes, unallocatedNote } = req.body;
+  const { amount, paidOn, method, reference, notes, unallocatedNote, currency, taxAmount, taxLabel, paymentAccountId } = req.body;
   const rawAllocations = req.body.allocations;
 
   if (typeof amount !== 'number' || amount <= 0) { res.status(400).json({ error: 'amount must be a positive number' }); return; }
   if (!paidOn) { res.status(400).json({ error: 'paidOn is required' }); return; }
+  if (taxAmount !== undefined && (typeof taxAmount !== 'number' || taxAmount < 0)) { res.status(400).json({ error: 'taxAmount must be a non-negative number' }); return; }
+
+  // Period close guard — block writes into a closed accounting period
+  const periodGuard = await assertPeriodOpen(schoolId, [paidOn]);
+  if (!periodGuard.ok) { res.status(periodGuard.status).json({ error: periodGuard.error }); return; }
 
   // Validate allocations if provided. Each entry { installmentId, amount }.
   // Allocations may sum to less than the payment total — the difference is the
@@ -669,10 +733,10 @@ export async function recordPayment(req: AuthRequest, res: Response): Promise<vo
     }
   }
 
-  // Verify student_fee exists in this school
+  // Verify student_fee exists in this school + grab plan currency
   const { data: sf } = await supabase
     .from('student_fees')
-    .select('id, fee_plan_id, students(full_name, parents(user_id))')
+    .select('id, fee_plan_id, students(full_name, parents(user_id)), fee_plans(currency)')
     .eq('id', id).eq('school_id', schoolId).single();
   if (!sf) { res.status(404).json({ error: 'Student fee not found' }); return; }
 
@@ -689,6 +753,16 @@ export async function recordPayment(req: AuthRequest, res: Response): Promise<vo
     }
   }
 
+  // Resolve currency: explicit > plan > school default
+  const cfgForCurrency = await getTuitionConfig(schoolId);
+  const resolvedCurrency = (typeof currency === 'string' && currency.trim())
+    || (sf as any).fee_plans?.currency
+    || cfgForCurrency.currency
+    || 'USD';
+
+  // Allocate the next sequential receipt number for the (school, year)
+  const { receiptYear, receiptNumber } = await allocateReceiptNumber(schoolId, paidOn);
+
   const { data, error } = await supabase.from('fee_payments').insert({
     school_id: schoolId,
     student_fee_id: id,
@@ -698,6 +772,12 @@ export async function recordPayment(req: AuthRequest, res: Response): Promise<vo
     reference: reference ?? null,
     notes: notes ?? null,
     unallocated_note: storedUnallocatedNote,
+    currency: resolvedCurrency,
+    tax_amount: typeof taxAmount === 'number' ? taxAmount : 0,
+    tax_label: taxLabel ?? null,
+    payment_account_id: paymentAccountId ?? null,
+    receipt_year: receiptYear,
+    receipt_number: receiptNumber,
     recorded_by: userId,
   }).select().single();
   if (error) { res.status(500).json({ error: error.message }); return; }
@@ -749,6 +829,9 @@ export async function deletePayment(req: AuthRequest, res: Response): Promise<vo
     .select('*, student_fees(students(full_name))')
     .eq('id', id).eq('school_id', schoolId).is('voided_at', null).single();
   if (!before) { res.status(404).json({ error: 'Payment not found' }); return; }
+  // Block voiding a payment whose paid_on falls inside a closed period
+  const periodGuard = await assertPeriodOpen(schoolId, [(before as any).paid_on]);
+  if (!periodGuard.ok) { res.status(periodGuard.status).json({ error: periodGuard.error }); return; }
   const { data: after, error } = await supabase
     .from('fee_payments')
     .update({ voided_at: new Date().toISOString(), voided_by: userId, void_reason: reason })
@@ -772,6 +855,8 @@ export async function unvoidPayment(req: AuthRequest, res: Response): Promise<vo
     .select('*, student_fees(students(full_name))')
     .eq('id', id).eq('school_id', schoolId).single();
   if (!before || !(before as any).voided_at) { res.status(404).json({ error: 'Voided payment not found' }); return; }
+  const periodGuard = await assertPeriodOpen(schoolId, [(before as any).paid_on]);
+  if (!periodGuard.ok) { res.status(periodGuard.status).json({ error: periodGuard.error }); return; }
   const { data: after, error } = await supabase
     .from('fee_payments')
     .update({ voided_at: null, voided_by: null, void_reason: null })
@@ -781,6 +866,137 @@ export async function unvoidPayment(req: AuthRequest, res: Response): Promise<vo
   const beforeRow: Record<string, unknown> = { ...(before as Record<string, unknown>) };
   delete beforeRow.student_fees;
   await logAudit({ req, entityType: 'fee_payment', entityId: String(id), action: 'update', before: beforeRow, after, label: studentName });
+  res.json({ success: true });
+}
+
+// Refund a previously-recorded payment (full or partial). Stores a separate
+// fee_payments row with is_refund=true and refund_of_payment_id pointing back.
+// The original row is NOT voided — both stay in history so receipts remain valid.
+export async function refundPayment(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId, userId } = req.user!;
+  const guard = await ensurePremium(schoolId);
+  if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
+
+  const { id } = req.params; // original fee_payment id
+  const { amount, refundedOn, method, reference, notes, paymentAccountId } = req.body;
+
+  if (typeof amount !== 'number' || amount <= 0) { res.status(400).json({ error: 'amount must be a positive number' }); return; }
+  if (!refundedOn) { res.status(400).json({ error: 'refundedOn is required' }); return; }
+
+  const { data: original } = await supabase
+    .from('fee_payments')
+    .select('id, school_id, student_fee_id, amount, currency, is_refund, voided_at, student_fees(students(full_name, parents(user_id)))')
+    .eq('id', id).eq('school_id', schoolId).single();
+  if (!original) { res.status(404).json({ error: 'Original payment not found' }); return; }
+  if ((original as any).is_refund) { res.status(400).json({ error: 'Cannot refund a refund' }); return; }
+  if ((original as any).voided_at) { res.status(400).json({ error: 'Cannot refund a voided payment — unvoid it first' }); return; }
+
+  // Cap refund at original − sum of prior non-voided refunds against it
+  const { data: prior } = await supabase
+    .from('fee_payments')
+    .select('amount')
+    .eq('school_id', schoolId)
+    .eq('refund_of_payment_id', id)
+    .is('voided_at', null);
+  const priorSum = (prior ?? []).reduce((s, p: any) => s + Number(p.amount), 0);
+  const refundable = Number((original as any).amount) - priorSum;
+  if (amount > refundable + 0.01) {
+    res.status(400).json({ error: `Refund exceeds remaining refundable amount (${refundable.toFixed(2)})` });
+    return;
+  }
+
+  const periodGuard = await assertPeriodOpen(schoolId, [refundedOn]);
+  if (!periodGuard.ok) { res.status(periodGuard.status).json({ error: periodGuard.error }); return; }
+
+  const { receiptYear, receiptNumber } = await allocateReceiptNumber(schoolId, refundedOn);
+
+  const { data: refund, error } = await supabase.from('fee_payments').insert({
+    school_id: schoolId,
+    student_fee_id: (original as any).student_fee_id,
+    amount,
+    paid_on: refundedOn,
+    method: method ?? null,
+    reference: reference ?? null,
+    notes: notes ?? null,
+    currency: (original as any).currency ?? 'USD',
+    is_refund: true,
+    refund_of_payment_id: id,
+    payment_account_id: paymentAccountId ?? null,
+    receipt_year: receiptYear,
+    receipt_number: receiptNumber,
+    recorded_by: userId,
+  }).select().single();
+  if (error) { res.status(500).json({ error: error.message }); return; }
+
+  const studentName = ((original as any).student_fees?.students?.full_name) as string | undefined;
+  await logAudit({ req, entityType: 'fee_payment', entityId: refund.id, action: 'create', after: refund, label: studentName, reason: `Refund of ${id}` });
+
+  const parentUserId = (original as any).student_fees?.students?.parents?.user_id;
+  if (parentUserId) {
+    await notify({
+      schoolId,
+      userId: parentUserId,
+      type: 'payment_recorded',
+      title: 'Refund issued',
+      message: `Refund of ${amount} issued`,
+      relatedId: refund.id,
+    });
+  }
+
+  res.status(201).json(toCC(refund));
+}
+
+// ── Late fees ──────────────────────────────────────────────────────────
+// The pg_cron job apply_late_fees() auto-inserts one row per overdue
+// installment per plan with late_fee_enabled. Admin/accountant can void
+// individual late fees (e.g. waived for a hardship). Once voided they don't
+// re-apply because the UNIQUE(student_fee_id, fee_installment_id) index
+// keeps the row in place.
+
+export async function listLateFees(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const guard = await ensurePremium(schoolId);
+  if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
+
+  const studentFeeId = (req.query.studentFeeId as string | undefined) ?? null;
+  let q = supabase
+    .from('student_fee_late_fees')
+    .select('id, student_fee_id, fee_installment_id, amount, applied_on, voided_at, void_reason, created_at, fee_installments(sequence, due_date)')
+    .eq('school_id', schoolId)
+    .order('applied_on', { ascending: false });
+  if (studentFeeId) q = q.eq('student_fee_id', studentFeeId);
+  const { data, error } = await q;
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json((data ?? []).map(toCC));
+}
+
+export async function voidLateFee(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId, userId } = req.user!;
+  const guard = await ensurePremium(schoolId);
+  if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
+
+  const { id } = req.params;
+  const reason = (req.body?.reason as string | undefined)?.trim() || null;
+  const { data: before } = await supabase.from('student_fee_late_fees').select('*').eq('id', id).eq('school_id', schoolId).is('voided_at', null).single();
+  if (!before) { res.status(404).json({ error: 'Late fee not found' }); return; }
+  const { data: after, error } = await supabase
+    .from('student_fee_late_fees')
+    .update({ voided_at: new Date().toISOString(), voided_by: userId, void_reason: reason })
+    .eq('id', id).eq('school_id', schoolId).select().single();
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  await logAudit({ req, entityType: 'late_fee', entityId: String(id), action: 'update', before, after, reason: reason ?? undefined });
+  res.json({ success: true });
+}
+
+// Manually trigger late-fee application (debug / admin "run now" button).
+// The pg_cron job runs nightly; this lets a school force a refresh after
+// editing a plan's late-fee config.
+export async function applyLateFeesNow(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const guard = await ensurePremium(schoolId);
+  if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
+  const { error } = await supabase.rpc('apply_late_fees');
+  if (error) { res.status(500).json({ error: error.message }); return; }
   res.json({ success: true });
 }
 

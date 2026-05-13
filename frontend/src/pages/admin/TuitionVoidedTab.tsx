@@ -6,6 +6,7 @@ import Button from '../../components/common/Button';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import EmptyState from '../../components/common/EmptyState';
 import { RotateCcw, Archive } from 'lucide-react';
+import { fmtMoney as fmt } from '../../utils/money';
 
 interface VoidedPlan {
   id: string;
@@ -33,12 +34,6 @@ interface VoidedPayment {
   currency: string;
 }
 
-function fmt(amount: number, currency: string) {
-  const sym: Record<string, string> = { USD: '$', EUR: '€', GBP: '£' };
-  const s = sym[currency] ?? '';
-  const n = amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  return s ? `${s}${n}` : `${currency} ${n}`;
-}
 
 function formatVoidedAt(iso: string): string {
   const d = new Date(iso);

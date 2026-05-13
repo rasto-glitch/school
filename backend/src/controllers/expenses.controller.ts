@@ -3,6 +3,7 @@ import { supabase } from '../config/supabase';
 import type { AuthRequest } from '../middleware/auth';
 import { toCC } from '../utils/transform';
 import { logAudit } from '../utils/audit';
+import { assertPeriodOpen } from '../utils/period';
 
 // ── Premium gate ────────────────────────────────────────────────────────
 async function ensurePremium(schoolId: string): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
@@ -302,13 +303,18 @@ export async function createExpense(req: AuthRequest, res: Response): Promise<vo
   const guard = await ensurePremium(schoolId);
   if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
 
-  const { name, amount, currency, expenseDate, categoryId, vendor, paymentMethod, notes } = req.body as {
+  const { name, amount, currency, expenseDate, categoryId, vendor, paymentMethod, notes, taxAmount, taxLabel, paymentAccountId } = req.body as {
     name?: string; amount?: number; currency?: string; expenseDate?: string;
     categoryId?: string | null; vendor?: string | null; paymentMethod?: string | null; notes?: string | null;
+    taxAmount?: number; taxLabel?: string | null; paymentAccountId?: string | null;
   };
   if (!name?.trim()) { res.status(400).json({ error: 'Name is required' }); return; }
   if (typeof amount !== 'number' || !isFinite(amount) || amount < 0) { res.status(400).json({ error: 'Amount must be a non-negative number' }); return; }
   if (!expenseDate) { res.status(400).json({ error: 'Expense date is required' }); return; }
+  if (taxAmount !== undefined && (typeof taxAmount !== 'number' || taxAmount < 0)) { res.status(400).json({ error: 'taxAmount must be a non-negative number' }); return; }
+
+  const periodGuard = await assertPeriodOpen(schoolId, [expenseDate]);
+  if (!periodGuard.ok) { res.status(periodGuard.status).json({ error: periodGuard.error }); return; }
 
   const { data, error } = await supabase.from('expenses').insert({
     school_id: schoolId,
@@ -320,6 +326,9 @@ export async function createExpense(req: AuthRequest, res: Response): Promise<vo
     vendor: vendor?.trim() || null,
     payment_method: paymentMethod?.trim() || null,
     notes: notes ?? null,
+    tax_amount: typeof taxAmount === 'number' ? taxAmount : 0,
+    tax_label: taxLabel ?? null,
+    payment_account_id: paymentAccountId ?? null,
     recorded_by: req.user!.userId,
   }).select().single();
   if (error) { res.status(500).json({ error: error.message }); return; }
@@ -333,9 +342,10 @@ export async function updateExpense(req: AuthRequest, res: Response): Promise<vo
   if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
 
   const { id } = req.params;
-  const { name, amount, currency, expenseDate, categoryId, vendor, paymentMethod, notes } = req.body as {
+  const { name, amount, currency, expenseDate, categoryId, vendor, paymentMethod, notes, taxAmount, taxLabel, paymentAccountId } = req.body as {
     name?: string; amount?: number; currency?: string; expenseDate?: string;
     categoryId?: string | null; vendor?: string | null; paymentMethod?: string | null; notes?: string | null;
+    taxAmount?: number; taxLabel?: string | null; paymentAccountId?: string | null;
   };
 
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
@@ -353,10 +363,21 @@ export async function updateExpense(req: AuthRequest, res: Response): Promise<vo
   if (vendor !== undefined) updates.vendor = vendor?.trim() || null;
   if (paymentMethod !== undefined) updates.payment_method = paymentMethod?.trim() || null;
   if (notes !== undefined) updates.notes = notes;
+  if (taxAmount !== undefined) {
+    if (typeof taxAmount !== 'number' || taxAmount < 0) { res.status(400).json({ error: 'taxAmount must be a non-negative number' }); return; }
+    updates.tax_amount = taxAmount;
+  }
+  if (taxLabel !== undefined) updates.tax_label = taxLabel;
+  if (paymentAccountId !== undefined) updates.payment_account_id = paymentAccountId;
 
   const { data: before } = await supabase.from('expenses').select('*').eq('id', id).eq('school_id', schoolId).single();
   if (!before) { res.status(404).json({ error: 'Expense not found' }); return; }
   if ((before as any).voided_at) { res.status(409).json({ error: 'Cannot edit a voided expense — restore it first' }); return; }
+  // Block edit if old or new date is in a closed period
+  const oldDate = (before as any).expense_date as string | undefined;
+  const newDate = typeof expenseDate === 'string' ? expenseDate : undefined;
+  const periodGuard = await assertPeriodOpen(schoolId, [oldDate, newDate]);
+  if (!periodGuard.ok) { res.status(periodGuard.status).json({ error: periodGuard.error }); return; }
 
   const { data: after, error } = await supabase.from('expenses').update(updates)
     .eq('id', id).eq('school_id', schoolId).select().single();
@@ -376,6 +397,8 @@ export async function voidExpense(req: AuthRequest, res: Response): Promise<void
   const { data: before } = await supabase.from('expenses').select('*').eq('id', id).eq('school_id', schoolId).single();
   if (!before) { res.status(404).json({ error: 'Expense not found' }); return; }
   if ((before as any).voided_at) { res.status(409).json({ error: 'Already voided' }); return; }
+  const periodGuard = await assertPeriodOpen(schoolId, [(before as any).expense_date]);
+  if (!periodGuard.ok) { res.status(periodGuard.status).json({ error: periodGuard.error }); return; }
 
   const { data: after, error } = await supabase.from('expenses').update({
     voided_at: new Date().toISOString(),
@@ -395,6 +418,8 @@ export async function unvoidExpense(req: AuthRequest, res: Response): Promise<vo
   const { id } = req.params;
   const { data: before } = await supabase.from('expenses').select('*').eq('id', id).eq('school_id', schoolId).single();
   if (!before || !(before as any).voided_at) { res.status(404).json({ error: 'Voided expense not found' }); return; }
+  const periodGuard = await assertPeriodOpen(schoolId, [(before as any).expense_date]);
+  if (!periodGuard.ok) { res.status(periodGuard.status).json({ error: periodGuard.error }); return; }
   const { data: after, error } = await supabase.from('expenses').update({
     voided_at: null, voided_by: null, void_reason: null,
   }).eq('id', id).eq('school_id', schoolId).select().single();

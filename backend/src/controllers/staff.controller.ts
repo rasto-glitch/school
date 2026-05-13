@@ -5,6 +5,7 @@ import { toCC } from '../utils/transform';
 import { notify, notifyMany } from '../utils/notify';
 import { streamStaffSalaryPdf, buildStaffSalaryXlsx, type StaffSalaryExportData } from '../utils/staffSalaryExport';
 import { logAudit } from '../utils/audit';
+import { assertPeriodOpen } from '../utils/period';
 
 // ── Premium gate (shares the tuition_fees flag) ────────────────────────
 
@@ -37,6 +38,9 @@ interface PaymentBody {
   notes?: string | null;
   insuranceAmount?: number | null;
   insurancePercentage?: number | null;
+  taxAmount?: number;
+  taxLabel?: string | null;
+  paymentAccountId?: string | null;
 }
 
 interface InsurancePayoutBody {
@@ -381,10 +385,14 @@ export async function recordStaffPayment(req: AuthRequest, res: Response): Promi
   if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
 
   const { id } = req.params; // staff_id
-  const { amount, currency, paidOn, periodLabel, notes, insuranceAmount, insurancePercentage } = req.body as PaymentBody;
+  const { amount, currency, paidOn, periodLabel, notes, insuranceAmount, insurancePercentage, taxAmount, taxLabel, paymentAccountId } = req.body as PaymentBody;
 
   if (typeof amount !== 'number' || amount <= 0) { res.status(400).json({ error: 'amount must be a positive number' }); return; }
   if (!paidOn) { res.status(400).json({ error: 'paidOn is required' }); return; }
+  if (taxAmount !== undefined && (typeof taxAmount !== 'number' || taxAmount < 0)) { res.status(400).json({ error: 'taxAmount must be a non-negative number' }); return; }
+
+  const periodGuard = await assertPeriodOpen(schoolId, [paidOn]);
+  if (!periodGuard.ok) { res.status(periodGuard.status).json({ error: periodGuard.error }); return; }
 
   const { data: staff } = await supabase
     .from('staff_members')
@@ -434,6 +442,9 @@ export async function recordStaffPayment(req: AuthRequest, res: Response): Promi
     notes: notes?.trim() || null,
     insurance_amount: insAmt,
     insurance_percentage: insPct,
+    tax_amount: typeof taxAmount === 'number' ? taxAmount : 0,
+    tax_label: taxLabel ?? null,
+    payment_account_id: paymentAccountId ?? null,
     recorded_by: userId,
   }).select().single();
   if (error) { res.status(500).json({ error: error.message }); return; }
@@ -470,6 +481,8 @@ export async function deleteStaffPayment(req: AuthRequest, res: Response): Promi
     .select('*, staff_members(full_name)')
     .eq('id', id).eq('school_id', schoolId).is('voided_at', null).single();
   if (!before) { res.status(404).json({ error: 'Payment not found' }); return; }
+  const periodGuard = await assertPeriodOpen(schoolId, [(before as any).paid_on]);
+  if (!periodGuard.ok) { res.status(periodGuard.status).json({ error: periodGuard.error }); return; }
   const { data: after, error } = await supabase
     .from('staff_salary_payments')
     .update({ voided_at: new Date().toISOString(), voided_by: userId, void_reason: reason })
@@ -493,6 +506,8 @@ export async function unvoidStaffPayment(req: AuthRequest, res: Response): Promi
     .select('*, staff_members(full_name)')
     .eq('id', id).eq('school_id', schoolId).single();
   if (!before || !(before as any).voided_at) { res.status(404).json({ error: 'Voided payment not found' }); return; }
+  const periodGuard = await assertPeriodOpen(schoolId, [(before as any).paid_on]);
+  if (!periodGuard.ok) { res.status(periodGuard.status).json({ error: periodGuard.error }); return; }
   const { data: after, error } = await supabase
     .from('staff_salary_payments')
     .update({ voided_at: null, voided_by: null, void_reason: null })

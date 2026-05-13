@@ -244,6 +244,7 @@ export interface WeeklySummary {
 
 export type FeeStatus = 'paid_up' | 'current' | 'due_soon' | 'overdue';
 export type FeeAppliesTo = 'all' | 'classes' | 'manual';
+export type FeePlanKind = 'tuition' | 'transport' | 'lunch' | 'uniform' | 'exam' | 'registration' | 'other';
 
 export interface FeeInstallment {
   id: string;
@@ -269,6 +270,11 @@ export interface FeePlan {
   createdAt: string;
   installments: FeeInstallment[];
   classIds: string[];
+  kind?: FeePlanKind;
+  lateFeeEnabled?: boolean;
+  lateFeeType?: 'fixed' | 'percent' | null;
+  lateFeeAmount?: number;
+  lateFeeGraceDays?: number;
 }
 
 export interface FeePaymentAllocation {
@@ -291,6 +297,15 @@ export interface FeePayment {
   unallocatedAmount?: number;
   unallocatedNote?: string | null;
   createdAt?: string;
+  // Accounting upgrade fields
+  currency?: string | null;
+  taxAmount?: number;
+  taxLabel?: string | null;
+  paymentAccountId?: string | null;
+  receiptYear?: number | null;
+  receiptNumber?: number | null;
+  isRefund?: boolean;
+  refundOfPaymentId?: string | null;
 }
 
 export interface StudentFeeRow {
@@ -309,11 +324,13 @@ export interface StudentFeeRow {
   totalAmount: number;
   adjustment: number;
   siblingDiscount: number;
+  lateFees?: number;
   paid: number;
   balance: number;
   status: FeeStatus;
   installments: FeeInstallment[];
   lockedFeatures: string[];
+  kind?: FeePlanKind;
 }
 
 export interface FamilyFeeGroup {

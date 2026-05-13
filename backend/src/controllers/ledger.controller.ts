@@ -79,7 +79,7 @@ async function buildLedger(
   if (include('fee_payment')) {
     let q = supabase
       .from('fee_payments')
-      .select('id, amount, paid_on, method, reference, notes, student_fee_id, student_fees(student_id, students(full_name))')
+      .select('id, amount, paid_on, method, reference, notes, currency, is_refund, refund_of_payment_id, receipt_year, receipt_number, student_fee_id, student_fees(student_id, students(full_name), fee_plans(kind))')
       .eq('school_id', schoolId)
       .is('voided_at', null);
     if (startDate) q = q.gte('paid_on', startDate);
@@ -88,16 +88,22 @@ async function buildLedger(
     if (error) return { ok: false, status: 500, error: `Tuition: ${error.message}` };
     for (const p of (data ?? []) as any[]) {
       const studentName = p.student_fees?.students?.full_name ?? 'Student';
+      const kindLabel = (p.student_fees?.fee_plans?.kind as string | undefined) ?? 'tuition';
+      const category = p.is_refund ? 'Refund' : kindLabel.charAt(0).toUpperCase() + kindLabel.slice(1);
+      const receipt = (p.receipt_year && p.receipt_number)
+        ? `RCP-${p.receipt_year}-${String(p.receipt_number).padStart(5, '0')}`
+        : null;
       rows.push({
         id: `fp:${p.id}`,
         date: p.paid_on,
-        type: 'income',
+        // Refunds flow OUT of cash — represent as expense so net math is correct.
+        type: p.is_refund ? 'expense' : 'income',
         source: 'fee_payment',
-        category: 'Tuition',
-        description: `Tuition payment — ${studentName}`,
+        category,
+        description: p.is_refund ? `Refund — ${studentName}` : `${category} payment — ${studentName}`,
         amount: Number(p.amount) || 0,
-        currency: defaultCurrency,
-        reference: [p.method, p.reference].filter(Boolean).join(' · ') || null,
+        currency: p.currency || defaultCurrency,
+        reference: [receipt, p.method, p.reference].filter(Boolean).join(' · ') || null,
       });
     }
   }

@@ -256,11 +256,17 @@ export const feesApi = {
   getStudentFee: (id: string) => api.get(`/accounting/student-fees/${id}`),
   updateStudentFee: (id: string, data: { adjustment?: number; notes?: string | null; totalAmount?: number }) =>
     api.patch(`/accounting/student-fees/${id}`, data),
-  recordPayment: (studentFeeId: string, data: { amount: number; paidOn: string; method?: string; reference?: string; notes?: string; allocations?: { installmentId: string; amount: number }[]; unallocatedNote?: string }) =>
+  recordPayment: (studentFeeId: string, data: { amount: number; paidOn: string; method?: string; reference?: string; notes?: string; allocations?: { installmentId: string; amount: number }[]; unallocatedNote?: string; currency?: string; taxAmount?: number; taxLabel?: string; paymentAccountId?: string | null }) =>
     api.post(`/accounting/student-fees/${studentFeeId}/payments`, data),
+  refundPayment: (paymentId: string, data: { amount: number; refundedOn: string; method?: string; reference?: string; notes?: string; paymentAccountId?: string | null }) =>
+    api.post(`/accounting/payments/${paymentId}/refund`, data),
   deletePayment: (paymentId: string, reason?: string) => api.delete(`/accounting/payments/${paymentId}`, { data: { reason } }),
   unvoidPayment: (paymentId: string) => api.post(`/accounting/payments/${paymentId}/unvoid`),
   listVoidedPayments: () => api.get('/accounting/payments/voided'),
+  // Late fees
+  listLateFees: (studentFeeId?: string) => api.get('/accounting/late-fees', { params: studentFeeId ? { studentFeeId } : {} }),
+  voidLateFee: (id: string, reason?: string) => api.delete(`/accounting/late-fees/${id}`, { data: { reason } }),
+  applyLateFeesNow: () => api.post('/accounting/late-fees/apply-now'),
   // Config
   getConfig: () => api.get('/accounting/config'),
   updateConfig: (data: object) => api.put('/accounting/config', data),
@@ -319,7 +325,7 @@ export const staffApi = {
   unvoid: (id: string) => api.post(`/accounting/staff/${id}/unvoid`),
   listVoided: () => api.get('/accounting/staff/voided'),
   listPayments: (id: string) => api.get(`/accounting/staff/${id}/payments`),
-  recordPayment: (id: string, data: { amount: number; currency?: string; paidOn: string; periodLabel?: string | null; notes?: string | null; insuranceAmount?: number | null; insurancePercentage?: number | null }) =>
+  recordPayment: (id: string, data: { amount: number; currency?: string; paidOn: string; periodLabel?: string | null; notes?: string | null; insuranceAmount?: number | null; insurancePercentage?: number | null; taxAmount?: number; taxLabel?: string | null; paymentAccountId?: string | null }) =>
     api.post(`/accounting/staff/${id}/payments`, data),
   deletePayment: (paymentId: string, reason?: string) => api.delete(`/accounting/staff-payments/${paymentId}`, { data: { reason } }),
   unvoidPayment: (paymentId: string) => api.post(`/accounting/staff-payments/${paymentId}/unvoid`),
@@ -426,6 +432,9 @@ export const expensesApi = {
     vendor?: string | null;
     paymentMethod?: string | null;
     notes?: string | null;
+    taxAmount?: number;
+    taxLabel?: string | null;
+    paymentAccountId?: string | null;
   }) => api.post<ExpenseRow>('/accounting/expenses', data),
   update: (id: string, data: Partial<{
     name: string;
@@ -436,6 +445,9 @@ export const expensesApi = {
     vendor: string | null;
     paymentMethod: string | null;
     notes: string | null;
+    taxAmount: number;
+    taxLabel: string | null;
+    paymentAccountId: string | null;
   }>) => api.patch<ExpenseRow>(`/accounting/expenses/${id}`, data),
   void: (id: string, reason?: string) => api.delete(`/accounting/expenses/${id}`, { data: { reason } }),
   unvoid: (id: string) => api.post(`/accounting/expenses/${id}/unvoid`),
@@ -469,6 +481,68 @@ export interface LedgerCategoryTotal {
   amount: number;
   currency: string;
 }
+
+// Reports + admin-level accounting (periods, payment accounts, FX rates).
+// Returns are intentionally loose (any) because each page narrows them.
+export interface AccountingPeriod {
+  id: string;
+  periodStart: string;
+  periodEnd: string;
+  closedAt: string;
+  closedBy: string | null;
+  closedByName: string | null;
+  reopenedAt: string | null;
+  reopenedBy: string | null;
+  reopenedByName: string | null;
+  reopenReason: string | null;
+  notes: string | null;
+  isClosed: boolean;
+}
+
+export interface PaymentAccount {
+  id: string;
+  name: string;
+  kind: 'cash' | 'bank' | 'wallet' | 'other';
+  currency: string;
+  openingBalance: number;
+  isActive: boolean;
+  notes: string | null;
+  balance?: number;
+}
+
+export interface FxRate {
+  id: string;
+  fromCurrency: string;
+  toCurrency: string;
+  rate: number;
+  effectiveFrom: string;
+}
+
+export const accountingApi = {
+  // Periods
+  listPeriods: () => api.get<AccountingPeriod[]>('/accounting/periods'),
+  closePeriod: (data: { periodStart: string; periodEnd: string; notes?: string }) => api.post<AccountingPeriod>('/accounting/periods', data),
+  reopenPeriod: (id: string, reason: string) => api.post(`/accounting/periods/${id}/reopen`, { reason }),
+  // Payment accounts
+  listPaymentAccounts: () => api.get<PaymentAccount[]>('/accounting/payment-accounts'),
+  createPaymentAccount: (data: Omit<PaymentAccount, 'id' | 'isActive' | 'balance'> & { notes?: string | null }) => api.post('/accounting/payment-accounts', data),
+  updatePaymentAccount: (id: string, data: Partial<Omit<PaymentAccount, 'id' | 'balance'>>) => api.patch(`/accounting/payment-accounts/${id}`, data),
+  deletePaymentAccount: (id: string) => api.delete(`/accounting/payment-accounts/${id}`),
+  // FX rates
+  listFxRates: () => api.get<FxRate[]>('/accounting/fx-rates'),
+  setFxRate: (data: { fromCurrency: string; toCurrency: string; rate: number; effectiveFrom?: string }) => api.post('/accounting/fx-rates', data),
+  deleteFxRate: (id: string) => api.delete(`/accounting/fx-rates/${id}`),
+  // Reports
+  getDashboard: () => api.get('/accounting/reports/dashboard'),
+  getArAging: () => api.get('/accounting/reports/ar-aging'),
+  getProfitLoss: (params: { startDate: string; endDate: string; compare?: '1' }) =>
+    api.get('/accounting/reports/profit-loss', { params }),
+  getCashFlow: (weeks?: number) => api.get('/accounting/reports/cash-flow', { params: weeks ? { weeks } : {} }),
+  getTaxReport: (params: { startDate: string; endDate: string }) =>
+    api.get('/accounting/reports/tax', { params }),
+  rollupCurrencies: (data: { amounts: { amount: number; currency: string }[]; toCurrency?: string; asOf?: string }) =>
+    api.post('/accounting/reports/rollup', data),
+};
 
 export const ledgerApi = {
   get: (params?: {

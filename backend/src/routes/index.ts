@@ -14,6 +14,8 @@ import * as fees from '../controllers/fees.controller';
 import * as staff from '../controllers/staff.controller';
 import * as expenses from '../controllers/expenses.controller';
 import * as ledger from '../controllers/ledger.controller';
+import * as accounting from '../controllers/accounting.controller';
+import * as reports from '../controllers/accountingReports.controller';
 import { authenticate, authorize } from '../middleware/auth';
 import type { AuthRequest } from '../middleware/auth';
 import { Server as SocketServer } from 'socket.io';
@@ -286,6 +288,33 @@ export function createRouter(io: SocketServer) {
   router.get('/accounting/ledger', authenticate, authorize(...accountingRW), (req, res) => ledger.getLedger(req as AuthRequest, res));
   router.get('/accounting/ledger/export.pdf', authenticate, authorize(...accountingRW), (req, res) => ledger.exportLedgerPdf(req as AuthRequest, res));
   router.get('/accounting/ledger/export.xlsx', authenticate, authorize(...accountingRW), (req, res) => ledger.exportLedgerXlsx(req as AuthRequest, res));
+
+  // Refunds, late fees, period close, payment accounts, FX rates
+  router.post('/accounting/payments/:id/refund', authenticate, authorize(...accountingRW), (req, res) => fees.refundPayment(req as AuthRequest, res));
+  router.get('/accounting/late-fees', authenticate, authorize(...accountingRW), (req, res) => fees.listLateFees(req as AuthRequest, res));
+  router.post('/accounting/late-fees/apply-now', authenticate, authorize(...accountingRW), (req, res) => fees.applyLateFeesNow(req as AuthRequest, res));
+  router.delete('/accounting/late-fees/:id', authenticate, authorize(...accountingRW), (req, res) => fees.voidLateFee(req as AuthRequest, res));
+
+  router.get('/accounting/periods', authenticate, authorize(...accountingRW), (req, res) => accounting.listPeriods(req as AuthRequest, res));
+  router.post('/accounting/periods', authenticate, authorize(...accountingRW), (req, res) => accounting.closePeriod(req as AuthRequest, res));
+  router.post('/accounting/periods/:id/reopen', authenticate, authorize(...accountingRW), (req, res) => accounting.reopenPeriod(req as AuthRequest, res));
+
+  router.get('/accounting/payment-accounts', authenticate, authorize(...accountingRO), (req, res) => accounting.listPaymentAccounts(req as AuthRequest, res));
+  router.post('/accounting/payment-accounts', authenticate, authorize(...accountingRW), (req, res) => accounting.createPaymentAccount(req as AuthRequest, res));
+  router.patch('/accounting/payment-accounts/:id', authenticate, authorize(...accountingRW), (req, res) => accounting.updatePaymentAccount(req as AuthRequest, res));
+  router.delete('/accounting/payment-accounts/:id', authenticate, authorize(...accountingRW), (req, res) => accounting.deletePaymentAccount(req as AuthRequest, res));
+
+  router.get('/accounting/fx-rates', authenticate, authorize(...accountingRW), (req, res) => accounting.listFxRates(req as AuthRequest, res));
+  router.post('/accounting/fx-rates', authenticate, authorize(...accountingRW), (req, res) => accounting.setFxRate(req as AuthRequest, res));
+  router.delete('/accounting/fx-rates/:id', authenticate, authorize(...accountingRW), (req, res) => accounting.deleteFxRate(req as AuthRequest, res));
+
+  // Reports — accountant dashboard, AR aging, P&L, cash-flow forecast, tax report
+  router.get('/accounting/reports/dashboard', authenticate, authorize(...accountingRW), (req, res) => reports.getDashboardSummary(req as AuthRequest, res));
+  router.get('/accounting/reports/ar-aging', authenticate, authorize(...accountingRW), (req, res) => reports.getArAging(req as AuthRequest, res));
+  router.get('/accounting/reports/profit-loss', authenticate, authorize(...accountingRW), (req, res) => reports.getProfitLoss(req as AuthRequest, res));
+  router.get('/accounting/reports/cash-flow', authenticate, authorize(...accountingRW), (req, res) => reports.getCashFlowForecast(req as AuthRequest, res));
+  router.get('/accounting/reports/tax', authenticate, authorize(...accountingRW), (req, res) => reports.getTaxReport(req as AuthRequest, res));
+  router.post('/accounting/reports/rollup', authenticate, authorize(...accountingRW), (req, res) => reports.rollupCurrencies(req as AuthRequest, res));
 
   // Teacher self-service: read-only "my salary"
   router.get('/teacher/salary', authenticate, authorize('teacher'), (req, res) => staff.getMyStaffInfo(req as AuthRequest, res));

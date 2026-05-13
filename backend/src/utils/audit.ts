@@ -11,7 +11,11 @@ export type AuditEntityType =
   | 'staff_salary_payment'
   | 'expense_category'
   | 'expense_template'
-  | 'expense';
+  | 'expense'
+  | 'accounting_period'
+  | 'payment_account'
+  | 'fx_rate'
+  | 'late_fee';
 
 interface LogParams {
   req: AuthRequest;

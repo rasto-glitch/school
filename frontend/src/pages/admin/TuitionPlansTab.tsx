@@ -7,7 +7,8 @@ import LoadingSpinner from '../../components/common/LoadingSpinner';
 import EmptyState from '../../components/common/EmptyState';
 import Modal from '../../components/common/Modal';
 import { Plus, Trash2, Pencil, Users as UsersIcon, ListChecks } from 'lucide-react';
-import type { FeePlan, FeeAppliesTo, Class } from '../../types';
+import type { FeePlan, FeeAppliesTo, Class, FeePlanKind } from '../../types';
+import { fmtMoney as fmt } from '../../utils/money';
 
 interface InstallmentDraft { sequence: number; amount: number; dueDate: string }
 
@@ -21,6 +22,11 @@ interface PlanForm {
   academicYear: string;
   isActive: boolean;
   installments: InstallmentDraft[];
+  kind: FeePlanKind;
+  lateFeeEnabled: boolean;
+  lateFeeType: 'fixed' | 'percent';
+  lateFeeAmount: string;
+  lateFeeGraceDays: string;
 }
 
 const empty: PlanForm = {
@@ -32,14 +38,12 @@ const empty: PlanForm = {
   academicYear: '',
   isActive: true,
   installments: [{ sequence: 1, amount: 0, dueDate: new Date().toISOString().slice(0, 10) }],
+  kind: 'tuition',
+  lateFeeEnabled: false,
+  lateFeeType: 'fixed',
+  lateFeeAmount: '0',
+  lateFeeGraceDays: '0',
 };
-
-function fmt(amount: number, currency: string) {
-  const sym: Record<string, string> = { USD: '$', EUR: '€', GBP: '£' };
-  const s = sym[currency] ?? '';
-  const n = amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  return s ? `${s}${n}` : `${currency} ${n}`;
-}
 
 export default function TuitionPlansTab() {
   const [plans, setPlans] = useState<FeePlan[] | null>(null);
@@ -72,6 +76,11 @@ export default function TuitionPlansTab() {
     installments: p.installments.length
       ? p.installments.map(i => ({ sequence: i.sequence, amount: i.amount, dueDate: i.dueDate }))
       : [{ sequence: 1, amount: p.totalAmount, dueDate: new Date().toISOString().slice(0, 10) }],
+    kind: p.kind ?? 'tuition',
+    lateFeeEnabled: !!p.lateFeeEnabled,
+    lateFeeType: (p.lateFeeType ?? 'fixed') as 'fixed' | 'percent',
+    lateFeeAmount: String(p.lateFeeAmount ?? 0),
+    lateFeeGraceDays: String(p.lateFeeGraceDays ?? 0),
   });
 
   const save = async () => {
@@ -91,6 +100,11 @@ export default function TuitionPlansTab() {
       academicYear: editing.academicYear.trim() || null,
       isActive: editing.isActive,
       installments: editing.installments.map((i, idx) => ({ sequence: idx + 1, amount: Number(i.amount), dueDate: i.dueDate })),
+      kind: editing.kind,
+      lateFeeEnabled: editing.lateFeeEnabled,
+      lateFeeType: editing.lateFeeEnabled ? editing.lateFeeType : null,
+      lateFeeAmount: Number(editing.lateFeeAmount) || 0,
+      lateFeeGraceDays: Number(editing.lateFeeGraceDays) || 0,
     };
 
     setSaving(true);
@@ -186,7 +200,25 @@ export default function TuitionPlansTab() {
       {editing && (
         <Modal isOpen onClose={() => setEditing(null)} title={editing.id ? 'Edit plan' : 'New plan'} size="xl">
           <div className="space-y-4">
-            <Input label="Name" value={editing.name} onChange={e => setEditing({ ...editing, name: e.target.value })} placeholder="2026-2027 Tuition" />
+            <div className="grid grid-cols-2 gap-3">
+              <Input label="Name" value={editing.name} onChange={e => setEditing({ ...editing, name: e.target.value })} placeholder="2026-2027 Tuition" />
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Kind</label>
+                <select
+                  value={editing.kind}
+                  onChange={e => setEditing({ ...editing, kind: e.target.value as FeePlanKind })}
+                  className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-gray-900 bg-white min-h-[44px] focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="tuition">Tuition</option>
+                  <option value="transport">Transport</option>
+                  <option value="lunch">Lunch</option>
+                  <option value="uniform">Uniform</option>
+                  <option value="exam">Exam</option>
+                  <option value="registration">Registration</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <Input label="Total amount" type="number" step="0.01" value={editing.totalAmount} onChange={e => setEditing({ ...editing, totalAmount: e.target.value })} />
               <Input label="Currency" value={editing.currency} onChange={e => setEditing({ ...editing, currency: e.target.value.toUpperCase() })} />
@@ -284,6 +316,28 @@ export default function TuitionPlansTab() {
               <input type="checkbox" checked={editing.isActive} onChange={e => setEditing({ ...editing, isActive: e.target.checked })} className="w-4 h-4 rounded border-gray-300 text-primary-600" />
               Active (uncheck to archive without deleting)
             </label>
+
+            {/* Late fees */}
+            <div className="border-t border-gray-100 pt-4">
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-800 mb-2">
+                <input type="checkbox" checked={editing.lateFeeEnabled} onChange={e => setEditing({ ...editing, lateFeeEnabled: e.target.checked })} className="w-4 h-4 rounded border-gray-300 text-primary-600" />
+                Charge a late fee on overdue installments
+              </label>
+              {editing.lateFeeEnabled && (
+                <div className="grid grid-cols-3 gap-3 pl-6">
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">Type</label>
+                    <select value={editing.lateFeeType} onChange={e => setEditing({ ...editing, lateFeeType: e.target.value as 'fixed' | 'percent' })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white">
+                      <option value="fixed">Fixed amount</option>
+                      <option value="percent">Percent of installment</option>
+                    </select>
+                  </div>
+                  <Input label={editing.lateFeeType === 'percent' ? 'Percent' : 'Amount'} type="number" step="0.01" value={editing.lateFeeAmount} onChange={e => setEditing({ ...editing, lateFeeAmount: e.target.value })} />
+                  <Input label="Grace days" type="number" step="1" value={editing.lateFeeGraceDays} onChange={e => setEditing({ ...editing, lateFeeGraceDays: e.target.value })} />
+                </div>
+              )}
+              <p className="text-xs text-gray-500 mt-2 pl-6">Late fees are applied automatically every night for installments still unpaid after the grace period.</p>
+            </div>
 
             <div className="flex gap-2 justify-end pt-2">
               <Button variant="ghost" onClick={() => setEditing(null)}>Cancel</Button>
