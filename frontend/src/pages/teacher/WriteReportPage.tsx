@@ -3,7 +3,6 @@ import { toast } from 'react-toastify';
 import { FileText, Plus, Trash2 } from 'lucide-react';
 import { teacherApi } from '../../services/api';
 import { useTeacherProfile } from '../../hooks/useTeacherProfile';
-import SubjectBadge from '../../components/common/SubjectBadge';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
 import Select from '../../components/common/Select';
@@ -11,11 +10,12 @@ import Button from '../../components/common/Button';
 import type { Class, Student, MarkType, Mark } from '../../types';
 
 export default function WriteReportPage() {
-  const { subject: teacherSubject, loading: subjectLoading } = useTeacherProfile();
+  const { subjectsForClass } = useTeacherProfile();
   const [classes, setClasses] = useState<Class[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [selectedClass, setSelectedClass] = useState('');
   const [selectedStudent, setSelectedStudent] = useState('');
+  const [selectedSubject, setSelectedSubject] = useState('');
   const [attendanceNotes, setAttendanceNotes] = useState('');
   const [behaviorNotes, setBehaviorNotes] = useState('');
   const [teacherNotes, setTeacherNotes] = useState('');
@@ -28,10 +28,19 @@ export default function WriteReportPage() {
     teacherApi.getMarkTypes('report').then(r => setMarkTypes(r.data || []));
   }, []);
 
+  const subjectOptions = subjectsForClass(selectedClass);
+
   useEffect(() => {
     if (!selectedClass) return;
     teacherApi.getStudents({ classId: selectedClass }).then(r => setStudents(r.data || []));
   }, [selectedClass]);
+
+  // Keep the subject in sync with the selected class's curriculum.
+  useEffect(() => {
+    const opts = subjectsForClass(selectedClass);
+    if (opts.length === 1) setSelectedSubject(opts[0].name);
+    else setSelectedSubject(prev => (prev && opts.some(o => o.name === prev) ? prev : ''));
+  }, [selectedClass, subjectsForClass]);
 
   useEffect(() => {
     setMarks([]);
@@ -57,15 +66,15 @@ export default function WriteReportPage() {
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!selectedStudent || !teacherSubject) {
-      toast.error('Please select a student');
+    if (!selectedStudent || !selectedSubject) {
+      toast.error('Please select a student and a subject');
       return;
     }
     setLoading(true);
     try {
       await teacherApi.createReport({
         studentId: selectedStudent,
-        subject: teacherSubject,
+        subject: selectedSubject,
         attendanceNotes,
         behaviorNotes,
         teacherNotes,
@@ -107,10 +116,17 @@ export default function WriteReportPage() {
               value={selectedStudent}
               onChange={e => setSelectedStudent(e.target.value)}
             />
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Subject</label>
-              <SubjectBadge subject={teacherSubject} loading={subjectLoading} />
-            </div>
+            {selectedClass && (subjectOptions.length === 0 ? (
+              <p className="text-sm text-amber-600">You aren't assigned any subject for this class. Ask an admin to add it in Class Management → Curriculum.</p>
+            ) : (
+              <Select
+                label="Subject"
+                options={subjectOptions.map(s => ({ value: s.name, label: s.name }))}
+                placeholder="Select subject"
+                value={selectedSubject}
+                onChange={e => setSelectedSubject(e.target.value)}
+              />
+            ))}
 
             {/* Dynamic marks */}
             <div>

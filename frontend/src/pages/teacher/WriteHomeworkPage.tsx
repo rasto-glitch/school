@@ -9,31 +9,34 @@ import Card from '../../components/common/Card';
 import Input from '../../components/common/Input';
 import Select from '../../components/common/Select';
 import Button from '../../components/common/Button';
-import SubjectBadge from '../../components/common/SubjectBadge';
 import type { Class, Homework } from '../../types';
 
 export default function WriteHomeworkPage() {
-  const { subject: teacherSubject, loading: subjectLoading } = useTeacherProfile();
+  const { subjectsForClass } = useTeacherProfile();
   const [classes, setClasses] = useState<Class[]>([]);
   const [homework, setHomework] = useState<Homework[]>([]);
   const [loading, setLoading] = useState(false);
   const [file, setFile] = useState<File | null>(null);
 
-  const { register, handleSubmit, reset, watch, setValue } = useForm<{
+  const { register, handleSubmit, reset, watch, setValue, getValues } = useForm<{
     classId: string; title: string; description: string; dueDate: string; subject: string;
   }>();
 
   const selectedClass = watch('classId');
+  const subjectOptions = subjectsForClass(selectedClass);
 
   useEffect(() => {
     teacherApi.getClasses().then(r => setClasses(r.data || []));
     teacherApi.getHomework().then(r => setHomework(r.data || []));
   }, []);
 
-  // Auto-fill subject when teacher profile loads
+  // Keep the subject field consistent with the selected class's curriculum.
   useEffect(() => {
-    if (teacherSubject) setValue('subject', teacherSubject);
-  }, [teacherSubject]);
+    const opts = subjectsForClass(selectedClass);
+    const current = getValues('subject');
+    if (opts.length === 1) setValue('subject', opts[0].name);
+    else if (current && !opts.some(o => o.name === current)) setValue('subject', '');
+  }, [selectedClass, subjectsForClass]);
 
   const onSubmit = async (data: any) => {
     setLoading(true);
@@ -67,11 +70,11 @@ export default function WriteHomeworkPage() {
           <h2 className="font-semibold text-gray-900 mb-4">New Homework</h2>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <Select label="Class" options={classes.map(c => ({ value: c.id, label: c.name }))} placeholder="Select class" {...register('classId', { required: true })} />
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Subject</label>
-              <SubjectBadge subject={teacherSubject} loading={subjectLoading} />
-              <input type="hidden" {...register('subject', { required: true })} value={teacherSubject} />
-            </div>
+            {subjectOptions.length === 0 ? (
+              <p className="text-sm text-amber-600">You aren't assigned any subject for this class. Ask an admin to add it in Class Management → Curriculum.</p>
+            ) : (
+              <Select label="Subject" options={subjectOptions.map(s => ({ value: s.name, label: s.name }))} placeholder="Select subject" {...register('subject', { required: true })} />
+            )}
             <Input label="Title" placeholder="Homework title" {...register('title', { required: true })} />
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Description</label>

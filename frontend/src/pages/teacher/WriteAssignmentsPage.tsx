@@ -4,7 +4,6 @@ import { toast } from 'react-toastify';
 import { ClipboardList, Trash2, Paperclip, X } from 'lucide-react';
 import { teacherApi } from '../../services/api';
 import { useTeacherProfile } from '../../hooks/useTeacherProfile';
-import SubjectBadge from '../../components/common/SubjectBadge';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
 import Input from '../../components/common/Input';
@@ -14,20 +13,21 @@ import Badge from '../../components/common/Badge';
 import type { Class, Assignment, Student } from '../../types';
 
 export default function WriteAssignmentsPage() {
-  const { subject: teacherSubject, loading: subjectLoading } = useTeacherProfile();
+  const { subjectsForClass } = useTeacherProfile();
   const [classes, setClasses] = useState<Class[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedClass, setSelectedClass] = useState('');
 
-  const { register, handleSubmit, reset, watch, setValue } = useForm<{
+  const { register, handleSubmit, reset, watch, setValue, getValues } = useForm<{
     classId: string; studentId: string; title: string; description: string; dueDate: string; subject: string;
   }>();
   const fileRef = useRef<HTMLInputElement>(null);
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
 
   const watchedClass = watch('classId');
+  const subjectOptions = subjectsForClass(watchedClass);
 
   useEffect(() => {
     teacherApi.getClasses().then(r => setClasses(r.data || []));
@@ -35,8 +35,11 @@ export default function WriteAssignmentsPage() {
   }, []);
 
   useEffect(() => {
-    if (teacherSubject) setValue('subject', teacherSubject);
-  }, [teacherSubject]);
+    const opts = subjectsForClass(watchedClass);
+    const current = getValues('subject');
+    if (opts.length === 1) setValue('subject', opts[0].name);
+    else if (current && !opts.some(o => o.name === current)) setValue('subject', '');
+  }, [watchedClass, subjectsForClass]);
 
   useEffect(() => {
     if (!watchedClass) return;
@@ -83,11 +86,11 @@ export default function WriteAssignmentsPage() {
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <Select label="Class" options={classes.map(c => ({ value: c.id, label: c.name }))} placeholder="Select class" {...register('classId', { required: true })} />
             <Select label="Student (optional)" options={students.map(s => ({ value: s.id, label: s.fullName }))} placeholder="All students in class" {...register('studentId')} />
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Subject</label>
-              <SubjectBadge subject={teacherSubject} loading={subjectLoading} />
-              <input type="hidden" {...register('subject', { required: true })} value={teacherSubject} />
-            </div>
+            {subjectOptions.length === 0 ? (
+              <p className="text-sm text-amber-600">You aren't assigned any subject for this class. Ask an admin to add it in Class Management → Curriculum.</p>
+            ) : (
+              <Select label="Subject" options={subjectOptions.map(s => ({ value: s.name, label: s.name }))} placeholder="Select subject" {...register('subject', { required: true })} />
+            )}
             <Input label="Title" placeholder="Assignment title" {...register('title', { required: true })} />
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Description</label>

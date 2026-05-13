@@ -3,7 +3,6 @@ import { toast } from 'react-toastify';
 import { Star, Plus, Trash2 } from 'lucide-react';
 import { teacherApi } from '../../services/api';
 import { useTeacherProfile } from '../../hooks/useTeacherProfile';
-import SubjectBadge from '../../components/common/SubjectBadge';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
 import Select from '../../components/common/Select';
@@ -11,12 +10,13 @@ import Button from '../../components/common/Button';
 import type { Class, Student, MarkType, Mark, Grade, Term } from '../../types';
 
 export default function GradingPage() {
-  const { subject: teacherSubject, loading: subjectLoading } = useTeacherProfile();
+  const { subjectsForClass } = useTeacherProfile();
   const [classes, setClasses] = useState<Class[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedClass, setSelectedClass] = useState('');
   const [selectedStudent, setSelectedStudent] = useState('');
+  const [selectedSubject, setSelectedSubject] = useState('');
   const [gradingPeriod, setGradingPeriod] = useState('');
   const [marks, setMarks] = useState<Mark[]>([]);
   const [markTypes, setMarkTypes] = useState<MarkType[]>([]);
@@ -31,10 +31,19 @@ export default function GradingPage() {
     teacherApi.getSettings().then(r => setAcademicYear(r.data?.currentAcademicYear || null));
   }, []);
 
+  const subjectOptions = subjectsForClass(selectedClass);
+
   useEffect(() => {
     if (!selectedClass) return;
     teacherApi.getStudents({ classId: selectedClass }).then(r => setStudents(r.data || []));
   }, [selectedClass]);
+
+  // Keep the subject in sync with the selected class's curriculum.
+  useEffect(() => {
+    const opts = subjectsForClass(selectedClass);
+    if (opts.length === 1) setSelectedSubject(opts[0].name);
+    else setSelectedSubject(prev => (prev && opts.some(o => o.name === prev) ? prev : ''));
+  }, [selectedClass, subjectsForClass]);
 
   useEffect(() => {
     setGradeSummary([]);
@@ -62,8 +71,8 @@ export default function GradingPage() {
 
   const onSubmit = async (e: { preventDefault(): void }) => {
     e.preventDefault();
-    if (!selectedStudent || !teacherSubject) {
-      toast.error('Please select a student');
+    if (!selectedStudent || !selectedSubject) {
+      toast.error('Please select a student and a subject');
       return;
     }
     setLoading(true);
@@ -71,7 +80,7 @@ export default function GradingPage() {
       await teacherApi.upsertGrade({
         studentId: selectedStudent,
         classId: selectedClass,
-        subject: teacherSubject,
+        subject: selectedSubject,
         gradingPeriod,
         marks: marks.map(m => ({ name: m.name, value: parseFloat(String(m.value)) || 0 })),
       });
@@ -120,10 +129,17 @@ export default function GradingPage() {
               value={selectedStudent}
               onChange={e => setSelectedStudent(e.target.value)}
             />
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Subject</label>
-              <SubjectBadge subject={teacherSubject} loading={subjectLoading} />
-            </div>
+            {selectedClass && (subjectOptions.length === 0 ? (
+              <p className="text-sm text-amber-600">You aren't assigned any subject for this class. Ask an admin to add it in Class Management → Curriculum.</p>
+            ) : (
+              <Select
+                label="Subject"
+                options={subjectOptions.map(s => ({ value: s.name, label: s.name }))}
+                placeholder="Select subject"
+                value={selectedSubject}
+                onChange={e => setSelectedSubject(e.target.value)}
+              />
+            ))}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Academic Year</label>

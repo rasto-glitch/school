@@ -30,8 +30,12 @@ export async function getProfileData(req: AuthRequest, res: Response): Promise<v
       teachingMap.set(r.class_id, arr);
     }
   }
-  const subjects = Array.from(allSubjects, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+  let subjects = Array.from(allSubjects, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
   const teaching = Array.from(teachingMap, ([classId, subs]) => ({ classId, subjects: subs.sort((a, b) => a.name.localeCompare(b.name)) }));
+  // Legacy fallback: if no curriculum rows exist yet, treat the comma-joined teachers.subject as the options.
+  if (subjects.length === 0 && (data as any).subject) {
+    subjects = String((data as any).subject).split(',').map((n: string) => n.trim()).filter(Boolean).map((name: string) => ({ id: name, name }));
+  }
   const resolvedSubject = subjects.map(s => s.name).join(', ') || (data as any).subject || null;
 
   const { class_subject_teachers: _cst, ...rest } = data as any;

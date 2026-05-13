@@ -3,7 +3,6 @@ import { toast } from 'react-toastify';
 import { Save, Lock } from 'lucide-react';
 import { teacherApi } from '../../services/api';
 import { useTeacherProfile } from '../../hooks/useTeacherProfile';
-import SubjectBadge from '../../components/common/SubjectBadge';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
 import Select from '../../components/common/Select';
@@ -19,39 +18,38 @@ interface Period {
 }
 
 export default function WeeklySummaryPage() {
-  const { subject: profileSubject, loading: subjectLoading } = useTeacherProfile();
+  const { subjectsForClass } = useTeacherProfile();
   const [period, setPeriod] = useState<Period | null | undefined>(undefined); // undefined = loading
   const [classes, setClasses] = useState<Class[]>([]);
-  const [teacherSubject, setTeacherSubject] = useState('');
+  const [selectedSubject, setSelectedSubject] = useState('');
   const [selectedClass, setSelectedClass] = useState('');
   const [rows, setRows] = useState<Record<string, Partial<WeeklySummary>>>({});
   const [loading, setLoading] = useState(false);
+
+  const subjectOptions = subjectsForClass(selectedClass);
 
   useEffect(() => {
     teacherApi.getClasses().then(r => setClasses(r.data || []));
     teacherApi.getActivePeriod().then(r => setPeriod(r.data ?? null));
   }, []);
 
+  // Keep the subject in sync with the selected class's curriculum.
   useEffect(() => {
-    if (profileSubject && !teacherSubject) setTeacherSubject(profileSubject);
-  }, [profileSubject]);
-
-  useEffect(() => {
-    if (!teacherSubject) return;
-    setRows({ [teacherSubject]: { subject: teacherSubject } });
-  }, [teacherSubject]);
+    const opts = subjectsForClass(selectedClass);
+    if (opts.length === 1) setSelectedSubject(opts[0].name);
+    else setSelectedSubject(prev => (prev && opts.some(o => o.name === prev) ? prev : ''));
+  }, [selectedClass, subjectsForClass]);
 
   // Load existing submission for the active period
   useEffect(() => {
-    if (!selectedClass || !period?.weekStartDate || !teacherSubject) return;
+    if (!selectedClass || !period?.weekStartDate || !selectedSubject) { setRows({}); return; }
     teacherApi.getWeeklySummary({ classId: selectedClass, weekStartDate: period.weekStartDate })
       .then(r => {
         const data: WeeklySummary[] = r.data || [];
-        const existing = data.find(item => item.subject === teacherSubject);
-        if (existing) setRows({ [teacherSubject]: existing });
-        else setRows({ [teacherSubject]: { subject: teacherSubject } });
+        const existing = data.find(item => item.subject === selectedSubject);
+        setRows({ [selectedSubject]: existing || { subject: selectedSubject } });
       });
-  }, [selectedClass, period?.weekStartDate, teacherSubject]);
+  }, [selectedClass, period?.weekStartDate, selectedSubject]);
 
   const updateRow = (subject: string, field: string, value: string) => {
     setRows(prev => ({ ...prev, [subject]: { ...prev[subject], [field]: value } }));
@@ -59,13 +57,13 @@ export default function WeeklySummaryPage() {
 
   const saveAll = async () => {
     if (!selectedClass) { toast.error('Select a class first'); return; }
-    if (!teacherSubject) { toast.error('Your subject is not set'); return; }
+    if (!selectedSubject) { toast.error('Select a subject first'); return; }
     setLoading(true);
     try {
       await teacherApi.upsertWeeklySummary({
         classId: selectedClass,
-        subject: teacherSubject,
-        ...rows[teacherSubject],
+        subject: selectedSubject,
+        ...rows[selectedSubject],
       });
       toast.success('Weekly summary saved!');
     } catch (err: any) {
@@ -75,7 +73,7 @@ export default function WeeklySummaryPage() {
     }
   };
 
-  const subjects = teacherSubject ? [teacherSubject] : [];
+  const subjects = selectedSubject ? [selectedSubject] : [];
 
   return (
     <PageLayout title="Weekly Summary">
@@ -114,8 +112,20 @@ export default function WeeklySummaryPage() {
             />
           </div>
           <div className="flex-1 min-w-44">
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Subject</label>
-            <SubjectBadge subject={teacherSubject} loading={subjectLoading} />
+            {selectedClass && subjectOptions.length === 0 ? (
+              <>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Subject</label>
+                <p className="text-sm text-amber-600">You aren't assigned any subject for this class. Ask an admin to add it in Class Management → Curriculum.</p>
+              </>
+            ) : (
+              <Select
+                label="Subject"
+                options={subjectOptions.map(s => ({ value: s.name, label: s.name }))}
+                placeholder="Select subject"
+                value={selectedSubject}
+                onChange={e => setSelectedSubject(e.target.value)}
+              />
+            )}
           </div>
           <Button onClick={saveAll} loading={loading} disabled={!period} icon={<Save className="w-4 h-4" />}>
             Save

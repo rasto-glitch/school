@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'react-toastify';
 import { History } from 'lucide-react';
@@ -11,31 +11,30 @@ import Select from '../../components/common/Select';
 import Button from '../../components/common/Button';
 import type { Teacher, Class } from '../../types';
 
-interface Subject { id: string; name: string; teacherId?: string; }
 interface InactiveUser { id: string; firstName: string; lastName: string; username: string; role: string; }
 
 export default function TeachersManagement() {
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
-  const [subjects, setSubjects] = useState<Subject[]>([]);
   const [selectedTeacherId, setSelectedTeacherId] = useState('');
   const [addSubmitting, setAddSubmitting] = useState(false);
   const [editSubmitting, setEditSubmitting] = useState(false);
 
   const addForm = useForm<{ fullName: string; phoneNumber: string; emergencyContact: string; classId: string; username: string; password: string }>();
   const editForm = useForm<{ fullName: string; phoneNumber: string; emergencyContact: string; classId: string; remove: boolean }>();
-  const [addSubjectIds, setAddSubjectIds] = useState<string[]>([]);
-  const [editSubjectIds, setEditSubjectIds] = useState<string[]>([]);
 
   const watchedAddName = addForm.watch('fullName');
   const debouncedAddName = useDebounce(watchedAddName ?? '', 350);
   const [inactiveMatches, setInactiveMatches] = useState<InactiveUser[]>([]);
   const [reactivatingId, setReactivatingId] = useState<string | null>(null);
 
+  const [editClassIds, setEditClassIds] = useState<string[]>([]);
+  const [addClassIds, setAddClassIds] = useState<string[]>([]);
+  const [removing, setRemoving] = useState(false);
+
   const load = () => {
     adminApi.getTeachers().then(r => setTeachers(r.data || []));
     adminApi.getClasses().then(r => setClasses(r.data || []));
-    adminApi.getSubjects().then(r => setSubjects(r.data || []));
   };
   useEffect(() => { load(); }, []);
 
@@ -64,18 +63,19 @@ export default function TeachersManagement() {
     } finally { setReactivatingId(null); }
   };
 
+  const selectedTeacher = useMemo(() => teachers.find(t => t.id === selectedTeacherId) || null, [teachers, selectedTeacherId]);
+
   // Populate edit form when teacher is selected
   useEffect(() => {
-    if (!selectedTeacherId) return;
-    const t = teachers.find(t => t.id === selectedTeacherId);
-    if (!t) return;
-    editForm.setValue('fullName', t.fullName);
-    editForm.setValue('phoneNumber', t.phoneNumber || '');
-    editForm.setValue('emergencyContact', t.emergencyContact || '');
-    setEditSubjectIds((t.subjects || []).map(s => s.id));
-    const existingClassIds = ((t as any).teacherClasses || []).map((tc: any) => tc.classId);
-    setEditClassIds(existingClassIds);
-  }, [selectedTeacherId, teachers]);
+    if (!selectedTeacher) return;
+    editForm.setValue('fullName', selectedTeacher.fullName);
+    editForm.setValue('phoneNumber', selectedTeacher.phoneNumber || '');
+    editForm.setValue('emergencyContact', selectedTeacher.emergencyContact || '');
+    setEditClassIds(((selectedTeacher as any).teacherClasses || []).map((tc: any) => tc.classId));
+  }, [selectedTeacher]);
+
+  const toggleClass = (id: string, list: string[], setter: (v: string[]) => void) =>
+    setter(list.includes(id) ? list.filter(c => c !== id) : [...list, id]);
 
   const onAdd = async (data: any) => {
     setAddSubmitting(true);
@@ -84,15 +84,13 @@ export default function TeachersManagement() {
         fullName: data.fullName,
         phoneNumber: data.phoneNumber,
         emergencyContact: data.emergencyContact,
-        subjectIds: addSubjectIds,
         classIds: addClassIds,
         username: data.username || undefined,
         password: data.password || undefined,
       });
       const tempPw = res.data?.tempPassword || 'Teacher@123';
-      toast.success(`Teacher added! Login: ${res.data?.username} / Password: ${tempPw}`);
+      toast.success(`Teacher added! Login: ${res.data?.username} / Password: ${tempPw}. Assign their subjects in Class Management → Curriculum.`, { autoClose: 9000 });
       addForm.reset();
-      setAddSubjectIds([]);
       setAddClassIds([]);
       load();
     } catch (err: any) {
@@ -102,19 +100,11 @@ export default function TeachersManagement() {
     }
   };
 
-  const [editClassIds, setEditClassIds] = useState<string[]>([]);
-  const [addClassIds, setAddClassIds] = useState<string[]>([]);
-
-  const toggleClass = (id: string, list: string[], setter: (v: string[]) => void) =>
-    setter(list.includes(id) ? list.filter(c => c !== id) : [...list, id]);
-
-  const [removing, setRemoving] = useState(false);
-
   const onEdit = async (data: any) => {
     if (!selectedTeacherId) { toast.error('Select a teacher first'); return; }
     setEditSubmitting(true);
     try {
-      await adminApi.updateTeacher(selectedTeacherId, { ...data, classIds: editClassIds, subjectIds: editSubjectIds });
+      await adminApi.updateTeacher(selectedTeacherId, { ...data, classIds: editClassIds });
       toast.success('Teacher updated!');
       load();
     } catch (err: any) {
@@ -133,7 +123,6 @@ export default function TeachersManagement() {
       toast.success('Teacher deactivated');
       setSelectedTeacherId('');
       editForm.reset();
-      setEditSubjectIds([]);
       setEditClassIds([]);
       load();
     } catch (err: any) {
@@ -141,6 +130,14 @@ export default function TeachersManagement() {
     } finally {
       setRemoving(false);
     }
+  };
+
+  const teachesSummary = (t: Teacher | null): string => {
+    if (!t?.subjects?.length) return 'No subjects assigned yet';
+    return t.subjects.map(s => {
+      const cls = (s.classes || []).map(c => c.name).filter(Boolean);
+      return cls.length ? `${s.name} (${cls.join(', ')})` : s.name;
+    }).join('; ');
   };
 
   return (
@@ -177,21 +174,6 @@ export default function TeachersManagement() {
               <Input placeholder="Primary Phone Number" {...addForm.register('phoneNumber')} />
               <Input placeholder="Emergency Contact" {...addForm.register('emergencyContact')} />
               <div>
-                <p className="text-sm font-medium text-gray-700 mb-2">Subject(s)</p>
-                {subjects.length === 0 ? (
-                  <p className="text-xs text-gray-400">No subjects yet — create them in Class Management → Subjects.</p>
-                ) : (
-                  <div className="max-h-32 overflow-y-auto border border-gray-200 rounded-xl p-2 space-y-1">
-                    {subjects.map(s => (
-                      <label key={s.id} className="flex items-center gap-2 cursor-pointer p-1 hover:bg-gray-50 rounded-lg">
-                        <input type="checkbox" checked={addSubjectIds.includes(s.id)} onChange={() => toggleClass(s.id, addSubjectIds, setAddSubjectIds)} className="w-4 h-4 text-primary-600" />
-                        <span className="text-sm text-gray-800">{s.name}</span>
-                      </label>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div>
                 <p className="text-sm font-medium text-gray-700 mb-2">Assign Class(es)</p>
                 <div className="max-h-32 overflow-y-auto border border-gray-200 rounded-xl p-2 space-y-1">
                   {classes.map(c => (
@@ -201,6 +183,7 @@ export default function TeachersManagement() {
                     </label>
                   ))}
                 </div>
+                <p className="text-xs text-gray-400 mt-1">Subjects are assigned per class in Class Management → Curriculum.</p>
               </div>
               <Input placeholder="Username (optional)" {...addForm.register('username')} />
               <Input type="password" placeholder="Password (default: Teacher@123)" {...addForm.register('password')} />
@@ -222,21 +205,13 @@ export default function TeachersManagement() {
               <Input placeholder="Full Name" {...editForm.register('fullName')} />
               <Input placeholder="Primary Phone Number" {...editForm.register('phoneNumber')} />
               <Input placeholder="Emergency Contact" {...editForm.register('emergencyContact')} />
-              <div>
-                <p className="text-sm font-medium text-gray-700 mb-2">Subject(s)</p>
-                {subjects.length === 0 ? (
-                  <p className="text-xs text-gray-400">No subjects yet — create them in Class Management → Subjects.</p>
-                ) : (
-                  <div className="max-h-32 overflow-y-auto border border-gray-200 rounded-xl p-2 space-y-1">
-                    {subjects.map(s => (
-                      <label key={s.id} className="flex items-center gap-2 cursor-pointer p-1 hover:bg-gray-50 rounded-lg">
-                        <input type="checkbox" checked={editSubjectIds.includes(s.id)} onChange={() => toggleClass(s.id, editSubjectIds, setEditSubjectIds)} className="w-4 h-4 text-primary-600" />
-                        <span className="text-sm text-gray-800">{s.name}</span>
-                      </label>
-                    ))}
-                  </div>
-                )}
-              </div>
+              {selectedTeacher && (
+                <div className="bg-gray-50 rounded-xl px-3 py-2">
+                  <p className="text-xs font-medium text-gray-500 mb-0.5">Teaches</p>
+                  <p className="text-sm text-gray-800">{teachesSummary(selectedTeacher)}</p>
+                  <p className="text-xs text-gray-400 mt-1">Manage subjects per class in Class Management → Curriculum.</p>
+                </div>
+              )}
               <div>
                 <p className="text-sm font-medium text-gray-700 mb-2">Assign Class(es)</p>
                 <div className="max-h-32 overflow-y-auto border border-gray-200 rounded-xl p-2 space-y-1">
@@ -247,6 +222,7 @@ export default function TeachersManagement() {
                     </label>
                   ))}
                 </div>
+                <p className="text-xs text-gray-400 mt-1">Removing a class also removes the subjects that teacher was teaching in it.</p>
               </div>
               <div className="flex gap-2">
                 <Button type="submit" loading={editSubmitting} fullWidth disabled={!selectedTeacherId}>Update Teacher</Button>

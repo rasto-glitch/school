@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'react-toastify';
-import { BookOpen, Plus, Search, Tag, Trash2, Users } from 'lucide-react';
+import { BookOpen, Plus, Search, Tag, Trash2, GraduationCap, X } from 'lucide-react';
 import { adminApi } from '../../services/api';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
@@ -11,7 +11,8 @@ import Button from '../../components/common/Button';
 import Modal from '../../components/common/Modal';
 import type { Class, Student, Teacher } from '../../types';
 
-interface Subject { id: string; name: string; teacherId?: string; teachers?: { id: string; fullName: string }[] }
+interface Subject { id: string; name: string; teachers?: { id: string; fullName: string; classes?: { id: string; name: string }[] }[] }
+interface CurriculumRow { id: string; classId: string; className: string | null; subjectId: string; subjectName: string | null; teacherId: string; teacherName: string | null }
 
 
 export default function ClassesPage() {
@@ -20,26 +21,30 @@ export default function ClassesPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [curriculum, setCurriculum] = useState<CurriculumRow[]>([]);
   const [creating, setCreating] = useState(false);
   const [creatingSubject, setCreatingSubject] = useState(false);
   const [newSubjectName, setNewSubjectName] = useState('');
-  const [newSubjectTeacherIds, setNewSubjectTeacherIds] = useState<string[]>([]);
   const [assignStudentSearch, setAssignStudentSearch] = useState('');
-  // Modal for managing the teachers assigned to a subject
-  const [editingSubject, setEditingSubject] = useState<Subject | null>(null);
-  const [editingTeacherIds, setEditingTeacherIds] = useState<string[]>([]);
-  const [savingTeachers, setSavingTeachers] = useState(false);
+  // Curriculum modal for a class
+  const [curriculumClass, setCurriculumClass] = useState<Class | null>(null);
+  const [newCstSubjectId, setNewCstSubjectId] = useState('');
+  const [newCstTeacherId, setNewCstTeacherId] = useState('');
+  const [addingCst, setAddingCst] = useState(false);
 
   const { register, handleSubmit, reset } = useForm<{ name: string; gradeLevel: string; academicYear: string; assignStudents: string }>();
 
   const loadClasses = () => adminApi.getClasses().then(r => setClasses(r.data || []));
   const loadSubjects = () => adminApi.getSubjects().then(r => setSubjects(r.data || []));
+  const loadCurriculum = () => adminApi.getCurriculum().then(r => setCurriculum(r.data || []));
+  const loadTeachers = () => adminApi.getTeachers().then(r => setTeachers(r.data || []));
 
   useEffect(() => {
     loadClasses();
     loadSubjects();
+    loadCurriculum();
     adminApi.getStudents().then(r => setStudents(r.data?.students || []));
-    adminApi.getTeachers().then(r => setTeachers(r.data || []));
+    loadTeachers();
   }, []);
 
   const onCreate = async (data: any) => {
@@ -56,17 +61,13 @@ export default function ClassesPage() {
     }
   };
 
-  const toggleId = (id: string, list: string[], setter: (v: string[]) => void) =>
-    setter(list.includes(id) ? list.filter(x => x !== id) : [...list, id]);
-
   const onCreateSubject = async () => {
     if (!newSubjectName.trim()) { toast.error('Enter a subject name'); return; }
     setCreatingSubject(true);
     try {
-      await adminApi.createSubject({ name: newSubjectName.trim(), teacherIds: newSubjectTeacherIds });
+      await adminApi.createSubject({ name: newSubjectName.trim() });
       toast.success('Subject created!');
       setNewSubjectName('');
-      setNewSubjectTeacherIds([]);
       loadSubjects();
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Failed to create subject');
@@ -75,32 +76,45 @@ export default function ClassesPage() {
   };
 
   const onDeleteSubject = async (id: string) => {
-    if (!confirm('Delete this subject?')) return;
+    if (!confirm('Delete this subject? It will be removed from every class that uses it.')) return;
     await adminApi.deleteSubject(id).catch(() => {});
     loadSubjects();
+    loadCurriculum();
+    loadTeachers();
   };
 
-  const openTeacherModal = (s: Subject) => {
-    setEditingSubject(s);
-    setEditingTeacherIds((s.teachers || []).map(t => t.id));
+  // ---- Curriculum (per class) ----
+  const openCurriculum = (c: Class) => {
+    setCurriculumClass(c);
+    setNewCstSubjectId('');
+    setNewCstTeacherId('');
   };
 
-  const saveTeacherModal = async () => {
-    if (!editingSubject) return;
-    setSavingTeachers(true);
+  const addCstRow = async () => {
+    if (!curriculumClass || !newCstSubjectId || !newCstTeacherId) { toast.error('Pick a subject and a teacher'); return; }
+    setAddingCst(true);
     try {
-      await adminApi.updateSubject(editingSubject.id, { name: editingSubject.name, teacherIds: editingTeacherIds });
-      toast.success('Teachers updated');
-      setEditingSubject(null);
-      loadSubjects();
-      // teacher.subject text caches changed too
-      adminApi.getTeachers().then(r => setTeachers(r.data || []));
+      await adminApi.addCurriculumRow({ classId: curriculumClass.id, subjectId: newCstSubjectId, teacherId: newCstTeacherId });
+      setNewCstSubjectId('');
+      setNewCstTeacherId('');
+      await loadCurriculum();
+      loadTeachers();
+      toast.success('Added');
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to update teachers');
+      toast.error(err.response?.data?.error || 'Failed to add');
     } finally {
-      setSavingTeachers(false);
+      setAddingCst(false);
     }
   };
+
+  const removeCstRow = async (rowId: string) => {
+    await adminApi.deleteCurriculumRow(rowId).catch(() => {});
+    await loadCurriculum();
+    loadTeachers();
+  };
+
+  const teacherName = (id: string) => teachers.find(t => t.id === id)?.fullName || '—';
+  const subjectName = (id: string) => subjects.find(s => s.id === id)?.name || '—';
 
   return (
     <PageLayout title="Class Management">
@@ -169,50 +183,67 @@ export default function ClassesPage() {
               <p className="text-sm text-gray-500 text-center py-4">No classes yet</p>
             ) : (
               <div className="space-y-2 max-h-[32rem] overflow-y-auto">
-                {classes.map(c => (
-                  <div key={c.id} className="flex items-center gap-3 px-4 py-3 bg-gray-50 rounded-xl">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900">{c.name}</p>
-                      {(c as any).gradeLevel && <p className="text-xs text-gray-400">{(c as any).gradeLevel}</p>}
+                {classes.map(c => {
+                  const rows = curriculum.filter(r => r.classId === c.id);
+                  return (
+                    <div key={c.id} className="px-4 py-3 bg-gray-50 rounded-xl">
+                      <div className="flex items-center gap-3">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900">{c.name}</p>
+                          {(c as any).gradeLevel && <p className="text-xs text-gray-400">{(c as any).gradeLevel}</p>}
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <button
+                            onClick={() => openCurriculum(c)}
+                            className="flex items-center gap-1 text-xs text-primary-600 hover:bg-primary-50 rounded-lg px-2 py-1 whitespace-nowrap"
+                          >
+                            <GraduationCap className="w-3.5 h-3.5" /> Curriculum ({rows.length})
+                          </button>
+                          <span className="text-xs text-gray-400 whitespace-nowrap">Next class</span>
+                          <select
+                            className="border border-gray-200 rounded-lg px-2 py-1 text-xs bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            value={(c as any).nextClassId || ''}
+                            onChange={async e => {
+                              const nextClassId = e.target.value || null;
+                              try {
+                                await adminApi.updateClass(c.id, { nextClassId });
+                                loadClasses();
+                              } catch {
+                                toast.error('Failed to update next class');
+                              }
+                            }}
+                          >
+                            <option value="">None (graduating class)</option>
+                            {classes.filter(oc => oc.id !== c.id).map(oc => (
+                              <option key={oc.id} value={oc.id}>{oc.name}</option>
+                            ))}
+                          </select>
+                          <button
+                            onClick={async () => {
+                              if (!confirm(`Delete class "${c.name}"?`)) return;
+                              try {
+                                await adminApi.deleteClass(c.id);
+                                loadClasses();
+                                loadCurriculum();
+                                toast.success('Class deleted');
+                              } catch {
+                                toast.error('Failed to delete class');
+                              }
+                            }}
+                            className="p-1.5 hover:bg-red-50 rounded-lg transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                          </button>
+                        </div>
+                      </div>
+                      {rows.length > 0 && (
+                        <p className="text-xs text-gray-500 mt-1 truncate">
+                          {rows.map(r => `${r.subjectName} — ${r.teacherName}`).join(' · ')}
+                        </p>
+                      )}
                     </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <span className="text-xs text-gray-400 whitespace-nowrap">Next class</span>
-                      <select
-                        className="border border-gray-200 rounded-lg px-2 py-1 text-xs bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500"
-                        value={(c as any).nextClassId || ''}
-                        onChange={async e => {
-                          const nextClassId = e.target.value || null;
-                          try {
-                            await adminApi.updateClass(c.id, { nextClassId });
-                            loadClasses();
-                          } catch {
-                            toast.error('Failed to update next class');
-                          }
-                        }}
-                      >
-                        <option value="">None (graduating class)</option>
-                        {classes.filter(oc => oc.id !== c.id).map(oc => (
-                          <option key={oc.id} value={oc.id}>{oc.name}</option>
-                        ))}
-                      </select>
-                      <button
-                        onClick={async () => {
-                          if (!confirm(`Delete class "${c.name}"?`)) return;
-                          try {
-                            await adminApi.deleteClass(c.id);
-                            loadClasses();
-                            toast.success('Class deleted');
-                          } catch {
-                            toast.error('Failed to delete class');
-                          }
-                        }}
-                        className="p-1.5 hover:bg-red-50 rounded-lg transition-colors"
-                      >
-                        <Trash2 className="w-3.5 h-3.5 text-red-400" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </Card>
@@ -229,21 +260,7 @@ export default function ClassesPage() {
             </div>
             <div className="space-y-3">
               <Input label="Subject Name" placeholder="Subject name (e.g. Mathematics)" value={newSubjectName} onChange={e => setNewSubjectName(e.target.value)} />
-              <div>
-                <p className="text-sm font-medium text-gray-700 mb-2">Assign Teachers <span className="text-gray-400 font-normal">(optional, you can pick several)</span></p>
-                {teachers.length === 0 ? (
-                  <p className="text-xs text-gray-400">No teachers yet</p>
-                ) : (
-                  <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-xl p-2 space-y-1">
-                    {teachers.map(t => (
-                      <label key={t.id} className="flex items-center gap-2 cursor-pointer p-1 hover:bg-gray-50 rounded-lg">
-                        <input type="checkbox" checked={newSubjectTeacherIds.includes(t.id)} onChange={() => toggleId(t.id, newSubjectTeacherIds, setNewSubjectTeacherIds)} className="w-4 h-4 text-primary-600" />
-                        <span className="text-sm text-gray-800">{t.fullName}</span>
-                      </label>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <p className="text-xs text-gray-400">Assign teachers to a subject per class in <span className="font-medium">Classes → Curriculum</span>.</p>
               <Button onClick={onCreateSubject} loading={creatingSubject} fullWidth icon={<Plus className="w-4 h-4" />}>Add Subject</Button>
             </div>
           </Card>
@@ -256,19 +273,16 @@ export default function ClassesPage() {
             ) : (
               <div className="space-y-2 max-h-[32rem] overflow-y-auto">
                 {subjects.map(s => {
-                  const names = (s.teachers || []).map(t => t.fullName);
+                  const summary = (s.teachers || []).map(t => {
+                    const cls = (t.classes || []).map(c => c.name).filter(Boolean);
+                    return cls.length ? `${t.fullName} (${cls.join(', ')})` : t.fullName;
+                  });
                   return (
                     <div key={s.id} className="flex items-center gap-2 p-2 bg-gray-50 rounded-xl">
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-gray-900">{s.name}</p>
-                        <p className="text-xs text-gray-500 truncate">{names.length ? names.join(', ') : 'No teachers assigned'}</p>
+                        <p className="text-xs text-gray-500 truncate">{summary.length ? summary.join('; ') : 'Not assigned to any class yet'}</p>
                       </div>
-                      <button
-                        onClick={() => openTeacherModal(s)}
-                        className="flex items-center gap-1 text-xs text-primary-600 hover:bg-primary-50 rounded-lg px-2 py-1 whitespace-nowrap"
-                      >
-                        <Users className="w-3.5 h-3.5" /> {names.length} teacher{names.length === 1 ? '' : 's'}
-                      </button>
                       <button onClick={() => onDeleteSubject(s.id)} className="p-1 hover:bg-red-50 rounded-lg">
                         <Trash2 className="w-3.5 h-3.5 text-red-400" />
                       </button>
@@ -281,22 +295,38 @@ export default function ClassesPage() {
         </div>
       )}
 
-      <Modal isOpen={!!editingSubject} onClose={() => setEditingSubject(null)} title={editingSubject ? `Teachers for ${editingSubject.name}` : ''}>
-        {teachers.length === 0 ? (
-          <p className="text-sm text-gray-500">No teachers yet. Add teachers first.</p>
-        ) : (
-          <div className="space-y-3">
-            <div className="max-h-72 overflow-y-auto border border-gray-200 rounded-xl p-2 space-y-1">
-              {teachers.map(t => (
-                <label key={t.id} className="flex items-center gap-2 cursor-pointer p-1.5 hover:bg-gray-50 rounded-lg">
-                  <input type="checkbox" checked={editingTeacherIds.includes(t.id)} onChange={() => toggleId(t.id, editingTeacherIds, setEditingTeacherIds)} className="w-4 h-4 text-primary-600" />
-                  <span className="text-sm text-gray-800">{t.fullName}</span>
-                </label>
+      {/* Curriculum modal */}
+      <Modal isOpen={!!curriculumClass} onClose={() => setCurriculumClass(null)} title={curriculumClass ? `Curriculum — ${curriculumClass.name}` : ''} size="lg">
+        {curriculumClass && (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-500">Which subjects are taught in this class, and by whom.</p>
+            <div className="space-y-1.5 max-h-64 overflow-y-auto">
+              {curriculum.filter(r => r.classId === curriculumClass.id).length === 0 ? (
+                <p className="text-sm text-gray-400">Nothing assigned yet.</p>
+              ) : curriculum.filter(r => r.classId === curriculumClass.id).map(r => (
+                <div key={r.id} className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg">
+                  <span className="text-sm font-medium text-gray-900 flex-1">{r.subjectName || subjectName(r.subjectId)}</span>
+                  <span className="text-sm text-gray-600 flex-1">{r.teacherName || teacherName(r.teacherId)}</span>
+                  <button onClick={() => removeCstRow(r.id)} className="p-1 hover:bg-red-50 rounded-lg">
+                    <X className="w-4 h-4 text-red-400" />
+                  </button>
+                </div>
               ))}
             </div>
-            <div className="flex gap-2 justify-end">
-              <Button type="button" variant="secondary" onClick={() => setEditingSubject(null)}>Cancel</Button>
-              <Button type="button" loading={savingTeachers} onClick={saveTeacherModal}>Save</Button>
+            <div className="border-t border-gray-100 pt-3">
+              <p className="text-sm font-medium text-gray-700 mb-2">Add</p>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <select className="flex-1 border border-gray-300 rounded-xl px-3 py-2.5 text-sm bg-white" value={newCstSubjectId} onChange={e => setNewCstSubjectId(e.target.value)}>
+                  <option value="">Subject…</option>
+                  {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+                <select className="flex-1 border border-gray-300 rounded-xl px-3 py-2.5 text-sm bg-white" value={newCstTeacherId} onChange={e => setNewCstTeacherId(e.target.value)}>
+                  <option value="">Teacher…</option>
+                  {teachers.map(t => <option key={t.id} value={t.id}>{t.fullName}</option>)}
+                </select>
+                <Button onClick={addCstRow} loading={addingCst} disabled={!newCstSubjectId || !newCstTeacherId}>Add</Button>
+              </div>
+              {subjects.length === 0 && <p className="text-xs text-gray-400 mt-2">No subjects yet — create them in the Subjects tab first.</p>}
             </div>
           </div>
         )}

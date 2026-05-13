@@ -498,8 +498,11 @@ export async function getMe(req: AuthRequest, res: Response): Promise<void> {
         teachingMap.set(r.class_id, arr);
       }
     }
-    const subjects = Array.from(allSubjects, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+    let subjects = Array.from(allSubjects, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
     const teaching = Array.from(teachingMap, ([classId, subs]) => ({ classId, subjects: subs.sort((a, b) => a.name.localeCompare(b.name)) }));
+    if (subjects.length === 0 && (teacher as any).subject) {
+      subjects = String((teacher as any).subject).split(',').map((n: string) => n.trim()).filter(Boolean).map((name: string) => ({ id: name, name }));
+    }
     const resolvedSubject = subjects.map(s => s.name).join(', ') || (teacher as any).subject || null;
     res.json({ role, subject: resolvedSubject, subjects, teaching });
   } catch {

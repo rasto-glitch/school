@@ -1,11 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import api from '../services/api';
 import { useAuthStore } from '../store/authStore';
+
+type SubjectOpt = { id: string; name: string };
 
 interface TeacherProfile {
   id: string;
   subject: string | null;
-  subjects: { id: string; name: string }[];
+  subjects: SubjectOpt[];
+  teaching: { classId: string; subjects: SubjectOpt[] }[];
   fullName: string;
   teacherClasses: { classId: string; classes: { name: string } }[];
 }
@@ -23,9 +26,9 @@ export function useTeacherProfile() {
         const data = r.data;
         setProfile({
           id: data.id,
-          // teachers.subject is the comma-joined cache; `subjects` is the structured list.
           subject: data.subject || null,
           subjects: Array.isArray(data.subjects) ? data.subjects : [],
+          teaching: Array.isArray(data.teaching) ? data.teaching : [],
           fullName: data.fullName || data.full_name || '',
           teacherClasses: data.teacherClasses || [],
         });
@@ -36,5 +39,23 @@ export function useTeacherProfile() {
       .finally(() => setLoading(false));
   }, [user?.id]);
 
-  return { profile, subject: profile?.subject || '', subjects: profile?.subjects || [], loading };
+  // Subjects this teacher teaches in a given class. Falls back to all their subjects when the
+  // class has no curriculum rows yet (matches the lenient server-side check).
+  const subjectsForClass = useCallback((classId: string | undefined | null): SubjectOpt[] => {
+    if (!profile) return [];
+    if (classId) {
+      const entry = profile.teaching.find(t => t.classId === classId);
+      if (entry && entry.subjects.length) return entry.subjects;
+    }
+    return profile.subjects;
+  }, [profile]);
+
+  return {
+    profile,
+    subject: profile?.subject || '',
+    subjects: profile?.subjects || [],
+    teaching: profile?.teaching || [],
+    subjectsForClass,
+    loading,
+  };
 }

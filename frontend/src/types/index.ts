@@ -43,7 +43,7 @@ export interface Teacher {
   fullName: string;
   phoneNumber?: string;
   subject?: string; // comma-joined display cache of `subjects`
-  subjects?: { id: string; name: string }[];
+  subjects?: { id: string; name: string; classes?: { id: string; name: string }[] }[];
   emergencyContact?: string;
   profilePicture?: string;
   teacherClasses?: { classId: string; classes: { name: string } }[];
