@@ -99,7 +99,7 @@ export default function TuitionFamiliesTab({ basePath }: Props) {
                       return (
                         <button
                           key={s.id}
-                          onClick={() => navigate(`${basePath}/student/${s.id}`)}
+                          onClick={() => navigate(`${basePath}/student/${s.studentId}`)}
                           className="w-full text-left px-4 py-3 hover:bg-white transition-colors"
                         >
                           <div className="flex items-start justify-between gap-3 mb-1.5">

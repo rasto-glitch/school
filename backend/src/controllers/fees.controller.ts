@@ -687,6 +687,229 @@ export async function getStudentFee(req: AuthRequest, res: Response): Promise<vo
   });
 }
 
+// ── Per-student rollups (used by the new tabbed student detail page) ────
+// listStudentRollup: one row per student, summarizing all their fee plans
+//   into kind badges + per-currency balance totals + worst-of statuses.
+// getStudentDetail: every plan for one student, each with its installments
+//   + payment history attached. Drives the tabbed UI.
+
+// Status precedence — used to roll multiple plans' statuses into one badge
+// on the deduplicated list row (overdue beats due_soon beats current beats paid_up).
+const STATUS_RANK: Record<Status, number> = { overdue: 3, due_soon: 2, current: 1, paid_up: 0 };
+
+export async function listStudentRollup(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const guard = await ensurePremium(schoolId);
+  if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
+
+  const rows = await buildStudentFeeRows(schoolId);
+
+  interface Plan {
+    studentFeeId: string;
+    planId: string;
+    planName: string;
+    kind: string;
+    academicYear: string | null;
+    currency: string;
+    totalAmount: number;
+    adjustment: number;
+    siblingDiscount: number;
+    lateFees: number;
+    paid: number;
+    balance: number;
+    status: Status;
+  }
+  interface Rollup {
+    studentId: string;
+    studentName: string;
+    className: string | null;
+    parentId: string | null;
+    parentName: string | null;
+    parentUserId: string | null;
+    plans: Plan[];
+    totalsByCurrency: { currency: string; due: number; paid: number; balance: number }[];
+    worstStatus: Status;
+    kinds: string[];
+    lockedFeatures: string[];
+  }
+
+  const byStudent = new Map<string, Rollup>();
+  for (const r of rows) {
+    let g = byStudent.get(r.studentId);
+    if (!g) {
+      g = {
+        studentId: r.studentId,
+        studentName: r.studentName,
+        className: r.className,
+        parentId: r.parentId,
+        parentName: r.parentName,
+        parentUserId: r.parentUserId,
+        plans: [],
+        totalsByCurrency: [],
+        worstStatus: 'paid_up',
+        kinds: [],
+        lockedFeatures: r.lockedFeatures,
+      };
+      byStudent.set(r.studentId, g);
+    }
+    g.plans.push({
+      studentFeeId: r.id,
+      planId: r.planId,
+      planName: r.planName,
+      kind: r.kind ?? 'tuition',
+      academicYear: r.academicYear,
+      currency: r.currency,
+      totalAmount: r.totalAmount,
+      adjustment: r.adjustment,
+      siblingDiscount: r.siblingDiscount,
+      lateFees: r.lateFees,
+      paid: r.paid,
+      balance: r.balance,
+      status: r.status,
+    });
+    if (STATUS_RANK[r.status] > STATUS_RANK[g.worstStatus]) g.worstStatus = r.status;
+  }
+
+  // Finalize each group: per-currency totals + deduped kinds (preserving order)
+  for (const g of byStudent.values()) {
+    const totals = new Map<string, { due: number; paid: number; balance: number }>();
+    const seenKinds = new Set<string>();
+    g.kinds = [];
+    for (const p of g.plans) {
+      const due = p.totalAmount + p.adjustment - p.siblingDiscount + p.lateFees;
+      const slot = totals.get(p.currency) ?? { due: 0, paid: 0, balance: 0 };
+      slot.due += due;
+      slot.paid += p.paid;
+      slot.balance += p.balance;
+      totals.set(p.currency, slot);
+      if (!seenKinds.has(p.kind)) {
+        seenKinds.add(p.kind);
+        g.kinds.push(p.kind);
+      }
+    }
+    g.totalsByCurrency = Array.from(totals.entries()).map(([currency, t]) => ({
+      currency,
+      due: Math.round(t.due * 100) / 100,
+      paid: Math.round(t.paid * 100) / 100,
+      balance: Math.round(t.balance * 100) / 100,
+    }));
+  }
+
+  const out = Array.from(byStudent.values()).sort((a, b) => a.studentName.localeCompare(b.studentName));
+  res.json(out);
+}
+
+export async function getStudentDetail(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const guard = await ensurePremium(schoolId);
+  if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
+
+  const { studentId } = req.params;
+  const allRows = await buildStudentFeeRows(schoolId);
+  const studentRows = allRows.filter(r => r.studentId === studentId);
+  if (studentRows.length === 0) { res.status(404).json({ error: 'Student has no fees' }); return; }
+
+  const head = studentRows[0]; // shared identity fields are the same on every row
+
+  const sfIds = studentRows.map(r => r.id);
+  const { data: payments } = await supabase
+    .from('fee_payments')
+    .select('id, student_fee_id, amount, paid_on, method, reference, notes, unallocated_note, recorded_by, created_at, currency, tax_amount, tax_label, payment_account_id, receipt_year, receipt_number, is_refund, refund_of_payment_id')
+    .eq('school_id', schoolId)
+    .in('student_fee_id', sfIds)
+    .is('voided_at', null)
+    .order('paid_on', { ascending: false });
+
+  const paymentIds = (payments ?? []).map(p => (p as any).id);
+  const recorderIds = Array.from(new Set((payments ?? []).map(p => (p as any).recorded_by).filter(Boolean)));
+  const [{ data: allocs }, { data: users }] = await Promise.all([
+    paymentIds.length
+      ? supabase
+          .from('fee_payment_allocations')
+          .select('fee_payment_id, fee_installment_id, amount, fee_installments(sequence, due_date)')
+          .in('fee_payment_id', paymentIds)
+      : Promise.resolve({ data: [] as any[] }),
+    recorderIds.length
+      ? supabase.from('users').select('id, first_name, last_name').in('id', recorderIds)
+      : Promise.resolve({ data: [] as any[] }),
+  ]);
+  const allocsByPayment = new Map<string, any[]>();
+  for (const a of (allocs ?? []) as any[]) {
+    const arr = allocsByPayment.get(a.fee_payment_id) ?? [];
+    arr.push({
+      installmentId: a.fee_installment_id,
+      amount: Number(a.amount),
+      sequence: a.fee_installments?.sequence ?? null,
+      dueDate: a.fee_installments?.due_date ?? null,
+    });
+    allocsByPayment.set(a.fee_payment_id, arr);
+  }
+  const nameByUser = new Map<string, string>();
+  for (const u of (users ?? []) as any[]) {
+    const name = `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim();
+    if (name) nameByUser.set(u.id, name);
+  }
+
+  // Group payments by student_fee_id
+  const paymentsBySf = new Map<string, any[]>();
+  for (const p of (payments ?? []) as any[]) {
+    const arr = paymentsBySf.get(p.student_fee_id) ?? [];
+    const allocList = (allocsByPayment.get(p.id) ?? []).sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
+    const allocSum = allocList.reduce((s, a) => s + a.amount, 0);
+    const unallocatedAmount = Math.round((Number(p.amount) - allocSum) * 100) / 100;
+    arr.push({
+      id: p.id,
+      amount: Number(p.amount),
+      paidOn: p.paid_on,
+      method: p.method,
+      reference: p.reference,
+      notes: p.notes,
+      unallocatedNote: p.unallocated_note ?? null,
+      unallocatedAmount: allocList.length > 0 && unallocatedAmount > 0 ? unallocatedAmount : 0,
+      recordedBy: p.recorded_by,
+      recorderName: p.recorded_by ? nameByUser.get(p.recorded_by) ?? null : null,
+      allocations: allocList,
+      createdAt: p.created_at,
+      currency: p.currency ?? null,
+      taxAmount: Number(p.tax_amount ?? 0),
+      taxLabel: p.tax_label ?? null,
+      paymentAccountId: p.payment_account_id ?? null,
+      receiptYear: p.receipt_year ?? null,
+      receiptNumber: p.receipt_number ?? null,
+      isRefund: !!p.is_refund,
+      refundOfPaymentId: p.refund_of_payment_id ?? null,
+    });
+    paymentsBySf.set(p.student_fee_id, arr);
+  }
+
+  res.json({
+    studentId: head.studentId,
+    studentName: head.studentName,
+    className: head.className,
+    parentId: head.parentId,
+    parentName: head.parentName,
+    parentUserId: head.parentUserId,
+    lockedFeatures: head.lockedFeatures,
+    plans: studentRows.map(r => ({
+      studentFeeId: r.id,
+      planId: r.planId,
+      planName: r.planName,
+      kind: r.kind ?? 'tuition',
+      academicYear: r.academicYear,
+      currency: r.currency,
+      totalAmount: r.totalAmount,
+      adjustment: r.adjustment,
+      siblingDiscount: r.siblingDiscount,
+      lateFees: r.lateFees,
+      paid: r.paid,
+      balance: r.balance,
+      status: r.status,
+      installments: r.installments,
+      payments: paymentsBySf.get(r.id) ?? [],
+    })),
+  });
+}
+
 // ── Payments (admin only) ───────────────────────────────────────────────
 
 export async function recordPayment(req: AuthRequest, res: Response): Promise<void> {

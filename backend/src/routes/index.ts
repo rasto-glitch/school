@@ -213,6 +213,10 @@ export function createRouter(io: SocketServer) {
   router.post('/accounting/plans/:id/assign', authenticate, authorize(...accountingRW), (req, res) => fees.assignPlan(req as AuthRequest, res));
 
   router.get('/accounting/students', authenticate, authorize(...accountingRO), (req, res) => fees.listStudentFees(req as AuthRequest, res));
+  // Rollup: one row per student summarizing all their plans — powers the deduplicated Students list.
+  router.get('/accounting/students-rollup', authenticate, authorize(...accountingRO), (req, res) => fees.listStudentRollup(req as AuthRequest, res));
+  // Per-student detail: every plan + installments + payments for one student — powers the tabbed detail page.
+  router.get('/accounting/students/:studentId/detail', authenticate, authorize(...accountingRO), (req, res) => fees.getStudentDetail(req as AuthRequest, res));
   router.get('/accounting/families', authenticate, authorize(...accountingRO), (req, res) => fees.listFamilies(req as AuthRequest, res));
   router.get('/accounting/student-fees/:id', authenticate, authorize(...accountingRO), (req, res) => fees.getStudentFee(req as AuthRequest, res));
   router.patch('/accounting/student-fees/:id', authenticate, authorize(...accountingRW), (req, res) => fees.updateStudentFee(req as AuthRequest, res));

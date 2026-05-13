@@ -252,8 +252,12 @@ export const feesApi = {
   assignPlan: (id: string, data?: { studentIds?: string[] }) => api.post(`/accounting/plans/${id}/assign`, data ?? {}),
   // Students / families
   listStudentFees: () => api.get('/accounting/students'),
+  // Deduplicated rollup — one row per student with all plan kinds folded in.
+  listStudentRollup: () => api.get('/accounting/students-rollup'),
   listFamilies: () => api.get('/accounting/families'),
   getStudentFee: (id: string) => api.get(`/accounting/student-fees/${id}`),
+  // Per-student detail — every plan with its installments + payments for the tabbed detail page.
+  getStudentDetail: (studentId: string) => api.get(`/accounting/students/${studentId}/detail`),
   updateStudentFee: (id: string, data: { adjustment?: number; notes?: string | null; totalAmount?: number }) =>
     api.patch(`/accounting/student-fees/${id}`, data),
   recordPayment: (studentFeeId: string, data: { amount: number; paidOn: string; method?: string; reference?: string; notes?: string; allocations?: { installmentId: string; amount: number }[]; unallocatedNote?: string; currency?: string; taxAmount?: number; taxLabel?: string; paymentAccountId?: string | null }) =>

@@ -333,6 +333,55 @@ export interface StudentFeeRow {
   kind?: FeePlanKind;
 }
 
+// Used by the deduplicated Students list — one row per student summarizing
+// every plan they have. Render the per-currency totals; pick a single status
+// pill using the worst-of rule on the server.
+export interface StudentRollupRow {
+  studentId: string;
+  studentName: string;
+  className: string | null;
+  parentId: string | null;
+  parentName: string | null;
+  parentUserId: string | null;
+  plans: StudentRollupPlan[];
+  totalsByCurrency: { currency: string; due: number; paid: number; balance: number }[];
+  worstStatus: FeeStatus;
+  kinds: FeePlanKind[];
+  lockedFeatures: string[];
+}
+export interface StudentRollupPlan {
+  studentFeeId: string;
+  planId: string;
+  planName: string;
+  kind: FeePlanKind;
+  academicYear: string | null;
+  currency: string;
+  totalAmount: number;
+  adjustment: number;
+  siblingDiscount: number;
+  lateFees: number;
+  paid: number;
+  balance: number;
+  status: FeeStatus;
+}
+
+// Used by the per-student detail page — every plan with its installments and
+// payments attached. The page renders one tab per plan.
+export interface StudentDetail {
+  studentId: string;
+  studentName: string;
+  className: string | null;
+  parentId: string | null;
+  parentName: string | null;
+  parentUserId: string | null;
+  lockedFeatures: string[];
+  plans: StudentDetailPlan[];
+}
+export interface StudentDetailPlan extends StudentRollupPlan {
+  installments: FeeInstallment[];
+  payments: FeePayment[];
+}
+
 export interface FamilyFeeGroup {
   parentId: string;
   parentName: string;

@@ -1,8 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { feesApi, accountingApi, type PaymentAccount } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
-import { fmtMoney as fmt } from '../../utils/money';
 import { toast } from 'react-toastify';
 import PageLayout from '../../components/layout/PageLayout';
 import Button from '../../components/common/Button';
@@ -11,9 +10,8 @@ import Card from '../../components/common/Card';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import Modal from '../../components/common/Modal';
 import { ArrowLeft, Plus, Trash2, Lock, Unlock, FileDown, Pencil, Undo2 } from 'lucide-react';
-import type { StudentFeeRow, FeePayment, FeeStatus } from '../../types';
-
-interface StudentFeeDetail extends StudentFeeRow { payments: FeePayment[] }
+import type { StudentDetail, StudentDetailPlan, FeePayment, FeeStatus, FeePlanKind } from '../../types';
+import { fmtMoney as fmt } from '../../utils/money';
 
 const STATUS_LABEL: Record<FeeStatus, string> = {
   paid_up: 'Paid up', current: 'On track', due_soon: 'Due soon', overdue: 'Overdue',
@@ -23,6 +21,15 @@ const STATUS_COLOR: Record<FeeStatus, string> = {
   current: 'bg-slate-50 text-slate-700 border-slate-200',
   due_soon: 'bg-amber-50 text-amber-700 border-amber-200',
   overdue: 'bg-rose-50 text-rose-700 border-rose-200',
+};
+const KIND_LABEL: Record<FeePlanKind, string> = {
+  tuition: 'Tuition',
+  transport: 'Transport',
+  lunch: 'Lunch',
+  uniform: 'Uniform',
+  exam: 'Exam',
+  registration: 'Registration',
+  other: 'Other',
 };
 
 function downloadBlob(blob: Blob, filename: string) {
@@ -37,17 +44,22 @@ function downloadBlob(blob: Blob, filename: string) {
 }
 
 export default function AdminTuitionStudentDetailPage() {
-  const { id } = useParams<{ id: string }>();
+  // The :id route param is now the student.id (not the student_fees.id).
+  // Existing links from AR aging already pass studentId; legacy links from earlier
+  // builds passing student_fees.id will 404 cleanly with "Student has no fees".
+  const { id: studentId } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const canWrite = user?.role === 'admin' || user?.role === 'accountant';
   const basePath = '/accounting';
 
-  const [data, setData] = useState<StudentFeeDetail | null>(null);
+  const [data, setData] = useState<StudentDetail | null>(null);
+  const [activeTab, setActiveTab] = useState<string>('');  // studentFeeId of the active plan
+  const [accounts, setAccounts] = useState<PaymentAccount[]>([]);
+
   const [showPay, setShowPay] = useState(false);
   const [showAdjust, setShowAdjust] = useState(false);
   const [refundOf, setRefundOf] = useState<FeePayment | null>(null);
-  const [accounts, setAccounts] = useState<PaymentAccount[]>([]);
 
   // record-payment form
   const [payDate, setPayDate] = useState(new Date().toISOString().slice(0, 10));
@@ -58,10 +70,14 @@ export default function AdminTuitionStudentDetailPage() {
   const [payTaxLabel, setPayTaxLabel] = useState('');
   const [payAccountId, setPayAccountId] = useState<string>('');
   const [paySaving, setPaySaving] = useState(false);
-  // amount per installment ('' = not allocating to that one). Plus an "extra" lump field.
   const [allocAmounts, setAllocAmounts] = useState<Record<string, string>>({});
   const [extraAmount, setExtraAmount] = useState('');
   const [extraNote, setExtraNote] = useState('');
+
+  // adjustment form
+  const [adjValue, setAdjValue] = useState('0');
+  const [adjNotes, setAdjNotes] = useState('');
+  const [adjSaving, setAdjSaving] = useState(false);
 
   // refund form
   const [refundAmount, setRefundAmount] = useState('');
@@ -70,58 +86,82 @@ export default function AdminTuitionStudentDetailPage() {
   const [refundNotes, setRefundNotes] = useState('');
   const [refundBusy, setRefundBusy] = useState(false);
 
-  // adjustment form
-  const [adjValue, setAdjValue] = useState('0');
-  const [adjNotes, setAdjNotes] = useState('');
-  const [adjSaving, setAdjSaving] = useState(false);
-
   const load = async () => {
-    if (!id) return;
-    const r = await feesApi.getStudentFee(id);
-    setData(r.data);
+    if (!studentId) return;
+    const r = await feesApi.getStudentDetail(studentId);
+    const detail = r.data as StudentDetail;
+    setData(detail);
+    // Pick the first plan as the default active tab on first load.
+    // On subsequent reloads (after recording a payment), keep the active tab
+    // if it still exists; otherwise fall back to the first plan.
+    setActiveTab(prev => {
+      if (prev && detail.plans.some(p => p.studentFeeId === prev)) return prev;
+      return detail.plans[0]?.studentFeeId ?? '';
+    });
   };
 
   useEffect(() => {
-    if (!id) return;
+    if (!studentId) return;
     load().catch((e: any) => toast.error(e.response?.data?.error || 'Failed to load'));
     accountingApi.listPaymentAccounts().then(r => setAccounts(r.data.filter(a => a.isActive))).catch(() => {});
-  }, [id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [studentId]);
+
+  // The "currently visible" plan derived from the active tab.
+  const activePlan: StudentDetailPlan | null = useMemo(() => {
+    if (!data) return null;
+    return data.plans.find(p => p.studentFeeId === activeTab) ?? data.plans[0] ?? null;
+  }, [data, activeTab]);
+
+  // How much of each installment has already been allocated by prior payments,
+  // so the per-installment input shows "X left of Y".
+  const paidByInstallment = useMemo(() => {
+    const m = new Map<string, number>();
+    if (!activePlan) return m;
+    for (const p of activePlan.payments) {
+      for (const a of p.allocations ?? []) {
+        m.set(a.installmentId, (m.get(a.installmentId) ?? 0) + a.amount);
+      }
+    }
+    return m;
+  }, [activePlan]);
 
   if (!data) return <PageLayout title="Tuition"><LoadingSpinner /></PageLayout>;
-
-  const due = data.totalAmount + data.adjustment - data.siblingDiscount;
-  const remaining = Math.max(0, due - data.paid);
-
-  // How much has already been allocated to each installment from existing payments
-  const paidByInstallment = new Map<string, number>();
-  for (const p of data.payments) {
-    for (const a of p.allocations ?? []) {
-      paidByInstallment.set(a.installmentId, (paidByInstallment.get(a.installmentId) ?? 0) + a.amount);
-    }
+  if (!activePlan) {
+    return (
+      <PageLayout title={data.studentName} subtitle="No fee plans assigned">
+        <button onClick={() => navigate(basePath)} className="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900 mb-4">
+          <ArrowLeft className="w-4 h-4" /> Back
+        </button>
+        <Card><p className="text-sm text-gray-500">This student has no fee plans assigned.</p></Card>
+      </PageLayout>
+    );
   }
 
-  const allocations = data ? data.installments
+  const due = activePlan.totalAmount + activePlan.adjustment - activePlan.siblingDiscount + activePlan.lateFees;
+  const remaining = Math.max(0, due - activePlan.paid);
+
+  // ── Record-payment math ──
+  const allocations = activePlan.installments
     .map(i => {
       const v = allocAmounts[i.id];
       const n = Number(v);
       return v && !isNaN(n) && n > 0 ? { installmentId: i.id, amount: n } : null;
     })
-    .filter((x): x is { installmentId: string; amount: number } => !!x) : [];
+    .filter((x): x is { installmentId: string; amount: number } => !!x);
   const allocSum = allocations.reduce((s, a) => s + a.amount, 0);
   const extraNum = Number(extraAmount);
   const extraValid = extraAmount && !isNaN(extraNum) && extraNum > 0 ? extraNum : 0;
   const totalPay = allocSum + extraValid;
-
-  const hasInstallments = data.installments.length > 0;
+  const hasInstallments = activePlan.installments.length > 0;
   const needsExtraNote = hasInstallments && allocations.length > 0 && extraValid > 0;
 
   const recordPayment = async () => {
-    if (!id) return;
     if (totalPay <= 0) { toast.error('Enter a positive amount'); return; }
     if (needsExtraNote && !extraNote.trim()) { toast.error('Please add a note explaining the other amount'); return; }
     setPaySaving(true);
     try {
-      await feesApi.recordPayment(id, {
+      await feesApi.recordPayment(activePlan.studentFeeId, {
         amount: totalPay,
         paidOn: payDate,
         method: payMethod,
@@ -160,10 +200,10 @@ export default function AdminTuitionStudentDetailPage() {
   };
 
   const downloadSummary = async () => {
-    if (!id) return;
+    if (!activePlan) return;
     try {
-      const r = await feesApi.downloadStudentFeeSummary(id);
-      downloadBlob(r.data, `tuition-statement-${id.slice(0, 8)}.pdf`);
+      const r = await feesApi.downloadStudentFeeSummary(activePlan.studentFeeId);
+      downloadBlob(r.data, `tuition-statement-${activePlan.studentFeeId.slice(0, 8)}.pdf`);
     } catch (e: any) { toast.error(e.response?.data?.error || 'Failed'); }
   };
 
@@ -189,10 +229,10 @@ export default function AdminTuitionStudentDetailPage() {
   };
 
   const saveAdjustment = async () => {
-    if (!id) return;
+    if (!activePlan) return;
     setAdjSaving(true);
     try {
-      await feesApi.updateStudentFee(id, { adjustment: Number(adjValue), notes: adjNotes || null });
+      await feesApi.updateStudentFee(activePlan.studentFeeId, { adjustment: Number(adjValue), notes: adjNotes || null });
       toast.success('Adjustment saved');
       setShowAdjust(false);
       await load();
@@ -222,46 +262,70 @@ export default function AdminTuitionStudentDetailPage() {
         <ArrowLeft className="w-4 h-4" /> Back to tuition
       </button>
 
+      {/* Per-plan tabs — one tab per kind/plan. Each tab shows its own balance so the
+          accountant can scan "tuition $5k, transport $300" without clicking. */}
+      <div className="bg-white rounded-2xl border border-gray-200 p-1.5 mb-4 inline-flex flex-wrap gap-1">
+        {data.plans.map(p => {
+          const isActive = p.studentFeeId === activeTab;
+          const planBal = Math.max(0, p.totalAmount + p.adjustment - p.siblingDiscount + p.lateFees - p.paid);
+          return (
+            <button
+              key={p.studentFeeId}
+              onClick={() => setActiveTab(p.studentFeeId)}
+              className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors flex items-center gap-2 ${
+                isActive ? 'bg-primary-600 text-white' : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              <span>{KIND_LABEL[p.kind] ?? p.kind}</span>
+              <span className={`text-xs font-medium ${isActive ? 'opacity-90' : 'text-gray-400'}`}>
+                {fmt(planBal, p.currency)}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
       <div className="grid lg:grid-cols-3 gap-4">
-        {/* Summary card */}
+        {/* Active-plan summary card */}
         <div className="lg:col-span-2">
           <Card>
             <div className="flex items-start justify-between mb-3">
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h2 className="font-semibold text-gray-900">{data.planName}</h2>
-                  {data.kind && data.kind !== 'tuition' && (
+                  <h2 className="font-semibold text-gray-900">{activePlan.planName}</h2>
+                  {activePlan.kind !== 'tuition' && (
                     <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 capitalize">
-                      {data.kind}
+                      {activePlan.kind}
                     </span>
                   )}
                 </div>
                 <div className="text-sm text-gray-500">
-                  {data.academicYear && <>{data.academicYear} · </>}
+                  {activePlan.academicYear && <>{activePlan.academicYear} · </>}
                   {data.className || 'No class'}
                 </div>
               </div>
-              <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${STATUS_COLOR[data.status]}`}>
-                {STATUS_LABEL[data.status]}
+              <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${STATUS_COLOR[activePlan.status]}`}>
+                {STATUS_LABEL[activePlan.status]}
               </span>
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-              <Stat label="Tuition" value={fmt(data.totalAmount, data.currency)} />
-              {data.adjustment !== 0 && <Stat label={data.adjustment < 0 ? 'Adjustment' : 'Surcharge'} value={fmt(data.adjustment, data.currency)} />}
-              {data.siblingDiscount > 0 && <Stat label="Sibling discount" value={`−${fmt(data.siblingDiscount, data.currency)}`} />}
-              <Stat label="Paid" value={fmt(data.paid, data.currency)} />
-              <Stat label="Balance" value={fmt(remaining, data.currency)} accent={remaining > 0} />
+              <Stat label="Plan total" value={fmt(activePlan.totalAmount, activePlan.currency)} />
+              {activePlan.adjustment !== 0 && <Stat label={activePlan.adjustment < 0 ? 'Adjustment' : 'Surcharge'} value={fmt(activePlan.adjustment, activePlan.currency)} />}
+              {activePlan.siblingDiscount > 0 && <Stat label="Sibling discount" value={`−${fmt(activePlan.siblingDiscount, activePlan.currency)}`} />}
+              {activePlan.lateFees > 0 && <Stat label="Late fees" value={fmt(activePlan.lateFees, activePlan.currency)} />}
+              <Stat label="Paid" value={fmt(activePlan.paid, activePlan.currency)} />
+              <Stat label="Balance" value={fmt(remaining, activePlan.currency)} accent={remaining > 0} />
             </div>
 
             <div className="h-2 rounded-full bg-gray-100 overflow-hidden mb-1">
-              <div className="h-full bg-primary-500" style={{ width: `${due > 0 ? Math.min(100, (data.paid / due) * 100) : 100}%` }} />
+              <div className="h-full bg-primary-500" style={{ width: `${due > 0 ? Math.min(100, (activePlan.paid / due) * 100) : 100}%` }} />
             </div>
-            <p className="text-xs text-gray-500">{fmt(data.paid, data.currency)} of {fmt(due, data.currency)}</p>
+            <p className="text-xs text-gray-500">{fmt(activePlan.paid, activePlan.currency)} of {fmt(due, activePlan.currency)}</p>
 
-            {data.installments.length > 0 && (
+            {activePlan.installments.length > 0 && (
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-4">
-                {data.installments.map(i => {
+                {activePlan.installments.map(i => {
                   const paidThis = paidByInstallment.get(i.id) ?? 0;
                   const fullyPaid = paidThis >= i.effectiveAmount - 0.01;
                   const partial = paidThis > 0 && !fullyPaid;
@@ -273,10 +337,10 @@ export default function AdminTuitionStudentDetailPage() {
                         {fullyPaid && <span className="text-emerald-700 font-medium">Paid</span>}
                         {partial && <span className="text-amber-700 font-medium">Partial</span>}
                       </div>
-                      <div className="font-semibold text-gray-900">{fmt(i.effectiveAmount, data.currency)}</div>
-                      {adjusted && <div className="text-gray-400 text-[10px]">base {fmt(i.amount, data.currency)}</div>}
+                      <div className="font-semibold text-gray-900">{fmt(i.effectiveAmount, activePlan.currency)}</div>
+                      {adjusted && <div className="text-gray-400 text-[10px]">base {fmt(i.amount, activePlan.currency)}</div>}
                       {paidThis > 0 && !fullyPaid && (
-                        <div className="text-amber-700">{fmt(paidThis, data.currency)} paid</div>
+                        <div className="text-amber-700">{fmt(paidThis, activePlan.currency)} paid</div>
                       )}
                       <div className="text-gray-500">due {i.dueDate}</div>
                     </div>
@@ -286,25 +350,25 @@ export default function AdminTuitionStudentDetailPage() {
             )}
           </Card>
 
-          {/* Payments */}
+          {/* Payments for the active plan */}
           <div className="mt-4">
             <div className="flex items-center justify-between mb-2">
-              <h3 className="font-semibold text-gray-900">Payments</h3>
+              <h3 className="font-semibold text-gray-900">Payments · {KIND_LABEL[activePlan.kind] ?? activePlan.kind}</h3>
               <div className="flex gap-2">
                 <Button variant="ghost" size="sm" onClick={downloadSummary} icon={<FileDown className="w-4 h-4" />}>Statement</Button>
                 {canWrite && <Button size="sm" onClick={() => setShowPay(true)} icon={<Plus className="w-4 h-4" />}>Record payment</Button>}
               </div>
             </div>
-            {data.payments.length === 0 ? (
-              <Card><p className="text-sm text-gray-500 text-center py-4">No payments recorded yet.</p></Card>
+            {activePlan.payments.length === 0 ? (
+              <Card><p className="text-sm text-gray-500 text-center py-4">No payments recorded yet for this plan.</p></Card>
             ) : (
               <Card className="!p-0">
                 <div className="divide-y divide-gray-100">
-                  {data.payments.map(p => (
+                  {activePlan.payments.map(p => (
                     <div key={p.id} className={`flex items-center gap-3 px-4 py-3 ${p.isRefund ? 'bg-rose-50/30' : ''}`}>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className={`font-semibold ${p.isRefund ? 'text-rose-700' : 'text-gray-900'}`}>{p.isRefund ? '−' : ''}{fmt(p.amount, p.currency || data.currency)}</span>
+                          <span className={`font-semibold ${p.isRefund ? 'text-rose-700' : 'text-gray-900'}`}>{p.isRefund ? '−' : ''}{fmt(p.amount, p.currency || activePlan.currency)}</span>
                           <span className="text-xs text-gray-500">· {p.paidOn}</span>
                           {p.isRefund && <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-rose-100 text-rose-700">Refund</span>}
                           {p.receiptYear && p.receiptNumber && (
@@ -312,7 +376,7 @@ export default function AdminTuitionStudentDetailPage() {
                           )}
                           {p.method && <span className="text-xs text-gray-500">· {p.method}</span>}
                           {p.reference && <span className="text-xs text-gray-500">· ref {p.reference}</span>}
-                          {(p.taxAmount ?? 0) > 0 && <span className="text-xs text-gray-500">· tax {fmt(p.taxAmount ?? 0, p.currency || data.currency)}{p.taxLabel ? ` (${p.taxLabel})` : ''}</span>}
+                          {(p.taxAmount ?? 0) > 0 && <span className="text-xs text-gray-500">· tax {fmt(p.taxAmount ?? 0, p.currency || activePlan.currency)}{p.taxLabel ? ` (${p.taxLabel})` : ''}</span>}
                         </div>
                         <div className="text-xs text-gray-700 mt-0.5">
                           <span className="text-gray-500">Recorded by </span>
@@ -322,12 +386,12 @@ export default function AdminTuitionStudentDetailPage() {
                           <div className="flex flex-wrap gap-1 mt-1">
                             {p.allocations.map(a => (
                               <span key={a.installmentId} className="text-xs px-1.5 py-0.5 rounded bg-primary-50 text-primary-700 border border-primary-100">
-                                Inst. {a.sequence} · {fmt(a.amount, data.currency)}
+                                Inst. {a.sequence} · {fmt(a.amount, activePlan.currency)}
                               </span>
                             ))}
                             {(p.unallocatedAmount ?? 0) > 0 && (
                               <span className="text-xs px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-100">
-                                Other · {fmt(p.unallocatedAmount ?? 0, data.currency)}
+                                Other · {fmt(p.unallocatedAmount ?? 0, activePlan.currency)}
                               </span>
                             )}
                           </div>
@@ -358,11 +422,11 @@ export default function AdminTuitionStudentDetailPage() {
           </div>
         </div>
 
-        {/* Side panel: locks + adjustments */}
+        {/* Side panel: locks (per-student) + adjustment (per-active-plan) */}
         <div className="space-y-4">
           <Card>
             <h3 className="font-semibold text-gray-900 mb-1">Feature locks</h3>
-            <p className="text-xs text-gray-500 mb-3">Lock specific portal features for this student until fees are settled. Critical features (attendance, bus, chat) stay available.</p>
+            <p className="text-xs text-gray-500 mb-3">Locks apply to the student across all plans. Critical features (attendance, bus, chat) stay available.</p>
             {(['grades', 'reports'] as const).map(f => {
               const locked = data.lockedFeatures.includes(f);
               return (
@@ -385,27 +449,26 @@ export default function AdminTuitionStudentDetailPage() {
           {canWrite && (
             <Card>
               <div className="flex items-center justify-between mb-1">
-                <h3 className="font-semibold text-gray-900">Adjustment</h3>
-                <button onClick={() => { setAdjValue(String(data.adjustment)); setAdjNotes(data.adjustment ? 'Scholarship' : ''); setShowAdjust(true); }} className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg"><Pencil className="w-4 h-4" /></button>
+                <h3 className="font-semibold text-gray-900">Adjustment <span className="text-xs text-gray-400 font-normal">· {KIND_LABEL[activePlan.kind] ?? activePlan.kind}</span></h3>
+                <button onClick={() => { setAdjValue(String(activePlan.adjustment)); setAdjNotes(activePlan.adjustment ? 'Scholarship' : ''); setShowAdjust(true); }} className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg"><Pencil className="w-4 h-4" /></button>
               </div>
-              <p className="text-xs text-gray-500 mb-2">Manual override on top of plan total. Negative for scholarships, positive for surcharges. Sibling discount is computed separately.</p>
-              <div className="text-2xl font-bold text-gray-900">{fmt(data.adjustment, data.currency)}</div>
+              <p className="text-xs text-gray-500 mb-2">Per-plan override. Negative for scholarships, positive for surcharges. Sibling discount is computed separately.</p>
+              <div className="text-2xl font-bold text-gray-900">{fmt(activePlan.adjustment, activePlan.currency)}</div>
             </Card>
           )}
         </div>
       </div>
 
+      {/* Record payment modal */}
       {showPay && (
-        <Modal isOpen onClose={() => setShowPay(false)} title="Record payment">
+        <Modal isOpen onClose={() => setShowPay(false)} title={`Record payment · ${KIND_LABEL[activePlan.kind] ?? activePlan.kind}`}>
           <div className="space-y-3">
             {hasInstallments && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Installments</label>
-                <p className="text-xs text-gray-500 mb-2">
-                  Amounts shown reflect this student's adjustment and sibling discount. Enter the amount paid against each installment — you can pay one, several, or partials.
-                </p>
+                <p className="text-xs text-gray-500 mb-2">Enter the amount paid against each installment — you can pay one, several, or partials.</p>
                 <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                  {data.installments.map(i => {
+                  {activePlan.installments.map(i => {
                     const alreadyPaid = paidByInstallment.get(i.id) ?? 0;
                     const remainingThis = Math.max(0, i.effectiveAmount - alreadyPaid);
                     const isPaid = remainingThis === 0;
@@ -416,17 +479,17 @@ export default function AdminTuitionStudentDetailPage() {
                           <div className="text-xs text-gray-600">
                             <span className="font-semibold text-gray-900">Installment {i.sequence}</span>
                             <span className="text-gray-500"> · due {i.dueDate}</span>
-                            {adjusted && <span className="text-gray-400"> · base {fmt(i.amount, data.currency)}</span>}
+                            {adjusted && <span className="text-gray-400"> · base {fmt(i.amount, activePlan.currency)}</span>}
                           </div>
                           <div className="text-xs text-gray-500">
-                            {isPaid ? <span className="text-emerald-700 font-medium">Paid</span> : <>{fmt(remainingThis, data.currency)} left of {fmt(i.effectiveAmount, data.currency)}</>}
+                            {isPaid ? <span className="text-emerald-700 font-medium">Paid</span> : <>{fmt(remainingThis, activePlan.currency)} left of {fmt(i.effectiveAmount, activePlan.currency)}</>}
                           </div>
                         </div>
                         {!isPaid && (
                           <Input
                             type="number"
                             step="0.01"
-                            placeholder={`0.00 (${data.currency})`}
+                            placeholder={`0.00 (${activePlan.currency})`}
                             value={allocAmounts[i.id] ?? ''}
                             onChange={e => setAllocAmounts(prev => ({ ...prev, [i.id]: e.target.value }))}
                           />
@@ -447,7 +510,6 @@ export default function AdminTuitionStudentDetailPage() {
                 {needsExtraNote && (
                   <div className="mt-2">
                     <label className="block text-sm font-medium text-gray-700 mb-1.5">Note for the other amount <span className="text-red-500">*</span></label>
-                    <p className="text-xs text-gray-500 mb-1">Required. Shown on the receipt and statement.</p>
                     <textarea
                       rows={2}
                       value={extraNote}
@@ -461,7 +523,7 @@ export default function AdminTuitionStudentDetailPage() {
             )}
             {!hasInstallments && (
               <Input
-                label={`Amount (${data.currency})`}
+                label={`Amount (${activePlan.currency})`}
                 type="number"
                 step="0.01"
                 value={extraAmount}
@@ -471,7 +533,7 @@ export default function AdminTuitionStudentDetailPage() {
             )}
             <div className="flex items-center justify-between rounded-lg bg-primary-50 border border-primary-200 px-3 py-2">
               <span className="text-sm font-medium text-primary-900">Total</span>
-              <span className="text-lg font-bold text-primary-900">{fmt(totalPay, data.currency)}</span>
+              <span className="text-lg font-bold text-primary-900">{fmt(totalPay, activePlan.currency)}</span>
             </div>
             <Input label="Paid on" type="date" value={payDate} onChange={e => setPayDate(e.target.value)} />
             <div>
@@ -510,8 +572,9 @@ export default function AdminTuitionStudentDetailPage() {
         </Modal>
       )}
 
+      {/* Refund modal */}
       {refundOf && (
-        <Modal isOpen onClose={() => setRefundOf(null)} title={`Refund payment of ${fmt(refundOf.amount, refundOf.currency || data.currency)}`}>
+        <Modal isOpen onClose={() => setRefundOf(null)} title={`Refund payment of ${fmt(refundOf.amount, refundOf.currency || activePlan.currency)}`}>
           <div className="space-y-3">
             <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2">
               The original payment is preserved. The refund is recorded as a separate negative event and a new receipt is issued.
@@ -540,14 +603,21 @@ export default function AdminTuitionStudentDetailPage() {
         </Modal>
       )}
 
+      {/* Adjustment modal */}
       {showAdjust && (
-        <Modal isOpen onClose={() => setShowAdjust(false)} title="Adjustment">
+        <Modal isOpen onClose={() => setShowAdjust(false)} title={`Adjustment · ${KIND_LABEL[activePlan.kind] ?? activePlan.kind}`}>
           <div className="space-y-3">
-            <Input label={`Adjustment (${data.currency})`} type="number" step="0.01" value={adjValue} onChange={e => setAdjValue(e.target.value)} />
+            <Input label={`Adjustment (${activePlan.currency})`} type="number" step="0.01" value={adjValue} onChange={e => setAdjValue(e.target.value)} />
             <p className="text-xs text-gray-500">Negative reduces the bill (scholarship). Positive adds a surcharge.</p>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Reason</label>
-              <textarea rows={2} value={adjNotes} onChange={e => setAdjNotes(e.target.value)} className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500" />
+              <textarea
+                rows={2}
+                value={adjNotes}
+                onChange={e => setAdjNotes(e.target.value)}
+                placeholder="Scholarship, sibling override, etc."
+                className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
             </div>
             <div className="flex gap-2 justify-end pt-2">
               <Button variant="ghost" onClick={() => setShowAdjust(false)}>Cancel</Button>
@@ -563,8 +633,8 @@ export default function AdminTuitionStudentDetailPage() {
 function Stat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
   return (
     <div>
-      <div className="text-xs text-gray-500 uppercase tracking-wide">{label}</div>
-      <div className={`text-lg font-bold ${accent ? 'text-primary-600' : 'text-gray-900'}`}>{value}</div>
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">{label}</div>
+      <div className={`text-lg font-bold ${accent ? 'text-primary-700' : 'text-gray-900'}`}>{value}</div>
     </div>
   );
 }
