@@ -12,7 +12,8 @@ let cachedUserId = null;
 export function loginAs(role, index) {
   if (cachedToken) return { token: cachedToken, userId: cachedUserId };
 
-  const username = `${ABBR}_${role}${index}`;
+  const suffix = index === undefined || index === null || index === '' ? '' : String(index);
+  const username = `${ABBR}_${role}${suffix}`;
   const res = http.post(
     `${BASE_URL}/api/auth/login`,
     JSON.stringify({ username, password: PASSWORD }),
