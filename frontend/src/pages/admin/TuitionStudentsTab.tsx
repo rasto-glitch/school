@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { feesApi } from '../../services/api';
 import { toast } from 'react-toastify';
 import Input from '../../components/common/Input';
@@ -46,9 +46,20 @@ const KIND_LABEL: Record<FeePlanKind, string> = {
 
 export default function TuitionStudentsTab({ basePath, canWrite: _canWrite }: Props) {
   const navigate = useNavigate();
+  // Kind filter lives in the URL (?kind=transport) so it survives navigating to a
+  // student's detail page and back, and so that picking a student opens the matching
+  // tab on the detail page automatically. Status/search stay as local state since
+  // they're more transient.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const kindFilter = (searchParams.get('kind') as 'all' | FeePlanKind | null) ?? 'all';
+  const setKindFilter = (value: 'all' | FeePlanKind) => {
+    const next = new URLSearchParams(searchParams);
+    if (value === 'all') next.delete('kind');
+    else next.set('kind', value);
+    setSearchParams(next, { replace: true });
+  };
   const [rows, setRows] = useState<StudentRollupRow[] | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | FeeStatus>('all');
-  const [kindFilter, setKindFilter] = useState<'all' | FeePlanKind>('all');
   const [search, setSearch] = useState('');
 
   useEffect(() => {
@@ -170,7 +181,7 @@ export default function TuitionStudentsTab({ basePath, canWrite: _canWrite }: Pr
             return (
               <button
                 key={r.studentId}
-                onClick={() => navigate(`${basePath}/student/${r.studentId}`)}
+                onClick={() => navigate(`${basePath}/student/${r.studentId}${kindFilter !== 'all' ? `?kind=${kindFilter}` : ''}`)}
                 className="w-full text-left bg-white rounded-2xl border border-gray-200 p-4 hover:border-primary-300 hover:shadow-sm transition-all"
               >
                 <div className="flex items-start justify-between gap-3 mb-2">

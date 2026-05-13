@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { feesApi, accountingApi, type PaymentAccount } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { toast } from 'react-toastify';
@@ -49,6 +49,12 @@ export default function AdminTuitionStudentDetailPage() {
   // builds passing student_fees.id will 404 cleanly with "Student has no fees".
   const { id: studentId } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  // ?kind=transport in the URL (set by the Students list when a kind chip is active)
+  // is used to:
+  //   1. Pre-select that kind's tab on first load instead of defaulting to the first plan.
+  //   2. Round-trip back to the list with the same chip selected when "Back" is clicked.
+  const [searchParams] = useSearchParams();
+  const desiredKind = searchParams.get('kind') as FeePlanKind | null;
   const { user } = useAuthStore();
   const canWrite = user?.role === 'admin' || user?.role === 'accountant';
   const basePath = '/accounting';
@@ -96,6 +102,13 @@ export default function AdminTuitionStudentDetailPage() {
     // if it still exists; otherwise fall back to the first plan.
     setActiveTab(prev => {
       if (prev && detail.plans.some(p => p.studentFeeId === prev)) return prev;
+      // If the user arrived from a kind-filtered list (?kind=transport), open that
+      // plan's tab instead of the first one. Falls back to the first plan if the
+      // student doesn't have a plan of that kind.
+      if (desiredKind) {
+        const match = detail.plans.find(p => p.kind === desiredKind);
+        if (match) return match.studentFeeId;
+      }
       return detail.plans[0]?.studentFeeId ?? '';
     });
   };
@@ -258,7 +271,7 @@ export default function AdminTuitionStudentDetailPage() {
 
   return (
     <PageLayout title={data.studentName} subtitle={data.parentName || 'No parent linked'}>
-      <button onClick={() => navigate(basePath)} className="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900 mb-4">
+      <button onClick={() => navigate(desiredKind ? `${basePath}?kind=${desiredKind}` : basePath)} className="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900 mb-4">
         <ArrowLeft className="w-4 h-4" /> Back to tuition
       </button>
 
