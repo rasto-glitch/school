@@ -164,8 +164,18 @@ export default function TuitionPlansTab() {
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <h3 className="font-semibold text-gray-900">{p.name}</h3>
+                    {p.kind && p.kind !== 'tuition' && (
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 capitalize">
+                        {p.kind}
+                      </span>
+                    )}
                     {p.academicYear && <span className="text-xs text-gray-500">· {p.academicYear}</span>}
                     {!p.isActive && <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">Inactive</span>}
+                    {p.lateFeeEnabled && (
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                        Late fee {p.lateFeeType === 'percent' ? `${p.lateFeeAmount}%` : fmt(p.lateFeeAmount ?? 0, p.currency)}
+                      </span>
+                    )}
                   </div>
                   <div className="text-sm text-gray-500">
                     {fmt(p.totalAmount, p.currency)} · {p.installments.length} installment{p.installments.length === 1 ? '' : 's'} · {' '}
