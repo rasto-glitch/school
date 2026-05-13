@@ -417,7 +417,7 @@ export const expensesApi = {
     isActive: boolean;
   }>) => api.patch<ExpenseTemplate>(`/accounting/expense-templates/${id}`, data),
   deleteTemplate: (id: string) => api.delete(`/accounting/expense-templates/${id}`),
-  recordTemplate: (id: string, data?: { expenseDate?: string; amount?: number; notes?: string | null; paymentMethod?: string | null }) =>
+  recordTemplate: (id: string, data?: { expenseDate?: string; amount?: number; notes?: string | null; paymentMethod?: string | null; taxAmount?: number; taxLabel?: string | null; paymentAccountId?: string | null }) =>
     api.post<{ expense: ExpenseRow; nextDueDate: string }>(`/accounting/expense-templates/${id}/record`, data ?? {}),
 
   // Expenses

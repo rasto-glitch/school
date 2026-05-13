@@ -228,7 +228,14 @@ export default function AdminTuitionStudentDetailPage() {
           <Card>
             <div className="flex items-start justify-between mb-3">
               <div>
-                <h2 className="font-semibold text-gray-900">{data.planName}</h2>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="font-semibold text-gray-900">{data.planName}</h2>
+                  {data.kind && data.kind !== 'tuition' && (
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 capitalize">
+                      {data.kind}
+                    </span>
+                  )}
+                </div>
                 <div className="text-sm text-gray-500">
                   {data.academicYear && <>{data.academicYear} · </>}
                   {data.className || 'No class'}

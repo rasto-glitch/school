@@ -106,6 +106,11 @@ export default function TuitionStudentsTab({ basePath, canWrite: _canWrite }: Pr
                       <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${STATUS_COLOR[r.status]}`}>
                         {STATUS_LABEL[r.status]}
                       </span>
+                      {r.kind && r.kind !== 'tuition' && (
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 capitalize">
+                          {r.kind}
+                        </span>
+                      )}
                       {r.lockedFeatures.length > 0 && (
                         <span className="inline-flex items-center gap-1 text-xs text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-full">
                           <Lock className="w-3 h-3" />

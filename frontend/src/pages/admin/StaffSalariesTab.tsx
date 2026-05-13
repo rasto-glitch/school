@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { staffApi } from '../../services/api';
+import { staffApi, accountingApi, type PaymentAccount } from '../../services/api';
 import { fmtMoney } from '../../utils/money';
 import { toast } from 'react-toastify';
 import Button from '../../components/common/Button';
@@ -148,6 +148,8 @@ export default function StaffSalariesTab() {
   const [paymentTarget, setPaymentTarget] = useState<StaffMember | null>(null);
   const [paymentForm, setPaymentForm] = useState<PaymentForm | null>(null);
   const [savingPayment, setSavingPayment] = useState(false);
+  // Active payment accounts (cash drawers / bank tills) for the salary modal's "paid from" picker.
+  const [accounts, setAccounts] = useState<PaymentAccount[]>([]);
 
   const [historyTarget, setHistoryTarget] = useState<StaffMember | null>(null);
   const [history, setHistory] = useState<StaffSalaryPayment[] | null>(null);
@@ -185,6 +187,8 @@ export default function StaffSalariesTab() {
   useEffect(() => {
     loadAll().catch((e: any) => toast.error(e.response?.data?.error || 'Failed to load staff'));
     loadSetup().catch(() => {});
+    // Only show active accounts in the payment "paid from" picker so retired tills don't clutter it.
+    accountingApi.listPaymentAccounts().then(r => setAccounts(r.data.filter(a => a.isActive))).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -867,6 +871,22 @@ export default function StaffSalariesTab() {
                 </div>
               </div>
 
+              {accounts.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Paid from</label>
+                  <select
+                    value={paymentForm.paymentAccountId}
+                    onChange={e => setPaymentForm({ ...paymentForm, paymentAccountId: e.target.value })}
+                    className="w-full border border-gray-300 rounded-xl px-4 py-2.5 bg-white min-h-[44px] focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="">— No specific account —</option>
+                    {accounts.map(a => (
+                      <option key={a.id} value={a.id}>{a.name} ({a.kind} · {a.currency})</option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">Cash leaves this account's running balance when the payment is recorded.</p>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <Input
                   label="Tax / withholding (optional)"

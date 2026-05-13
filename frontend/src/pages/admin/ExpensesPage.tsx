@@ -333,7 +333,15 @@ function RecordTemplateForm({ template, onClose, onRecorded }: {
   const [amount, setAmount] = useState(template.amount.toString());
   const [paymentMethod, setPaymentMethod] = useState('');
   const [notes, setNotes] = useState('');
+  const [taxAmount, setTaxAmount] = useState('');
+  const [taxLabel, setTaxLabel] = useState('');
+  const [paymentAccountId, setPaymentAccountId] = useState<string>('');
+  const [accounts, setAccounts] = useState<PaymentAccount[]>([]);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    accountingApi.listPaymentAccounts().then(r => setAccounts(r.data.filter(a => a.isActive))).catch(() => {});
+  }, []);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -344,6 +352,9 @@ function RecordTemplateForm({ template, onClose, onRecorded }: {
         amount: parseFloat(amount) || template.amount,
         paymentMethod: paymentMethod.trim() || null,
         notes: notes.trim() || null,
+        taxAmount: Number(taxAmount) || 0,
+        taxLabel: taxLabel.trim() || null,
+        paymentAccountId: paymentAccountId || null,
       });
       toast.success(`Recorded. Next due: ${r.data.nextDueDate}`);
       onRecorded();
@@ -362,6 +373,15 @@ function RecordTemplateForm({ template, onClose, onRecorded }: {
         <Input label="Expense date" type="date" value={date} onChange={e => setDate(e.target.value)} required />
         <Input label="Amount" type="number" step="0.01" min="0" value={amount} onChange={e => setAmount(e.target.value)} required />
         <Input label="Payment method" value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)} placeholder="cash, bank transfer..." />
+        <Select
+          label="Paid from (optional)"
+          options={accounts.map(a => ({ value: a.id, label: `${a.name} (${a.kind} · ${a.currency})` }))}
+          placeholder={accounts.length ? '— No specific account —' : '(Add payment accounts to track per-till balances)'}
+          value={paymentAccountId}
+          onChange={e => setPaymentAccountId(e.target.value)}
+        />
+        <Input label="Tax / VAT (optional)" type="number" step="0.01" min="0" value={taxAmount} onChange={e => setTaxAmount(e.target.value)} placeholder="0.00" />
+        <Input label="Tax label" value={taxLabel} onChange={e => setTaxLabel(e.target.value)} placeholder="VAT 5%, etc." />
         <Input label="Notes" value={notes} onChange={e => setNotes(e.target.value)} placeholder="(optional)" />
         <div className="md:col-span-2 flex gap-2 justify-end mt-2">
           <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>

@@ -235,7 +235,11 @@ export async function recordTemplate(req: AuthRequest, res: Response): Promise<v
   if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
 
   const { id } = req.params;
-  const { expenseDate, amount, notes, paymentMethod } = req.body as { expenseDate?: string; amount?: number; notes?: string | null; paymentMethod?: string | null };
+  const { expenseDate, amount, notes, paymentMethod, taxAmount, taxLabel, paymentAccountId } = req.body as {
+    expenseDate?: string; amount?: number; notes?: string | null; paymentMethod?: string | null;
+    taxAmount?: number; taxLabel?: string | null; paymentAccountId?: string | null;
+  };
+  if (taxAmount !== undefined && (typeof taxAmount !== 'number' || taxAmount < 0)) { res.status(400).json({ error: 'taxAmount must be a non-negative number' }); return; }
   const { data: tmpl } = await supabase.from('expense_recurring_templates').select('*').eq('id', id).eq('school_id', schoolId).single();
   if (!tmpl) { res.status(404).json({ error: 'Template not found' }); return; }
   if (!tmpl.is_active) { res.status(409).json({ error: 'Template is archived' }); return; }
@@ -243,6 +247,10 @@ export async function recordTemplate(req: AuthRequest, res: Response): Promise<v
   const t = tmpl as Record<string, any>;
   const dateUsed = expenseDate || t.next_due_date || new Date().toISOString().slice(0, 10);
   const amountUsed = (typeof amount === 'number' && isFinite(amount) && amount >= 0) ? amount : Number(t.amount);
+
+  // Block writes into a closed period — same guard as createExpense
+  const periodGuard = await assertPeriodOpen(schoolId, [dateUsed]);
+  if (!periodGuard.ok) { res.status(periodGuard.status).json({ error: periodGuard.error }); return; }
 
   const { data: expense, error: insertErr } = await supabase.from('expenses').insert({
     school_id: schoolId,
@@ -255,6 +263,9 @@ export async function recordTemplate(req: AuthRequest, res: Response): Promise<v
     vendor: t.vendor,
     payment_method: paymentMethod ?? null,
     notes: notes ?? null,
+    tax_amount: typeof taxAmount === 'number' ? taxAmount : 0,
+    tax_label: taxLabel ?? null,
+    payment_account_id: paymentAccountId ?? null,
     recorded_by: req.user!.userId,
   }).select().single();
   if (insertErr) { res.status(500).json({ error: insertErr.message }); return; }
