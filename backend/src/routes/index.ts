@@ -199,8 +199,10 @@ export function createRouter(io: SocketServer) {
   // ---- ACCOUNTING (premium feature, gated server-side) ----
   // Admin & accountant: full read/write. Reception: read-only list/families/student-detail. Parent: own family only.
   // (Routes formerly lived under /admin/fees/*; renamed to /accounting/* when introducing the dedicated accountant role.)
-  const accountingRW = ['admin', 'accountant'] as const;
-  const accountingRO = ['admin', 'accountant', 'reception'] as const;
+  // Admin is intentionally excluded — finance is the accountant's domain. Reception keeps RO so the front desk
+  // can answer "how much does this family owe?" walk-ins.
+  const accountingRW = ['accountant'] as const;
+  const accountingRO = ['accountant', 'reception'] as const;
 
   router.get('/accounting/plans', authenticate, authorize(...accountingRO), (req, res) => fees.listPlans(req as AuthRequest, res));
   router.post('/accounting/plans', authenticate, authorize(...accountingRW), (req, res) => fees.createPlan(req as AuthRequest, res));
