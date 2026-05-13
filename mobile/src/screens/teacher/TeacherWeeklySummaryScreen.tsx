@@ -8,25 +8,34 @@ import { Clock, Lock, Send } from 'lucide-react-native';
 import { teacherApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
 import { spacing, radius, font, shadow } from '../../theme';
+import { subjectsForClass, type SubjectOpt, type TeachingEntry } from '../../utils/subjects';
 
 interface ClassItem { id: string; name: string }
 interface PeriodItem { id: string; weekStartDate: string; weekEndDate: string }
 
-interface Props { subject?: string; classes: ClassItem[]; embedded?: boolean }
+interface Props { subject?: string; classes: ClassItem[]; subjects?: SubjectOpt[]; teaching?: TeachingEntry[]; embedded?: boolean }
 
-export default function TeacherWeeklySummaryScreen({ subject, classes, embedded }: Props) {
+export default function TeacherWeeklySummaryScreen({ subject, classes, subjects, teaching, embedded }: Props) {
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [period, setPeriod] = useState<PeriodItem | null>(null);
   const [periodLoading, setPeriodLoading] = useState(true);
   const [selectedClass, setSelectedClass] = useState('');
+  const [selectedSubject, setSelectedSubject] = useState('');
   const [unit, setUnit] = useState('');
   const [lesson, setLesson] = useState('');
   const [pages, setPages] = useState('');
   const [homeworkReminder, setHomeworkReminder] = useState('');
   const [saving, setSaving] = useState(false);
   const [loadingExisting, setLoadingExisting] = useState(false);
+
+  const subjectOptions = subjectsForClass(teaching, subjects, selectedClass);
+
+  useEffect(() => {
+    if (subjectOptions.length === 1) setSelectedSubject(subjectOptions[0].name);
+    else if (selectedSubject && !subjectOptions.some(o => o.name === selectedSubject)) setSelectedSubject('');
+  }, [selectedClass, subjectOptions.length]);
 
   useEffect(() => {
     teacherApi.getActivePeriod()
@@ -44,7 +53,10 @@ export default function TeacherWeeklySummaryScreen({ subject, classes, embedded 
     setLoadingExisting(true);
     teacherApi.getWeeklySummary({ classId: selectedClass, weekStartDate: period.weekStartDate })
       .then(r => {
-        const data = r.data;
+        const rows = Array.isArray(r.data) ? r.data : (r.data ? [r.data] : []);
+        // A teacher can have one summary per subject for the same class+week — pick the one
+        // matching the picked subject (or the first row if no subject is selected yet).
+        const data = (selectedSubject && rows.find((x: any) => x.subject === selectedSubject)) || rows[0] || null;
         if (data) {
           setUnit(data.unit || '');
           setLesson(data.lesson || '');
@@ -56,13 +68,13 @@ export default function TeacherWeeklySummaryScreen({ subject, classes, embedded 
       })
       .catch(() => {})
       .finally(() => setLoadingExisting(false));
-  }, [selectedClass, period]);
+  }, [selectedClass, period, selectedSubject]);
 
   const handleSave = async () => {
     if (!selectedClass || !period) return;
     setSaving(true);
     try {
-      await teacherApi.upsertWeeklySummary({ classId: selectedClass, subject, unit: unit.trim() || undefined, lesson: lesson.trim() || undefined, pages: pages.trim() || undefined, homeworkReminder: homeworkReminder.trim() || undefined });
+      await teacherApi.upsertWeeklySummary({ classId: selectedClass, subject: selectedSubject || subject, unit: unit.trim() || undefined, lesson: lesson.trim() || undefined, pages: pages.trim() || undefined, homeworkReminder: homeworkReminder.trim() || undefined });
       Alert.alert('Saved', 'Weekly summary saved.');
     } catch {
       Alert.alert('Error', 'Could not save weekly summary.');
@@ -102,7 +114,20 @@ export default function TeacherWeeklySummaryScreen({ subject, classes, embedded 
         ))}
       </ScrollView>
 
-      {subject && <View style={styles.subjectBadge}><Text style={styles.subjectText}>{subject}</Text></View>}
+      {selectedClass ? (subjectOptions.length === 0 ? (
+        <Text style={[styles.label, { color: colors.warning, textTransform: 'none', marginBottom: spacing.md }]}>You aren't assigned any subject for this class.</Text>
+      ) : (
+        <>
+          <Text style={styles.label}>Subject</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing.md }}>
+            {subjectOptions.map(s => (
+              <TouchableOpacity key={s.id} style={[styles.chip, selectedSubject === s.name && styles.chipActive]} onPress={() => setSelectedSubject(s.name)}>
+                <Text style={[styles.chipText, selectedSubject === s.name && styles.chipTextActive]}>{s.name}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </>
+      )) : null}
 
       {loadingExisting ? (
         <CardListSkeleton count={4} hasIcon={false} />

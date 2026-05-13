@@ -12,12 +12,13 @@ import { academicApi } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { useColors } from '../../store/themeStore';
 import { spacing, radius, font, shadow } from '../../theme';
+import { subjectsForClass, type SubjectOpt, type TeachingEntry } from '../../utils/subjects';
 import type { AcademicPost } from '../../types';
 
 interface ClassItem { id: string; name: string }
-interface Props { subject?: string; classes: ClassItem[] }
+interface Props { subject?: string; classes: ClassItem[]; subjects?: SubjectOpt[]; teaching?: TeachingEntry[] }
 
-export default function TeacherPostsScreen({ subject, classes }: Props) {
+export default function TeacherPostsScreen({ subject, classes, subjects, teaching }: Props) {
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const navigation = useNavigation<any>();
@@ -31,11 +32,19 @@ export default function TeacherPostsScreen({ subject, classes }: Props) {
 
   // Form state
   const [classId, setClassId] = useState('');
+  const [selectedSubject, setSelectedSubject] = useState('');
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [image, setImage] = useState<{ uri: string; name: string; mimeType: string } | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [isPublished, setIsPublished] = useState(true);
+
+  const subjectOptions = subjectsForClass(teaching, subjects, classId);
+
+  useEffect(() => {
+    if (subjectOptions.length === 1) setSelectedSubject(subjectOptions[0].name);
+    else if (selectedSubject && !subjectOptions.some(o => o.name === selectedSubject)) setSelectedSubject('');
+  }, [classId, subjectOptions.length]);
 
   const load = useCallback(() => {
     academicApi.getPosts()
@@ -93,7 +102,7 @@ export default function TeacherPostsScreen({ subject, classes }: Props) {
         classId,
         contentType: 'plaintext',
         body: body.trim() || undefined,
-        subject: subject || undefined,
+        subject: selectedSubject || subject || undefined,
         imageUrl,
         isPublished,
       });
@@ -211,6 +220,28 @@ export default function TeacherPostsScreen({ subject, classes }: Props) {
                 );
               })}
             </ScrollView>
+
+            {classId ? (subjectOptions.length === 0 ? (
+              <Text style={[styles.label, { color: colors.warning, textTransform: 'none' }]}>You aren't assigned any subject for this class.</Text>
+            ) : (
+              <>
+                <Text style={[styles.label, { color: colors.textMuted }]}>Subject</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: spacing.sm }}>
+                  {subjectOptions.map(s => {
+                    const active = selectedSubject === s.name;
+                    return (
+                      <TouchableOpacity
+                        key={s.id}
+                        onPress={() => setSelectedSubject(s.name)}
+                        style={[styles.chip, { borderColor: active ? colors.primary : colors.border, backgroundColor: active ? colors.primaryLight : colors.card }]}
+                      >
+                        <Text style={[styles.chipText, { color: active ? colors.primary : colors.text }]}>{s.name}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </>
+            )) : null}
 
             <Text style={[styles.label, { color: colors.textMuted }]}>Title</Text>
             <TextInput

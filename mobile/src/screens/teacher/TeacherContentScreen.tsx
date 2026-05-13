@@ -14,6 +14,7 @@ import TeacherGradingScreen from './TeacherGradingScreen';
 import TeacherReportScreen from './TeacherReportScreen';
 import TeacherWeeklySummaryScreen from './TeacherWeeklySummaryScreen';
 import TeacherPostsScreen from './TeacherPostsScreen';
+import type { SubjectOpt, TeachingEntry } from '../../utils/subjects';
 
 type TabKey = 'homework' | 'assignments' | 'grades' | 'reports' | 'weekly' | 'posts';
 interface ClassItem { id: string; name: string }
@@ -43,6 +44,8 @@ export default function TeacherContentScreen() {
 
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [subject, setSubject] = useState<string | undefined>();
+  const [subjects, setSubjects] = useState<SubjectOpt[]>([]);
+  const [teaching, setTeaching] = useState<TeachingEntry[]>([]);
   const [academicYear, setAcademicYear] = useState<string | undefined>();
   const [profileLoading, setProfileLoading] = useState(true);
 
@@ -53,7 +56,11 @@ export default function TeacherContentScreen() {
       teacherApi.getSettings(),
     ]).then(([cls, profile, settings]) => {
       if (cls.status === 'fulfilled') setClasses(cls.value.data || []);
-      if (profile.status === 'fulfilled') setSubject(profile.value.data?.subject);
+      if (profile.status === 'fulfilled') {
+        setSubject(profile.value.data?.subject);
+        setSubjects(Array.isArray(profile.value.data?.subjects) ? profile.value.data.subjects : []);
+        setTeaching(Array.isArray(profile.value.data?.teaching) ? profile.value.data.teaching : []);
+      }
       if (settings.status === 'fulfilled') setAcademicYear(settings.value.data?.academicYear);
     }).finally(() => setProfileLoading(false));
   }, []);
@@ -88,17 +95,17 @@ export default function TeacherContentScreen() {
       {profileLoading ? (
         <CardListSkeleton count={4} />
       ) : tab === 'homework' ? (
-        <TeacherHomeworkScreen subject={subject} classes={classes} />
+        <TeacherHomeworkScreen subject={subject} classes={classes} subjects={subjects} teaching={teaching} />
       ) : tab === 'assignments' ? (
-        <TeacherAssignmentsScreen subject={subject} classes={classes} />
+        <TeacherAssignmentsScreen subject={subject} classes={classes} subjects={subjects} teaching={teaching} />
       ) : tab === 'grades' ? (
-        <TeacherGradingScreen subject={subject} classes={classes} academicYear={academicYear} />
+        <TeacherGradingScreen subject={subject} classes={classes} subjects={subjects} teaching={teaching} academicYear={academicYear} />
       ) : tab === 'reports' ? (
-        <TeacherReportScreen subject={subject} classes={classes} />
+        <TeacherReportScreen subject={subject} classes={classes} subjects={subjects} teaching={teaching} />
       ) : tab === 'weekly' ? (
-        <TeacherWeeklySummaryScreen subject={subject} classes={classes} />
+        <TeacherWeeklySummaryScreen subject={subject} classes={classes} subjects={subjects} teaching={teaching} />
       ) : (
-        <TeacherPostsScreen subject={subject} classes={classes} />
+        <TeacherPostsScreen subject={subject} classes={classes} subjects={subjects} teaching={teaching} />
       )}
     </View>
   );

@@ -7,19 +7,21 @@ import { Plus, Trash2, Send, ChevronDown, Check } from 'lucide-react-native';
 import { teacherApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
 import { spacing, radius, font } from '../../theme';
+import { subjectsForClass, type SubjectOpt, type TeachingEntry } from '../../utils/subjects';
 
 interface ClassItem { id: string; name: string }
 interface StudentItem { id: string; fullName: string }
 interface MarkType { id: string; name: string }
 interface Mark { name: string; value: string }
 
-interface Props { subject?: string; classes: ClassItem[] }
+interface Props { subject?: string; classes: ClassItem[]; subjects?: SubjectOpt[]; teaching?: TeachingEntry[] }
 
-export default function TeacherReportScreen({ subject, classes }: Props) {
+export default function TeacherReportScreen({ subject, classes, subjects, teaching }: Props) {
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [selectedClass, setSelectedClass] = useState('');
+  const [selectedSubject, setSelectedSubject] = useState('');
   const [students, setStudents] = useState<StudentItem[]>([]);
   const [selectedStudent, setSelectedStudent] = useState('');
   const [markTypes, setMarkTypes] = useState<MarkType[]>([]);
@@ -42,6 +44,13 @@ export default function TeacherReportScreen({ subject, classes }: Props) {
     teacherApi.getStudents({ classId: selectedClass }).then(r => setStudents(r.data || [])).catch(() => setStudents([]));
     setSelectedStudent('');
   }, [selectedClass]);
+
+  const subjectOptions = subjectsForClass(teaching, subjects, selectedClass);
+
+  useEffect(() => {
+    if (subjectOptions.length === 1) setSelectedSubject(subjectOptions[0].name);
+    else if (selectedSubject && !subjectOptions.some(o => o.name === selectedSubject)) setSelectedSubject('');
+  }, [selectedClass, subjectOptions.length]);
 
   useEffect(() => {
     setMarks([{ name: '', value: '' }]);
@@ -68,7 +77,7 @@ export default function TeacherReportScreen({ subject, classes }: Props) {
     try {
       await teacherApi.createReport({
         studentId: selectedStudent,
-        subject,
+        subject: selectedSubject || subject,
         marks: validMarks.map(m => ({ name: m.name, value: parseFloat(m.value) })),
         attendanceNotes: attendanceNotes.trim() || undefined,
         behaviorNotes: behaviorNotes.trim() || undefined,
@@ -109,7 +118,20 @@ export default function TeacherReportScreen({ subject, classes }: Props) {
         </>
       )}
 
-      {subject && <View style={styles.subjectBadge}><Text style={styles.subjectText}>{subject}</Text></View>}
+      {selectedClass ? (subjectOptions.length === 0 ? (
+        <Text style={[styles.label, { color: colors.warning, textTransform: 'none', marginBottom: spacing.md }]}>You aren't assigned any subject for this class.</Text>
+      ) : (
+        <>
+          <Text style={styles.label}>Subject</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing.md }}>
+            {subjectOptions.map(s => (
+              <TouchableOpacity key={s.id} style={[styles.chip, selectedSubject === s.name && styles.chipActive]} onPress={() => setSelectedSubject(s.name)}>
+                <Text style={[styles.chipText, selectedSubject === s.name && styles.chipTextActive]}>{s.name}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </>
+      )) : null}
 
       <Text style={styles.label}>Marks</Text>
       {marks.map((mark, i) => (

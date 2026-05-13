@@ -10,13 +10,14 @@ import { BookOpen, Plus, Trash2, Paperclip, X, Send, ChevronLeft, ChevronRight }
 import { teacherApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
 import { spacing, radius, font, shadow } from '../../theme';
+import { subjectsForClass, type SubjectOpt, type TeachingEntry } from '../../utils/subjects';
 
 interface ClassItem { id: string; name: string }
 interface HwItem { id: string; title: string; subject?: string; dueDate?: string; classes?: { name: string }; description?: string }
 
-interface Props { subject?: string; classes: ClassItem[] }
+interface Props { subject?: string; classes: ClassItem[]; subjects?: SubjectOpt[]; teaching?: TeachingEntry[] }
 
-export default function TeacherHomeworkScreen({ subject, classes }: Props) {
+export default function TeacherHomeworkScreen({ subject, classes, subjects, teaching }: Props) {
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -28,11 +29,20 @@ export default function TeacherHomeworkScreen({ subject, classes }: Props) {
 
   // Form state
   const [classId, setClassId] = useState('');
+  const [selectedSubject, setSelectedSubject] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [file, setFile] = useState<{ uri: string; name: string; mimeType: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  const subjectOptions = subjectsForClass(teaching, subjects, classId);
+
+  // Keep the subject in sync with the class's curriculum (auto-pick when only one).
+  useEffect(() => {
+    if (subjectOptions.length === 1) setSelectedSubject(subjectOptions[0].name);
+    else if (selectedSubject && !subjectOptions.some(o => o.name === selectedSubject)) setSelectedSubject('');
+  }, [classId, subjectOptions.length]);
 
   // Date picker state
   const [showCal, setShowCal] = useState(false);
@@ -63,7 +73,7 @@ export default function TeacherHomeworkScreen({ subject, classes }: Props) {
     if (!classId || !title.trim()) { Alert.alert('Required', 'Please select a class and enter a title.'); return; }
     setSubmitting(true);
     try {
-      await teacherApi.createHomework({ classId, title: title.trim(), description: description.trim() || undefined, dueDate: dueDate || undefined, subject: subject || undefined, file: file || undefined });
+      await teacherApi.createHomework({ classId, title: title.trim(), description: description.trim() || undefined, dueDate: dueDate || undefined, subject: selectedSubject || subject || undefined, file: file || undefined });
       setTitle(''); setDescription(''); setDueDate(''); setFile(null);
       setShowForm(false);
       load();
@@ -145,12 +155,23 @@ export default function TeacherHomeworkScreen({ subject, classes }: Props) {
                 </TouchableOpacity>
               ))}
             </ScrollView>
-            {subject && (
+            {classId ? (subjectOptions.length === 0 ? (
               <>
                 <Text style={styles.fieldLabel}>Subject</Text>
-                <View style={styles.subjectBadge}><Text style={styles.subjectText}>{subject}</Text></View>
+                <Text style={[styles.cardMeta, { color: colors.warning, marginBottom: spacing.sm }]}>You aren't assigned any subject for this class.</Text>
               </>
-            )}
+            ) : (
+              <>
+                <Text style={styles.fieldLabel}>Subject</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing.md }}>
+                  {subjectOptions.map(s => (
+                    <TouchableOpacity key={s.id} style={[styles.chip, selectedSubject === s.name && styles.chipActive]} onPress={() => setSelectedSubject(s.name)}>
+                      <Text style={[styles.chipText, selectedSubject === s.name && styles.chipTextActive]}>{s.name}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </>
+            )) : null}
             <Text style={styles.fieldLabel}>Title *</Text>
             <TextInput style={styles.input} placeholder="Homework title" placeholderTextColor={colors.textMuted} value={title} onChangeText={setTitle} />
             <Text style={styles.fieldLabel}>Description</Text>

@@ -7,6 +7,7 @@ import { Plus, Trash2, Send, ChevronDown, Check } from 'lucide-react-native';
 import { teacherApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
 import { spacing, radius, font, shadow } from '../../theme';
+import { subjectsForClass, type SubjectOpt, type TeachingEntry } from '../../utils/subjects';
 
 interface ClassItem { id: string; name: string }
 interface StudentItem { id: string; fullName: string }
@@ -15,13 +16,14 @@ interface TermItem { id: string; name: string }
 interface Mark { name: string; value: string }
 interface GradeRecord { id: string; gradingPeriod?: string; academicYear?: string; marks: Mark[]; createdAt: string }
 
-interface Props { subject?: string; classes: ClassItem[]; academicYear?: string }
+interface Props { subject?: string; classes: ClassItem[]; subjects?: SubjectOpt[]; teaching?: TeachingEntry[]; academicYear?: string }
 
-export default function TeacherGradingScreen({ subject, classes, academicYear }: Props) {
+export default function TeacherGradingScreen({ subject, classes, subjects, teaching, academicYear }: Props) {
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [selectedClass, setSelectedClass] = useState('');
+  const [selectedSubject, setSelectedSubject] = useState('');
   const [students, setStudents] = useState<StudentItem[]>([]);
   const [selectedStudent, setSelectedStudent] = useState('');
   const [markTypes, setMarkTypes] = useState<MarkType[]>([]);
@@ -46,6 +48,13 @@ export default function TeacherGradingScreen({ subject, classes, academicYear }:
     teacherApi.getStudents({ classId: selectedClass }).then(r => setStudents(r.data || [])).catch(() => setStudents([]));
     setSelectedStudent('');
   }, [selectedClass]);
+
+  const subjectOptions = subjectsForClass(teaching, subjects, selectedClass);
+
+  useEffect(() => {
+    if (subjectOptions.length === 1) setSelectedSubject(subjectOptions[0].name);
+    else if (selectedSubject && !subjectOptions.some(o => o.name === selectedSubject)) setSelectedSubject('');
+  }, [selectedClass, subjectOptions.length]);
 
   useEffect(() => {
     setMarks([{ name: '', value: '' }]);
@@ -75,7 +84,7 @@ export default function TeacherGradingScreen({ subject, classes, academicYear }:
     if (validMarks.length === 0) { Alert.alert('Required', 'Add at least one mark.'); return; }
     setSaving(true);
     try {
-      await teacherApi.upsertGrade({ studentId: selectedStudent, classId: selectedClass, subject, gradingPeriod: gradingPeriod.trim(), marks: validMarks.map(m => ({ name: m.name, value: parseFloat(m.value) })) });
+      await teacherApi.upsertGrade({ studentId: selectedStudent, classId: selectedClass, subject: selectedSubject || subject, gradingPeriod: gradingPeriod.trim(), marks: validMarks.map(m => ({ name: m.name, value: parseFloat(m.value) })) });
       Alert.alert('Saved', 'Grade saved successfully.');
       setMarks([{ name: '', value: '' }]);
       setGradingPeriod('');
@@ -113,12 +122,25 @@ export default function TeacherGradingScreen({ subject, classes, academicYear }:
         </>
       )}
 
-      {subject && (
-        <View style={styles.infoBadgeRow}>
-          <View style={styles.subjectBadge}><Text style={styles.subjectText}>{subject}</Text></View>
-          {academicYear && <View style={styles.yearBadge}><Text style={styles.yearText}>{academicYear}</Text></View>}
-        </View>
-      )}
+      {selectedClass ? (subjectOptions.length === 0 ? (
+        <Text style={[styles.label, { color: colors.warning, textTransform: 'none', marginBottom: spacing.md }]}>You aren't assigned any subject for this class.</Text>
+      ) : (
+        <>
+          <Text style={styles.label}>Subject</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing.sm }}>
+            {subjectOptions.map(s => (
+              <TouchableOpacity key={s.id} style={[styles.chip, selectedSubject === s.name && styles.chipActive]} onPress={() => setSelectedSubject(s.name)}>
+                <Text style={[styles.chipText, selectedSubject === s.name && styles.chipTextActive]}>{s.name}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+          {academicYear && (
+            <View style={styles.infoBadgeRow}>
+              <View style={styles.yearBadge}><Text style={styles.yearText}>{academicYear}</Text></View>
+            </View>
+          )}
+        </>
+      )) : null}
 
       <Text style={styles.label}>Term *</Text>
       <TouchableOpacity style={[styles.input, styles.dropdownBtn]} onPress={() => setTermPickerOpen(true)}>

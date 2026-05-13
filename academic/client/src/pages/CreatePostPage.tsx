@@ -10,6 +10,9 @@ import type { AcademicClass } from '../types';
 
 type ContentType = 'richtext' | 'plaintext' | 'file';
 
+type SubjectOpt = { id: string; name: string };
+type TeachingEntry = { classId: string; subjects: SubjectOpt[] };
+
 export default function CreatePostPage() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
@@ -18,7 +21,8 @@ export default function CreatePostPage() {
   const [classes, setClasses] = useState<AcademicClass[]>([]);
   const [title, setTitle] = useState('');
   const [subject, setSubject] = useState('');
-  const [teacherSubject, setTeacherSubject] = useState<string | null>(null);
+  const [allSubjects, setAllSubjects] = useState<SubjectOpt[]>([]);
+  const [teaching, setTeaching] = useState<TeachingEntry[]>([]);
   const [classId, setClassId] = useState('');
   const [body, setBody] = useState('');
   const [contentType, setContentType] = useState<ContentType>('richtext');
@@ -39,11 +43,27 @@ export default function CreatePostPage() {
   useEffect(() => {
     if (!isTeacher) return;
     academicApi.getMe().then(r => {
-      const s = r.data?.subject ?? null;
-      setTeacherSubject(s);
-      if (s) setSubject(s);
+      setAllSubjects(Array.isArray(r.data?.subjects) ? r.data.subjects : []);
+      setTeaching(Array.isArray(r.data?.teaching) ? r.data.teaching : []);
     }).catch(() => {});
   }, [isTeacher]);
+
+  // Subjects this teacher teaches in the picked class (or all of theirs if no curriculum yet).
+  const subjectOptions: SubjectOpt[] = (() => {
+    if (!isTeacher) return [];
+    if (classId) {
+      const entry = teaching.find(t => t.classId === classId);
+      if (entry && entry.subjects.length) return entry.subjects;
+    }
+    return allSubjects;
+  })();
+
+  // Auto-pick when only one option (or clear when the picked one no longer applies).
+  useEffect(() => {
+    if (!isTeacher) return;
+    if (subjectOptions.length === 1) setSubject(subjectOptions[0].name);
+    else if (subject && !subjectOptions.some(o => o.name === subject)) setSubject('');
+  }, [classId, subjectOptions.length, isTeacher]);
 
   const uploadImage = async (file: File): Promise<string> => {
     const res = await academicApi.uploadFile(file);
@@ -137,11 +157,18 @@ export default function CreatePostPage() {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1.5">Subject</label>
-                  {isTeacher && teacherSubject ? (
-                    <div className="w-full border border-gray-200 bg-gray-50 rounded-xl px-3.5 py-2.5 text-sm text-gray-700">
-                      {teacherSubject}
-                    </div>
+                  {isTeacher ? (subjectOptions.length === 0 ? (
+                    <p className="text-xs text-amber-600 px-1 pt-1.5">You aren't assigned any subject for this class. Ask an admin to add it in Class Management → Curriculum.</p>
                   ) : (
+                    <select
+                      value={subject}
+                      onChange={e => setSubject(e.target.value)}
+                      className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                    >
+                      <option value="">Select subject…</option>
+                      {subjectOptions.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                    </select>
+                  )) : (
                     <input
                       type="text"
                       value={subject}

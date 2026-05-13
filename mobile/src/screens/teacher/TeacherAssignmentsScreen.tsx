@@ -10,6 +10,7 @@ import { ClipboardList, Plus, Trash2, Paperclip, X, Send, ChevronLeft, ChevronRi
 import { teacherApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
 import { spacing, radius, font, shadow } from '../../theme';
+import { subjectsForClass, type SubjectOpt, type TeachingEntry } from '../../utils/subjects';
 
 interface ClassItem { id: string; name: string }
 interface StudentItem { id: string; fullName: string }
@@ -17,9 +18,9 @@ interface AssignmentItem { id: string; title: string; subject?: string; dueDate?
 
 const STATUS_COLORS: Record<string, string> = { pending: '#F59E0B', submitted: '#6B7280', graded: '#10B981' };
 
-interface Props { subject?: string; classes: ClassItem[] }
+interface Props { subject?: string; classes: ClassItem[]; subjects?: SubjectOpt[]; teaching?: TeachingEntry[] }
 
-export default function TeacherAssignmentsScreen({ subject, classes }: Props) {
+export default function TeacherAssignmentsScreen({ subject, classes, subjects, teaching }: Props) {
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -31,6 +32,7 @@ export default function TeacherAssignmentsScreen({ subject, classes }: Props) {
   const [showForm, setShowForm] = useState(false);
 
   const [classId, setClassId] = useState('');
+  const [selectedSubject, setSelectedSubject] = useState('');
   const [studentId, setStudentId] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -61,6 +63,13 @@ export default function TeacherAssignmentsScreen({ subject, classes }: Props) {
     setStudentId('');
   }, [classId]);
 
+  const subjectOptions = subjectsForClass(teaching, subjects, classId);
+
+  useEffect(() => {
+    if (subjectOptions.length === 1) setSelectedSubject(subjectOptions[0].name);
+    else if (selectedSubject && !subjectOptions.some(o => o.name === selectedSubject)) setSelectedSubject('');
+  }, [classId, subjectOptions.length]);
+
   const pickFile = async () => {
     const result = await DocumentPicker.getDocumentAsync({ type: ['application/pdf', 'application/msword', 'image/*'], copyToCacheDirectory: true });
     if (!result.canceled && result.assets[0]) {
@@ -73,7 +82,7 @@ export default function TeacherAssignmentsScreen({ subject, classes }: Props) {
     if (!classId || !title.trim()) { Alert.alert('Required', 'Please select a class and enter a title.'); return; }
     setSubmitting(true);
     try {
-      await teacherApi.createAssignment({ classId, studentId: studentId || undefined, title: title.trim(), description: description.trim() || undefined, dueDate: dueDate || undefined, subject: subject || undefined, file: file || undefined });
+      await teacherApi.createAssignment({ classId, studentId: studentId || undefined, title: title.trim(), description: description.trim() || undefined, dueDate: dueDate || undefined, subject: selectedSubject || subject || undefined, file: file || undefined });
       setTitle(''); setDescription(''); setDueDate(''); setFile(null); setStudentId('');
       setShowForm(false);
       load();
@@ -178,12 +187,23 @@ export default function TeacherAssignmentsScreen({ subject, classes }: Props) {
                 </ScrollView>
               </>
             )}
-            {subject && (
+            {classId ? (subjectOptions.length === 0 ? (
               <>
                 <Text style={styles.fieldLabel}>Subject</Text>
-                <View style={styles.subjectBadge}><Text style={styles.subjectText}>{subject}</Text></View>
+                <Text style={[styles.cardMeta, { color: colors.warning, marginBottom: spacing.sm }]}>You aren't assigned any subject for this class.</Text>
               </>
-            )}
+            ) : (
+              <>
+                <Text style={styles.fieldLabel}>Subject</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing.md }}>
+                  {subjectOptions.map(s => (
+                    <TouchableOpacity key={s.id} style={[styles.chip, selectedSubject === s.name && styles.chipActive]} onPress={() => setSelectedSubject(s.name)}>
+                      <Text style={[styles.chipText, selectedSubject === s.name && styles.chipTextActive]}>{s.name}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </>
+            )) : null}
             <Text style={styles.fieldLabel}>Title *</Text>
             <TextInput style={styles.input} placeholder="Assignment title" placeholderTextColor={colors.textMuted} value={title} onChangeText={setTitle} />
             <Text style={styles.fieldLabel}>Description</Text>
