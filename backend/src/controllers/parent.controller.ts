@@ -383,7 +383,7 @@ export async function createAppointment(req: AuthRequest, res: Response): Promis
     parent_id: parent.id,
     reason,
     message,
-    requested_date: requestedDate,
+    requested_date: requestedDate || null,
     student_ids: studentIds,
   }).select().single();
 

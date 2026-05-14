@@ -91,7 +91,7 @@ export async function createHomework(req: AuthRequest, res: Response): Promise<v
     title,
     description,
     attachment_url: attachmentUrl,
-    due_date: dueDate,
+    due_date: dueDate || null,
     subject,
   }).select().single();
 
@@ -180,7 +180,7 @@ export async function createAssignment(req: AuthRequest, res: Response): Promise
     student_id: studentId || null,
     title,
     description,
-    due_date: dueDate,
+    due_date: dueDate || null,
     subject,
     attachment_url: attachmentUrl,
   }).select().single();
