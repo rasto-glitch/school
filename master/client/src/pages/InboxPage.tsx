@@ -301,37 +301,7 @@ export default function InboxPage({ onLogout, currentView, onNavigate }: Props) 
               </div>
 
               <div className="space-y-3">
-                {openThread.map(m => (
-                  <article
-                    key={m.id}
-                    className={`bg-white border rounded-lg p-4 ${
-                      m.direction === 'outbound' ? 'border-indigo-200 bg-indigo-50/30' : 'border-slate-200'
-                    }`}
-                  >
-                    <header className="flex items-center justify-between gap-2 mb-2">
-                      <div className="text-sm">
-                        <span className="font-medium text-slate-900">{m.from_name || m.from_email}</span>
-                        <span className="text-slate-400"> &lt;{m.from_email}&gt;</span>
-                        <span className="text-slate-400"> → {m.to_email}</span>
-                      </div>
-                      <time className="text-xs text-slate-400" title={fmtFull(m.received_at)}>
-                        {fmtFull(m.received_at)}
-                      </time>
-                    </header>
-                    {m.cc_emails.length > 0 && (
-                      <div className="text-xs text-slate-500 mb-2">cc: {m.cc_emails.join(', ')}</div>
-                    )}
-                    <pre className="text-sm text-slate-800 whitespace-pre-wrap font-sans leading-relaxed">
-                      {m.text_body || (m.html_body ? '(HTML only — see source)' : '(empty)')}
-                    </pre>
-                    {m.attachments.length > 0 && (
-                      <div className="mt-3 pt-3 border-t border-slate-100 text-xs text-slate-500">
-                        Attachments: {m.attachments.map(a => a.name).filter(Boolean).join(', ')}
-                        <span className="text-slate-400"> (kept in Gmail, not stored here)</span>
-                      </div>
-                    )}
-                  </article>
-                ))}
+                {openThread.map(m => <MessageCard key={m.id} m={m} />)}
               </div>
 
               {/* Reply box */}
@@ -376,5 +346,85 @@ export default function InboxPage({ onLogout, currentView, onNavigate }: Props) 
         </div>
       </div>
     </div>
+  );
+}
+
+function MessageCard({ m }: { m: EmailRow }) {
+  const [showHtml, setShowHtml] = useState(false);
+  const hasHtml = !!(m.html_body && m.html_body.trim());
+  const hasText = !!(m.text_body && m.text_body.trim());
+
+  return (
+    <article
+      className={`bg-white border rounded-lg p-4 ${
+        m.direction === 'outbound' ? 'border-indigo-200 bg-indigo-50/30' : 'border-slate-200'
+      }`}
+    >
+      <header className="flex items-center justify-between gap-2 mb-2">
+        <div className="text-sm min-w-0">
+          {m.from_name && m.from_name !== m.from_email ? (
+            <>
+              <span className="font-medium text-slate-900">{m.from_name}</span>
+              <span className="text-slate-400"> &lt;{m.from_email}&gt;</span>
+            </>
+          ) : (
+            <span className="font-medium text-slate-900">{m.from_email}</span>
+          )}
+          <span className="text-slate-400"> → {m.to_email}</span>
+        </div>
+        <time className="text-xs text-slate-400 shrink-0" title={fmtFull(m.received_at)}>
+          {fmtFull(m.received_at)}
+        </time>
+      </header>
+
+      {m.cc_emails.length > 0 && (
+        <div className="text-xs text-slate-500 mb-2">cc: {m.cc_emails.join(', ')}</div>
+      )}
+
+      {showHtml && hasHtml ? (
+        <iframe
+          sandbox=""
+          srcDoc={m.html_body || ''}
+          className="w-full border border-slate-200 rounded bg-white"
+          style={{ height: 460 }}
+          title="email-html"
+        />
+      ) : (
+        <pre className="text-sm text-slate-800 whitespace-pre-wrap font-sans leading-relaxed m-0">
+          {hasText
+            ? m.text_body
+            : hasHtml
+              ? '(no plain-text version — click View HTML)'
+              : '(empty)'}
+        </pre>
+      )}
+
+      <div className="mt-3 flex items-center justify-between gap-3 text-xs">
+        <div className="text-slate-400">
+          {m.attachments.length > 0 && (
+            <>
+              Attachments: {m.attachments.map(a => a.name).filter(Boolean).join(', ')}
+              <span className="text-slate-300"> (kept in Gmail, not stored here)</span>
+            </>
+          )}
+        </div>
+        {hasHtml && hasText && (
+          <button
+            onClick={() => setShowHtml(s => !s)}
+            className="text-slate-500 hover:text-slate-800 underline-offset-2 hover:underline shrink-0"
+          >
+            {showHtml ? 'View text' : 'View HTML'}
+          </button>
+        )}
+        {hasHtml && !hasText && !showHtml && (
+          <button
+            onClick={() => setShowHtml(true)}
+            className="text-slate-500 hover:text-slate-800 underline-offset-2 hover:underline shrink-0"
+          >
+            View HTML
+          </button>
+        )}
+      </div>
+    </article>
   );
 }

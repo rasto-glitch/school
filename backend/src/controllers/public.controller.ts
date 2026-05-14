@@ -5,6 +5,7 @@ import { logger } from '../utils/logger';
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 const TO_EMAIL = process.env.LANDING_INBOX || 'onboarding@scholify.krd';
 const CONTACT_TO_EMAIL = process.env.CONTACT_INBOX || 'contact@scholify.krd';
+const PARTNER_TO_EMAIL = process.env.PARTNER_INBOX || 'partner@scholify.krd';
 const FROM_EMAIL = process.env.LANDING_FROM || 'Scholify <no-reply@scholify.krd>';
 
 const str = (v: unknown, max = 500) =>
@@ -15,12 +16,12 @@ const esc = (s: string) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] || c),
   );
 
-const row = (label: string, value: string) =>
+const htmlRow = (label: string, value: string) =>
   value
     ? `<tr><td style="padding:6px 12px;color:#64748b;font-size:13px;vertical-align:top;white-space:nowrap">${esc(label)}</td><td style="padding:6px 12px;color:#0f172a;font-size:14px">${esc(value).replace(/\n/g, '<br/>')}</td></tr>`
     : '';
 
-const wrapper = (title: string, rows: string) => `
+const wrapHtml = (title: string, rows: string) => `
   <div style="font-family:-apple-system,BlinkMacSystemFont,Inter,sans-serif;background:#f8fafc;padding:24px">
     <div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden">
       <div style="background:#6366F1;padding:20px 24px;color:#fff">
@@ -32,7 +33,32 @@ const wrapper = (title: string, rows: string) => `
   </div>
 `;
 
-const send = async (subject: string, html: string, replyTo?: string, to: string = TO_EMAIL) => {
+// Plain-text rendering for the master-inbox text body and any client that
+// strips HTML. Without this, postal-mime collapses the table cells in the
+// HTML version into one wall of concatenated text (Name<value>Email<value>…).
+const wrapText = (title: string, fields: { label: string; value: string }[]) => {
+  const rows = fields
+    .filter(f => f.value)
+    .map(f => `${f.label}: ${f.value}`)
+    .join('\n');
+  return `${title}\n${'='.repeat(title.length)}\n\n${rows}\n`;
+};
+
+type Field = { label: string; value: string };
+const buildBodies = (title: string, fields: Field[]) => ({
+  html: wrapHtml(title, fields.map(f => htmlRow(f.label, f.value)).join('')),
+  text: wrapText(title, fields),
+});
+
+interface SendArgs {
+  subject: string;
+  html: string;
+  text: string;
+  replyTo?: string;
+  to?: string;
+}
+
+const send = async ({ subject, html, text, replyTo, to = TO_EMAIL }: SendArgs) => {
   if (!resend) {
     logger.warn('Resend API key missing; skipping send', { subject });
     return;
@@ -43,11 +69,35 @@ const send = async (subject: string, html: string, replyTo?: string, to: string 
     replyTo,
     subject,
     html,
+    text,
   });
   if (error) {
-    logger.error('Resend send failed', { error, subject });
-    throw new Error('send_failed');
+    // Resend errors typically expose .name and .message. Log both so the
+    // operator can tell apart "domain not verified", "rate limit", "invalid
+    // recipient" etc. when triaging failed sends.
+    logger.error('Resend send failed', {
+      from: FROM_EMAIL,
+      to,
+      subject,
+      errorName: (error as { name?: string }).name,
+      errorMessage: (error as { message?: string }).message,
+      error,
+    });
+    const err = new Error('send_failed') as Error & { resendMessage?: string };
+    err.resendMessage = (error as { message?: string }).message;
+    throw err;
   }
+};
+
+// Generic 5xx response with a hint in non-prod so the operator can see the
+// real reason from the browser network tab. In production we still return
+// only the friendly message — Railway logs carry the full Resend error.
+const sendError = (res: Response, err: unknown) => {
+  const e = err as { resendMessage?: string };
+  const detail = process.env.NODE_ENV !== 'production' && e?.resendMessage
+    ? ` (${e.resendMessage})`
+    : '';
+  res.status(500).json({ error: `Could not send. Please try again later.${detail}` });
 };
 
 export const demoRequest = async (req: Request, res: Response) => {
@@ -69,21 +119,26 @@ export const demoRequest = async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Invalid email.' });
   }
 
-  const rows = [
-    row('School', schoolName),
-    row('Contact', contactName),
-    row('Role', role),
-    row('Email', email),
-    row('Phone', phone),
-    row('Students', students),
-    row('Message', message),
-  ].join('');
+  const { html, text } = buildBodies('New demo request', [
+    { label: 'School',   value: schoolName },
+    { label: 'Contact',  value: contactName },
+    { label: 'Role',     value: role },
+    { label: 'Email',    value: email },
+    { label: 'Phone',    value: phone },
+    { label: 'Students', value: students },
+    { label: 'Message',  value: message },
+  ]);
 
   try {
-    await send(`Demo request — ${schoolName}`, wrapper('New demo request', rows), email);
+    await send({
+      subject: `Demo request - ${schoolName}`,
+      html,
+      text,
+      replyTo: email,
+    });
     res.json({ ok: true });
-  } catch {
-    res.status(500).json({ error: 'Could not send. Please try again later.' });
+  } catch (err) {
+    sendError(res, err);
   }
 };
 
@@ -102,23 +157,24 @@ export const contactRequest = async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Invalid email.' });
   }
 
-  const rows = [
-    row('Name', name),
-    row('Email', email),
-    row('Subject', subject),
-    row('Message', message),
-  ].join('');
+  const { html, text } = buildBodies('New contact message', [
+    { label: 'Name',    value: name },
+    { label: 'Email',   value: email },
+    { label: 'Subject', value: subject },
+    { label: 'Message', value: message },
+  ]);
 
   try {
-    await send(
-      `Contact form — ${subject || name}`,
-      wrapper('New contact message', rows),
-      email,
-      CONTACT_TO_EMAIL,
-    );
+    await send({
+      subject: `Contact form - ${subject || name}`,
+      html,
+      text,
+      replyTo: email,
+      to: CONTACT_TO_EMAIL,
+    });
     res.json({ ok: true });
-  } catch {
-    res.status(500).json({ error: 'Could not send. Please try again later.' });
+  } catch (err) {
+    sendError(res, err);
   }
 };
 
@@ -139,19 +195,25 @@ export const partnerApplication = async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Invalid email.' });
   }
 
-  const rows = [
-    row('Company', companyName),
-    row('Contact', contactName),
-    row('Email', email),
-    row('Phone', phone),
-    row('Country', country),
-    row('About', about),
-  ].join('');
+  const { html, text } = buildBodies('New partner application', [
+    { label: 'Company', value: companyName },
+    { label: 'Contact', value: contactName },
+    { label: 'Email',   value: email },
+    { label: 'Phone',   value: phone },
+    { label: 'Country', value: country },
+    { label: 'About',   value: about },
+  ]);
 
   try {
-    await send(`Partner application — ${companyName}`, wrapper('New partner application', rows), email);
+    await send({
+      subject: `Partner application - ${companyName}`,
+      html,
+      text,
+      replyTo: email,
+      to: PARTNER_TO_EMAIL,
+    });
     res.json({ ok: true });
-  } catch {
-    res.status(500).json({ error: 'Could not send. Please try again later.' });
+  } catch (err) {
+    sendError(res, err);
   }
 };
