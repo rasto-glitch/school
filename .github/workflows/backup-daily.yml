@@ -1,0 +1,100 @@
+name: Daily backup
+
+# Nightly Postgres dump → age encryption → Backblaze B2 (S3-compatible).
+# Independent of Supabase so the off-site copy survives any Supabase-side
+# incident, account suspension, or data corruption. See BACKUP.md for the
+# one-time setup walkthrough.
+
+on:
+  schedule:
+    # 01:00 UTC = 04:00 Iraq (UTC+3). Quiet hour — minimal write traffic
+    # so pg_dump runs fast and won't compete with school staff.
+    - cron: '0 1 * * *'
+  workflow_dispatch: {}  # also runnable on demand from the Actions tab
+
+# Stop concurrent runs from racing each other (e.g. manual + scheduled).
+concurrency:
+  group: backup
+  cancel-in-progress: false
+
+jobs:
+  postgres:
+    name: Postgres → B2
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Install pg_dump and age
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+
+          # Supabase runs Postgres 15; install matching client to avoid
+          # version mismatch warnings on dumps that use newer syntax.
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            -o /etc/apt/trusted.gpg.d/postgresql.asc
+          echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client-15 age
+
+      - name: Dump database
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          # Custom format = compressed + supports parallel restore. --no-owner
+          # and --no-acl strip Supabase-specific role grants that wouldn't
+          # apply on a restore target. Both flags are reapplied at restore
+          # time if you ever restore into Supabase again.
+          STAMP=$(date -u +%Y%m%dT%H%M%SZ)
+          echo "STAMP=$STAMP" >> "$GITHUB_ENV"
+          pg_dump "$SUPABASE_DB_URL" \
+            --format=custom \
+            --no-owner \
+            --no-acl \
+            --file="dump-$STAMP.pg"
+          ls -lh "dump-$STAMP.pg"
+
+      - name: Encrypt with age
+        env:
+          BACKUP_AGE_PUBLIC_KEY: ${{ secrets.BACKUP_AGE_PUBLIC_KEY }}
+        run: |
+          set -euo pipefail
+          # The public key is fine to expose; the matching private key
+          # never leaves your offline storage. If both are compromised
+          # together, your dumps are readable — same risk as any KMS.
+          echo "$BACKUP_AGE_PUBLIC_KEY" > /tmp/recipient.txt
+          age --encrypt --recipients-file /tmp/recipient.txt \
+            --output "dump-${STAMP}.pg.age" \
+            "dump-${STAMP}.pg"
+          rm "dump-${STAMP}.pg"  # leave only the encrypted file on disk
+          ls -lh "dump-${STAMP}.pg.age"
+
+      - name: Upload to Backblaze B2 (S3-compatible)
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.B2_APPLICATION_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.B2_APPLICATION_KEY }}
+          B2_BUCKET: ${{ secrets.B2_BUCKET }}
+          B2_ENDPOINT: ${{ secrets.B2_ENDPOINT }}
+        run: |
+          set -euo pipefail
+          # Partition by date so old backups are easy to age out via
+          # lifecycle rules in the B2 dashboard (see BACKUP.md).
+          DAY_PREFIX=$(date -u -d "$STAMP" +%Y/%m/%d)
+          aws --endpoint-url "$B2_ENDPOINT" s3 cp \
+            "dump-${STAMP}.pg.age" \
+            "s3://${B2_BUCKET}/postgres/${DAY_PREFIX}/dump-${STAMP}.pg.age"
+
+          # Stash a "latest" pointer for the restore script's convenience.
+          aws --endpoint-url "$B2_ENDPOINT" s3 cp \
+            "dump-${STAMP}.pg.age" \
+            "s3://${B2_BUCKET}/postgres/latest.pg.age"
+
+      - name: Summary
+        run: |
+          echo "## Backup complete" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Timestamp: \`$STAMP\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- B2 path: \`postgres/$(date -u -d "$STAMP" +%Y/%m/%d)/dump-${STAMP}.pg.age\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Restore: see BACKUP.md or run scripts/restore.ps1" >> "$GITHUB_STEP_SUMMARY"
