@@ -76,6 +76,40 @@ export async function closePeriod(req: AuthRequest, res: Response): Promise<void
     return;
   }
 
+  // The table has UNIQUE(school_id, period_start, period_end). If the exact
+  // same range was previously closed and reopened, the row still exists with
+  // reopened_at set. Re-closing means updating that row instead of inserting
+  // a new one — otherwise the insert would fail with a duplicate-key error
+  // that surfaces as a raw Postgres message in the UI.
+  const { data: existing } = await supabase
+    .from('accounting_periods')
+    .select('id, reopened_at')
+    .eq('school_id', schoolId)
+    .eq('period_start', periodStart)
+    .eq('period_end', periodEnd)
+    .maybeSingle();
+
+  if (existing && (existing as any).reopened_at) {
+    const { data: reclosed, error: reErr } = await supabase
+      .from('accounting_periods')
+      .update({
+        closed_by: userId,
+        closed_at: new Date().toISOString(),
+        reopened_at: null,
+        reopened_by: null,
+        reopen_reason: null,
+        notes: notes ?? null,
+      })
+      .eq('id', (existing as any).id)
+      .eq('school_id', schoolId)
+      .select()
+      .single();
+    if (reErr) { res.status(500).json({ error: reErr.message }); return; }
+    await logAudit({ req, entityType: 'accounting_period', entityId: String((existing as any).id), action: 'update', after: reclosed, label: `${periodStart} → ${periodEnd}`, reason: 'Re-closed after reopen' });
+    res.status(200).json(toCC(reclosed));
+    return;
+  }
+
   const { data, error } = await supabase.from('accounting_periods').insert({
     school_id: schoolId,
     period_start: periodStart,

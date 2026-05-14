@@ -421,9 +421,20 @@ export default function YearTransitionModal({ currentYear, onClose, onDone }: Pr
 
               <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl p-4">
                 <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-                <p className="text-sm text-red-700">
-                  <span className="font-semibold">This action cannot be undone.</span> Cleared reports and graduation records are permanent.
-                </p>
+                <div className="text-sm text-red-700 space-y-1.5">
+                  <p><span className="font-semibold">This action cannot be undone.</span></p>
+                  <ul className="list-disc pl-5 space-y-1">
+                    <li>
+                      <span className="font-semibold">Every report</span> for the {continuingStudents.length} continuing student{continuingStudents.length !== 1 ? 's' : ''} will be <span className="font-semibold">permanently deleted</span>. Grades and attendance are kept.
+                    </li>
+                    <li>
+                      The {gradSelected.size} graduating student{gradSelected.size !== 1 ? 's' : ''} will leave the active roster — kept in the archive only if your school has the archive feature enabled.
+                    </li>
+                    <li>
+                      Class assignments update immediately; you cannot roll this back through the UI.
+                    </li>
+                  </ul>
+                </div>
               </div>
             </div>
           )}

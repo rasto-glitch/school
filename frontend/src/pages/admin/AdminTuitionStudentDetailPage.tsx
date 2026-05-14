@@ -570,7 +570,7 @@ export default function AdminTuitionStudentDetailPage() {
               </div>
             )}
             <div className="grid grid-cols-2 gap-3">
-              <Input label="Tax / withholding (optional)" type="number" step="0.01" value={payTaxAmount} onChange={e => setPayTaxAmount(e.target.value)} placeholder="0.00" />
+              <Input label="Tax included (optional)" type="number" step="0.01" value={payTaxAmount} onChange={e => setPayTaxAmount(e.target.value)} placeholder="0.00" />
               <Input label="Tax label" value={payTaxLabel} onChange={e => setPayTaxLabel(e.target.value)} placeholder="VAT 5%, etc." />
             </div>
             <div>

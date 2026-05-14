@@ -1493,7 +1493,7 @@ export async function paymentReceiptPdf(req: AuthRequest, res: Response): Promis
   const { id } = req.params; // payment id
 
   const { data: payment } = await supabase
-    .from('fee_payments').select('id, student_fee_id, amount, paid_on, method, reference, notes, unallocated_note, recorded_by, created_at, receipt_year, receipt_number')
+    .from('fee_payments').select('id, student_fee_id, amount, paid_on, method, reference, notes, unallocated_note, recorded_by, created_at, receipt_year, receipt_number, tax_amount, tax_label')
     .eq('id', id).eq('school_id', schoolId).is('voided_at', null).single();
   if (!payment) { res.status(404).json({ error: 'Payment not found' }); return; }
 
@@ -1560,6 +1560,8 @@ export async function paymentReceiptPdf(req: AuthRequest, res: Response): Promis
     method: (payment as any).method,
     reference: (payment as any).reference,
     notes: (payment as any).notes,
+    taxAmount: (payment as any).tax_amount != null ? Number((payment as any).tax_amount) : 0,
+    taxLabel: (payment as any).tax_label ?? null,
     totalAmount: ctx.totalAmount,
     adjustment: ctx.adjustment,
     siblingDiscount: ctx.siblingDiscount,

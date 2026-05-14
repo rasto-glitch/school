@@ -36,6 +36,11 @@ export interface PaymentReceiptData extends Common {
   allocations: PaymentAllocationLine[];
   unallocatedAmount: number;
   unallocatedNote: string | null;
+  // Tax is captured as withholding INCLUDED in `amount` (not added on top).
+  // When > 0, the receipt surfaces it as a sub-line under Amount paid so the
+  // parent can see how their payment breaks down for tax-receipt purposes.
+  taxAmount?: number;
+  taxLabel?: string | null;
 }
 
 export interface YearSummaryPayment {
@@ -137,8 +142,19 @@ export async function streamPaymentReceipt(stream: Writable, data: PaymentReceip
   doc.font('Helvetica').fontSize(10).fillColor(COLOR_MUTED).text('Amount paid', 320, 310, { width: 235, align: 'right' });
   doc.font('Helvetica-Bold').fontSize(18).fillColor(COLOR_ACCENT).text(amountLine, 320, 320, { width: 235, align: 'right' });
 
+  // Tax breakdown — surfaces the withholding portion when present. The
+  // amount above is the full payment received; this line tells the parent
+  // how much of it represents tax for their own filing.
+  let taxLineHeight = 0;
+  if (data.taxAmount && data.taxAmount > 0) {
+    const taxLabel = data.taxLabel && data.taxLabel.trim() ? `Including ${data.taxLabel}` : 'Including tax';
+    const taxText = `${taxLabel}: ${fmt(data.taxAmount, data.currency)}`;
+    doc.font('Helvetica').fontSize(9).fillColor(COLOR_MUTED).text(taxText, 320, 344, { width: 235, align: 'right' });
+    taxLineHeight = 14;
+  }
+
   // Allocation breakdown — which installment(s) this payment covers
-  let extraY = 360;
+  let extraY = 360 + taxLineHeight;
   if (data.allocations.length > 0) {
     doc.font('Helvetica').fontSize(10).fillColor(COLOR_MUTED).text('Applied to', 40, extraY);
     const lines = data.allocations.map(a =>

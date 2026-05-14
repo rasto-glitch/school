@@ -889,7 +889,7 @@ export default function StaffSalariesTab() {
               )}
               <div className="grid grid-cols-2 gap-3">
                 <Input
-                  label="Tax / withholding (optional)"
+                  label="Tax included (optional)"
                   type="number"
                   step="0.01"
                   value={paymentForm.taxAmount}
