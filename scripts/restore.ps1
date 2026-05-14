@@ -26,6 +26,12 @@
   Download + decrypt only; do not run pg_restore. Useful for verifying
   a backup is restorable without touching the target DB.
 
+.PARAMETER Keep
+  Do not delete the temporary working directory at the end. Use this
+  when you want to inspect the decrypted .pg file (e.g. with
+  pg_restore --list). Without this flag the directory is wiped to
+  avoid leaving plaintext dumps on disk.
+
 .EXAMPLE
   # Restore the latest backup into a fresh local Postgres instance
   .\scripts\restore.ps1 -Target "postgresql://postgres:postgres@localhost:5432/restored" -Source latest
@@ -33,6 +39,10 @@
 .EXAMPLE
   # Verify a specific backup is readable, without restoring
   .\scripts\restore.ps1 -Source "postgres/2026/05/14/dump-20260514T010000Z.pg.age" -DryRun
+
+.EXAMPLE
+  # Decrypt and keep the dump so you can inspect it
+  .\scripts\restore.ps1 -Source latest -DryRun -Keep
 #>
 
 param(
@@ -46,7 +56,10 @@ param(
   [string]$AgeKeyFile = "$env:USERPROFILE\.config\school-backups\key.txt",
 
   [Parameter(Mandatory = $false)]
-  [switch]$DryRun
+  [switch]$DryRun,
+
+  [Parameter(Mandatory = $false)]
+  [switch]$Keep
 )
 
 $ErrorActionPreference = 'Stop'
@@ -108,7 +121,12 @@ try {
 
   if ($DryRun) {
     Write-Host "==> Dry run - skipping pg_restore."
-    Write-Host "==> Inspect the file at: $decrypted"
+    if ($Keep) {
+      Write-Host "==> Decrypted file kept at: $decrypted"
+      Write-Host "    Inspect with: pg_restore --list `"$decrypted`""
+    } else {
+      Write-Host "==> Decryption succeeded. Re-run with -Keep to preserve the .pg file for inspection."
+    }
     return
   }
 
@@ -134,7 +152,13 @@ try {
   }
 } finally {
   if (Test-Path $work) {
-    Remove-Item -Recurse -Force $work
-    Write-Host "==> Cleaned up working directory."
+    if ($Keep) {
+      Write-Host "==> Working directory kept at: $work"
+      Write-Host "    Delete it manually when you are done:"
+      Write-Host "      Remove-Item -Recurse -Force `"$work`""
+    } else {
+      Remove-Item -Recurse -Force $work
+      Write-Host "==> Cleaned up working directory."
+    }
   }
 }
