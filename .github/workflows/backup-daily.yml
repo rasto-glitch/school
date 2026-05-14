@@ -93,7 +93,9 @@ jobs:
           set -euo pipefail
           # Partition by date so old backups are easy to age out via
           # lifecycle rules in the B2 dashboard (see BACKUP.md).
-          DAY_PREFIX=$(date -u -d "$STAMP" +%Y/%m/%d)
+          # STAMP is YYYYMMDDTHHMMSSZ — slice directly rather than asking
+          # GNU date to re-parse, since it does not accept the compact form.
+          DAY_PREFIX="${STAMP:0:4}/${STAMP:4:2}/${STAMP:6:2}"
           aws --endpoint-url "$B2_ENDPOINT" s3 cp \
             "dump-${STAMP}.pg.age" \
             "s3://${B2_BUCKET}/postgres/${DAY_PREFIX}/dump-${STAMP}.pg.age"
@@ -105,8 +107,9 @@ jobs:
 
       - name: Summary
         run: |
+          DAY_PREFIX="${STAMP:0:4}/${STAMP:4:2}/${STAMP:6:2}"
           echo "## Backup complete" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "- Timestamp: \`$STAMP\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- B2 path: \`postgres/$(date -u -d "$STAMP" +%Y/%m/%d)/dump-${STAMP}.pg.age\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- B2 path: \`postgres/${DAY_PREFIX}/dump-${STAMP}.pg.age\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- Restore: see BACKUP.md or run scripts/restore.ps1" >> "$GITHUB_STEP_SUMMARY"
