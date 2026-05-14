@@ -18,6 +18,44 @@ for a small school's data volume.
   want 6-hour RPO at 4× the storage cost (still pennies).
 - Point-in-time recovery to the second. That needs Supabase PITR.
 
+## How the pieces fit together
+
+```
++-------------+       nightly @ 01:00 UTC      +------------------+
+| Supabase    | <----- pg_dump (over -------+  | GitHub Actions   |
+| Postgres    |        Session pooler)      |  | (Ubuntu runner)  |
++-------------+                             +--+ - dumps DB       |
+                                               | - encrypts (age) |
+                                               | - uploads to B2  |
+                                               +------------------+
+                                                        |
+                                                        v
+                                            +-----------------------+
+                                            | Backblaze B2 bucket   |
+                                            |  postgres/<Y>/<M>/<D>/|
+                                            |  postgres/latest.pg.age|
+                                            +-----------------------+
+                                                        |
+                       when you need a restore...       |
+                                                        v
++----------------------+        restore.ps1     +---------------+
+| Your machine         | <-------- (downloads ---+ Decrypts with |
+| - age private key    |          + decrypts +   | age private   |
+| - aws-cli, age,      |          + restores)    | key on disk   |
+|   pg_restore         |                         +---------------+
++----------------------+
+```
+
+**Secrets that make this work:**
+- `BACKUP_AGE_PUBLIC_KEY` (GitHub Secret) — the recipient the workflow
+  encrypts to. Safe to share.
+- Private half of the age keypair (your laptop, plus offline backup) —
+  the only thing that can decrypt anything. Lose it, all backups
+  are unreadable noise.
+- `SUPABASE_DB_URL` (GitHub Secret) — Session pooler URL, NOT Direct.
+- `B2_APPLICATION_KEY_ID` + `B2_APPLICATION_KEY` (GitHub Secrets) —
+  scoped to one bucket; rotate via Backblaze dashboard if leaked.
+
 ---
 
 ## One-time setup
@@ -36,13 +74,14 @@ You only have to do this once.
 # direct download from https://github.com/FiloSottile/age/releases
 winget install FiloSottile.age
 
-# Generate a keypair. The whole file is your private key; the last line
-# is the public key.
+# Generate a keypair. Use the -o flag — NOT a > redirect. PowerShell's
+# default output redirection writes UTF-16 with a BOM, which age cannot
+# parse on read. Always use age-keygen -o ...
 mkdir "$env:USERPROFILE\.config\school-backups" -Force
 age-keygen -o "$env:USERPROFILE\.config\school-backups\key.txt"
 ```
 
-Open `key.txt` in a text editor. You'll see something like:
+The file will look like this (exactly three lines):
 
 ```
 # created: 2026-05-14T10:00:00Z
@@ -56,10 +95,31 @@ AGE-SECRET-KEY-1FOOBARBAZ...
   public key. This is what GitHub Actions uses to encrypt; it's safe to
   share.
 
+**Do not open `key.txt` in a text editor unless you're only reading it.**
+A misclicked "Save" with another buffer's contents will overwrite the
+real key with garbage and you'll only find out when the next restore
+fails to decrypt. Every consumer of the file (`restore.ps1`, `age -d`)
+reads it directly — you should never need to manually edit it.
+
 **Back up the private key** to at least one place that is not your laptop:
 print it on paper and put it in a safe, copy it to a USB stick stored at
 home, store it in a password manager's secure note. Without this file
 your backups are unreadable.
+
+**Verify the file shape any time** with:
+
+```powershell
+$ln = 0
+Get-Content "$env:USERPROFILE\.config\school-backups\key.txt" | ForEach-Object {
+  $ln++
+  if     ($_ -match '^AGE-SECRET-KEY-') { "Line ${ln}: AGE-SECRET-KEY (good)" }
+  elseif ($_ -match '^# public key:')   { "Line ${ln}: # public key (good)" }
+  else                                  { "Line ${ln}: UNEXPECTED" }
+}
+```
+
+You should see exactly two lines marked `good`. Anything else means the
+file is corrupted and decryption will fail.
 
 ### 2. Create a Backblaze B2 account + bucket
 
@@ -114,14 +174,37 @@ repository secret**. Add five secrets:
 | `B2_BUCKET`              | Your bucket name (e.g. `school-system-backups-...`). |
 | `B2_ENDPOINT`            | `https://s3.us-west-002.backblazeb2.com` (replace region as appropriate; include the `https://`). |
 
-**Where to find `SUPABASE_DB_URL`:** Supabase dashboard → Project Settings
-→ Database → "Connection string" → **URI** tab → **Mode: Session, Direct
-connection** (not the pooler — pg_dump doesn't work over the pooler in
-transaction mode). The form is:
+**Where to find `SUPABASE_DB_URL`:** click the green **Connect** button in
+the Supabase dashboard. The panel has tabs for different connection types
+— pick **Session pooler** (NOT Direct, NOT Transaction pooler):
+
+- **Direct connection** uses IPv6 by default. GitHub Actions runners are
+  IPv4-only. This URL will look right but every workflow run will fail
+  with "Network is unreachable". Avoid unless you've paid for the IPv4
+  add-on.
+- **Transaction pooler** (port 6543) doesn't support `pg_dump`.
+- **Session pooler** (port 5432, IPv4 by default) is the right one — works
+  with `pg_dump` AND reachable from GitHub.
+
+The Session pooler URL looks like:
 
 ```
-postgresql://postgres:<password>@db.<project-ref>.supabase.co:5432/postgres
+postgresql://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres
 ```
+
+Note the dot in `postgres.<project-ref>` — that's the distinguishing
+mark of the pooler URL. Direct connections use just `postgres` as the
+username.
+
+**Test the URL before pasting it into GitHub Secrets** so a typo doesn't
+cause a 3-minute workflow round-trip:
+
+```powershell
+psql "<paste full URL here>" -c "SELECT 1"
+```
+
+If you get back `1`, the URL is good. If it errors, fix the URL first
+(usually a forgotten password replacement or wrong region).
 
 ### 5. Test it
 
@@ -163,6 +246,31 @@ $env:B2_BUCKET = '<your-bucket-name>'
 $env:B2_ENDPOINT = 'https://s3.us-west-002.backblazeb2.com'
 ```
 
+### Browsing what's in B2
+
+The workflow uploads to two paths every night:
+
+- `postgres/YYYY/MM/DD/dump-YYYYMMDDTHHMMSSZ.pg.age` — the dated copy,
+  one per run, age-encrypted Postgres custom-format dump.
+- `postgres/latest.pg.age` — a pointer that always equals the most
+  recent dated copy. `restore.ps1 -Source latest` grabs this one.
+
+List what's there:
+
+```powershell
+# Everything at the top level
+aws --endpoint-url $env:B2_ENDPOINT s3 ls s3://$env:B2_BUCKET/postgres/
+
+# A specific day
+aws --endpoint-url $env:B2_ENDPOINT s3 ls s3://$env:B2_BUCKET/postgres/2026/05/14/
+```
+
+`PRE 2026/` in the output is AWS CLI's way of saying "this is a folder
+(prefix)". File entries show their size in bytes — anything around 50KB
+or larger is a healthy backup for a small school's data; truly tiny
+files (under 1KB) usually mean the dump errored partway and only the
+PDF header made it.
+
 ### Dry run — verify a backup is intact
 
 This downloads + decrypts a backup without touching any database. Run it
@@ -173,15 +281,64 @@ your data:
 .\scripts\restore.ps1 -Source latest -DryRun
 ```
 
-You should see the dump file path printed at the end. Open it in
-pg_restore's listing mode if you want to peek at what's inside:
+Success looks like:
 
-```powershell
-pg_restore --list <path printed above>
+```
+==> Downloaded 574698 bytes.
+==> Decrypted to C:\Users\...\Temp\school-restore-xxxxxxxx\dump.pg
+==> Dry run - skipping pg_restore.
+==> Decryption succeeded. Re-run with -Keep to preserve the .pg file for inspection.
+==> Cleaned up working directory.
 ```
 
-You should see a long list of tables — schools, students, fee_payments,
-etc. That confirms the dump is real and decryptable.
+The default cleans up the decrypted file immediately — the dump is
+plaintext data and shouldn't linger on disk. For a routine health check
+this is enough; if it ran without errors, the file decrypted cleanly.
+
+### Inspecting the dump contents
+
+When you want to actually look inside (e.g. before a real restore, or
+when curious), pass `-Keep` so the temp directory survives:
+
+```powershell
+.\scripts\restore.ps1 -Source latest -DryRun -Keep
+```
+
+The script prints the working directory path at the end:
+
+```
+==> Working directory kept at: C:\Users\...\Temp\school-restore-xxxxxxxx
+```
+
+Inside that directory you'll find `dump.pg` — a Postgres custom-format
+binary archive. Not directly readable as text. List its contents with
+`pg_restore`:
+
+```powershell
+pg_restore --list "C:\Users\...\Temp\school-restore-xxxxxxxx\dump.pg"
+```
+
+You'll see a table of contents — every schema, table, sequence, function,
+index, FK constraint. Looks like:
+
+```
+1; 3079 16389 EXTENSION - uuid-ossp
+123; 1259 16554 TABLE public schools postgres
+124; 1259 16567 TABLE public students postgres
+125; 1259 16580 TABLE public fee_payments postgres
+...
+```
+
+If your real tables show up in that listing — schools, students,
+fee_payments, archived_students, etc. — the dump is valid and complete.
+That's the deepest verification short of a full restore.
+
+**When you're done inspecting, delete the working directory** (it
+contains a plaintext copy of your database):
+
+```powershell
+Remove-Item -Recurse -Force "C:\Users\...\Temp\school-restore-xxxxxxxx"
+```
 
 ### Real restore — into a fresh database
 
@@ -250,6 +407,96 @@ For a small school (say 500 students, 18 months of data):
 Even at 50 schools and several years of retention, you're looking at
 maybe $2–10/month. The biggest cost is your attention — set it up once,
 verify it monthly, drill quarterly.
+
+---
+
+## Troubleshooting — issues we've actually hit
+
+Real failure modes from the initial setup, with what they look like and
+how to fix.
+
+### `pg_dump: server version mismatch`
+
+```
+pg_dump: error: aborting because of server version mismatch
+pg_dump: detail: server version: 17.6; pg_dump version: 16.13
+```
+
+Supabase upgraded their managed Postgres major version. The workflow's
+client major must be at least as new as the server. Edit
+`.github/workflows/backup-daily.yml`, find the `postgresql-client-NN`
+line, bump `NN` to match the server major Supabase reports. Same with
+the `/usr/lib/postgresql/NN/bin/pg_dump` path further down.
+
+### `Network is unreachable` against the database
+
+```
+pg_dump: error: connection to server at "db.xxxxx.supabase.co"
+  (2a05:d014:...), port 5432 failed: Network is unreachable
+```
+
+The IPv6 address in the error tells you everything — you copied the
+**Direct connection** URL from Supabase, which is IPv6-only on Free tier.
+GitHub Actions runners are IPv4-only. Switch the `SUPABASE_DB_URL` secret
+to the **Session pooler** URL (see step 4 above). Distinguishing marks:
+the username is `postgres.<projref>` (with a dot), the host contains
+`pooler.supabase.com`, port is `5432`.
+
+### `pg_dump: error: connection to server on socket ...`
+
+```
+pg_dump: error: connection to server on socket "/var/run/postgresql/..."
+  failed: No such file or directory
+```
+
+`pg_dump` got an empty or malformed URL and fell back to trying a local
+socket. The `SUPABASE_DB_URL` secret is either empty, doesn't start with
+`postgresql://`, or still has `[YOUR-PASSWORD]` as a placeholder. Fix
+the secret value and re-run.
+
+### `age: error: ... unknown identity type`
+
+```
+age: error: reading "...key.txt": failed to read ...: error at line N:
+  unknown identity type
+```
+
+The `key.txt` file is malformed — either the wrong content was saved to
+it (a common one: overwriting the real key with documentation or chat
+output when "Save"-ing in an editor that had another buffer in front),
+or PowerShell's `>` redirect added a UTF-16 BOM that age can't parse.
+
+Diagnose with the verifier from step 1 above. If the file isn't exactly
+two `good` lines, restore it from your offline backup (USB stick, paper
+copy, password manager). If no offline copy exists, regenerate with
+`age-keygen -o ...`, update `BACKUP_AGE_PUBLIC_KEY` in GitHub Secrets,
+re-run the workflow — but any backups encrypted with the OLD public key
+are now unreadable, so the dated copies in B2 prior to this point are
+dead weight.
+
+### `date: invalid date '20260514T...'` in the workflow
+
+GNU `date` doesn't accept the compact ISO 8601 format. If you change
+the timestamp format anywhere in the workflow, do not try to re-parse
+it with `date -d`. Slice the fixed-width string directly with bash
+parameter expansion: `${STAMP:0:4}/${STAMP:4:2}/${STAMP:6:2}`.
+
+### Script output gets garbled after the dry-run message
+
+If you ever edit `restore.ps1` and add em-dashes, smart quotes, or other
+non-ASCII characters in messages or comments, PowerShell 5.1 (Windows
+default) reads the file as Windows-1252, mangles the multi-byte UTF-8
+sequences, and produces confusing output. **Keep the script pure ASCII**
+— stick to plain `-` for dashes, plain `"` for quotes. Any text editor
+showing non-ASCII characters in the file is a smell.
+
+### Workflow stays failing even after I fixed the secret
+
+Workflow definitions are pulled from the branch's HEAD at trigger time.
+If you re-ran a previous failed run via the "Re-run jobs" button, it
+uses the same workflow YAML it had originally — but secrets are
+re-evaluated. Use `gh workflow run "Daily backup"` to trigger a fresh
+run from current main, which is safer.
 
 ---
 
