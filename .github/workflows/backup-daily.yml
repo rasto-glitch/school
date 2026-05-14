@@ -39,9 +39,13 @@ jobs:
             | sudo tee /etc/apt/sources.list.d/pgdg.list
           sudo apt-get update -qq
           sudo apt-get install -y postgresql-client-17 age
-          # Force the /usr/bin/pg_dump wrapper to v17 in case the runner
-          # had an older Postgres preinstalled.
-          sudo update-alternatives --set pg_dump /usr/lib/postgresql/17/bin/pg_dump || true
+
+          # Debug — make sure v17 is actually installed before the dump step.
+          echo "Installed Postgres client versions:"
+          ls /usr/lib/postgresql/ 2>/dev/null || echo "  (none in /usr/lib/postgresql)"
+          echo "pg_dump wrapper resolves to:"
+          which pg_dump
+          /usr/lib/postgresql/17/bin/pg_dump --version
 
       - name: Dump database
         env:
@@ -54,7 +58,10 @@ jobs:
           # time if you ever restore into Supabase again.
           STAMP=$(date -u +%Y%m%dT%H%M%SZ)
           echo "STAMP=$STAMP" >> "$GITHUB_ENV"
-          pg_dump "$SUPABASE_DB_URL" \
+          # Call the v17 binary by its full path to bypass the pg_wrapper
+          # at /usr/bin/pg_dump — on Ubuntu runners with multiple Postgres
+          # versions installed, the wrapper does not always pick the newest.
+          /usr/lib/postgresql/17/bin/pg_dump "$SUPABASE_DB_URL" \
             --format=custom \
             --no-owner \
             --no-acl \
