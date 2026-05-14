@@ -28,15 +28,20 @@ jobs:
           set -euo pipefail
           sudo apt-get update -qq
 
-          # Supabase runs Postgres 15; install matching client to avoid
-          # version mismatch warnings on dumps that use newer syntax.
+          # Supabase currently runs Postgres 17. pg_dump refuses to dump
+          # from a newer server, so the client major must match (or exceed)
+          # the server major. Bump this when Supabase upgrades — they will
+          # announce it in advance.
           sudo install -d /usr/share/postgresql-common/pgdg
           sudo curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
             -o /etc/apt/trusted.gpg.d/postgresql.asc
           echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
             | sudo tee /etc/apt/sources.list.d/pgdg.list
           sudo apt-get update -qq
-          sudo apt-get install -y postgresql-client-15 age
+          sudo apt-get install -y postgresql-client-17 age
+          # Force the /usr/bin/pg_dump wrapper to v17 in case the runner
+          # had an older Postgres preinstalled.
+          sudo update-alternatives --set pg_dump /usr/lib/postgresql/17/bin/pg_dump || true
 
       - name: Dump database
         env:
