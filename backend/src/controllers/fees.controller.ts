@@ -1493,9 +1493,16 @@ export async function paymentReceiptPdf(req: AuthRequest, res: Response): Promis
   const { id } = req.params; // payment id
 
   const { data: payment } = await supabase
-    .from('fee_payments').select('id, student_fee_id, amount, paid_on, method, reference, notes, unallocated_note, recorded_by, created_at')
+    .from('fee_payments').select('id, student_fee_id, amount, paid_on, method, reference, notes, unallocated_note, recorded_by, created_at, receipt_year, receipt_number')
     .eq('id', id).eq('school_id', schoolId).is('voided_at', null).single();
   if (!payment) { res.status(404).json({ error: 'Payment not found' }); return; }
+
+  // Canonical receipt number is RCP-YYYY-NNNNN (sequential per school, per
+  // calendar year — see CLAUDE.md). Fall back to a UUID-derived ID only for
+  // payments recorded before migration 009 introduced these columns.
+  const formattedReceiptNumber = (payment as any).receipt_year != null && (payment as any).receipt_number != null
+    ? `RCP-${(payment as any).receipt_year}-${String((payment as any).receipt_number).padStart(5, '0')}`
+    : `FEE-${String((payment as any).id).slice(0, 8).toUpperCase()}`;
 
   const auth = await authorizeReceipt(req, (payment as any).student_fee_id);
   if (!auth.ok) { res.status(403).json({ error: 'Forbidden' }); return; }
@@ -1539,7 +1546,7 @@ export async function paymentReceiptPdf(req: AuthRequest, res: Response): Promis
   }
 
   res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `inline; filename="receipt-${(payment as any).id.slice(0, 8)}.pdf"`);
+  res.setHeader('Content-Disposition', `inline; filename="receipt-${formattedReceiptNumber}.pdf"`);
   await streamPaymentReceipt(res, {
     school: ctx.schoolInfo,
     parentName: ctx.parentName,
@@ -1547,7 +1554,7 @@ export async function paymentReceiptPdf(req: AuthRequest, res: Response): Promis
     planName: ctx.planName,
     academicYear: ctx.academicYear,
     currency: ctx.currency,
-    receiptNumber: `FEE-${(payment as any).id.slice(0, 8).toUpperCase()}`,
+    receiptNumber: formattedReceiptNumber,
     paidOn: (payment as any).paid_on,
     amount: paymentAmount,
     method: (payment as any).method,
