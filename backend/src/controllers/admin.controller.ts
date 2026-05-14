@@ -721,9 +721,15 @@ export async function archiveStudent(req: AuthRequest, res: Response): Promise<v
   // Each entry = one student_fee row (a plan applied to this student) with its
   // own payment list. This is the source of truth for the accountant archive
   // tab once the student is gone.
+  //
+  // Per-payment fields mirror fee_payments columns so a returning parent's
+  // receipt lookup (RCP-YYYY-NNNNN), refund chain, tax records, and
+  // payment-account reconciliation all survive archive. Currency on the
+  // payment row is the source of truth — must NOT fall back to the plan's
+  // currency (per the accounting invariant in CLAUDE.md).
   const { data: studentFeeRows } = await supabase
     .from('student_fees')
-    .select('id, total_amount, adjustment, notes, created_at, fee_plans(name, currency, academic_year)')
+    .select('id, total_amount, adjustment, sibling_discount, late_fees, notes, created_at, fee_plans(name, currency, academic_year)')
     .eq('student_id', id)
     .eq('school_id', schoolId);
 
@@ -731,7 +737,9 @@ export async function archiveStudent(req: AuthRequest, res: Response): Promise<v
   const { data: paymentRows } = sfIds.length
     ? await supabase
         .from('fee_payments')
-        .select('id, student_fee_id, amount, paid_on, method, reference, notes, created_at')
+        .select(`id, student_fee_id, amount, paid_on, method, reference, notes, created_at,
+                 currency, receipt_year, receipt_number, tax_amount, tax_label,
+                 payment_account_id, is_refund, refund_of_payment_id`)
         .in('student_fee_id', sfIds)
         .order('paid_on', { ascending: true })
     : { data: [] as any[] };
@@ -747,49 +755,61 @@ export async function archiveStudent(req: AuthRequest, res: Response): Promise<v
       reference: (p as any).reference ?? null,
       notes: (p as any).notes ?? null,
       createdAt: (p as any).created_at,
+      // accounting fields — preserved verbatim so receipts, refunds, and
+      // tax reports remain reconstructable after archive
+      currency: (p as any).currency ?? null,
+      receiptYear: (p as any).receipt_year ?? null,
+      receiptNumber: (p as any).receipt_number ?? null,
+      taxAmount: (p as any).tax_amount != null ? Number((p as any).tax_amount) : null,
+      taxLabel: (p as any).tax_label ?? null,
+      paymentAccountId: (p as any).payment_account_id ?? null,
+      isRefund: Boolean((p as any).is_refund),
+      refundOfPaymentId: (p as any).refund_of_payment_id ?? null,
     });
     paymentsBySf.set((p as any).student_fee_id, arr);
   }
 
-  const paymentHistory = (studentFeeRows || []).map((sf: any) => ({
-    studentFeeId: sf.id,
-    planName: sf.fee_plans?.name ?? 'Plan',
-    academicYear: sf.fee_plans?.academic_year ?? null,
-    currency: sf.fee_plans?.currency ?? 'USD',
-    totalAmount: Number(sf.total_amount),
-    adjustment: Number(sf.adjustment),
-    notes: sf.notes ?? null,
-    createdAt: sf.created_at,
-    payments: paymentsBySf.get(sf.id) ?? [],
-  }));
-
-  // Insert archive record
-  const { error: archiveErr } = await supabase.from('archived_students').insert({
-    school_id: schoolId,
-    original_student_id: id,
-    full_name: student.full_name,
-    date_of_birth: student.date_of_birth ?? null,
-    enrollment_date: student.created_at ? student.created_at.split('T')[0] : null,
-    departure_date: departureDate || new Date().toISOString().split('T')[0],
-    reason,
-    parent_full_name: (student as any).parents?.full_name ?? null,
-    parent_phone: (student as any).parents?.phone_number ?? null,
-    classes_attended: classesAttended,
-    grades: gradesSnapshot,
-    payment_history: paymentHistory,
+  const paymentHistory = (studentFeeRows || []).map((sf: any) => {
+    const payments = paymentsBySf.get(sf.id) ?? [];
+    // Plan-level currency is the fallback only — individual payments may
+    // have been recorded in a different currency, which the per-payment
+    // record above preserves.
+    return {
+      studentFeeId: sf.id,
+      planName: sf.fee_plans?.name ?? 'Plan',
+      academicYear: sf.fee_plans?.academic_year ?? null,
+      currency: sf.fee_plans?.currency ?? 'USD',
+      totalAmount: Number(sf.total_amount),
+      adjustment: Number(sf.adjustment),
+      siblingDiscount: sf.sibling_discount != null ? Number(sf.sibling_discount) : 0,
+      lateFees: sf.late_fees != null ? Number(sf.late_fees) : 0,
+      notes: sf.notes ?? null,
+      createdAt: sf.created_at,
+      payments,
+    };
   });
 
-  if (archiveErr) {
-    res.status(500).json({ error: archiveErr.message });
-    return;
-  }
+  // Atomic archive: insert into archived_students + delete from students
+  // in one transaction (PL/pgSQL function from migration 010). Previously
+  // these were two REST calls and a partial failure could leave a duplicate
+  // archive row alongside the live student.
+  const { error: rpcErr } = await supabase.rpc('archive_student_atomic', {
+    p_school_id: schoolId,
+    p_student_id: id,
+    p_full_name: student.full_name,
+    p_date_of_birth: student.date_of_birth ?? null,
+    p_enrollment_date: student.created_at ? student.created_at.split('T')[0] : null,
+    p_departure_date: departureDate || new Date().toISOString().split('T')[0],
+    p_reason: reason,
+    p_parent_full_name: (student as any).parents?.full_name ?? null,
+    p_parent_phone: (student as any).parents?.phone_number ?? null,
+    p_classes_attended: classesAttended,
+    p_grades: gradesSnapshot,
+    p_payment_history: paymentHistory,
+  });
 
-  // Delete student — cascades attendance, reports, grades, bus records, etc.
-  const { error: deleteErr } = await supabase
-    .from('students').delete().eq('id', id).eq('school_id', schoolId);
-
-  if (deleteErr) {
-    res.status(500).json({ error: deleteErr.message });
+  if (rpcErr) {
+    res.status(500).json({ error: rpcErr.message });
     return;
   }
 
@@ -925,11 +945,17 @@ export async function deleteClass(req: AuthRequest, res: Response): Promise<void
   const affTeachers = Array.from(new Set(((cstRows ?? []) as any[]).map(r => r.teacher_id)));
   const affSubjects = Array.from(new Set(((cstRows ?? []) as any[]).map(r => r.subject_id)));
 
-  // Students with this class_id will have class_id set to NULL automatically (ON DELETE SET NULL)
+  // SET NULL cascades on delete:
+  //   - students.class_id → student stays, class link cleared
+  //   - grades.class_id → grade row stays as historical record
+  //   - attendance.class_id → attendance row stays as historical record
+  // CASCADE cascades on delete (these rows go away with the class):
+  //   - homework, assignments, weekly_summaries, schedule_assignments,
+  //     class_subject_teachers, academic_posts
   const { error } = await supabase.from('classes').delete().eq('id', id).eq('school_id', schoolId);
   if (error) { res.status(500).json({ error: error.message }); return; }
   await recomputeCaches(schoolId, { teacherIds: affTeachers, subjectIds: affSubjects });
-  res.json({ message: 'Class deleted. Students have been unassigned but not removed.' });
+  res.json({ message: 'Class deleted. Students unassigned; grades and attendance preserved as historical records.' });
 }
 
 // ---- CURRICULUM (class ↔ subject ↔ teacher) ----

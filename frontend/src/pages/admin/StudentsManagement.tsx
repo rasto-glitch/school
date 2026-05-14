@@ -168,7 +168,13 @@ export default function StudentsManagement() {
   const onRemove = async () => {
     if (removeStudentIds.size === 0) { toast.error('Select at least one student to remove'); return; }
     const count = removeStudentIds.size;
-    if (!confirm(`Remove ${count} student${count > 1 ? 's' : ''}? This cannot be undone.`)) return;
+    const noun = count > 1 ? 'students' : 'student';
+    if (!confirm(
+      `Permanently delete ${count} ${noun}?\n\n` +
+      `This will also delete every grade, attendance record, report, homework submission, ` +
+      `assignment, and bus record tied to ${count > 1 ? 'them' : 'this student'}.\n\n` +
+      `If you want to keep their history, use Archive instead.\n\nThis cannot be undone.`
+    )) return;
     setRemoveSubmitting(true);
     try {
       await Promise.all([...removeStudentIds].map(id => adminApi.deleteStudent(id)));

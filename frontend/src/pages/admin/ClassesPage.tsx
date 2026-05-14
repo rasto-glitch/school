@@ -220,7 +220,13 @@ export default function ClassesPage() {
                           </select>
                           <button
                             onClick={async () => {
-                              if (!confirm(`Delete class "${c.name}"?`)) return;
+                              if (!confirm(
+                                `Delete class "${c.name}"?\n\n` +
+                                `Students currently in this class will be unassigned (their records stay).\n\n` +
+                                `Grades and attendance for this class will be kept as historical records ` +
+                                `(no longer linked to an active class). Homework, assignments, weekly summaries, ` +
+                                `and schedule entries for this class will be permanently deleted.`
+                              )) return;
                               try {
                                 await adminApi.deleteClass(c.id);
                                 loadClasses();
