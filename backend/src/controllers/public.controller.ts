@@ -89,14 +89,13 @@ const send = async ({ subject, html, text, replyTo, to = TO_EMAIL }: SendArgs) =
   }
 };
 
-// Generic 5xx response with a hint in non-prod so the operator can see the
-// real reason from the browser network tab. In production we still return
-// only the friendly message — Railway logs carry the full Resend error.
+// 5xx response that includes the underlying Resend reason when available.
+// Resend's error messages are operator-facing ("domain not verified", "rate
+// limit exceeded", "invalid recipient") and safe to expose — they don't
+// leak internal state.
 const sendError = (res: Response, err: unknown) => {
   const e = err as { resendMessage?: string };
-  const detail = process.env.NODE_ENV !== 'production' && e?.resendMessage
-    ? ` (${e.resendMessage})`
-    : '';
+  const detail = e?.resendMessage ? ` (${e.resendMessage})` : '';
   res.status(500).json({ error: `Could not send. Please try again later.${detail}` });
 };
 
