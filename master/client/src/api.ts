@@ -196,3 +196,62 @@ export const getAccessLog = (schoolId?: string) =>
   api.get<AccessLogEntry[]>('/chat-audit/access-log', {
     params: schoolId ? { schoolId } : undefined,
   });
+
+// ── Operator inbox ─────────────────────────────────────────────────────────
+
+export type InboxKey = 'all' | 'support' | 'onboarding' | 'contact' | 'partner';
+export type InboxStatus = 'all' | 'unread' | 'read' | 'archived';
+
+export interface ThreadSummary {
+  threadId: string;
+  latestId: string;
+  subject: string;
+  preview: string;
+  participant: { email: string; name: string | null };
+  inbox: string;          // e.g. "support@scholify.krd"
+  messageCount: number;
+  latestAt: string;
+  latestDirection: 'inbound' | 'outbound';
+  unread: boolean;
+  archived: boolean;
+  replied: boolean;
+}
+
+export interface EmailRow {
+  id: string;
+  thread_id: string;
+  message_id: string | null;
+  in_reply_to: string | null;
+  references_header: string | null;
+  direction: 'inbound' | 'outbound';
+  from_email: string;
+  from_name: string | null;
+  to_email: string;
+  cc_emails: string[];
+  subject: string | null;
+  text_body: string | null;
+  html_body: string | null;
+  received_at: string;
+  is_read: boolean;
+  is_archived: boolean;
+  replied_at: string | null;
+  resend_id: string | null;
+  attachments: { name: string | null; type: string | null; size: number | null }[];
+}
+
+export const listThreads = (params: { inbox?: InboxKey; status?: InboxStatus; q?: string } = {}) =>
+  api.get<{ threads: ThreadSummary[] }>('/emails', { params });
+
+export const getEmail = (id: string) =>
+  api.get<{ email: EmailRow; thread: EmailRow[] }>(`/emails/${id}`);
+
+export const patchEmail = (id: string, patch: { isRead?: boolean; isArchived?: boolean }) =>
+  api.patch(`/emails/${id}`, patch);
+
+export const patchThread = (threadId: string, patch: { isRead?: boolean; isArchived?: boolean }) =>
+  api.patch(`/emails/thread/${threadId}`, patch);
+
+export const replyToEmail = (
+  id: string,
+  body: { text: string; html?: string; subject?: string; cc?: string[] },
+) => api.post<{ ok: boolean; id?: string; resendId?: string | null }>(`/emails/${id}/reply`, body);

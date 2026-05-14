@@ -7,6 +7,7 @@ dotenv.config();
 import authRouter from './routes/auth';
 import schoolsRouter from './routes/schools';
 import chatAuditRouter from './routes/chatAudit';
+import emailsRouter from './routes/emails';
 import { requireMasterAuth } from './middleware/auth';
 
 const app = express();
@@ -18,6 +19,7 @@ app.use(express.json());
 app.use('/api/auth', authRouter);
 app.use('/api/schools', requireMasterAuth, schoolsRouter);
 app.use('/api/chat-audit', requireMasterAuth, chatAuditRouter);
+app.use('/api/emails', requireMasterAuth, emailsRouter);
 
 // Serve built client in production
 const clientDist = path.join(__dirname, '../../client/dist');

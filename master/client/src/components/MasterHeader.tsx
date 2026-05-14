@@ -26,6 +26,7 @@ export default function MasterHeader({ currentView, onNavigate, onLogout }: Prop
         <nav className="flex gap-1 bg-slate-100 rounded-lg p-1">
           <NavTab active={currentView === 'schools'} onClick={() => onNavigate('schools')}>Schools</NavTab>
           <NavTab active={currentView === 'audit'} onClick={() => onNavigate('audit')}>Chat Audit</NavTab>
+          <NavTab active={currentView === 'inbox'} onClick={() => onNavigate('inbox')}>Inbox</NavTab>
         </nav>
       </div>
 

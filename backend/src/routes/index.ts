@@ -10,6 +10,7 @@ import * as academic from '../controllers/academic.controller';
 import * as chat from '../controllers/chat.controller';
 import * as reception from '../controllers/reception.controller';
 import * as pub from '../controllers/public.controller';
+import * as inbound from '../controllers/inbound.controller';
 import * as fees from '../controllers/fees.controller';
 import * as staff from '../controllers/staff.controller';
 import * as expenses from '../controllers/expenses.controller';
@@ -32,6 +33,13 @@ export function createRouter(io: SocketServer) {
   router.post('/public/demo-request', (req, res) => { pub.demoRequest(req, res); });
   router.post('/public/partner-application', (req, res) => { pub.partnerApplication(req, res); });
   router.post('/public/contact-request', (req, res) => { pub.contactRequest(req, res); });
+
+  // ---- INBOUND EMAIL WEBHOOK ----
+  // Called by the Cloudflare Email Worker. Shared-secret auth is enforced
+  // inside the controller. Not user-facing — exempt from the public-form
+  // limiter (which is keyed on /api/public/), gated by the general
+  // /api/ limiter only.
+  router.post('/inbound/email', (req, res) => { inbound.inboundEmail(req, res); });
 
   // ---- AUTH ----
   router.post('/auth/login', login);

@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react';
 import LoginPage from './pages/LoginPage';
 import SchoolsPage from './pages/SchoolsPage';
 import ChatAuditPage from './pages/ChatAuditPage';
+import InboxPage from './pages/InboxPage';
 
-export type MasterView = 'schools' | 'audit';
+export type MasterView = 'schools' | 'audit' | 'inbox';
 
 export default function App() {
   const [token, setToken] = useState<string | null>(null);
@@ -28,6 +29,9 @@ export default function App() {
 
   if (view === 'audit') {
     return <ChatAuditPage onLogout={handleLogout} currentView={view} onNavigate={setView} />;
+  }
+  if (view === 'inbox') {
+    return <InboxPage onLogout={handleLogout} currentView={view} onNavigate={setView} />;
   }
   return <SchoolsPage onLogout={handleLogout} currentView={view} onNavigate={setView} />;
 }
