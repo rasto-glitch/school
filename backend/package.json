@@ -7,7 +7,9 @@
     "dev": "nodemon --watch src --ext ts --exec ts-node src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "typecheck": "tsc --noEmit",
+    "check:tenant-scoping": "node scripts/check-tenant-scoping.cjs"
   },
   "keywords": [],
   "author": "",

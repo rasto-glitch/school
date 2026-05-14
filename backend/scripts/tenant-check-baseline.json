@@ -1,0 +1,217 @@
+{
+  "_comment": "Grandfathered tenant-scoping offenders. Each entry is a controller-file/table pair where Supabase queries currently filter by something other than school_id (typically an id from a prior school-scoped query — safe by data flow but not statically verifiable). Audit these one by one and remove from this file as you scope them explicitly. New offenders not in this file will fail the check.",
+  "entries": [
+    {
+      "file": "academic.controller.ts",
+      "table": "academic_posts"
+    },
+    {
+      "file": "academic.controller.ts",
+      "table": "classes"
+    },
+    {
+      "file": "academic.controller.ts",
+      "table": "parents"
+    },
+    {
+      "file": "academic.controller.ts",
+      "table": "post_comment_likes"
+    },
+    {
+      "file": "academic.controller.ts",
+      "table": "post_comments"
+    },
+    {
+      "file": "academic.controller.ts",
+      "table": "post_likes"
+    },
+    {
+      "file": "academic.controller.ts",
+      "table": "post_saves"
+    },
+    {
+      "file": "academic.controller.ts",
+      "table": "students"
+    },
+    {
+      "file": "academic.controller.ts",
+      "table": "teacher_classes"
+    },
+    {
+      "file": "academic.controller.ts",
+      "table": "teachers"
+    },
+    {
+      "file": "academic.controller.ts",
+      "table": "users"
+    },
+    {
+      "file": "accounting.controller.ts",
+      "table": "expenses"
+    },
+    {
+      "file": "accounting.controller.ts",
+      "table": "fee_payments"
+    },
+    {
+      "file": "accounting.controller.ts",
+      "table": "staff_salary_payments"
+    },
+    {
+      "file": "accounting.controller.ts",
+      "table": "users"
+    },
+    {
+      "file": "admin.controller.ts",
+      "table": "announcement_comment_likes"
+    },
+    {
+      "file": "admin.controller.ts",
+      "table": "announcement_comments"
+    },
+    {
+      "file": "admin.controller.ts",
+      "table": "announcement_likes"
+    },
+    {
+      "file": "admin.controller.ts",
+      "table": "drivers"
+    },
+    {
+      "file": "admin.controller.ts",
+      "table": "fee_payments"
+    },
+    {
+      "file": "admin.controller.ts",
+      "table": "students"
+    },
+    {
+      "file": "admin.controller.ts",
+      "table": "teacher_classes"
+    },
+    {
+      "file": "admin.controller.ts",
+      "table": "teachers"
+    },
+    {
+      "file": "admin.controller.ts",
+      "table": "users"
+    },
+    {
+      "file": "auth.controller.ts",
+      "table": "device_tokens"
+    },
+    {
+      "file": "chat.controller.ts",
+      "table": "conversation_reads"
+    },
+    {
+      "file": "chat.controller.ts",
+      "table": "conversations"
+    },
+    {
+      "file": "chat.controller.ts",
+      "table": "message_edits"
+    },
+    {
+      "file": "chat.controller.ts",
+      "table": "messages"
+    },
+    {
+      "file": "chat.controller.ts",
+      "table": "teacher_classes"
+    },
+    {
+      "file": "chat.controller.ts",
+      "table": "users"
+    },
+    {
+      "file": "driver.controller.ts",
+      "table": "bus_locations"
+    },
+    {
+      "file": "driver.controller.ts",
+      "table": "drivers"
+    },
+    {
+      "file": "expenses.controller.ts",
+      "table": "expense_recurring_templates"
+    },
+    {
+      "file": "expenses.controller.ts",
+      "table": "expenses"
+    },
+    {
+      "file": "expenses.controller.ts",
+      "table": "users"
+    },
+    {
+      "file": "fees.controller.ts",
+      "table": "fee_installments"
+    },
+    {
+      "file": "fees.controller.ts",
+      "table": "fee_payment_allocations"
+    },
+    {
+      "file": "fees.controller.ts",
+      "table": "fee_payments"
+    },
+    {
+      "file": "fees.controller.ts",
+      "table": "fee_plan_classes"
+    },
+    {
+      "file": "fees.controller.ts",
+      "table": "fee_plans"
+    },
+    {
+      "file": "fees.controller.ts",
+      "table": "student_access_locks"
+    },
+    {
+      "file": "fees.controller.ts",
+      "table": "student_fee_late_fees"
+    },
+    {
+      "file": "fees.controller.ts",
+      "table": "student_fees"
+    },
+    {
+      "file": "fees.controller.ts",
+      "table": "users"
+    },
+    {
+      "file": "parent.controller.ts",
+      "table": "drivers"
+    },
+    {
+      "file": "parent.controller.ts",
+      "table": "students"
+    },
+    {
+      "file": "staff.controller.ts",
+      "table": "staff_salary_payments"
+    },
+    {
+      "file": "staff.controller.ts",
+      "table": "users"
+    },
+    {
+      "file": "teacher.controller.ts",
+      "table": "attendance"
+    },
+    {
+      "file": "teacher.controller.ts",
+      "table": "notifications"
+    },
+    {
+      "file": "teacher.controller.ts",
+      "table": "students"
+    },
+    {
+      "file": "teacher.controller.ts",
+      "table": "teacher_classes"
+    }
+  ]
+}
