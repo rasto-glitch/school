@@ -5,7 +5,7 @@
   and restore into a target database.
 
 .DESCRIPTION
-  Designed for the emergency case — your primary Supabase database is in
+  Designed for the emergency case - your primary Supabase database is in
   a bad state and you need to recover. See BACKUP.md for context.
 
 .PARAMETER Target
@@ -57,7 +57,7 @@ function Require-Cmd([string]$name) {
   }
 }
 
-Require-Cmd 'aws'   # AWS CLI v2 — talks to B2's S3-compatible API
+Require-Cmd 'aws'   # AWS CLI v2 - talks to B2's S3-compatible API
 Require-Cmd 'age'   # age CLI for decryption
 if (-not $DryRun) {
   Require-Cmd 'pg_restore'
@@ -107,7 +107,7 @@ try {
   Write-Host "==> Decrypted to $decrypted."
 
   if ($DryRun) {
-    Write-Host "==> Dry run — skipping pg_restore."
+    Write-Host "==> Dry run - skipping pg_restore."
     Write-Host "==> Inspect the file at: $decrypted"
     return
   }
@@ -128,7 +128,7 @@ try {
       --verbose `
       $decrypted
   if ($LASTEXITCODE -ne 0) {
-    Write-Warning "pg_restore exited with $LASTEXITCODE — some objects may have failed to restore. Check the verbose output above."
+    Write-Warning "pg_restore exited with $LASTEXITCODE - some objects may have failed to restore. Check the verbose output above."
   } else {
     Write-Host "==> Restore complete."
   }
