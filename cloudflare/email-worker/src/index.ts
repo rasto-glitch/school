@@ -30,6 +30,29 @@ interface ParsedAttachment {
   content?: ArrayBuffer | Uint8Array;
 }
 
+// Per-attachment cap. Larger files arrive as metadata-only; the operator
+// can still retrieve them from the Gmail mirror. Keeps Worker memory and
+// the JSON payload to the backend bounded.
+const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+const MAX_ATTACHMENTS = 10;
+
+function bytesOf(content: ParsedAttachment['content']): Uint8Array | null {
+  if (!content) return null;
+  if (content instanceof Uint8Array) return content;
+  if (content instanceof ArrayBuffer) return new Uint8Array(content);
+  return null;
+}
+
+function toBase64(bytes: Uint8Array): string {
+  // Chunked to avoid huge intermediate string-from-charcodes calls.
+  const CHUNK = 0x8000;
+  const parts: string[] = [];
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    parts.push(String.fromCharCode(...bytes.subarray(i, i + CHUNK)));
+  }
+  return btoa(parts.join(''));
+}
+
 interface ParsedEmail {
   messageId?: string;
   inReplyTo?: string;
@@ -119,16 +142,21 @@ export default {
         subject: parsed.subject,
         text: parsed.text,
         html: parsed.html,
-        attachments: (parsed.attachments || []).map(a => ({
-          filename: a.filename,
-          mimeType: a.mimeType,
-          size:
-            a.content instanceof ArrayBuffer
-              ? a.content.byteLength
-              : a.content instanceof Uint8Array
-                ? a.content.byteLength
+        attachments: (parsed.attachments || []).slice(0, MAX_ATTACHMENTS).map(a => {
+          const bytes = bytesOf(a.content);
+          const size = bytes?.byteLength;
+          return {
+            filename: a.filename,
+            mimeType: a.mimeType,
+            size,
+            // Ship the file body only when small enough; backend will
+            // store it in Supabase. Oversized files become metadata-only.
+            contentBase64:
+              bytes && typeof size === 'number' && size > 0 && size <= MAX_ATTACHMENT_BYTES
+                ? toBase64(bytes)
                 : undefined,
-        })),
+          };
+        }),
         rawSize: raw.byteLength,
       };
 

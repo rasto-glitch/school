@@ -18,6 +18,18 @@ import { logger } from '../utils/logger';
 
 const MAX_BODY = 256 * 1024;     // 256 KB per text/html field
 const MAX_HEADERS_TOTAL = 4 * 1024;
+const STORAGE_BUCKET = 'operator-mail';
+const MAX_ATTACHMENTS = 10;
+
+interface InboundAttachment {
+  filename?: string;
+  mimeType?: string;
+  size?: number;
+  // Present only when the file is small enough (≤10 MB per the Worker).
+  // Larger attachments arrive as metadata-only; the operator can fetch
+  // them from Gmail.
+  contentBase64?: string;
+}
 
 interface InboundPayload {
   messageId?: string;
@@ -29,9 +41,14 @@ interface InboundPayload {
   subject?: string;
   text?: string;
   html?: string;
-  attachments?: { filename?: string; mimeType?: string; size?: number }[];
+  attachments?: InboundAttachment[];
   rawSize?: number;
 }
+
+const sanitizeFilename = (name: string | null | undefined, fallback: string): string => {
+  const raw = (name || fallback).replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 200);
+  return raw || fallback;
+};
 
 const OUR_INBOXES = new Set([
   'support@scholify.krd',
@@ -157,11 +174,13 @@ export const inboundEmail = async (req: Request, res: Response) => {
     thread_id: threadIdFromAncestor || '00000000-0000-0000-0000-000000000000',
     attachments: Array.isArray(payload.attachments)
       ? payload.attachments
-          .slice(0, 32)
+          .slice(0, MAX_ATTACHMENTS)
           .map(a => ({
             name: truncate(a?.filename, 255),
             type: truncate(a?.mimeType, 127),
             size: typeof a?.size === 'number' ? a.size : null,
+            // storageKey filled in after upload below
+            storageKey: null as string | null,
           }))
       : [],
     raw_size: typeof payload.rawSize === 'number' ? payload.rawSize : null,
@@ -186,6 +205,45 @@ export const inboundEmail = async (req: Request, res: Response) => {
     await supabase
       .from('operator_emails')
       .update({ thread_id: inserted.id })
+      .eq('id', inserted.id);
+  }
+
+  // Attachment uploads. Best-effort: even if one fails, the row stays in
+  // place with metadata so the operator at least sees the filename in the
+  // inbox UI. We only update the row if at least one upload succeeded.
+  const incoming = Array.isArray(payload.attachments)
+    ? payload.attachments.slice(0, MAX_ATTACHMENTS)
+    : [];
+  if (incoming.some(a => a?.contentBase64)) {
+    const storedAttachments = await Promise.all(
+      row.attachments.map(async (att, idx) => {
+        const src = incoming[idx];
+        if (!src?.contentBase64) return att;
+        try {
+          const buf = Buffer.from(src.contentBase64, 'base64');
+          const safe = sanitizeFilename(att.name, `file-${idx}`);
+          const key = `inbound/${inserted.id}/${idx}-${safe}`;
+          const { error: upErr } = await supabase.storage
+            .from(STORAGE_BUCKET)
+            .upload(key, buf, {
+              contentType: att.type || 'application/octet-stream',
+              upsert: false,
+            });
+          if (upErr) {
+            logger.error('Inbound attachment upload failed', { error: upErr, key });
+            return att;
+          }
+          return { ...att, storageKey: key };
+        } catch (err) {
+          logger.error('Inbound attachment decode/upload threw', { err, idx });
+          return att;
+        }
+      }),
+    );
+    // tenant-check-allow: operator_emails is operator-level (no school_id by design)
+    await supabase
+      .from('operator_emails')
+      .update({ attachments: storedAttachments })
       .eq('id', inserted.id);
   }
 

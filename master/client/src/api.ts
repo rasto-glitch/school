@@ -236,8 +236,21 @@ export interface EmailRow {
   is_archived: boolean;
   replied_at: string | null;
   resend_id: string | null;
-  attachments: { name: string | null; type: string | null; size: number | null }[];
+  attachments: {
+    name: string | null;
+    type: string | null;
+    size: number | null;
+    storageKey?: string | null;
+  }[];
 }
+
+export interface InboxDescriptor {
+  address: string;
+  name: string;
+}
+
+export const listInboxes = () =>
+  api.get<{ inboxes: InboxDescriptor[] }>('/emails/inboxes');
 
 export const listThreads = (params: { inbox?: InboxKey; status?: InboxStatus; q?: string } = {}) =>
   api.get<{ threads: ThreadSummary[] }>('/emails', { params });
@@ -251,7 +264,74 @@ export const patchEmail = (id: string, patch: { isRead?: boolean; isArchived?: b
 export const patchThread = (threadId: string, patch: { isRead?: boolean; isArchived?: boolean }) =>
   api.patch(`/emails/thread/${threadId}`, patch);
 
+export const getAttachmentUrl = (emailId: string, idx: number) =>
+  api.get<{ url: string; filename: string | null; type: string | null }>(
+    `/emails/attachments/${emailId}/${idx}/url`,
+  );
+
+// Helper: build a multipart body. Resend caps total at 40 MB; we cap at 25 MB.
+function buildFormData(fields: Record<string, string | string[] | undefined>, files: File[]): FormData {
+  const fd = new FormData();
+  for (const [key, val] of Object.entries(fields)) {
+    if (val === undefined) continue;
+    if (Array.isArray(val)) fd.append(key, val.join(','));
+    else fd.append(key, val);
+  }
+  for (const f of files) fd.append('attachments', f, f.name);
+  return fd;
+}
+
 export const replyToEmail = (
   id: string,
-  body: { text: string; html?: string; subject?: string; cc?: string[] },
-) => api.post<{ ok: boolean; id?: string; resendId?: string | null }>(`/emails/${id}/reply`, body);
+  body: {
+    text: string;
+    html?: string;
+    subject?: string;
+    cc?: string[];
+    fromInbox?: string;
+  },
+  files: File[] = [],
+) => {
+  const fd = buildFormData(
+    {
+      text: body.text,
+      html: body.html,
+      subject: body.subject,
+      cc: body.cc,
+      fromInbox: body.fromInbox,
+    },
+    files,
+  );
+  return api.post<{ ok: boolean; id?: string; resendId?: string | null }>(
+    `/emails/${id}/reply`,
+    fd,
+  );
+};
+
+export const composeEmail = (
+  body: {
+    from: string;
+    to: string;
+    subject: string;
+    text: string;
+    html?: string;
+    cc?: string[];
+  },
+  files: File[] = [],
+) => {
+  const fd = buildFormData(
+    {
+      from: body.from,
+      to: body.to,
+      subject: body.subject,
+      text: body.text,
+      html: body.html,
+      cc: body.cc,
+    },
+    files,
+  );
+  return api.post<{ ok: boolean; id?: string; threadId?: string; resendId?: string | null }>(
+    '/emails/compose',
+    fd,
+  );
+};

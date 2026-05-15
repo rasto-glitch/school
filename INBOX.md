@@ -51,6 +51,19 @@ Apply `database/migrations/011_operator_emails.sql` to Supabase:
 -- copy/paste the file contents into SQL Editor and Run
 ```
 
+### 2a. Create the attachment storage bucket
+
+The inbox stores attachment files (both inbound and outbound replies) in a
+private Supabase Storage bucket called `operator-mail`. One-time setup:
+
+1. Supabase dashboard → **Storage** → **New bucket**.
+2. Name: `operator-mail`. Public: **No** (leave private). File size limit:
+   leave default; we cap at 10 MB per file in code.
+3. Click **Create bucket**.
+
+That's it — the master server uses the service-role key to read/write
+this bucket, and clients only see short-lived signed URLs for download.
+
 ### 3. Backend env var
 
 Generate a long random secret (32+ chars). Then in Railway →
@@ -128,10 +141,14 @@ If only Gmail receives it, the webhook is failing. Run
 
 ## Limits and known caveats
 
-- **Attachments** are not stored — only their metadata (filename, size,
-  type) lives on the row. The actual files are in your Gmail mirror.
-  Adding storage is a v2 (write to Supabase storage or B2 from the
-  Worker, save the URL).
+- **Attachments** are stored in the private `operator-mail` Supabase
+  Storage bucket. Per-file cap is **10 MB**; per-send cap is **25 MB**
+  total, max **10 files**. These limits are enforced in three places:
+  the Cloudflare Worker (skips inbound attachments >10 MB and ships
+  metadata only), `multer` on the master server (rejects oversized
+  uploads), and the client (validates before submit). Attachments
+  larger than the cap on inbound are shown as a dimmed chip in the UI
+  with a tooltip pointing the operator to the Gmail mirror.
 - **HTML rendering** in the thread reader is plain-text only. Most
   customer mail is plain anyway; if needed, switch the `<pre>` block
   in `InboxPage.tsx` to a sanitized HTML renderer (DOMPurify) later.
