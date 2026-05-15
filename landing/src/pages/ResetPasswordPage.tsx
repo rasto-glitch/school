@@ -9,12 +9,20 @@ type Status = 'ready' | 'sending' | 'success' | 'error';
 export default function ResetPasswordPage() {
   const { t } = useTranslation();
   const [params] = useSearchParams();
-  const token = params.get('token') || '';
+  // Capture the token once, then scrub it from the URL so it doesn't sit in
+  // browser history or leak via the Referer header to anything loaded later.
+  const [token] = useState(() => params.get('token') || '');
 
   const [pwd, setPwd] = useState('');
   const [confirm, setConfirm] = useState('');
   const [status, setStatus] = useState<Status>('ready');
   const [errorMsg, setErrorMsg] = useState('');
+
+  useEffect(() => {
+    if (window.location.search.includes('token=')) {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, []);
 
   // Reject pages opened without a token before the user even tries.
   useEffect(() => {

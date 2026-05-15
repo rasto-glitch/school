@@ -72,8 +72,8 @@ export default function ReportBugScreen() {
 
   const removeAttachment = () => setPicked(null);
 
-  const submit = async () => {
-    if (!description.trim()) return;
+  const submit = async (isRetry = false) => {
+    if (!description.trim() || submitting) return;
     setSubmitting(true);
     try {
       await bugReportApi.submit(
@@ -97,8 +97,10 @@ export default function ReportBugScreen() {
         [{ text: t('common.ok'), onPress: () => navigation.goBack() }],
       );
     } catch (err: any) {
-      if (err?.code === 'no_email_on_profile') {
+      if (err?.code === 'no_email_on_profile' && !isRetry) {
         setEmailModalOpen(true);
+      } else if (err?.code === 'no_email_on_profile') {
+        Alert.alert(t('bug.error_title'), t('bug.email_save_failed'));
       } else {
         Alert.alert(t('bug.error_title'), err?.message || t('bug.error_body'));
       }
@@ -117,8 +119,9 @@ export default function ReportBugScreen() {
     try {
       await authApi.updateMyEmail(clean);
       setEmailModalOpen(false);
-      // Auto-retry the submission now that they have an email
-      setTimeout(() => submit(), 50);
+      // Auto-retry once now that they have an email. The retry flag stops a
+      // loop if the server still rejects (modal won't reopen).
+      setTimeout(() => submit(true), 50);
     } catch (e: any) {
       Alert.alert(t('bug.error_title'), e?.response?.data?.error || t('bug.email_save_failed'));
     } finally {
@@ -194,7 +197,7 @@ export default function ReportBugScreen() {
             styles.submitBtn,
             (!description.trim() || submitting) && styles.submitBtnDisabled,
           ]}
-          onPress={submit}
+          onPress={() => submit()}
           disabled={!description.trim() || submitting}
           activeOpacity={0.85}
         >

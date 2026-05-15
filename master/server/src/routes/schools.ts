@@ -107,7 +107,7 @@ router.post('/', async (req: Request, res: Response) => {
 // from ON to OFF, every historical student record for this school is purged.
 router.put('/:id', async (req: Request, res: Response) => {
   const id = req.params.id as string;
-  const { name, slug, abbreviation, primaryColor, secondaryColor, domain, subscriptionPlan, features } = req.body;
+  const { name, slug, abbreviation, primaryColor, secondaryColor, domain, subscriptionPlan, features, confirmPurge } = req.body;
 
   let archiveWasOn = false;
   if (features) {
@@ -135,8 +135,17 @@ router.put('/:id', async (req: Request, res: Response) => {
   if (error) { res.status(400).json({ error: error.message }); return; }
 
   // Cleanup AFTER the update succeeds so we never wipe data and then fail.
+  // The purge is irreversible (drops archived_students + graduated students),
+  // so it only runs when the operator explicitly confirmed it. Without the
+  // flag we keep the data and signal the UI to ask for confirmation; the
+  // archive feature is still off, the rows are just retained until confirmed.
   if (features && archiveWasOn && features.archive !== true) {
-    await purgeArchive(id);
+    if (confirmPurge === true) {
+      await purgeArchive(id);
+    } else {
+      res.json({ ...data, pendingPurge: true });
+      return;
+    }
   }
 
   res.json(data);

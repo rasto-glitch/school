@@ -7,7 +7,8 @@ import Card from '../../components/common/Card';
 import Select from '../../components/common/Select';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import EmptyState from '../../components/common/EmptyState';
-import type { Student, Report, Grade, Mark } from '../../types';
+import type { Student, Report, Grade } from '../../types';
+import { getMarkNames, getMarkValue, gradeTotal } from '../../utils/marks';
 import { format, parseISO, differenceInYears } from 'date-fns';
 
 interface ArchivedSnapshot {
@@ -449,33 +450,3 @@ function canonicalLabel(s: string | null | undefined): string {
   return s.trim().toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
 }
 
-// Mark helpers — `marks[]` is the source of truth (CLAUDE.md). Legacy columns
-// are read only as a fallback for records written before the migration.
-function getMarkNames(g: Grade): string[] {
-  if (g.marks && g.marks.length > 0) return g.marks.map(m => m.name);
-  const legacy: string[] = [];
-  if (g.dailyGrade) legacy.push('Daily');
-  if (g.quizGrade) legacy.push('Quiz');
-  if (g.monthlyExamGrade) legacy.push('Monthly');
-  if (g.termExamGrade) legacy.push('Term Exam');
-  return legacy;
-}
-
-function getMarkValue(g: Grade, name: string): number | null {
-  if (g.marks && g.marks.length > 0) {
-    const m = g.marks.find((m: Mark) => m.name === name);
-    return m ? m.value : null;
-  }
-  if (name === 'Daily') return g.dailyGrade ?? null;
-  if (name === 'Quiz') return g.quizGrade ?? null;
-  if (name === 'Monthly') return g.monthlyExamGrade ?? null;
-  if (name === 'Term Exam') return g.termExamGrade ?? null;
-  return null;
-}
-
-function gradeTotal(g: Grade, markNames: string[]): number {
-  if (g.marks && g.marks.length > 0) {
-    return g.marks.reduce((s, m) => s + m.value, 0);
-  }
-  return markNames.reduce((s, name) => s + (getMarkValue(g, name) || 0), 0);
-}

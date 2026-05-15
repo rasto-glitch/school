@@ -36,6 +36,36 @@ api.interceptors.response.use(
 
 export default api;
 
+// Multipart uploads can't go through the axios instance (React Native needs
+// the raw FormData/fetch path), so they'd otherwise miss the 401 interceptor
+// and swallow the server's error body. This helper restores both: it parses
+// the JSON error (exposing `err.code`) and logs out on a 401 that used the
+// current session token, exactly like the axios response interceptor.
+async function multipartRequest<T>(
+  path: string,
+  form: FormData,
+  method: 'POST' | 'PATCH' = 'POST',
+): Promise<T> {
+  const token = useAuthStore.getState().token;
+  const res = await fetch(`${API_URL}${path}`, {
+    method,
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    body: form,
+  });
+  if (!res.ok) {
+    let payload: { error?: string } = {};
+    try { payload = await res.json(); } catch { /* non-JSON error body */ }
+    if (res.status === 401 && token && useAuthStore.getState().token === token) {
+      useAuthStore.getState().logout();
+    }
+    const err = new Error(payload.error || 'upload_failed') as Error & { code?: string };
+    err.code = payload.error;
+    throw err;
+  }
+  const text = await res.text();
+  return (text ? JSON.parse(text) : undefined) as T;
+}
+
 // ---- AUTH ----
 export const authApi = {
   getSchools: () => api.get('/schools'),
@@ -53,17 +83,10 @@ export const authApi = {
     api.post('/auth/forgot-password', { username }),
   forgotPasswordEmail: (username: string) =>
     api.post('/auth/forgot-password-email', { username }),
-  uploadProfilePicture: async (uri: string, name: string, mimeType: string): Promise<{ profilePicture: string }> => {
-    const token = useAuthStore.getState().token;
+  uploadProfilePicture: (uri: string, name: string, mimeType: string): Promise<{ profilePicture: string }> => {
     const form = new FormData();
     form.append('avatar', { uri, name, type: mimeType } as any);
-    const res = await fetch(`${API_URL}/auth/profile-picture`, {
-      method: 'PATCH',
-      headers: { Authorization: `Bearer ${token}` },
-      body: form,
-    });
-    if (!res.ok) throw new Error('Upload failed');
-    return res.json();
+    return multipartRequest<{ profilePicture: string }>('/auth/profile-picture', form, 'PATCH');
   },
   updateMyEmail: (email: string) =>
     api.patch<{ email: string }>('/auth/me/email', { email }),
@@ -78,7 +101,6 @@ export const bugReportApi = {
     deviceInfo: Record<string, string | undefined>,
     attachment: { uri: string; name: string; type: string } | null,
   ): Promise<void> => {
-    const token = useAuthStore.getState().token;
     const form = new FormData();
     form.append('description', description);
     form.append('deviceInfo', JSON.stringify(deviceInfo));
@@ -89,18 +111,7 @@ export const bugReportApi = {
         type: attachment.type,
       } as any);
     }
-    const res = await fetch(`${API_URL}/bug-report`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-      body: form,
-    });
-    if (!res.ok) {
-      let payload: { error?: string } = {};
-      try { payload = await res.json(); } catch { /* ignore */ }
-      const err = new Error(payload.error || 'submit_failed') as Error & { code?: string };
-      err.code = payload.error;
-      throw err;
-    }
+    await multipartRequest<void>('/bug-report', form);
   },
 };
 
@@ -194,38 +205,24 @@ export const teacherApi = {
     api.post('/teacher/attendance', data),
   getHomework: (params?: Record<string, string>) => api.get('/teacher/homework', { params }),
   createHomework: async (data: { classId: string; title: string; description?: string; dueDate?: string; subject?: string; file?: { uri: string; name: string; mimeType: string } }) => {
-    const token = useAuthStore.getState().token;
     const { file, ...rest } = data;
     if (file) {
       const form = new FormData();
       form.append('attachment', { uri: file.uri, name: file.name, type: file.mimeType } as any);
       Object.entries(rest).forEach(([k, v]) => v !== undefined && form.append(k, String(v)));
-      const res = await fetch(`${API_URL}/teacher/homework`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: form,
-      });
-      if (!res.ok) throw new Error('Upload failed');
-      return { data: await res.json() };
+      return { data: await multipartRequest('/teacher/homework', form) };
     }
     return api.post('/teacher/homework', rest);
   },
   deleteHomework: (id: string) => api.delete(`/teacher/homework/${id}`),
   getAssignments: (params?: Record<string, string>) => api.get('/teacher/assignments', { params }),
   createAssignment: async (data: { classId: string; studentId?: string; title: string; description?: string; dueDate?: string; subject?: string; file?: { uri: string; name: string; mimeType: string } }) => {
-    const token = useAuthStore.getState().token;
     const { file, ...rest } = data;
     if (file) {
       const form = new FormData();
       form.append('attachment', { uri: file.uri, name: file.name, type: file.mimeType } as any);
       Object.entries(rest).forEach(([k, v]) => v !== undefined && form.append(k, String(v)));
-      const res = await fetch(`${API_URL}/teacher/assignments`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: form,
-      });
-      if (!res.ok) throw new Error('Upload failed');
-      return { data: await res.json() };
+      return { data: await multipartRequest('/teacher/assignments', form) };
     }
     return api.post('/teacher/assignments', rest);
   },
@@ -261,17 +258,10 @@ export const chatApi = {
   deleteMessage: (msgId: string) => api.delete(`/chat/messages/${msgId}`),
   markRead: (conversationId: string) => api.post(`/chat/conversations/${conversationId}/read`),
   getUnreadCount: () => api.get('/chat/unread-count'),
-  uploadAttachment: async (file: { uri: string; name: string; mimeType: string }): Promise<{ url: string; name: string; size: number; type: 'image' | 'file' }> => {
-    const token = useAuthStore.getState().token;
+  uploadAttachment: (file: { uri: string; name: string; mimeType: string }): Promise<{ url: string; name: string; size: number; type: 'image' | 'file' }> => {
     const form = new FormData();
     form.append('file', { uri: file.uri, name: file.name, type: file.mimeType } as any);
-    const res = await fetch(`${API_URL}/chat/upload`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-      body: form,
-    });
-    if (!res.ok) throw new Error('Upload failed');
-    return res.json();
+    return multipartRequest<{ url: string; name: string; size: number; type: 'image' | 'file' }>('/chat/upload', form);
   },
 };
 

@@ -138,6 +138,7 @@ export interface Report {
   behaviorNotes?: string;
   quizMarks?: number;
   examMarks?: number;
+  marks?: GradeMark[];
   teacherNotes?: string;
   reportDate?: string;
   createdAt: string;

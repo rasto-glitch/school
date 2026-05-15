@@ -8,7 +8,8 @@ import Select from '../../components/common/Select';
 import EmptyState from '../../components/common/EmptyState';
 import ErrorMessage from '../../components/common/ErrorMessage';
 import { GradesTableSkeleton } from '../../components/common/Skeleton';
-import type { Student, Grade, Mark } from '../../types';
+import type { Student, Grade } from '../../types';
+import { getMarkNames, getMarkValue, gradeTotal } from '../../utils/marks';
 
 export default function GradesPage() {
   const { t } = useTranslation();
@@ -175,39 +176,6 @@ export default function GradesPage() {
 function canonicalLabel(s: string | null | undefined): string {
   if (!s) return '';
   return s.trim().toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
-}
-
-// Collect mark names from a grade, with legacy fallback
-function getMarkNames(g: Grade): string[] {
-  if (g.marks && g.marks.length > 0) return g.marks.map(m => m.name);
-  const legacy: string[] = [];
-  if (g.dailyGrade) legacy.push('Daily');
-  if (g.quizGrade) legacy.push('Quiz');
-  if (g.monthlyExamGrade) legacy.push('Monthly');
-  if (g.termExamGrade) legacy.push('Term Exam');
-  return legacy;
-}
-
-// Get value for a named mark (dynamic or legacy)
-function getMarkValue(g: Grade, name: string): number | null {
-  if (g.marks && g.marks.length > 0) {
-    const m = g.marks.find((m: Mark) => m.name === name);
-    return m ? m.value : null;
-  }
-  // legacy fallback
-  if (name === 'Daily') return g.dailyGrade ?? null;
-  if (name === 'Quiz') return g.quizGrade ?? null;
-  if (name === 'Monthly') return g.monthlyExamGrade ?? null;
-  if (name === 'Term Exam') return g.termExamGrade ?? null;
-  return null;
-}
-
-function gradeTotal(g: Grade, markNames: string[]): number {
-  if (g.marks && g.marks.length > 0) {
-    return g.marks.reduce((s, m) => s + m.value, 0);
-  }
-  // legacy fallback — sum only the columns visible in the table
-  return markNames.reduce((s, name) => s + (getMarkValue(g, name) || 0), 0);
 }
 
 function termAverage(subjects: string[], termData: Record<string, Grade>, markNames: string[]): number {

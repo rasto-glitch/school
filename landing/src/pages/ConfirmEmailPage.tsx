@@ -22,6 +22,11 @@ export default function ConfirmEmailPage() {
     if (ran.current) return;
     ran.current = true;
 
+    // Scrub the single-use token from the URL (history + Referer hygiene).
+    if (window.location.search.includes('token=')) {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+
     if (!token) {
       setStatus('error');
       setErrorMsg(t('confirm.no_token'));

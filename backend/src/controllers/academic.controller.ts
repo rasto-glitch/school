@@ -25,12 +25,6 @@ async function getParentClassIds(userId: string): Promise<string[]> {
   return (students ?? []).map((s: any) => s.class_id).filter(Boolean);
 }
 
-async function getUserName(userId: string): Promise<string> {
-  const { data } = await supabase.from('users').select('first_name, last_name').eq('id', userId).single();
-  if (!data) return '';
-  return `${data.first_name ?? ''} ${data.last_name ?? ''}`.trim();
-}
-
 // Fires post-publish notifications for a newly visible post. Teacher posts
 // reach only parents of students in that class; supervisor posts reach every
 // parent in the school.

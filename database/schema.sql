@@ -520,6 +520,11 @@ CREATE TABLE IF NOT EXISTS password_reset_requests (
 -- INDEXES
 -- ============================================================
 CREATE INDEX IF NOT EXISTS idx_users_school ON users(school_id);
+-- One email address per account within a school (case-insensitive). NULLs are
+-- allowed and unconstrained — email is optional. Cross-school reuse is allowed
+-- on purpose (a parent with children in two schools has two accounts).
+CREATE UNIQUE INDEX IF NOT EXISTS uq_users_school_email
+  ON users (school_id, lower(email)) WHERE email IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_students_school ON students(school_id);
 CREATE INDEX IF NOT EXISTS idx_students_class ON students(class_id);
 CREATE INDEX IF NOT EXISTS idx_students_parent ON students(parent_id);

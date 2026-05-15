@@ -195,7 +195,13 @@ export async function getGrades(req: AuthRequest, res: Response): Promise<void> 
   const { studentIds } = await getParentAndChildren(userId, schoolId);
   if (studentIds.length === 0) { res.json([]); return; }
 
-  const targetId = studentId && (studentIds as string[]).includes(studentId) ? studentId : studentIds[0];
+  // If a specific child is requested it must belong to this parent — don't
+  // silently fall back to another child (that would leak the wrong record).
+  if (studentId && !(studentIds as string[]).includes(studentId)) {
+    res.status(403).json({ error: 'Not your student' });
+    return;
+  }
+  const targetId = studentId || studentIds[0];
 
   const lock = await isFeatureLocked(targetId, 'grades');
   if (lock.locked) { res.status(403).json({ error: 'feature_locked', feature: 'grades', reason: lock.reason }); return; }

@@ -33,7 +33,7 @@ import ParentScheduleScreen from '../screens/parent/ParentScheduleScreen';
 import TuitionScreen from '../screens/parent/TuitionScreen';
 import ChatScreen from '../screens/chat/ChatScreen';
 import ReportBugScreen from '../screens/common/ReportBugScreen';
-import type { Homework, Announcement, Conversation, Ebook } from '../types';
+import type { Homework, Announcement, Conversation, Ebook, Report } from '../types';
 
 export type RootStackParamList = {
   Login: undefined;
@@ -56,7 +56,7 @@ export type RootStackParamList = {
   ReportBug: undefined;
   Reports: undefined;
   Notifications: undefined;
-  ReportDetail: { report: { id: string; subject: string; attendanceNotes?: string; behaviorNotes?: string; teacherNotes?: string; quizMarks?: number; examMarks?: number; reportDate?: string; createdAt: string; students?: { fullName: string }; teachers?: { fullName: string } } };
+  ReportDetail: { report: Report };
   Appointments: undefined;
   Grades: undefined;
   Homework: undefined;

@@ -151,13 +151,23 @@ export async function forgotPassword(req: Request, res: Response): Promise<void>
     return;
   }
 
+  // Anti-enumeration: same body, same minimum wall-clock time on every path.
+  const okMsg = { message: 'If this username exists, a reset request has been submitted to your school administrator.' };
+  const start = Date.now();
+  const FORGOT_MIN_MS = 600;
+  const finishOk = async (): Promise<void> => {
+    const wait = FORGOT_MIN_MS - (Date.now() - start);
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+    res.json(okMsg);
+  };
+
   const underscoreIdx = username.indexOf('_');
-  if (underscoreIdx === -1) { res.json({ message: 'If this username exists, a reset request has been submitted to your school administrator.' }); return; }
+  if (underscoreIdx === -1) { await finishOk(); return; }
   const abbreviation = username.substring(0, underscoreIdx).toLowerCase();
 
   const { data: school } = await supabase
     .from('schools').select('id').ilike('abbreviation', abbreviation).eq('is_active', true).single();
-  if (!school) { res.json({ message: 'If this username exists, a reset request has been submitted to your school administrator.' }); return; }
+  if (!school) { await finishOk(); return; }
 
   const { data: user } = await supabase
     .from('users').select('id, first_name, last_name')
@@ -182,7 +192,7 @@ export async function forgotPassword(req: Request, res: Response): Promise<void>
     emitToAdmins(school.id, 'password_reset_request', { userId: user.id, username });
   }
 
-  res.json({ message: 'If this username exists, a reset request has been submitted to your school administrator.' });
+  await finishOk();
 }
 
 export async function registerDeviceToken(req: AuthRequest, res: Response): Promise<void> {
@@ -315,6 +325,10 @@ export async function updateMyEmail(req: Request, res: Response): Promise<void> 
       .update({ email: cleaned })
       .eq('id', userId);
     if (error) {
+      if ((error as { code?: string }).code === '23505') {
+        res.status(409).json({ error: 'That email is already in use by another account.' });
+        return;
+      }
       res.status(500).json({ error: error.message });
       return;
     }
@@ -430,6 +444,10 @@ export async function confirmEmail(req: Request, res: Response): Promise<void> {
     .update({ email: r.new_email })
     .eq('id', r.user_id);
   if (upErr) {
+    if ((upErr as { code?: string }).code === '23505') {
+      res.status(409).json({ error: 'That email is already in use by another account.' });
+      return;
+    }
     res.status(500).json({ error: upErr.message });
     return;
   }
@@ -448,19 +466,31 @@ export async function confirmEmail(req: Request, res: Response): Promise<void> {
 export async function forgotPasswordEmail(req: Request, res: Response): Promise<void> {
   const okMessage = { message: 'If an account matches and has an email on file, a reset link has been sent.' };
 
+  // Anti-enumeration: every outcome returns the same body AND takes at least
+  // the same wall-clock time, so an attacker can't distinguish "no such user"
+  // from "user, link sent" by timing. The email itself is sent fire-and-forget
+  // so its variable latency never leaks into the response.
+  const start = Date.now();
+  const FORGOT_MIN_MS = 600;
+  const finishOk = async (): Promise<void> => {
+    const wait = FORGOT_MIN_MS - (Date.now() - start);
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+    res.json(okMessage);
+  };
+
   const { username } = req.body as { username?: string };
   if (!username || typeof username !== 'string') {
-    res.json(okMessage);
+    await finishOk();
     return;
   }
 
   const underscoreIdx = username.indexOf('_');
-  if (underscoreIdx === -1) { res.json(okMessage); return; }
+  if (underscoreIdx === -1) { await finishOk(); return; }
   const abbreviation = username.substring(0, underscoreIdx).toLowerCase();
 
   const { data: school } = await supabase
     .from('schools').select('id').ilike('abbreviation', abbreviation).eq('is_active', true).single();
-  if (!school) { res.json(okMessage); return; }
+  if (!school) { await finishOk(); return; }
 
   const { data: user } = await supabase
     .from('users')
@@ -472,7 +502,7 @@ export async function forgotPasswordEmail(req: Request, res: Response): Promise<
   // No user, inactive user, or no email → silently succeed.
   const u = user as { id: string; email: string | null; first_name: string; is_active: boolean } | null;
   if (!u || !u.is_active || !u.email) {
-    res.json(okMessage);
+    await finishOk();
     return;
   }
 
@@ -529,15 +559,13 @@ export async function forgotPasswordEmail(req: Request, res: Response): Promise<
       </div>
     </div>`;
 
-  try {
-    await sendMail(u.email, subject, html, text);
-  } catch (err) {
-    // We log but still tell the caller success — telling them the send
-    // failed would reveal that an email is on file.
+  // Fire-and-forget: do not await, so the response time does not depend on
+  // mail-provider latency (which would otherwise be an enumeration oracle).
+  sendMail(u.email, subject, html, text).catch((err) => {
     logger.error('Reset email send failed', { err });
-  }
+  });
 
-  res.json(okMessage);
+  await finishOk();
 }
 
 // Public endpoint — verifies the token, swaps the password hash, marks the
