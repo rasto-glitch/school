@@ -5,9 +5,10 @@ import {
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import {
   Bell, Globe, Lock, LogOut, FileText, ShieldCheck,
-  Moon, ChevronRight, CheckCircle, XCircle, AlertCircle, X,
+  Moon, ChevronRight, CheckCircle, XCircle, AlertCircle, X, Bug,
 } from 'lucide-react-native';
 import { openLegalPage } from '../../utils/legal';
 import i18n, { changeLanguageAndApply } from '../../i18n';
@@ -28,6 +29,7 @@ export default function TeacherSettingsScreen() {
   const { logout, user } = useAuthStore();
   const { isDark, toggleTheme } = useThemeStore();
   const colors = useColors();
+  const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
   const [lang, setLang] = useState(i18n.language || 'en');
   const [pushStatus, setPushStatus] = useState<PushStatus>(getPushStatus());
@@ -227,6 +229,19 @@ export default function TeacherSettingsScreen() {
           </View>
           <ChevronRight size={18} color={colors.textMuted} />
         </TouchableOpacity>
+        {/* Help */}
+        <Text style={styles.sectionTitle}>{t('settings.help_section')}</Text>
+        <TouchableOpacity style={styles.row} onPress={() => navigation.navigate('ReportBug')}>
+          <View style={[styles.iconBox, { backgroundColor: '#FEF2F2' }]}>
+            <Bug size={18} color="#DC2626" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.rowLabel}>{t('settings.report_bug_label')}</Text>
+            <Text style={styles.rowSub}>{t('settings.report_bug_sub')}</Text>
+          </View>
+          <ChevronRight size={18} color={colors.textMuted} />
+        </TouchableOpacity>
+
         <TouchableOpacity style={styles.logoutRow} onPress={handleLogout}>
           <LogOut size={18} color={colors.danger} />
           <Text style={styles.logoutText}>{t('nav.logout')}</Text>

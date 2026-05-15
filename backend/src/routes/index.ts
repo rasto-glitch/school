@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import multer from 'multer';
-import { login, changePassword, getSchools, forgotPassword, registerDeviceToken, removeDeviceToken, updateDeviceLanguage, uploadProfilePicture } from '../controllers/auth.controller';
+import { login, changePassword, getSchools, forgotPassword, registerDeviceToken, removeDeviceToken, updateDeviceLanguage, uploadProfilePicture, updateMyEmail } from '../controllers/auth.controller';
+import { submitBugReport } from '../controllers/bugReport.controller';
 import * as admin from '../controllers/admin.controller';
 import * as teacher from '../controllers/teacher.controller';
 import * as parent from '../controllers/parent.controller';
@@ -44,6 +45,20 @@ export function createRouter(io: SocketServer) {
   // ---- AUTH ----
   router.post('/auth/login', login);
   router.post('/auth/change-password', authenticate, (req, res) => changePassword(req, res));
+  router.patch('/auth/me/email', authenticate, (req, res) => updateMyEmail(req, res));
+
+  // Bug report — mobile app posts here. Multer accepts one screenshot or
+  // short video up to 25 MB. Body field `description` is required.
+  const bugReportUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 25 * 1024 * 1024, files: 1 },
+  });
+  router.post(
+    '/bug-report',
+    authenticate,
+    bugReportUpload.single('attachment'),
+    (req, res) => submitBugReport(req as AuthRequest, res),
+  );
   router.post('/auth/device-token', authenticate, (req, res) => registerDeviceToken(req as AuthRequest, res));
   router.delete('/auth/device-token', authenticate, (req, res) => removeDeviceToken(req as AuthRequest, res));
   router.put('/auth/device-language', authenticate, (req, res) => updateDeviceLanguage(req as AuthRequest, res));

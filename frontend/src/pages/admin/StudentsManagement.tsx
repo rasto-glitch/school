@@ -43,7 +43,7 @@ export default function StudentsManagement() {
   const [archiveFilterClassId, setArchiveFilterClassId] = useState('');
   const [assignCurrentClassId, setAssignCurrentClassId] = useState('');
 
-  const addForm = useForm<{ fullName: string; parentId: string; phoneNumber: string; emergencyContact: string; homeAddress: string; classId: string; dateOfBirth: string; residenceType: string; blockNumber: string }>();
+  const addForm = useForm<{ fullName: string; parentId: string; parentEmail: string; phoneNumber: string; emergencyContact: string; homeAddress: string; classId: string; dateOfBirth: string; residenceType: string; blockNumber: string }>();
   const editForm = useForm<{ fullName: string; parentId: string; phoneNumber: string; emergencyContact: string; homeAddress: string; classId: string; dateOfBirth: string; residenceType: string; blockNumber: string }>();
 
   // Returning-student search: as the admin types the name, surface archived
@@ -115,6 +115,7 @@ export default function StudentsManagement() {
       const res = await adminApi.createStudent({
         fullName: data.fullName,
         parentId: data.parentId || undefined,
+        parentEmail: data.parentEmail || undefined,
         phoneNumber: data.phoneNumber,
         emergencyContact: data.emergencyContact,
         homeAddress: data.homeAddress,
@@ -326,6 +327,7 @@ export default function StudentsManagement() {
                 </div>
               ) : null}
               <Select options={parents.map(p => ({ value: p.id, label: p.fullName }))} placeholder="Select Parent / Guardian" {...addForm.register('parentId')} />
+              <Input placeholder="Parent Email (optional)" type="email" {...addForm.register('parentEmail')} />
               <Input placeholder="Primary Phone Number" {...addForm.register('phoneNumber')} />
               <Input placeholder="Emergency Contact" {...addForm.register('emergencyContact')} />
               <Input placeholder="Address" {...addForm.register('homeAddress')} />
@@ -343,8 +345,8 @@ export default function StudentsManagement() {
 
           <Card>
             <h2 className="font-bold text-gray-900 mb-3 text-center">Upload Students</h2>
-            <p className="text-xs text-gray-500 mb-1">Excel columns: <span className="font-medium text-gray-700">Full Name, Primary Phone Number, Parent Phone, Emergency Contact, Date of Birth, Grade, Address, Residence Type, Block Number</span></p>
-            <p className="text-xs text-gray-400 mb-3">Optional: Parent Phone, Address, Residence Type (house/apartment), Block Number. New classes created automatically.</p>
+            <p className="text-xs text-gray-500 mb-1">Excel columns: <span className="font-medium text-gray-700">Full Name, Primary Phone Number, Parent Phone, Parent Email, Emergency Contact, Date of Birth, Grade, Address, Residence Type, Block Number</span></p>
+            <p className="text-xs text-gray-400 mb-3">Optional: Parent Phone, Parent Email, Address, Residence Type (house/apartment), Block Number. New classes created automatically. Parent emails are linked to the auto-created parent account so they can later submit bug reports from the mobile app.</p>
             <label className="flex items-center gap-2 cursor-pointer border-2 border-dashed border-gray-300 rounded-xl p-3 hover:border-primary-400 transition-colors">
               <Paperclip className="w-4 h-4 text-gray-400" />
               <span className="text-sm text-gray-500 truncate">{uploadFile ? uploadFile.name : 'Choose .xlsx or .xls file'}</span>

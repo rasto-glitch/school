@@ -204,6 +204,39 @@ export async function removeDeviceToken(req: AuthRequest, res: Response): Promis
   res.json({ message: 'Device token removed' });
 }
 
+// Lets a user set or change their own email address. The mobile bug-report
+// flow blocks submission until an email is on file (we need somewhere to
+// route the operator's reply), so this is the unblock path for parents
+// whose admin didn't capture an email at account creation.
+export async function updateMyEmail(req: Request, res: Response): Promise<void> {
+  const userId = (req as any).user?.userId;
+  const { email } = req.body as { email?: string };
+
+  const cleaned = typeof email === 'string' ? email.trim().toLowerCase() : '';
+  if (!cleaned) {
+    res.status(400).json({ error: 'email is required' });
+    return;
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleaned)) {
+    res.status(400).json({ error: 'Invalid email address' });
+    return;
+  }
+  if (cleaned.length > 254) {
+    res.status(400).json({ error: 'Email is too long' });
+    return;
+  }
+
+  const { error } = await supabase
+    .from('users')
+    .update({ email: cleaned })
+    .eq('id', userId);
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+  res.json({ email: cleaned });
+}
+
 export async function changePassword(req: Request, res: Response): Promise<void> {
   const { currentPassword, newPassword } = req.body;
   const userId = (req as any).user?.userId;

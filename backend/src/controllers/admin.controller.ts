@@ -42,7 +42,16 @@ export async function getStudents(req: AuthRequest, res: Response): Promise<void
 
 export async function createStudent(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
-  const { fullName, parentId, classId, driverId, homeAddress, emergencyContact, phoneNumber, dateOfBirth, residenceType, blockNumber, previousArchiveId } = req.body;
+  const { fullName, parentId, classId, driverId, homeAddress, emergencyContact, phoneNumber, dateOfBirth, residenceType, blockNumber, previousArchiveId, parentEmail } = req.body;
+
+  // Optional parent email captured when admin creates the student. Stored
+  // on the auto-created parent's users row so they can later use it for
+  // password recovery and to submit bug reports from mobile.
+  const cleanedParentEmail = typeof parentEmail === 'string' && parentEmail.trim()
+    ? (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parentEmail.trim().toLowerCase())
+        ? parentEmail.trim().toLowerCase()
+        : null)
+    : null;
 
   // If linking to a previously-archived enrollment, verify the archive row belongs to this school.
   let resolvedPreviousArchiveId: string | null = null;
@@ -112,6 +121,7 @@ export async function createStudent(req: AuthRequest, res: Response): Promise<vo
             username,
             password_hash: passwordHash,
             role: 'parent',
+            email: cleanedParentEmail,
             is_active: true,
           }).select('id').single();
 
@@ -270,6 +280,8 @@ export async function bulkUploadStudents(req: AuthRequest, res: Response): Promi
     'address': 'homeAddress', 'home address': 'homeAddress',
     'parent phone': 'parentPhone', 'parent phone number': 'parentPhone',
     'father phone': 'parentPhone', 'father phone number': 'parentPhone',
+    'parent email': 'parentEmail', 'email': 'parentEmail', 'parent_email': 'parentEmail',
+    'father email': 'parentEmail',
     'residence type': 'residenceType', 'house type': 'residenceType',
     'block number': 'blockNumber', 'building number': 'blockNumber',
     'apartment number': 'blockNumber', 'block': 'blockNumber', 'building': 'blockNumber',
@@ -363,6 +375,7 @@ export async function bulkUploadStudents(req: AuthRequest, res: Response): Promi
     grandfatherName: string;
     fullName: string;
     phone: string | null;
+    email: string | null;
     normResidence: 'apartment' | 'house' | null;
     blockNumber: string | null;
     createdId?: string;
@@ -394,7 +407,11 @@ export async function bulkUploadStudents(req: AuthRequest, res: Response): Promi
     }
 
     const { fullName, phoneNumber, emergencyContact, dateOfBirth, grade,
-            homeAddress, parentPhone, residenceType, blockNumber } = mapped;
+            homeAddress, parentPhone, parentEmail, residenceType, blockNumber } = mapped;
+
+    const cleanedParentEmail = parentEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parentEmail.trim().toLowerCase())
+      ? parentEmail.trim().toLowerCase()
+      : null;
 
     if (!fullName) {
       errors.push(`Row ${rowNum}: missing "Full Name" — skipped`);
@@ -446,7 +463,7 @@ export async function bulkUploadStudents(req: AuthRequest, res: Response): Promi
           if (!newParentsNeeded.has(conflictKey)) {
             newParentsNeeded.set(conflictKey, {
               fatherName, grandfatherName, fullName: parentFullName,
-              phone: resolvedPhone, normResidence, blockNumber: blockNumber || null,
+              phone: resolvedPhone, email: cleanedParentEmail, normResidence, blockNumber: blockNumber || null,
             });
           }
         }
@@ -460,7 +477,7 @@ export async function bulkUploadStudents(req: AuthRequest, res: Response): Promi
           if (!newParentsNeeded.has(conflictKey)) {
             newParentsNeeded.set(conflictKey, {
               fatherName, grandfatherName, fullName: parentFullName,
-              phone: resolvedPhone, normResidence, blockNumber: blockNumber || null,
+              phone: resolvedPhone, email: cleanedParentEmail, normResidence, blockNumber: blockNumber || null,
             });
           }
         } else {
@@ -468,7 +485,7 @@ export async function bulkUploadStudents(req: AuthRequest, res: Response): Promi
           if (!newParentsNeeded.has(parentNameKey)) {
             newParentsNeeded.set(parentNameKey, {
               fatherName, grandfatherName, fullName: parentFullName,
-              phone: resolvedPhone, normResidence, blockNumber: blockNumber || null,
+              phone: resolvedPhone, email: cleanedParentEmail, normResidence, blockNumber: blockNumber || null,
             });
           }
         }
@@ -552,6 +569,7 @@ export async function bulkUploadStudents(req: AuthRequest, res: Response): Promi
         username: generateParentUsername(p.fatherName, p.grandfatherName.split(' ')[0]),
         password_hash: defaultParentPasswordHash,
         role: 'parent',
+        email: p.email,
         is_active: true,
       })))
       .select('id');

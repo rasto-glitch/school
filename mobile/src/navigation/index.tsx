@@ -31,6 +31,7 @@ import EbookReaderScreen from '../screens/parent/EbookReaderScreen';
 import ParentScheduleScreen from '../screens/parent/ParentScheduleScreen';
 import TuitionScreen from '../screens/parent/TuitionScreen';
 import ChatScreen from '../screens/chat/ChatScreen';
+import ReportBugScreen from '../screens/common/ReportBugScreen';
 import type { Homework, Announcement, Conversation, Ebook } from '../types';
 
 export type RootStackParamList = {
@@ -50,6 +51,7 @@ export type RootStackParamList = {
   Tuition: undefined;
   SetPickupLocation: undefined;
   Settings: undefined;
+  ReportBug: undefined;
   Reports: undefined;
   Notifications: undefined;
   ReportDetail: { report: { id: string; subject: string; attendanceNotes?: string; behaviorNotes?: string; teacherNotes?: string; quizMarks?: number; examMarks?: number; reportDate?: string; createdAt: string; students?: { fullName: string }; teachers?: { fullName: string } } };
@@ -167,6 +169,11 @@ export default function Navigation() {
               component={ChatScreen}
               options={{ headerShown: true, headerBackTitle: 'Back' }}
             />
+            <Stack.Screen
+              name="ReportBug"
+              component={ReportBugScreen}
+              options={{ headerShown: true, headerTitle: 'Report a bug', headerBackTitle: 'Back' }}
+            />
           </>
         ) : (
           <>
@@ -251,6 +258,11 @@ export default function Navigation() {
               name="Chat"
               component={ChatScreen}
               options={{ headerShown: true, headerBackTitle: 'Back' }}
+            />
+            <Stack.Screen
+              name="ReportBug"
+              component={ReportBugScreen}
+              options={{ headerShown: true, headerTitle: 'Report a bug', headerBackTitle: 'Back' }}
             />
           </>
         )}

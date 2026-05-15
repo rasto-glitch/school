@@ -63,6 +63,41 @@ export const authApi = {
     if (!res.ok) throw new Error('Upload failed');
     return res.json();
   },
+  updateMyEmail: (email: string) =>
+    api.patch<{ email: string }>('/auth/me/email', { email }),
+};
+
+// ---- BUG REPORT ----
+export const bugReportApi = {
+  submit: async (
+    description: string,
+    deviceInfo: Record<string, string | undefined>,
+    attachment: { uri: string; name: string; type: string } | null,
+  ): Promise<void> => {
+    const token = useAuthStore.getState().token;
+    const form = new FormData();
+    form.append('description', description);
+    form.append('deviceInfo', JSON.stringify(deviceInfo));
+    if (attachment) {
+      form.append('attachment', {
+        uri: attachment.uri,
+        name: attachment.name,
+        type: attachment.type,
+      } as any);
+    }
+    const res = await fetch(`${API_URL}/bug-report`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+    });
+    if (!res.ok) {
+      let payload: { error?: string } = {};
+      try { payload = await res.json(); } catch { /* ignore */ }
+      const err = new Error(payload.error || 'submit_failed') as Error & { code?: string };
+      err.code = payload.error;
+      throw err;
+    }
+  },
 };
 
 // ---- PARENT ----
