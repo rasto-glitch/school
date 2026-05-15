@@ -14,6 +14,7 @@ interface AuthState {
   setAuth: (token: string, user: AuthUser, school: School) => void;
   setSelectedSchool: (school: School) => void;
   setProfilePicture: (url: string) => void;
+  setEmail: (email: string | null) => void;
   logout: () => void;
   isAuthenticated: () => boolean;
 }
@@ -28,6 +29,7 @@ export const useAuthStore = create<AuthState>()(
       setAuth: (token, user, school) => set({ token, user, school }),
       setSelectedSchool: (school) => set({ selectedSchool: school }),
       setProfilePicture: (url) => set(s => s.user ? { user: { ...s.user, profilePicture: url } } : {}),
+      setEmail: (email) => set(s => s.user ? { user: { ...s.user, email } } : {}),
       logout: () => {
         // Unsubscribe this device from push before clearing auth. Fire and
         // forget — the axios request picks up the auth header synchronously,

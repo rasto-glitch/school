@@ -8,8 +8,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import {
   Bell, MapPin, Globe, Lock, LogOut, FileText, ShieldCheck,
-  Moon, ChevronRight, CheckCircle, XCircle, AlertCircle, X, Bug,
+  Moon, ChevronRight, CheckCircle, XCircle, AlertCircle, X, Bug, Mail,
 } from 'lucide-react-native';
+import EmailEditModal from '../../components/EmailEditModal';
 import { openLegalPage } from '../../utils/legal';
 import i18n, { changeLanguageAndApply } from '../../i18n';
 import { useAuthStore } from '../../store/authStore';
@@ -27,6 +28,7 @@ const LANGUAGES = [
 export default function SettingsScreen() {
   const { t } = useTranslation();
   const { logout, user } = useAuthStore();
+  const setEmailInStore = useAuthStore(s => s.setEmail);
   const { isDark, toggleTheme } = useThemeStore();
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -34,6 +36,9 @@ export default function SettingsScreen() {
   const [lang, setLang] = useState(i18n.language || 'en');
   const [pushStatus, setPushStatus] = useState<PushStatus>(getPushStatus());
   const [retrying, setRetrying] = useState(false);
+
+  // Email modal state
+  const [showEmailModal, setShowEmailModal] = useState(false);
 
   // Password modal state
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -48,6 +53,18 @@ export default function SettingsScreen() {
     i18n.on('languageChanged', handler);
     return () => { i18n.off('languageChanged', handler); };
   }, []);
+
+  // On mount, refresh the cached email from the server. Handles the case
+  // where the user logged in BEFORE the login response started including
+  // email — without this they'd see "Not set" forever even if they do have
+  // an email on file.
+  useEffect(() => {
+    let cancelled = false;
+    authApi.getMe()
+      .then(r => { if (!cancelled) setEmailInStore(r.data.email ?? null); })
+      .catch(() => { /* non-fatal */ });
+    return () => { cancelled = true; };
+  }, [setEmailInStore]);
 
   const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
 
@@ -226,6 +243,24 @@ export default function SettingsScreen() {
 
         {/* Account */}
         <Text style={styles.sectionTitle}>{t('settings.account_section')}</Text>
+        <TouchableOpacity style={styles.row} onPress={() => setShowEmailModal(true)}>
+          <View style={[styles.iconBox, { backgroundColor: '#EEF2FF' }]}>
+            <Mail size={18} color="#6366F1" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.rowLabel}>{t('settings.email_label')}</Text>
+            <Text
+              style={[
+                styles.rowSub,
+                !user?.email && { color: colors.warning },
+              ]}
+              numberOfLines={1}
+            >
+              {user?.email || t('settings.email_not_set')}
+            </Text>
+          </View>
+          <ChevronRight size={18} color={colors.textMuted} />
+        </TouchableOpacity>
         <TouchableOpacity style={styles.row} onPress={() => setShowPasswordModal(true)}>
           <View style={[styles.iconBox, { backgroundColor: '#EFF6FF' }]}>
             <Lock size={18} color="#2563EB" />
@@ -271,6 +306,12 @@ export default function SettingsScreen() {
           <Text style={styles.logoutText}>{t('nav.logout')}</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      <EmailEditModal
+        visible={showEmailModal}
+        onClose={() => setShowEmailModal(false)}
+        currentEmail={user?.email || null}
+      />
 
       {/* Password Modal */}
       <Modal visible={showPasswordModal} animationType="slide" presentationStyle="pageSheet">

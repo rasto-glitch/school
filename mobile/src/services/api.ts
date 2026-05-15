@@ -65,6 +65,8 @@ export const authApi = {
   },
   updateMyEmail: (email: string) =>
     api.patch<{ email: string }>('/auth/me/email', { email }),
+  getMe: () =>
+    api.get<{ id: string; username: string; role: string; firstName: string; lastName: string; profilePicture: string | null; email: string | null }>('/auth/me'),
 };
 
 // ---- BUG REPORT ----

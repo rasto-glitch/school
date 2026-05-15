@@ -83,6 +83,7 @@ export interface AuthUser {
   firstName: string;
   lastName: string;
   profilePicture?: string;
+  email?: string | null;
 }
 
 export interface Student {

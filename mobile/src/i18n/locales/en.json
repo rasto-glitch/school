@@ -253,7 +253,18 @@
     "logout_confirm": "Are you sure you want to sign out?",
     "help_section": "Help",
     "report_bug_label": "Report a bug",
-    "report_bug_sub": "Tell us what went wrong and attach a screenshot or short video"
+    "report_bug_sub": "Tell us what went wrong and attach a screenshot or short video",
+    "email_label": "Email",
+    "email_not_set": "Not set — tap to add",
+    "email_set_title": "Add your email",
+    "email_change_title": "Change your email",
+    "email_set_body": "We use your email to reply to bug reports and other support requests.",
+    "email_change_body": "Update the email we use to reach you for support replies.",
+    "email_field_label": "Email",
+    "email_invalid": "Please enter a valid email address.",
+    "email_save": "Save",
+    "email_save_failed_title": "Could not save",
+    "email_save_failed_body": "Please try again in a moment."
   },
   "bug": {
     "title": "Report a bug",

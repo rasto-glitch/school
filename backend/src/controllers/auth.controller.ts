@@ -54,7 +54,7 @@ export async function login(req: Request, res: Response): Promise<void> {
   // Find user
   const { data: user, error: userErr } = await supabase
     .from('users')
-    .select('id, username, password_hash, role, first_name, last_name, profile_picture, is_active')
+    .select('id, username, password_hash, role, first_name, last_name, profile_picture, email, is_active')
     .eq('school_id', school.id)
     .eq('username', username)
     .single();
@@ -91,6 +91,7 @@ export async function login(req: Request, res: Response): Promise<void> {
       firstName: user.first_name,
       lastName: user.last_name,
       profilePicture: user.profile_picture,
+      email: user.email || null,
     },
     school: {
       id: school.id,
@@ -202,6 +203,35 @@ export async function removeDeviceToken(req: AuthRequest, res: Response): Promis
 
   await supabase.from('device_tokens').delete().eq('user_id', userId).eq('token', token);
   res.json({ message: 'Device token removed' });
+}
+
+// Returns the authenticated user's current profile. Mobile Settings calls
+// this on mount so the Email row reflects DB state even when the cached
+// token predates the email-in-login change.
+export async function getMe(req: Request, res: Response): Promise<void> {
+  const userId = (req as any).user?.userId;
+  if (!userId) {
+    res.status(401).json({ error: 'unauthorized' });
+    return;
+  }
+  const { data: user, error } = await supabase
+    .from('users')
+    .select('id, username, role, first_name, last_name, profile_picture, email')
+    .eq('id', userId)
+    .single();
+  if (error || !user) {
+    res.status(404).json({ error: 'user not found' });
+    return;
+  }
+  res.json({
+    id: user.id,
+    username: user.username,
+    role: user.role,
+    firstName: user.first_name,
+    lastName: user.last_name,
+    profilePicture: user.profile_picture,
+    email: user.email || null,
+  });
 }
 
 // Lets a user set or change their own email address. The mobile bug-report

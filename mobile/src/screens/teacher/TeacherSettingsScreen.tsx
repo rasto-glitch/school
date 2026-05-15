@@ -8,8 +8,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import {
   Bell, Globe, Lock, LogOut, FileText, ShieldCheck,
-  Moon, ChevronRight, CheckCircle, XCircle, AlertCircle, X, Bug,
+  Moon, ChevronRight, CheckCircle, XCircle, AlertCircle, X, Bug, Mail,
 } from 'lucide-react-native';
+import EmailEditModal from '../../components/EmailEditModal';
 import { openLegalPage } from '../../utils/legal';
 import i18n, { changeLanguageAndApply } from '../../i18n';
 import { useAuthStore } from '../../store/authStore';
@@ -27,9 +28,11 @@ const LANGUAGES = [
 export default function TeacherSettingsScreen() {
   const { t } = useTranslation();
   const { logout, user } = useAuthStore();
+  const setEmailInStore = useAuthStore(s => s.setEmail);
   const { isDark, toggleTheme } = useThemeStore();
   const colors = useColors();
   const navigation = useNavigation<any>();
+  const [showEmailModal, setShowEmailModal] = useState(false);
   const insets = useSafeAreaInsets();
   const [lang, setLang] = useState(i18n.language || 'en');
   const [pushStatus, setPushStatus] = useState<PushStatus>(getPushStatus());
@@ -47,6 +50,16 @@ export default function TeacherSettingsScreen() {
     i18n.on('languageChanged', handler);
     return () => { i18n.off('languageChanged', handler); };
   }, []);
+
+  // Refresh email from server so stale cached tokens don't show "Not set"
+  // when the user actually has an email on file.
+  useEffect(() => {
+    let cancelled = false;
+    authApi.getMe()
+      .then(r => { if (!cancelled) setEmailInStore(r.data.email ?? null); })
+      .catch(() => { /* non-fatal */ });
+    return () => { cancelled = true; };
+  }, [setEmailInStore]);
 
   const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
 
@@ -202,6 +215,24 @@ export default function TeacherSettingsScreen() {
 
         {/* Account */}
         <Text style={styles.sectionTitle}>{t('settings.account_section')}</Text>
+        <TouchableOpacity style={styles.row} onPress={() => setShowEmailModal(true)}>
+          <View style={[styles.iconBox, { backgroundColor: '#EEF2FF' }]}>
+            <Mail size={18} color="#6366F1" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.rowLabel}>{t('settings.email_label')}</Text>
+            <Text
+              style={[
+                styles.rowSub,
+                !user?.email && { color: colors.warning },
+              ]}
+              numberOfLines={1}
+            >
+              {user?.email || t('settings.email_not_set')}
+            </Text>
+          </View>
+          <ChevronRight size={18} color={colors.textMuted} />
+        </TouchableOpacity>
         <TouchableOpacity style={styles.row} onPress={() => setShowPasswordModal(true)}>
           <View style={[styles.iconBox, { backgroundColor: '#EFF6FF' }]}>
             <Lock size={18} color="#2563EB" />
@@ -247,6 +278,12 @@ export default function TeacherSettingsScreen() {
           <Text style={styles.logoutText}>{t('nav.logout')}</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      <EmailEditModal
+        visible={showEmailModal}
+        onClose={() => setShowEmailModal(false)}
+        currentEmail={user?.email || null}
+      />
 
       {/* Password Modal */}
       <Modal visible={showPasswordModal} animationType="slide" presentationStyle="pageSheet">
