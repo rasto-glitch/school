@@ -44,6 +44,7 @@ export default function TeacherSettingsScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [changingPassword, setChangingPassword] = useState(false);
   const [sendingForgot, setSendingForgot] = useState(false);
+  const [sendingForgotEmail, setSendingForgotEmail] = useState(false);
 
   useEffect(() => {
     const handler = (lng: string) => setLang(lng);
@@ -132,6 +133,19 @@ export default function TeacherSettingsScreen() {
       Alert.alert('Error', 'Could not send reset request.');
     } finally {
       setSendingForgot(false);
+    }
+  };
+
+  const handleForgotPasswordEmail = async () => {
+    if (!user?.username) return;
+    setSendingForgotEmail(true);
+    try {
+      await authApi.forgotPasswordEmail(user.username);
+      Alert.alert(t('settings.forgot_email_sent_title'), t('settings.forgot_email_sent_body'));
+    } catch {
+      Alert.alert('Error', 'Could not send reset email.');
+    } finally {
+      setSendingForgotEmail(false);
     }
   };
 
@@ -334,11 +348,26 @@ export default function TeacherSettingsScreen() {
 
             <Text style={styles.modalSection}>{t('settings.forgot_title')}</Text>
             <Text style={styles.forgotDesc}>{t('settings.forgot_desc')}</Text>
-            <TouchableOpacity style={styles.forgotBtn} onPress={handleForgotPassword} disabled={sendingForgot}>
-              <Text style={styles.forgotBtnText}>
-                {sendingForgot ? t('settings.forgot_sending') : t('settings.forgot_btn')}
+            <TouchableOpacity
+              style={[styles.submitBtn, sendingForgotEmail && { opacity: 0.6 }]}
+              onPress={handleForgotPasswordEmail}
+              disabled={sendingForgotEmail || sendingForgot}
+            >
+              <Text style={styles.submitText}>
+                {sendingForgotEmail ? t('settings.forgot_email_sending') : t('settings.forgot_email_btn')}
               </Text>
             </TouchableOpacity>
+            <Text style={styles.forgotHint}>{t('settings.forgot_email_hint')}</Text>
+            <TouchableOpacity
+              style={[styles.forgotBtn, { marginTop: spacing.sm }, sendingForgot && { opacity: 0.6 }]}
+              onPress={handleForgotPassword}
+              disabled={sendingForgot || sendingForgotEmail}
+            >
+              <Text style={styles.forgotBtnText}>
+                {sendingForgot ? t('settings.forgot_sending') : t('settings.forgot_admin_btn')}
+              </Text>
+            </TouchableOpacity>
+            <Text style={styles.forgotHint}>{t('settings.forgot_admin_hint')}</Text>
           </ScrollView>
         </View>
       </Modal>
@@ -409,6 +438,7 @@ const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').u
   submitText: { fontSize: font.md, fontWeight: '700', color: '#fff' },
   divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.lg },
   forgotDesc: { fontSize: font.sm, color: colors.textSecondary, marginBottom: spacing.md, lineHeight: 20 },
+  forgotHint: { fontSize: font.xs, color: colors.textMuted, textAlign: 'center', marginTop: 6, lineHeight: 16 },
   forgotBtn: {
     borderWidth: 1.5, borderColor: colors.primary, borderRadius: radius.md,
     padding: spacing.md, alignItems: 'center',
