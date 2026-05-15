@@ -336,6 +336,7 @@ export async function updateMyEmail(req: Request, res: Response): Promise<void> 
 
   const raw = generateToken();
   const expiresAt = new Date(Date.now() + EMAIL_CHANGE_TTL_MS).toISOString();
+  // tenant-check-allow: email_change_tokens is user-keyed (no school_id by design)
   const { error: insErr } = await supabase
     .from('email_change_tokens')
     .insert({
@@ -401,6 +402,7 @@ export async function confirmEmail(req: Request, res: Response): Promise<void> {
     res.status(400).json({ error: 'token is required' });
     return;
   }
+  // tenant-check-allow: email_change_tokens is user-keyed (no school_id by design)
   const { data: row } = await supabase
     .from('email_change_tokens')
     .select('id, user_id, new_email, expires_at, used_at')
@@ -421,6 +423,7 @@ export async function confirmEmail(req: Request, res: Response): Promise<void> {
     return;
   }
 
+  // tenant-check-allow: user_id sourced from token row above (token uniquely identifies the user)
   const { error: upErr } = await supabase
     .from('users')
     .update({ email: r.new_email })
@@ -429,6 +432,7 @@ export async function confirmEmail(req: Request, res: Response): Promise<void> {
     res.status(500).json({ error: upErr.message });
     return;
   }
+  // tenant-check-allow: email_change_tokens is user-keyed (no school_id by design)
   await supabase
     .from('email_change_tokens')
     .update({ used_at: new Date().toISOString() })
@@ -480,6 +484,7 @@ export async function forgotPasswordEmail(req: Request, res: Response): Promise<
 
   const raw = generateToken();
   const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS).toISOString();
+  // tenant-check-allow: password_reset_tokens is user-keyed (no school_id by design)
   await supabase
     .from('password_reset_tokens')
     .insert({
@@ -548,6 +553,7 @@ export async function resetWithToken(req: Request, res: Response): Promise<void>
     return;
   }
 
+  // tenant-check-allow: password_reset_tokens is user-keyed (no school_id by design)
   const { data: row } = await supabase
     .from('password_reset_tokens')
     .select('id, user_id, expires_at, used_at')
@@ -564,12 +570,14 @@ export async function resetWithToken(req: Request, res: Response): Promise<void>
   const rounds = parseInt(process.env.BCRYPT_ROUNDS || '10');
   const passwordHash = await bcrypt.hash(newPassword, rounds);
 
+  // tenant-check-allow: user_id sourced from token row above (token uniquely identifies the user)
   const { error: upErr } = await supabase
     .from('users')
     .update({ password_hash: passwordHash, password_changed_at: new Date().toISOString() })
     .eq('id', r.user_id);
   if (upErr) { res.status(500).json({ error: upErr.message }); return; }
 
+  // tenant-check-allow: password_reset_tokens is user-keyed (no school_id by design)
   await supabase
     .from('password_reset_tokens')
     .update({ used_at: new Date().toISOString() })
