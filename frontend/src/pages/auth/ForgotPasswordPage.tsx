@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -8,7 +9,7 @@ import { authApi } from '../../services/api';
 import Input from '../../components/common/Input';
 
 const schema = z.object({
-  username: z.string().min(1, 'Username is required'),
+  username: z.string().min(1, 'auth.username_required'),
 });
 type FormData = z.infer<typeof schema>;
 
@@ -21,6 +22,7 @@ type Status = 'idle' | 'sending' | 'sent';
 
 export default function ForgotPasswordPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [emailStatus, setEmailStatus] = useState<Status>('idle');
   const [adminStatus, setAdminStatus] = useState<Status>('idle');
   const [serverError, setServerError] = useState('');
@@ -38,7 +40,7 @@ export default function ForgotPasswordPage() {
     } catch {
       // Backend always returns 200; this catches only network errors.
       setEmailStatus('idle');
-      setServerError('Could not reach the server. Please try again.');
+      setServerError(t('auth.server_error'));
     }
   };
 
@@ -52,7 +54,7 @@ export default function ForgotPasswordPage() {
       setAdminStatus('sent');
     } catch {
       setAdminStatus('idle');
-      setServerError('Could not reach the server. Please try again.');
+      setServerError(t('auth.server_error'));
     }
   };
 
@@ -63,16 +65,16 @@ export default function ForgotPasswordPage() {
           <div className="inline-flex items-center justify-center w-16 h-16 bg-white rounded-2xl shadow-lg mb-4">
             <GraduationCap className="w-9 h-9 text-primary-600" />
           </div>
-          <h1 className="text-3xl font-bold text-white">Forgot password?</h1>
-          <p className="text-primary-200 mt-1">Pick how you'd like to reset it.</p>
+          <h1 className="text-3xl font-bold text-white">{t('auth.forgot_title')}</h1>
+          <p className="text-primary-200 mt-1">{t('auth.forgot_subtitle')}</p>
         </div>
 
         <div className="bg-white rounded-2xl shadow-2xl p-8 space-y-4">
           <form onSubmit={handleSubmit(sendEmailLink)} className="space-y-4">
             <Input
-              label="Username"
-              placeholder="e.g. fisk_username"
-              error={errors.username?.message}
+              label={t('auth.username')}
+              placeholder={t('auth.username_ph')}
+              error={errors.username?.message && t(errors.username.message)}
               autoComplete="username"
               {...register('username')}
             />
@@ -90,12 +92,12 @@ export default function ForgotPasswordPage() {
               <span className="flex-1 text-left">
                 <span className="block text-sm font-semibold">
                   {emailStatus === 'sending'
-                    ? 'Sending…'
+                    ? t('auth.sending')
                     : emailStatus === 'sent'
-                      ? 'Link sent — check your inbox'
-                      : 'Email me a reset link'}
+                      ? t('auth.email_sent_btn')
+                      : t('auth.email_btn')}
                 </span>
-                <span className="block text-xs text-white/85">Works if you have an email on file</span>
+                <span className="block text-xs text-white/85">{t('auth.email_hint')}</span>
               </span>
             </button>
           </form>
@@ -114,22 +116,22 @@ export default function ForgotPasswordPage() {
             <span className="flex-1 text-left">
               <span className="block text-sm font-semibold">
                 {adminStatus === 'sending'
-                  ? 'Sending…'
+                  ? t('auth.sending')
                   : adminStatus === 'sent'
-                    ? 'Request sent to your admin'
-                    : 'Ask my school admin'}
+                    ? t('auth.admin_sent_btn')
+                    : t('auth.admin_btn')}
               </span>
-              <span className="block text-xs text-gray-500">Works for everyone, even without an email</span>
+              <span className="block text-xs text-gray-500">{t('auth.admin_hint')}</span>
             </span>
           </button>
 
           {(emailStatus === 'sent' || adminStatus === 'sent') && (
             <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-3 text-sm text-emerald-800">
               {emailStatus === 'sent' && (
-                <p>If your account has an email on file, a reset link is on its way. The link expires in 1 hour.</p>
+                <p>{t('auth.email_sent_note')}</p>
               )}
               {adminStatus === 'sent' && (
-                <p>Your school administrator will reset your password and contact you.</p>
+                <p>{t('auth.admin_sent_note')}</p>
               )}
             </div>
           )}
@@ -147,7 +149,7 @@ export default function ForgotPasswordPage() {
               className="inline-flex items-center gap-1 text-sm text-primary-600 hover:text-primary-800 font-medium transition-colors"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
-              Back to Sign In
+              {t('auth.back_to_sign_in')}
             </button>
           </div>
         </div>

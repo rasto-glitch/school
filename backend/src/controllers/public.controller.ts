@@ -89,13 +89,16 @@ const send = async ({ subject, html, text, replyTo, to = TO_EMAIL }: SendArgs) =
   }
 };
 
-// 5xx response that includes the underlying Resend reason when available.
-// Resend's error messages are operator-facing ("domain not verified", "rate
-// limit exceeded", "invalid recipient") and safe to expose — they don't
-// leak internal state.
+// 5xx response for the public landing forms. The underlying Resend reason
+// ("domain not verified", "rate limit exceeded", ...) is always logged for
+// the operator, but only echoed to the (unauthenticated) caller outside
+// production — in prod it would leak mail-infra state to anyone.
 const sendError = (res: Response, err: unknown) => {
   const e = err as { resendMessage?: string };
-  const detail = e?.resendMessage ? ` (${e.resendMessage})` : '';
+  const detail =
+    process.env.NODE_ENV !== 'production' && e?.resendMessage
+      ? ` (${e.resendMessage})`
+      : '';
   res.status(500).json({ error: `Could not send. Please try again later.${detail}` });
 };
 

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -11,8 +12,8 @@ import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
 
 const schema = z.object({
-  username: z.string().min(1, 'Username is required'),
-  password: z.string().min(1, 'Password is required'),
+  username: z.string().min(1, 'auth.username_required'),
+  password: z.string().min(1, 'auth.password_required'),
   rememberMe: z.boolean(),
 });
 
@@ -30,6 +31,7 @@ const ROLE_DASHBOARDS: Record<string, string> = {
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const { setAuth, isAuthenticated, user } = useAuthStore();
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -53,7 +55,7 @@ export default function LoginPage() {
       setAuth(token, user, school, data.rememberMe);
       navigate(ROLE_DASHBOARDS[user.role] || '/');
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Login failed. Please check your credentials.');
+      toast.error(err.response?.data?.error || t('auth.login_failed'));
     } finally {
       setLoading(false);
     }
@@ -68,25 +70,25 @@ export default function LoginPage() {
             <img src="/splash-s.png" alt="Scholify" className="w-12 h-12" />
           </div>
           <h1 className="text-3xl font-bold text-white">Scholify</h1>
-          <p className="text-primary-200 mt-1">Sign in to your account</p>
+          <p className="text-primary-200 mt-1">{t('auth.subtitle')}</p>
         </div>
 
         {/* Form card */}
         <div className="bg-white rounded-2xl shadow-2xl p-8">
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <Input
-              label="Username"
-              placeholder="e.g. fisk_username"
-              error={errors.username?.message}
+              label={t('auth.username')}
+              placeholder={t('auth.username_ph')}
+              error={errors.username?.message && t(errors.username.message)}
               autoComplete="username"
               {...register('username')}
             />
             <div className="relative">
               <Input
-                label="Password"
+                label={t('auth.password')}
                 type={showPass ? 'text' : 'password'}
-                placeholder="Enter your password"
-                error={errors.password?.message}
+                placeholder={t('auth.password_ph')}
+                error={errors.password?.message && t(errors.password.message)}
                 autoComplete="current-password"
                 {...register('password')}
               />
@@ -106,7 +108,7 @@ export default function LoginPage() {
                 className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
                 {...register('rememberMe')}
               />
-              <span className="text-sm text-gray-600">Remember me</span>
+              <span className="text-sm text-gray-600">{t('auth.remember_me')}</span>
             </label>
 
             <Button
@@ -116,7 +118,7 @@ export default function LoginPage() {
               icon={<LogIn className="w-4 h-4" />}
               className="mt-2"
             >
-              Sign In
+              {t('auth.sign_in')}
             </Button>
 
             <div className="text-center mt-3">
@@ -125,13 +127,13 @@ export default function LoginPage() {
                 onClick={() => navigate('/forgot-password')}
                 className="text-sm text-primary-600 hover:text-primary-800 font-medium transition-colors"
               >
-                Forgot password?
+                {t('auth.forgot_password')}
               </button>
             </div>
           </form>
 
           <p className="text-center text-xs text-gray-400 mt-6">
-            Contact your school administrator if you need login credentials.
+            {t('auth.contact_admin')}
           </p>
         </div>
       </div>

@@ -98,6 +98,9 @@ export interface UpdateSchoolPayload {
   domain?: string;
   subscriptionPlan: string;
   features: SchoolFeatures;
+  // Required to be true for the server to actually purge archived/graduated
+  // students when the archive feature is turned off. Omitted otherwise.
+  confirmPurge?: boolean;
 }
 
 export const authLogin = (secret: string) =>

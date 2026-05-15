@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { ArrowLeft, Mail, ShieldCheck, CheckCircle2 } from 'lucide-react-native';
 import { authApi } from '../../services/api';
 import { colors, spacing, radius, font, shadow } from '../../theme';
@@ -20,6 +21,7 @@ type Status = 'idle' | 'sending' | 'sent';
 
 export default function ForgotPasswordScreen() {
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   const navigation = useNavigation<any>();
   const route = useRoute<RouteProp<Record<string, { prefillUsername?: string }>, string>>();
   const [username, setUsername] = useState(route.params?.prefillUsername || '');
@@ -34,11 +36,11 @@ export default function ForgotPasswordScreen() {
     try {
       await authApi.forgotPasswordEmail(username.trim());
       setEmailStatus('sent');
-      setMessage('If your account has an email on file, a reset link is on its way. The link expires in 1 hour.');
+      setMessage(t('auth.email_sent_note'));
     } catch {
       // Endpoint always returns success; this catches only network errors.
       setEmailStatus('idle');
-      setMessage('Could not reach the server. Check your connection and try again.');
+      setMessage(t('auth.network_error'));
     }
   };
 
@@ -49,10 +51,10 @@ export default function ForgotPasswordScreen() {
     try {
       await authApi.forgotPassword(username.trim());
       setAdminStatus('sent');
-      setMessage('Your school administrator has been notified. They will reset your password and contact you.');
+      setMessage(t('auth.admin_sent_note'));
     } catch {
       setAdminStatus('idle');
-      setMessage('Could not reach the server. Check your connection and try again.');
+      setMessage(t('auth.network_error'));
     }
   };
 
@@ -66,23 +68,23 @@ export default function ForgotPasswordScreen() {
       >
         <TouchableOpacity style={styles.back} onPress={() => navigation.goBack()}>
           <ArrowLeft size={18} color={colors.text} />
-          <Text style={styles.backText}>Back to sign in</Text>
+          <Text style={styles.backText}>{t('auth.back_to_sign_in')}</Text>
         </TouchableOpacity>
 
-        <Text style={styles.title}>Forgot password?</Text>
+        <Text style={styles.title}>{t('auth.forgot_title')}</Text>
         <Text style={styles.subtitle}>
-          Enter your username, then choose how you'd like to reset.
+          {t('auth.forgot_subtitle')}
         </Text>
 
         <View style={styles.card}>
-          <Text style={styles.label}>Username</Text>
+          <Text style={styles.label}>{t('auth.username')}</Text>
           <TextInput
             style={styles.input}
             value={username}
             onChangeText={setUsername}
             autoCapitalize="none"
             autoCorrect={false}
-            placeholder="e.g. fisk_username"
+            placeholder={t('auth.username_ph')}
             placeholderTextColor={colors.textMuted}
             editable={canType}
             returnKeyType="done"
@@ -106,12 +108,12 @@ export default function ForgotPasswordScreen() {
             <View style={{ flex: 1 }}>
               <Text style={styles.optionPrimaryTitle}>
                 {emailStatus === 'sending'
-                  ? 'Sending…'
+                  ? t('auth.sending')
                   : emailStatus === 'sent'
-                    ? 'Link sent'
-                    : 'Email me a reset link'}
+                    ? t('auth.email_sent_btn')
+                    : t('auth.email_btn')}
               </Text>
-              <Text style={styles.optionPrimarySub}>Works if you have an email on file</Text>
+              <Text style={styles.optionPrimarySub}>{t('auth.email_hint')}</Text>
             </View>
             {emailStatus === 'sending' && <ActivityIndicator color="#fff" />}
           </TouchableOpacity>
@@ -134,12 +136,12 @@ export default function ForgotPasswordScreen() {
             <View style={{ flex: 1 }}>
               <Text style={styles.optionSecondaryTitle}>
                 {adminStatus === 'sending'
-                  ? 'Sending…'
+                  ? t('auth.sending')
                   : adminStatus === 'sent'
-                    ? 'Request sent'
-                    : 'Ask my school admin'}
+                    ? t('auth.admin_sent_btn')
+                    : t('auth.admin_btn')}
               </Text>
-              <Text style={styles.optionSecondarySub}>Works for everyone, even without an email</Text>
+              <Text style={styles.optionSecondarySub}>{t('auth.admin_hint')}</Text>
             </View>
             {adminStatus === 'sending' && <ActivityIndicator color={colors.primary} />}
           </TouchableOpacity>

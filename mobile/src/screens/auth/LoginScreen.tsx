@@ -5,12 +5,14 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { authApi } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { colors, spacing, radius, font, shadow } from '../../theme';
 
 export default function LoginScreen() {
   const { setAuth } = useAuthStore();
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   const [username, setUsername] = useState('');
@@ -18,16 +20,13 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
-    if (!username || !password) { Alert.alert('', 'Please enter your username and password'); return; }
+    if (!username || !password) { Alert.alert('', t('auth.enter_credentials')); return; }
     setLoading(true);
     try {
       const res = await authApi.login(username, password);
       const MOBILE_ROLES = ['parent', 'teacher', 'driver', 'supervisor'];
       if (!MOBILE_ROLES.includes(res.data.user?.role)) {
-        Alert.alert(
-          'Not available on mobile',
-          'This account type is managed from the web portal. Please sign in there instead.',
-        );
+        Alert.alert(t('auth.role_blocked_title'), t('auth.role_blocked_body'));
         return;
       }
       setAuth(res.data.token, res.data.user, res.data.school);
@@ -36,9 +35,9 @@ export default function LoginScreen() {
       const msg = serverMsg
         ? serverMsg
         : err.response
-          ? 'Invalid username or password'
-          : 'Could not reach the server. Check your connection and try again.';
-      Alert.alert('Sign In Failed', msg);
+          ? t('auth.invalid_credentials')
+          : t('auth.network_error');
+      Alert.alert(t('auth.sign_in_failed'), msg);
     } finally {
       setLoading(false);
     }
@@ -53,46 +52,46 @@ export default function LoginScreen() {
         <View style={styles.brand}>
           <Image source={require('../../../assets/logo.png')} style={styles.logoImg} resizeMode="contain" />
           <Text style={styles.brandTitle}>Scholify</Text>
-          <Text style={styles.brandSub}>Sign in to your account</Text>
+          <Text style={styles.brandSub}>{t('auth.subtitle')}</Text>
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.label}>Username</Text>
+          <Text style={styles.label}>{t('auth.username')}</Text>
           <TextInput
             style={styles.input}
             value={username}
             onChangeText={setUsername}
             autoCapitalize="none"
             autoCorrect={false}
-            placeholder="e.g. fisk_username"
+            placeholder={t('auth.username_ph')}
             placeholderTextColor={colors.textMuted}
             returnKeyType="next"
           />
 
-          <Text style={styles.label}>Password</Text>
+          <Text style={styles.label}>{t('auth.password')}</Text>
           <TextInput
             style={styles.input}
             value={password}
             onChangeText={setPassword}
             secureTextEntry
-            placeholder="Enter your password"
+            placeholder={t('auth.password_ph')}
             placeholderTextColor={colors.textMuted}
             returnKeyType="done"
             onSubmitEditing={handleLogin}
           />
 
           <TouchableOpacity style={[styles.btn, loading && { opacity: 0.7 }]} onPress={handleLogin} disabled={loading}>
-            {loading ? <ActivityIndicator color={colors.textInverse} /> : <Text style={styles.btnText}>Sign In</Text>}
+            {loading ? <ActivityIndicator color={colors.textInverse} /> : <Text style={styles.btnText}>{t('auth.sign_in')}</Text>}
           </TouchableOpacity>
 
           <TouchableOpacity
             onPress={() => navigation.navigate('ForgotPassword', { prefillUsername: username })}
             style={styles.forgotWrap}
           >
-            <Text style={styles.forgotLink}>Forgot password?</Text>
+            <Text style={styles.forgotLink}>{t('auth.forgot_password')}</Text>
           </TouchableOpacity>
 
-          <Text style={styles.hint}>Contact your school administrator for login credentials.</Text>
+          <Text style={styles.hint}>{t('auth.contact_admin')}</Text>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>

@@ -87,7 +87,7 @@ export default function EditSchoolModal({ school, onClose, onUpdated }: Props) {
     }
   };
 
-  const performUpdate = async () => {
+  const performUpdate = async (confirmPurge = false) => {
     setError('');
     setLoading(true);
     try {
@@ -100,6 +100,7 @@ export default function EditSchoolModal({ school, onClose, onUpdated }: Props) {
         domain: form.domain || undefined,
         subscriptionPlan: form.subscriptionPlan,
         features,
+        ...(confirmPurge ? { confirmPurge: true } : {}),
       });
       onUpdated({ ...school, ...res.data });
     } catch (err: unknown) {
@@ -312,7 +313,7 @@ export default function EditSchoolModal({ school, onClose, onUpdated }: Props) {
               </button>
               <button
                 type="button"
-                onClick={performUpdate}
+                onClick={() => performUpdate(true)}
                 disabled={loading || pdfBusy || xlsxBusy}
                 className="flex-1 py-2.5 rounded-lg bg-red-600 hover:bg-red-500 disabled:bg-red-300 text-white text-sm font-medium transition-colors"
               >
