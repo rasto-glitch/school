@@ -3,6 +3,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuthStore } from '../store/authStore';
 import { useColors } from '../store/themeStore';
 import LoginScreen from '../screens/auth/LoginScreen';
+import ForgotPasswordScreen from '../screens/auth/ForgotPasswordScreen';
 import ParentTabs from './ParentTabs';
 import DriverTabs from './DriverTabs';
 import DriverSettingsScreen from '../screens/driver/DriverSettingsScreen';
@@ -36,6 +37,7 @@ import type { Homework, Announcement, Conversation, Ebook } from '../types';
 
 export type RootStackParamList = {
   Login: undefined;
+  ForgotPassword: { prefillUsername?: string } | undefined;
   ParentTabs: undefined;
   DriverTabs: undefined;
   DriverSettings: undefined;
@@ -87,7 +89,10 @@ export default function Navigation() {
         }}
       >
         {!authed ? (
-          <Stack.Screen name="Login" component={LoginScreen} />
+          <>
+            <Stack.Screen name="Login" component={LoginScreen} />
+            <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+          </>
         ) : user?.role === 'driver' ? (
           <>
             <Stack.Screen name="DriverTabs" component={DriverTabs} />

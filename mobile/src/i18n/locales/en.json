@@ -264,7 +264,9 @@
     "email_invalid": "Please enter a valid email address.",
     "email_save": "Save",
     "email_save_failed_title": "Could not save",
-    "email_save_failed_body": "Please try again in a moment."
+    "email_save_failed_body": "Please try again in a moment.",
+    "email_pending_title": "Confirmation link sent",
+    "email_pending_body": "We sent a link to {{email}}. Click it to finish changing your email — the change isn't live until you confirm."
   },
   "bug": {
     "title": "Report a bug",

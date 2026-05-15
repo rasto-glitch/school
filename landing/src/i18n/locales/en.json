@@ -155,5 +155,31 @@
       "success": "Thanks! Our partnerships team will be in touch.",
       "error": "Something went wrong. Please try again."
     }
+  },
+  "reset": {
+    "title": "Reset your password",
+    "subtitle": "Choose a new password for your Scholify account.",
+    "new_password": "New password",
+    "confirm_password": "Confirm new password",
+    "submit": "Reset password",
+    "submitting": "Saving…",
+    "success_title": "Password updated",
+    "success_body": "You can now sign in with your new password.",
+    "no_token": "This reset link is missing its token. Request a new link from the login page.",
+    "too_short": "Password must be at least 6 characters.",
+    "no_match": "Passwords don't match.",
+    "generic_error": "Could not reset password. The link may have expired.",
+    "back_home": "Return to scholify.krd"
+  },
+  "confirm": {
+    "pending_title": "Confirming your email…",
+    "pending_body": "Hold tight, this only takes a second.",
+    "success_title": "Email confirmed",
+    "success_body": "Your account email has been updated to:",
+    "error_title": "We couldn't confirm this link",
+    "error_body": "The link may have expired or already been used.",
+    "no_token": "This confirmation link is missing its token.",
+    "generic_error": "We couldn't confirm this link.",
+    "back_home": "Return to scholify.krd"
   }
 }

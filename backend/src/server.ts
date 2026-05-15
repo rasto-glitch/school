@@ -71,6 +71,20 @@ const forgotPasswordLimiter = rateLimit({
   message: { error: 'Too many password reset requests. Please wait 15 minutes before trying again.' },
 });
 app.use('/api/auth/forgot-password', forgotPasswordLimiter);
+app.use('/api/auth/forgot-password-email', forgotPasswordLimiter);
+
+// Public token-redemption endpoints (the token IS the auth, but we still
+// don't want unbounded guessing). 30 requests/min/IP is plenty for a real
+// user clicking a link, way too slow for brute force on 32-byte tokens.
+const tokenRedeemLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests. Please slow down.' },
+});
+app.use('/api/auth/reset-with-token', tokenRedeemLimiter);
+app.use('/api/auth/confirm-email', tokenRedeemLimiter);
 
 // Strict limiter for landing-page submissions — 5 per 15 minutes per IP
 const publicFormLimiter = rateLimit({

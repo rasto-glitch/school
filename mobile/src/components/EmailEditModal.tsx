@@ -49,8 +49,21 @@ export default function EmailEditModal({ visible, onClose, currentEmail }: Props
     }
     setSaving(true);
     try {
-      await authApi.updateMyEmail(clean);
-      setEmail(clean);
+      const r = await authApi.updateMyEmail(clean);
+      // Backend returns `pending: true` when the user has an existing email
+      // (change requires confirmation link sent to the NEW address) or
+      // `pending: false` for first-time set (applied immediately).
+      const pending = (r.data as { pending?: boolean }).pending;
+      if (pending) {
+        Alert.alert(
+          t('settings.email_pending_title'),
+          t('settings.email_pending_body', { email: clean }),
+        );
+        // Don't update the local store; the new email isn't live until
+        // the user clicks the link. Next /me fetch will reflect it.
+      } else {
+        setEmail(clean);
+      }
       onClose();
     } catch (e: any) {
       Alert.alert(

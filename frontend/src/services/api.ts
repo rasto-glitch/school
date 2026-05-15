@@ -37,6 +37,8 @@ export const authApi = {
     api.post('/auth/change-password', { currentPassword, newPassword }),
   forgotPassword: (username: string) =>
     api.post('/auth/forgot-password', { username }),
+  forgotPasswordEmail: (username: string) =>
+    api.post('/auth/forgot-password-email', { username }),
   uploadProfilePicture: (file: File) => {
     const fd = new FormData();
     fd.append('avatar', file);

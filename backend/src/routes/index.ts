@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import multer from 'multer';
-import { login, changePassword, getSchools, forgotPassword, registerDeviceToken, removeDeviceToken, updateDeviceLanguage, uploadProfilePicture, updateMyEmail, getMe } from '../controllers/auth.controller';
+import { login, changePassword, getSchools, forgotPassword, registerDeviceToken, removeDeviceToken, updateDeviceLanguage, uploadProfilePicture, updateMyEmail, getMe, forgotPasswordEmail, resetWithToken, confirmEmail } from '../controllers/auth.controller';
 import { submitBugReport } from '../controllers/bugReport.controller';
 import * as admin from '../controllers/admin.controller';
 import * as teacher from '../controllers/teacher.controller';
@@ -47,6 +47,9 @@ export function createRouter(io: SocketServer) {
   router.post('/auth/change-password', authenticate, (req, res) => changePassword(req, res));
   router.get('/auth/me', authenticate, (req, res) => getMe(req, res));
   router.patch('/auth/me/email', authenticate, (req, res) => updateMyEmail(req, res));
+  router.post('/auth/confirm-email', (req, res) => confirmEmail(req, res));
+  router.post('/auth/forgot-password-email', (req, res) => forgotPasswordEmail(req, res));
+  router.post('/auth/reset-with-token', (req, res) => resetWithToken(req, res));
 
   // Bug report — mobile app posts here. Multer accepts one screenshot or
   // short video up to 25 MB. Body field `description` is required.

@@ -264,7 +264,9 @@
     "email_invalid": "يرجى إدخال بريد إلكتروني صالح.",
     "email_save": "حفظ",
     "email_save_failed_title": "تعذّر الحفظ",
-    "email_save_failed_body": "يرجى المحاولة بعد قليل."
+    "email_save_failed_body": "يرجى المحاولة بعد قليل.",
+    "email_pending_title": "تم إرسال رابط التأكيد",
+    "email_pending_body": "أرسلنا رابطاً إلى {{email}}. اضغط الرابط لإكمال تغيير بريدك الإلكتروني — لن يتم التغيير قبل التأكيد."
   },
   "bug": {
     "title": "الإبلاغ عن خلل",

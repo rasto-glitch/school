@@ -9,6 +9,8 @@ import PartnerPage from './pages/PartnerPage';
 import ContactPage from './pages/ContactPage';
 import PrivacyPage from './pages/PrivacyPage';
 import TermsPage from './pages/TermsPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
+import ConfirmEmailPage from './pages/ConfirmEmailPage';
 
 function AnimatedRoutes() {
   const location = useLocation();
@@ -33,6 +35,8 @@ function AnimatedRoutes() {
           <Route path="/contact" element={<ContactPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="/terms" element={<TermsPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
+          <Route path="/confirm-email" element={<ConfirmEmailPage />} />
           <Route path="*" element={<HomePage />} />
         </Routes>
       </motion.div>

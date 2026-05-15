@@ -4,6 +4,7 @@ import {
   StyleSheet, ActivityIndicator, Alert, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import { authApi } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { colors, spacing, radius, font, shadow } from '../../theme';
@@ -11,6 +12,7 @@ import { colors, spacing, radius, font, shadow } from '../../theme';
 export default function LoginScreen() {
   const { setAuth } = useAuthStore();
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<any>();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -75,6 +77,13 @@ export default function LoginScreen() {
             {loading ? <ActivityIndicator color={colors.textInverse} /> : <Text style={styles.btnText}>Sign In</Text>}
           </TouchableOpacity>
 
+          <TouchableOpacity
+            onPress={() => navigation.navigate('ForgotPassword', { prefillUsername: username })}
+            style={styles.forgotWrap}
+          >
+            <Text style={styles.forgotLink}>Forgot password?</Text>
+          </TouchableOpacity>
+
           <Text style={styles.hint}>Contact your school administrator for login credentials.</Text>
         </View>
       </ScrollView>
@@ -94,5 +103,7 @@ const styles = StyleSheet.create({
   input: { borderWidth: 1.5, borderColor: colors.border, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: 13, fontSize: font.md, color: colors.text, marginBottom: spacing.md, backgroundColor: colors.bg },
   btn: { backgroundColor: colors.primary, borderRadius: radius.md, paddingVertical: 15, alignItems: 'center', marginTop: 4 },
   btnText: { color: colors.textInverse, fontSize: font.md, fontWeight: '700' },
+  forgotWrap: { alignItems: 'center', marginTop: spacing.md },
+  forgotLink: { fontSize: font.sm, fontWeight: '600', color: '#2563EB' },
   hint: { fontSize: font.xs, color: colors.textMuted, textAlign: 'center', marginTop: spacing.md },
 });

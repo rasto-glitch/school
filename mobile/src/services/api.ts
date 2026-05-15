@@ -51,6 +51,8 @@ export const authApi = {
     api.post('/auth/change-password', { currentPassword, newPassword }),
   forgotPassword: (username: string) =>
     api.post('/auth/forgot-password', { username }),
+  forgotPasswordEmail: (username: string) =>
+    api.post('/auth/forgot-password-email', { username }),
   uploadProfilePicture: async (uri: string, name: string, mimeType: string): Promise<{ profilePicture: string }> => {
     const token = useAuthStore.getState().token;
     const form = new FormData();
