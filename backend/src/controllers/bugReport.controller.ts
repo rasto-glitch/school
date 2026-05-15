@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { randomUUID } from 'crypto';
 import { supabase } from '../config/supabase';
+import { sanitizeFilename } from '../utils/upload';
 import { logger } from '../utils/logger';
 import type { AuthRequest } from '../middleware/auth';
 
@@ -16,11 +17,6 @@ import type { AuthRequest } from '../middleware/auth';
 const STORAGE_BUCKET = 'operator-mail';
 const SUPPORT_INBOX = 'support@scholify.krd';
 const MAX_DESCRIPTION = 4000;
-
-const sanitizeFilename = (name: string | null | undefined, fallback: string): string => {
-  const raw = (name || fallback).replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 200);
-  return raw || fallback;
-};
 
 const escapeHtml = (s: string) =>
   s.replace(/[&<>"']/g, c =>

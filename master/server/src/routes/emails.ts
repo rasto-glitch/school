@@ -279,7 +279,7 @@ router.get('/attachments/:emailId/:idx/url', async (req: Request, res: Response)
   const emailId = req.params.emailId as string;
   const idx = req.params.idx as string;
   const idxNum = parseInt(idx, 10);
-  if (!Number.isInteger(idxNum) || idxNum < 0 || idxNum > MAX_ATTACHMENTS) {
+  if (!Number.isInteger(idxNum) || idxNum < 0 || idxNum >= MAX_ATTACHMENTS) {
     res.status(400).json({ error: 'bad index' });
     return;
   }

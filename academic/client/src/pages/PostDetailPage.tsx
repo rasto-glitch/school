@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { format } from 'date-fns';
+import DOMPurify from 'dompurify';
 import { ArrowLeft, Pencil, Trash2, Paperclip, Download, Heart, MessageCircle, Bookmark, Send, CornerDownRight, X } from 'lucide-react';
 import { academicApi } from '../services/api';
 import { useAuthStore } from '../store/authStore';
@@ -276,7 +277,7 @@ export default function PostDetailPage() {
             {post.content_type === 'richtext' && post.content && (
               <div
                 className="tiptap-content text-gray-700"
-                dangerouslySetInnerHTML={{ __html: post.content }}
+                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(post.content) }}
               />
             )}
 

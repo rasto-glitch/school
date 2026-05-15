@@ -2,6 +2,7 @@ import { Response } from 'express';
 import bcrypt from 'bcryptjs';
 import * as XLSX from 'xlsx';
 import { supabase } from '../config/supabase';
+import { safeExt } from '../utils/upload';
 import type { AuthRequest } from '../middleware/auth';
 import { toCC } from '../utils/transform';
 import { notify, notifyMany } from '../utils/notify';
@@ -1552,7 +1553,7 @@ export async function uploadAnnouncementFile(req: AuthRequest, res: Response): P
   const { schoolId } = req.user!;
   const file = (req as any).file;
   if (!file) { res.status(400).json({ error: 'No file provided' }); return; }
-  const ext = file.originalname.includes('.') ? '.' + file.originalname.split('.').pop() : '';
+  const ext = safeExt(file.originalname, '');
   const path = `${schoolId}/announcements/${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`;
   const bucket = process.env.SUPABASE_STORAGE_BUCKET || 'homework-attachments';
   const { error } = await supabase.storage
@@ -1571,7 +1572,7 @@ export async function createAnnouncement(req: AuthRequest, res: Response): Promi
   let attachmentUrl: string | null = null;
   const file = (req as any).file;
   if (file) {
-    const ext = file.originalname.includes('.') ? '.' + file.originalname.split('.').pop() : '';
+    const ext = safeExt(file.originalname, '');
     const storagePath = `${schoolId}/announcements/${Date.now()}${ext}`;
     const bucket = process.env.SUPABASE_STORAGE_BUCKET || 'homework-attachments';
     const { data: uploadData, error: uploadErr } = await supabase.storage
@@ -2306,7 +2307,7 @@ export async function uploadSchoolLogo(req: AuthRequest, res: Response): Promise
   const file = (req as any).file;
   if (!file) { res.status(400).json({ error: 'No file uploaded' }); return; }
 
-  const ext = file.originalname.includes('.') ? '.' + file.originalname.split('.').pop() : '.png';
+  const ext = safeExt(file.originalname, '.png');
   const storagePath = `school-logos/${schoolId}${ext}`;
   const bucket = process.env.SUPABASE_STORAGE_BUCKET || 'homework-attachments';
 

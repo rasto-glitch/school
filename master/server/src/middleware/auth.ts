@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { masterJwtSecret } from '../utils/masterAuth';
 
 export function requireMasterAuth(req: Request, res: Response, next: NextFunction): void {
   const auth = req.headers.authorization;
@@ -9,7 +10,7 @@ export function requireMasterAuth(req: Request, res: Response, next: NextFunctio
   }
   const token = auth.slice(7);
   try {
-    jwt.verify(token, process.env.MASTER_SECRET!);
+    jwt.verify(token, masterJwtSecret());
     next();
   } catch {
     res.status(401).json({ error: 'Session expired — please log in again' });

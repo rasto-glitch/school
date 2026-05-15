@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { Resend } from 'resend';
 import { supabase } from '../config/supabase';
+import { safeExt } from '../utils/upload';
 import { toCC } from '../utils/transform';
 import { emitToAdmins } from '../utils/notify';
 import { logger } from '../utils/logger';
@@ -214,7 +215,7 @@ export async function uploadProfilePicture(req: AuthRequest, res: Response): Pro
   const file = (req as any).file;
   if (!file) { res.status(400).json({ error: 'No file uploaded' }); return; }
 
-  const ext = file.originalname.includes('.') ? '.' + file.originalname.split('.').pop() : '.jpg';
+  const ext = safeExt(file.originalname, '.jpg');
   const storagePath = `avatars/${schoolId}/${userId}${ext}`;
   const bucket = process.env.SUPABASE_STORAGE_BUCKET || 'homework-attachments';
 

@@ -1,5 +1,6 @@
 import { Response } from 'express';
 import { supabase } from '../config/supabase';
+import { safeExt } from '../utils/upload';
 import type { AuthRequest } from '../middleware/auth';
 import { notifyMany } from '../utils/notify';
 import { subjectAllowedForClass } from '../utils/curriculum';
@@ -424,8 +425,8 @@ export async function uploadPostFile(req: AuthRequest, res: Response): Promise<v
   const file = (req as any).file;
   if (!file) { res.status(400).json({ error: 'No file provided' }); return; }
 
-  const ext = file.originalname.split('.').pop();
-  const path = `posts/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+  const ext = safeExt(file.originalname, '.bin');
+  const path = `posts/${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`;
 
   const { error } = await supabase.storage
     .from(process.env.SUPABASE_STORAGE_BUCKET || 'homework-attachments')
@@ -841,8 +842,8 @@ export async function uploadEbook(req: AuthRequest, res: Response): Promise<void
   if (!title || !file) { res.status(400).json({ error: 'title and file are required' }); return; }
 
   try {
-    const ext = file.originalname.split('.').pop();
-    const path = `ebooks/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+    const ext = safeExt(file.originalname, '.bin');
+    const path = `ebooks/${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`;
 
     const bucket = process.env.SUPABASE_STORAGE_BUCKET || 'homework-attachments';
 

@@ -10,3 +10,7 @@ logs/
 # OS
 .DS_Store
 Thumbs.db
+
+# Mobile signing credentials — managed remotely by EAS, never commit
+mobile/credentials.json
+mobile/credentials/

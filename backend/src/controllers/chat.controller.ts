@@ -1,5 +1,6 @@
 import { Response } from 'express';
 import { supabase } from '../config/supabase';
+import { safeExt } from '../utils/upload';
 import { toCC } from '../utils/transform';
 import type { AuthRequest } from '../middleware/auth';
 import { getIo, chatPush } from '../utils/notify';
@@ -539,8 +540,8 @@ export async function uploadAttachment(req: AuthRequest, res: Response): Promise
   const file = (req as any).file;
   if (!file) { res.status(400).json({ error: 'No file provided' }); return; }
 
-  const ext = file.originalname.split('.').pop()?.toLowerCase() || 'bin';
-  const path = `${schoolId}/${userId}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+  const ext = safeExt(file.originalname, '.bin');
+  const path = `${schoolId}/${userId}/${Date.now()}_${Math.random().toString(36).slice(2)}${ext}`;
 
   const { error } = await supabase.storage
     .from('chat-files')

@@ -1,6 +1,17 @@
 import { Request, Response } from 'express';
+import crypto from 'crypto';
 import { supabase } from '../config/supabase';
 import { logger } from '../utils/logger';
+import { sanitizeFilename } from '../utils/upload';
+
+// Length-independent constant-time string comparison. Hash both sides so
+// timingSafeEqual gets equal-length buffers regardless of input length
+// (a raw length mismatch would itself leak via an early throw).
+const safeEqual = (a: string, b: string): boolean => {
+  const ah = crypto.createHash('sha256').update(a).digest();
+  const bh = crypto.createHash('sha256').update(b).digest();
+  return crypto.timingSafeEqual(ah, bh);
+};
 
 // Inbound email webhook.
 //
@@ -44,11 +55,6 @@ interface InboundPayload {
   attachments?: InboundAttachment[];
   rawSize?: number;
 }
-
-const sanitizeFilename = (name: string | null | undefined, fallback: string): string => {
-  const raw = (name || fallback).replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 200);
-  return raw || fallback;
-};
 
 const OUR_INBOXES = new Set([
   'support@scholify.krd',
@@ -113,15 +119,15 @@ const resolveThreadId = async (
 };
 
 export const inboundEmail = async (req: Request, res: Response) => {
-  // Constant-time-ish secret check. The Worker is the only legitimate
-  // caller; everyone else gets 401 with no detail.
+  // Constant-time secret check (see safeEqual). The Worker is the only
+  // legitimate caller; everyone else gets 401 with no detail.
   const expected = process.env.INBOUND_EMAIL_SECRET;
   if (!expected) {
     logger.error('INBOUND_EMAIL_SECRET not configured; rejecting all inbound mail');
     return res.status(503).json({ error: 'inbound disabled' });
   }
   const supplied = (req.headers['x-inbound-secret'] || '') as string;
-  if (supplied !== expected) {
+  if (!safeEqual(supplied, expected)) {
     return res.status(401).json({ error: 'unauthorized' });
   }
 

@@ -1,4 +1,4 @@
-export type Role = 'parent' | 'teacher' | 'admin' | 'driver' | 'supervisor' | 'reception';
+export type Role = 'parent' | 'teacher' | 'admin' | 'driver' | 'supervisor' | 'reception' | 'accountant';
 
 export interface AcademicPost {
   id: string;

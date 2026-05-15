@@ -22,6 +22,14 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       const res = await authApi.login(username, password);
+      const MOBILE_ROLES = ['parent', 'teacher', 'driver', 'supervisor'];
+      if (!MOBILE_ROLES.includes(res.data.user?.role)) {
+        Alert.alert(
+          'Not available on mobile',
+          'This account type is managed from the web portal. Please sign in there instead.',
+        );
+        return;
+      }
       setAuth(res.data.token, res.data.user, res.data.school);
     } catch (err: any) {
       const serverMsg = err.response?.data?.error;

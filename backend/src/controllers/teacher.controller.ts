@@ -1,5 +1,6 @@
 import { Response } from 'express';
 import { supabase } from '../config/supabase';
+import { safeExt } from '../utils/upload';
 import type { AuthRequest } from '../middleware/auth';
 import { toCC } from '../utils/transform';
 import { notify, notifyMany } from '../utils/notify';
@@ -66,7 +67,7 @@ export async function createHomework(req: AuthRequest, res: Response): Promise<v
   let attachmentUrl: string | null = null;
   const file = (req as any).file;
   if (file) {
-    const ext = file.originalname.includes('.') ? '.' + file.originalname.split('.').pop() : '';
+    const ext = safeExt(file.originalname, '');
     const storagePath = `${schoolId}/${Date.now()}${ext}`;
     const bucket = process.env.SUPABASE_STORAGE_BUCKET || 'homework-attachments';
     const { data: uploadData, error: uploadErr } = await supabase.storage
@@ -155,7 +156,7 @@ export async function createAssignment(req: AuthRequest, res: Response): Promise
   let attachmentUrl: string | null = null;
   const file = (req as any).file;
   if (file) {
-    const ext = file.originalname.includes('.') ? '.' + file.originalname.split('.').pop() : '';
+    const ext = safeExt(file.originalname, '');
     const storagePath = `${schoolId}/assignments/${Date.now()}${ext}`;
     const bucket = process.env.SUPABASE_STORAGE_BUCKET || 'homework-attachments';
     const { data: uploadData, error: uploadErr } = await supabase.storage
