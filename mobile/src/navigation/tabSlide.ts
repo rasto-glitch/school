@@ -24,8 +24,10 @@ export function makeSlideTransition(width: number): SlideTransition {
     transitionSpec: {
       animation: 'timing',
       config: {
-        duration: 260,
-        // Decelerate curve — fast out, gentle settle. Reads as native/iOS-like.
+        // ~Facebook-speed. Fast enough to feel instant; the strong decelerate
+        // curve below is what keeps "fast" from reading as "abrupt/janky".
+        duration: 210,
+        // Decelerate — quick off the mark, soft landing. Native/iOS-like.
         easing: Easing.out(Easing.cubic),
       },
     },
