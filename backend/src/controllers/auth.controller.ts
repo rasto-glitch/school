@@ -325,10 +325,6 @@ export async function updateMyEmail(req: Request, res: Response): Promise<void> 
       .update({ email: cleaned })
       .eq('id', userId);
     if (error) {
-      if ((error as { code?: string }).code === '23505') {
-        res.status(409).json({ error: 'That email is already in use by another account.' });
-        return;
-      }
       res.status(500).json({ error: error.message });
       return;
     }
@@ -444,10 +440,6 @@ export async function confirmEmail(req: Request, res: Response): Promise<void> {
     .update({ email: r.new_email })
     .eq('id', r.user_id);
   if (upErr) {
-    if ((upErr as { code?: string }).code === '23505') {
-      res.status(409).json({ error: 'That email is already in use by another account.' });
-      return;
-    }
     res.status(500).json({ error: upErr.message });
     return;
   }
