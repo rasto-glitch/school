@@ -207,12 +207,27 @@ export default function BusTrackingScreen() {
     ? computeETA(busData.location.latitude, busData.location.longitude, etaTarget.lat, etaTarget.lng, busSpeed)
     : null;
 
-  const mapRegion = busData?.location ? {
-    latitude: busData.location.latitude,
-    longitude: busData.location.longitude,
-    latitudeDelta: 0.02,
-    longitudeDelta: 0.02,
-  } : undefined;
+  // Initial map framing: when the parent opens an active bus, show BOTH the
+  // bus and the parent's point (pickup > GPS > home) at a moderate zoom so
+  // the distance is readable. initialRegion (NOT region) = applied once;
+  // after that the user can freely zoom/pan and the live marker keeps
+  // moving without the camera ever snapping back.
+  let mapInitialRegion: { latitude: number; longitude: number; latitudeDelta: number; longitudeDelta: number } | undefined;
+  if (busData?.location) {
+    const b = busData.location;
+    if (etaTarget) {
+      const PAD = 2.2;         // breathing room so neither point sits on the edge
+      const MIN_DELTA = 0.012; // moderate cap so close points don't over-zoom
+      mapInitialRegion = {
+        latitude: (b.latitude + etaTarget.lat) / 2,
+        longitude: (b.longitude + etaTarget.lng) / 2,
+        latitudeDelta: Math.max(Math.abs(b.latitude - etaTarget.lat) * PAD, MIN_DELTA),
+        longitudeDelta: Math.max(Math.abs(b.longitude - etaTarget.lng) * PAD, MIN_DELTA),
+      };
+    } else {
+      mapInitialRegion = { latitude: b.latitude, longitude: b.longitude, latitudeDelta: 0.02, longitudeDelta: 0.02 };
+    }
+  }
 
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
@@ -307,10 +322,19 @@ export default function BusTrackingScreen() {
             </View>
           )}
 
-          {mapRegion && (
+          {mapInitialRegion && (
             <View style={styles.mapContainer}>
               <MapErrorBoundary>
-                <MapView style={styles.map} provider={PROVIDER_DEFAULT} region={mapRegion}>
+                <MapView
+                  // Remount only when the framed pair changes (different
+                  // driver, or the parent point becoming known) so a fresh
+                  // active bus is re-framed once — but live socket/poll
+                  // updates keep the same key, preserving the user's zoom/pan.
+                  key={`${busData.location.driverId}:${etaTarget ? 'two' : 'one'}`}
+                  style={styles.map}
+                  provider={PROVIDER_DEFAULT}
+                  initialRegion={mapInitialRegion}
+                >
                   <Marker coordinate={{ latitude: busData.location.latitude, longitude: busData.location.longitude }} title="Bus" anchor={{ x: 0.5, y: 0.5 }}>
                     <View style={styles.busMarker}>
                       {busData.location.drivers?.vehicleType === 'taxi'
