@@ -33,14 +33,14 @@ export function makeSlideTransition(width: number): SlideTransition {
     transitionSpec: {
       animation: 'spring',
       config: {
-        // Near-critically damped: ζ ≈ 0.94 (critical damping for
-        // stiffness 220, mass 1 is 2·√220 ≈ 29.7). Fast off the mark,
-        // soft landing, no perceptible bounce.
-        // Dial: snappier → raise stiffness (e.g. 280) and damping with it;
-        //       softer/longer settle → lower stiffness (e.g. 170) or raise
-        //       mass; if you ever see any bounce → set overshootClamping: true.
-        stiffness: 220,
-        damping: 28,
+        // Stiff + near-critically damped: ζ ≈ 0.96 (critical damping for
+        // stiffness 350, mass 1 is 2·√350 ≈ 37.4). Punchy off the mark for
+        // that instant/"premium" response, lands clean, no perceptible bounce.
+        // Dial: faster → raise stiffness (e.g. 430) and damping with it
+        //       (keep damping ≈ 2·√stiffness); calmer → lower stiffness;
+        //       lighter/zippier → lower mass; any bounce → overshootClamping: true.
+        stiffness: 350,
+        damping: 36,
         mass: 1,
       },
     },
