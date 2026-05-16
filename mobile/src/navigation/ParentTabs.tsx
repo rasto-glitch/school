@@ -170,7 +170,7 @@ export default function ParentTabs() {
   );
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.card }}>
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
       {/* Fixed header — lives OUTSIDE the navigator so the tab slide moves
           only the body, like Facebook (the bottom bar is already fixed). */}
       <View style={{ backgroundColor: colors.card, paddingTop: insets.top }}>

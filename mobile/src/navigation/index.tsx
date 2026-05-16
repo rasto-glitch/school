@@ -1,7 +1,7 @@
-import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
+import { NavigationContainer, DefaultTheme, DarkTheme, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuthStore } from '../store/authStore';
-import { useColors } from '../store/themeStore';
+import { useColors, useIsDark } from '../store/themeStore';
 import LoginScreen from '../screens/auth/LoginScreen';
 import ForgotPasswordScreen from '../screens/auth/ForgotPasswordScreen';
 import ParentTabs from './ParentTabs';
@@ -76,16 +76,35 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 export default function Navigation() {
   const { user, isAuthenticated } = useAuthStore();
   const colors = useColors();
+  const isDark = useIsDark();
   const authed = isAuthenticated();
 
+  // React Navigation ships a LIGHT theme by default; without this its
+  // scene/transition backdrop (background + card) stays light and flashes
+  // through during tab slides and stack pushes when the app is in dark mode.
+  const base = isDark ? DarkTheme : DefaultTheme;
+  const navTheme = {
+    ...base,
+    colors: {
+      ...base.colors,
+      primary: colors.primary,
+      background: colors.bg,
+      card: colors.card,
+      text: colors.text,
+      border: colors.border,
+      notification: colors.danger,
+    },
+  };
+
   return (
-    <NavigationContainer ref={navigationRef}>
+    <NavigationContainer ref={navigationRef} theme={navTheme}>
       <Stack.Navigator
         screenOptions={{
           headerStyle: { backgroundColor: colors.card },
           headerTitleStyle: { color: colors.text },
           headerTintColor: colors.primary,
           headerShown: false,
+          contentStyle: { backgroundColor: colors.bg },
         }}
       >
         {!authed ? (
