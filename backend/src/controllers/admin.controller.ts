@@ -1024,12 +1024,14 @@ async function recomputeCaches(schoolId: string, opts: { teacherIds?: string[]; 
   ]);
 }
 
-// Make sure a teacher_classes row exists for (teacher, class) — teaching a subject in a class
-// implies the teacher can see that class's students.
-async function ensureTeacherClass(teacherId: string, classId: string): Promise<void> {
-  const { data: existing } = await supabase.from('teacher_classes')
+// Strict model: a teacher may only be put on a class's curriculum if they are
+// already assigned to that class (Teachers tab). Returns true if the
+// teacher_classes link exists.
+async function teacherAssignedToClass(teacherId: string, classId: string): Promise<boolean> {
+  // tenant-check-allow: teacher_classes has no school_id column; teacher+class are school-scoped via the cst upsert
+  const { data } = await supabase.from('teacher_classes')
     .select('id').eq('teacher_id', teacherId).eq('class_id', classId).limit(1).maybeSingle();
-  if (!existing) await supabase.from('teacher_classes').insert({ teacher_id: teacherId, class_id: classId });
+  return !!data;
 }
 
 // ---- CURRICULUM endpoints ----
@@ -1058,11 +1060,14 @@ export async function addCurriculumRow(req: AuthRequest, res: Response): Promise
   const { schoolId } = req.user!;
   const { classId, subjectId, teacherId } = req.body;
   if (!classId || !subjectId || !teacherId) { res.status(400).json({ error: 'classId, subjectId and teacherId are required' }); return; }
+  if (!(await teacherAssignedToClass(teacherId, classId))) {
+    res.status(400).json({ error: 'This teacher is not assigned to this class. Assign the class to the teacher in the Teachers tab first.' });
+    return;
+  }
   const { data, error } = await supabase.from('class_subject_teachers')
     .upsert({ school_id: schoolId, class_id: classId, subject_id: subjectId, teacher_id: teacherId }, { onConflict: 'class_id,subject_id,teacher_id' })
     .select('id').single();
   if (error) { res.status(500).json({ error: error.message }); return; }
-  await ensureTeacherClass(teacherId, classId);
   await recomputeCaches(schoolId, { teacherIds: [teacherId], subjectIds: [subjectId] });
   res.status(201).json({ id: data.id });
 }

@@ -328,11 +328,16 @@ export default function ClassesPage() {
                 </select>
                 <select className="flex-1 border border-gray-300 rounded-xl px-3 py-2.5 text-sm bg-white" value={newCstTeacherId} onChange={e => setNewCstTeacherId(e.target.value)}>
                   <option value="">Teacher…</option>
-                  {teachers.map(t => <option key={t.id} value={t.id}>{t.fullName}</option>)}
+                  {teachers
+                    .filter(t => (t.teacherClasses || []).some(tc => tc.classId === curriculumClass.id))
+                    .map(t => <option key={t.id} value={t.id}>{t.fullName}</option>)}
                 </select>
                 <Button onClick={addCstRow} loading={addingCst} disabled={!newCstSubjectId || !newCstTeacherId}>Add</Button>
               </div>
               {subjects.length === 0 && <p className="text-xs text-gray-400 mt-2">No subjects yet — create them in the Subjects tab first.</p>}
+              {teachers.filter(t => (t.teacherClasses || []).some(tc => tc.classId === curriculumClass.id)).length === 0 && (
+                <p className="text-xs text-gray-400 mt-2">No teachers are assigned to this class yet — assign it in the <span className="font-medium">Teachers</span> tab first.</p>
+              )}
             </div>
           </div>
         )}
