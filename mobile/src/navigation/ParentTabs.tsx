@@ -171,6 +171,7 @@ export default function ParentTabs() {
   return (
     <View style={{ flex: 1 }}>
       <Tab.Navigator
+        detachInactiveScreens={false}
         screenListeners={{
           state: (e) => {
             const s: any = (e.data as any)?.state;

@@ -9,6 +9,7 @@ import { useNavigation } from '@react-navigation/native';
 import { FileText, FileBadge, Calendar, BookOpen, ClipboardList } from 'lucide-react-native';
 import { useAuthStore } from '../../store/authStore';
 import { parentApi, announcementApi } from '../../services/api';
+import { useRefreshOnFocus } from '../../hooks/useRefreshOnFocus';
 import { spacing, radius, shadow, font } from '../../theme';
 import { useColors } from '../../store/themeStore';
 import { useBadgeStore } from '../../store/badgeStore';
@@ -46,6 +47,7 @@ export default function FeedScreen() {
   };
 
   useEffect(() => { load().finally(() => setLoading(false)); }, []);
+  useRefreshOnFocus(load);
 
   const onRefresh = () => {
     setRefreshing(true);

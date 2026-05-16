@@ -9,6 +9,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useAuthStore } from '../../store/authStore';
 import { useColors, useIsDark } from '../../store/themeStore';
 import { parentApi, authApi } from '../../services/api';
+import { useRefreshOnFocus } from '../../hooks/useRefreshOnFocus';
 import { spacing, radius, font, shadow } from '../../theme';
 import type { Student } from '../../types';
 
@@ -23,11 +24,14 @@ export default function MeScreen() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
 
-  useEffect(() => {
+  const loadChildren = (silent = false) =>
     parentApi.getChildren()
       .then(r => setChildren(r.data || []))
-      .finally(() => setLoading(false));
-  }, []);
+      .catch(() => {})
+      .finally(() => { if (!silent) setLoading(false); });
+
+  useEffect(() => { loadChildren(); }, []);
+  useRefreshOnFocus(() => loadChildren(true));
 
   const pickAndUpload = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();

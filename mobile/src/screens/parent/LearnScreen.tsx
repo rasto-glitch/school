@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigation } from '@react-navigation/native';
 import { Heart, MessageCircle, Bookmark, BookOpen, FileText } from 'lucide-react-native';
 import { academicApi, parentApi } from '../../services/api';
+import { useRefreshOnFocus } from '../../hooks/useRefreshOnFocus';
 import { useColors, useIsDark } from '../../store/themeStore';
 import { useBadgeStore } from '../../store/badgeStore';
 import { spacing, radius, font } from '../../theme';
@@ -238,6 +239,7 @@ export default function LearnScreen() {
   }, []);
 
   useEffect(() => { load().finally(() => setLoading(false)); }, [load]);
+  useRefreshOnFocus(load);
 
   // When the user enters the Posts sub-tab, clear the post badge.
   useEffect(() => {
