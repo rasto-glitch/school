@@ -45,6 +45,7 @@ export default function TeacherTabs() {
   const { socket } = useSocketStore();
   const { width: screenWidth } = useWindowDimensions();
   const [activeIndex, setActiveIndex] = useState(0);
+  const [activeRoute, setActiveRoute] = useState('TeacherDashboard');
   const indicatorX = useRef(new Animated.Value(0)).current;
 
   const tabCount = 3
@@ -135,23 +136,31 @@ export default function TeacherTabs() {
   );
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      {/* Fixed header — lives OUTSIDE the navigator so the tab slide moves
+          only the body, like Facebook (the bottom bar is already fixed). */}
+      <View style={{ backgroundColor: colors.card, paddingTop: insets.top }}>
+        <View style={styles.headerRow}>
+          <HeaderBrand />
+          {activeRoute === 'TeacherMe' ? SettingsButton() : NotificationBell()}
+        </View>
+      </View>
+      <View style={{ flex: 1 }}>
       <Tab.Navigator
         detachInactiveScreens={false}
         screenListeners={{
           state: (e) => {
             const s: any = (e.data as any)?.state;
-            if (s && typeof s.index === 'number') setActiveIndex(s.index);
+            if (s && typeof s.index === 'number') {
+              setActiveIndex(s.index);
+              const rname = s.routes?.[s.index]?.name;
+              if (rname) setActiveRoute(rname);
+            }
           },
         }}
         screenOptions={{
           ...makeSlideTransition(screenWidth),
-          headerShown: true,
-          headerStyle: { backgroundColor: colors.card, direction: 'ltr' } as any,
-          headerTitle: '',
-          headerLeft: () => <HeaderBrand />,
-          headerShadowVisible: false,
-          headerRight: () => <NotificationBell />,
+          headerShown: false,
           tabBarActiveTintColor: isDark ? '#FFFFFF' : colors.primary,
           tabBarInactiveTintColor: isDark ? '#FFFFFF' : colors.textMuted,
           tabBarStyle: {
@@ -233,10 +242,10 @@ export default function TeacherTabs() {
           options={{
             tabBarLabel: t('nav.me', 'Me'),
             tabBarIcon: ({ color, focused }) => <User size={ICON_SIZE} color={color} fill={focused ? activeFill : 'transparent'} />,
-            headerRight: () => <SettingsButton />,
           }}
         />
       </Tab.Navigator>
+      </View>
       <Animated.View
         pointerEvents="none"
         style={[
@@ -253,6 +262,13 @@ export default function TeacherTabs() {
 }
 
 const styles = StyleSheet.create({
+  headerRow: {
+    height: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    direction: 'ltr',
+  },
   headerBtn: {
     width: 36, height: 36, borderRadius: 18,
     alignItems: 'center', justifyContent: 'center',
