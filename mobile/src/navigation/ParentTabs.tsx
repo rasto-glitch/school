@@ -13,6 +13,7 @@ import BusTrackingScreen from '../screens/parent/BusTrackingScreen';
 import MeScreen from '../screens/parent/MeScreen';
 import LearnScreen from '../screens/parent/LearnScreen';
 import ChatListScreen from '../screens/chat/ChatListScreen';
+import { makeSlideTransition } from './tabSlide';
 import { useColors, useIsDark } from '../store/themeStore';
 import { useBadgeStore } from '../store/badgeStore';
 import { font } from '../theme';
@@ -177,6 +178,7 @@ export default function ParentTabs() {
           },
         }}
         screenOptions={{
+          ...makeSlideTransition(screenWidth),
           headerShown: true,
           headerStyle: { backgroundColor: colors.card, direction: 'ltr' } as any,
           headerTitle: '',

@@ -9,6 +9,7 @@ import HouseIcon from '../components/HouseIcon';
 import CalendarCheckIcon from '../components/CalendarCheckIcon';
 import BookOpenIcon from '../components/BookOpenIcon';
 import HeaderBrand from '../components/HeaderBrand';
+import { makeSlideTransition } from './tabSlide';
 import { useColors, useIsDark } from '../store/themeStore';
 import { useAuthStore } from '../store/authStore';
 import SupervisorDashboardScreen from '../screens/supervisor/SupervisorDashboardScreen';
@@ -108,6 +109,7 @@ export default function SupervisorTabs() {
           },
         }}
         screenOptions={{
+          ...makeSlideTransition(screenWidth),
           headerShown: false,
           tabBarActiveTintColor: isDark ? '#FFFFFF' : colors.primary,
           tabBarInactiveTintColor: isDark ? '#FFFFFF' : colors.textMuted,

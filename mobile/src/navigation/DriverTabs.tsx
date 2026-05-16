@@ -7,6 +7,7 @@ import { useNavigation } from '@react-navigation/native';
 import { Navigation, Users, User, Settings } from 'lucide-react-native';
 import HouseIcon from '../components/HouseIcon';
 import HeaderBrand from '../components/HeaderBrand';
+import { makeSlideTransition } from './tabSlide';
 import { useColors, useIsDark } from '../store/themeStore';
 import DriverDashboardScreen from '../screens/driver/DriverDashboardScreen';
 import StartDriveScreen from '../screens/driver/StartDriveScreen';
@@ -65,6 +66,7 @@ export default function DriverTabs() {
           },
         }}
         screenOptions={{
+          ...makeSlideTransition(screenWidth),
           headerShown: false,
           tabBarActiveTintColor: isDark ? '#FFFFFF' : colors.primary,
           tabBarInactiveTintColor: isDark ? '#FFFFFF' : colors.textMuted,

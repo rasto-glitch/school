@@ -9,6 +9,7 @@ import HouseIcon from '../components/HouseIcon';
 import CalendarCheckIcon from '../components/CalendarCheckIcon';
 import BookOpenIcon from '../components/BookOpenIcon';
 import HeaderBrand from '../components/HeaderBrand';
+import { makeSlideTransition } from './tabSlide';
 import { useColors, useIsDark } from '../store/themeStore';
 import { useAuthStore } from '../store/authStore';
 import { useSocketStore } from '../store/socketStore';
@@ -143,6 +144,7 @@ export default function TeacherTabs() {
           },
         }}
         screenOptions={{
+          ...makeSlideTransition(screenWidth),
           headerShown: true,
           headerStyle: { backgroundColor: colors.card, direction: 'ltr' } as any,
           headerTitle: '',
