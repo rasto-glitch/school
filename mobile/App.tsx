@@ -10,6 +10,7 @@ import Navigation, { navigationRef } from './src/navigation';
 import { usePushNotifications } from './src/hooks/usePushNotifications';
 import { useRTL } from './src/hooks/useRTL';
 import { useAuthStore } from './src/store/authStore';
+import { useColors } from './src/store/themeStore';
 import { useSocketStore } from './src/store/socketStore';
 import { getNotifEmoji, openNotificationTarget } from './src/utils/notificationNav';
 import AnimatedSplash from './src/components/AnimatedSplash';
@@ -60,6 +61,7 @@ function NotificationBanner({ info, onDismiss, onPress }: { info: BannerInfo; on
 function AppInner() {
   usePushNotifications();
   const isRTL = useRTL();
+  const colors = useColors();
   const { token } = useAuthStore();
   const { connect, disconnect } = useSocketStore();
 
@@ -122,7 +124,7 @@ function AppInner() {
   };
 
   return (
-    <View style={{ flex: 1, direction: isRTL ? 'rtl' : 'ltr' }}>
+    <View style={{ flex: 1, backgroundColor: colors.bg, direction: isRTL ? 'rtl' : 'ltr' }}>
       <ConsentGate>
         <Navigation />
       </ConsentGate>
