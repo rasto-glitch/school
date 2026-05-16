@@ -1,19 +1,20 @@
 import { useEffect, useState, useCallback, useRef, Component, useMemo } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, Alert, TouchableOpacity, Animated, Linking, Easing } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker, PROVIDER_DEFAULT } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { io as socketIO } from 'socket.io-client';
-import { RefreshCw, User, AlertCircle, Bus, Car, MapPin, ChevronRight, Building2, Home, Check } from 'lucide-react-native';
-import { useNavigation } from '@react-navigation/native';
+import { AlertCircle, Bus, Car, Phone, MessageSquare, Shield } from 'lucide-react-native';
 import { parentApi } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { useColors, useIsDark } from '../../store/themeStore';
-import { spacing, radius, shadow, font } from '../../theme';
+import { font } from '../../theme';
 import type { Student } from '../../types';
 
 const SOCKET_URL = process.env.EXPO_PUBLIC_SOCKET_URL || 'https://school-production-3ccc.up.railway.app';
+
+const KID_COLORS = ['#F472B6', '#60A5FA', '#34D399', '#FBBF24', '#A78BFA', '#F87171'];
 
 interface BusData {
   location: {
@@ -49,13 +50,20 @@ function computeETA(busLat: number, busLng: number, targetLat: number, targetLng
   return new Date(Date.now() + etaMs).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
+function initialsOf(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
 class MapErrorBoundary extends Component<{ children: React.ReactNode }, { failed: boolean }> {
   state = { failed: false };
   static getDerivedStateFromError() { return { failed: true }; }
   render() {
     if (this.state.failed) {
       return (
-        <View style={{ height: 280, borderRadius: 12, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+        <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
           <Text style={{ fontSize: 13, fontWeight: '600', color: '#6B7280' }}>Map unavailable on this device</Text>
           <Text style={{ fontSize: 12, color: '#9CA3AF', textAlign: 'center', paddingHorizontal: 24 }}>Google Maps API key required for Android</Text>
         </View>
@@ -68,18 +76,14 @@ class MapErrorBoundary extends Component<{ children: React.ReactNode }, { failed
 export default function BusTrackingScreen() {
   const { t } = useTranslation();
   const { token } = useAuthStore();
-  const navigation = useNavigation<any>();
   const colors = useColors();
   const isDark = useIsDark();
+  const insets = useSafeAreaInsets();
 
-  // Pickup location + residence state
-  const [hasPickupLocation, setHasPickupLocation] = useState<boolean | null>(null);
-  const hasPickupRef = useRef<boolean | null>(null);
+  // Saved pickup pin — still needed for ETA target + the map marker even
+  // though the editor itself now lives in Settings → Pickup location.
   const [pickupCoords, setPickupCoords] = useState<{ lat: number | null; lng: number | null }>({ lat: null, lng: null });
-  const [residenceType, setResidenceType] = useState<'apartment' | 'house' | null>(null);
-  const [blockNumber, setBlockNumber] = useState('');
-  const [residenceDirty, setResidenceDirty] = useState(false);
-  const [savingResidence, setSavingResidence] = useState(false);
+  const hasPickupRef = useRef<boolean | null>(null);
 
   const [staticDriverInfo, setStaticDriverInfo] = useState<DriverInfo | null>(null);
   const [children, setChildren] = useState<Student[]>([]);
@@ -90,16 +94,31 @@ export default function BusTrackingScreen() {
   const [parentLocation, setParentLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [busSpeed, setBusSpeed] = useState(0);
 
+  // "Updated Ns ago" — set on every poll success and every socket push.
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
+  const [nowTick, setNowTick] = useState(Date.now());
+  useEffect(() => {
+    const iv = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(iv);
+  }, []);
+
+  // Pulsing live dot
+  const pulseAnim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.timing(pulseAnim, { toValue: 1, duration: 1600, easing: Easing.out(Easing.ease), useNativeDriver: true }),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [pulseAnim]);
+
   useEffect(() => {
     parentApi.getPickupLocation().then(r => {
-      const { latitude, longitude, residenceType: rt, blockNumber: bn } = r.data;
+      const { latitude, longitude } = r.data;
       const has = !!(latitude && longitude);
       hasPickupRef.current = has;
-      setHasPickupLocation(has);
       setPickupCoords({ lat: latitude ?? null, lng: longitude ?? null });
-      setResidenceType((rt as 'apartment' | 'house' | null) ?? null);
-      setBlockNumber(bn ?? '');
-    }).catch(() => { hasPickupRef.current = false; setHasPickupLocation(false); });
+    }).catch(() => { hasPickupRef.current = false; });
   }, []);
 
   useEffect(() => {
@@ -107,7 +126,6 @@ export default function BusTrackingScreen() {
       const kids = r.data || [];
       setChildren(kids);
       if (kids.length > 0) {
-        // Prefer the first child who has a driver assigned
         const withDriver = kids.find((k: any) => k.drivers && (Array.isArray(k.drivers) ? k.drivers.length > 0 : k.drivers.fullName));
         setSelectedChild(withDriver?.id || kids[0].id);
       }
@@ -130,11 +148,9 @@ export default function BusTrackingScreen() {
         const loc = await Location.getCurrentPositionAsync({});
         const { latitude, longitude } = loc.coords;
         setParentLocation({ latitude, longitude });
-        // Auto-save as pickup location if none set yet
         if (autoSave && hasPickupRef.current === false) {
           parentApi.updatePickupLocation(latitude, longitude).then(() => {
             hasPickupRef.current = true;
-            setHasPickupLocation(true);
             setPickupCoords({ lat: latitude, lng: longitude });
           }).catch(() => {});
         }
@@ -151,7 +167,7 @@ export default function BusTrackingScreen() {
     if (!selectedChild) return;
     setLoading(true);
     parentApi.getBusLocation(selectedChild)
-      .then(r => { setBusData(r.data); setAbsent(false); })
+      .then(r => { setBusData(r.data); setAbsent(false); setLastUpdatedAt(Date.now()); })
       .catch(err => {
         const msg: string = err.response?.data?.error || '';
         setBusData(null);
@@ -170,6 +186,7 @@ export default function BusTrackingScreen() {
     socket.on('locationUpdate', (data: { latitude: number; longitude: number; isDriving: boolean; speed?: number }) => {
       if (data.speed !== undefined) setBusSpeed(data.speed);
       setBusData(prev => prev ? { ...prev, location: { ...prev.location, latitude: data.latitude, longitude: data.longitude, isDriving: data.isDriving } } : prev);
+      setLastUpdatedAt(Date.now());
     });
     socket.on('driveEnded', () => reset());
     socket.on('busAlert', (data: { title: string; message: string }) => {
@@ -178,26 +195,8 @@ export default function BusTrackingScreen() {
     return () => { socket.disconnect(); };
   }, [busData?.location?.driverId, reset, token]);
 
-  const handleSaveResidence = async () => {
-    setSavingResidence(true);
-    try {
-      await parentApi.updatePickupLocation(
-        pickupCoords.lat ?? 0,
-        pickupCoords.lng ?? 0,
-        residenceType ?? undefined,
-        blockNumber.trim() || undefined,
-      );
-      setResidenceDirty(false);
-    } catch {
-      Alert.alert('Error', 'Could not save residence info. Please try again.');
-    } finally {
-      setSavingResidence(false);
-    }
-  };
-
   const isActive = !!busData?.location?.isDriving;
   const driverInfo: DriverInfo | null = busData?.location?.drivers || staticDriverInfo;
-  // Prefer manually-set pickup location for ETA and map marker
   const etaTarget = pickupCoords.lat && pickupCoords.lng
     ? { lat: pickupCoords.lat, lng: pickupCoords.lng }
     : parentLocation
@@ -207,17 +206,26 @@ export default function BusTrackingScreen() {
     ? computeETA(busData.location.latitude, busData.location.longitude, etaTarget.lat, etaTarget.lng, busSpeed)
     : null;
 
-  // Initial map framing: when the parent opens an active bus, show BOTH the
-  // bus and the parent's point (pickup > GPS > home) at a moderate zoom so
-  // the distance is readable. initialRegion (NOT region) = applied once;
-  // after that the user can freely zoom/pan and the live marker keeps
-  // moving without the camera ever snapping back.
+  const distKm = isActive && busData?.location && etaTarget
+    ? haversineKm(busData.location.latitude, busData.location.longitude, etaTarget.lat, etaTarget.lng)
+    : null;
+  const etaMinutes = distKm != null
+    ? Math.max(1, Math.round(distKm / (busSpeed > 1 ? busSpeed * 3.6 : 30) * 60))
+    : null;
+  const distLabel = distKm != null
+    ? `${distKm < 10 ? distKm.toFixed(1) : Math.round(distKm)} km`
+    : null;
+  const secondsAgo = lastUpdatedAt != null ? Math.max(0, Math.floor((nowTick - lastUpdatedAt) / 1000)) : null;
+
+  // Initial map framing: show BOTH the bus and the parent point at a
+  // moderate zoom. initialRegion (NOT region) applies once; afterwards the
+  // user can freely zoom/pan while the live marker keeps moving.
   let mapInitialRegion: { latitude: number; longitude: number; latitudeDelta: number; longitudeDelta: number } | undefined;
   if (busData?.location) {
     const b = busData.location;
     if (etaTarget) {
-      const PAD = 2.2;         // breathing room so neither point sits on the edge
-      const MIN_DELTA = 0.012; // moderate cap so close points don't over-zoom
+      const PAD = 2.2;
+      const MIN_DELTA = 0.012;
       mapInitialRegion = {
         latitude: (b.latitude + etaTarget.lat) / 2,
         longitude: (b.longitude + etaTarget.lng) / 2,
@@ -229,256 +237,258 @@ export default function BusTrackingScreen() {
     }
   }
 
-  const insets = useSafeAreaInsets();
+  const accent = colors.primary;
   const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
 
-  return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.md }]}
-    >
-      {/* Header */}
-      <View style={styles.headerRow}>
-        <View>
-          <Text style={styles.title}>{t('bus.title')}</Text>
-          <Text style={styles.subtitle}>{t('bus.subtitle')}</Text>
-        </View>
-        <TouchableOpacity style={styles.refreshBtn} onPress={fetchBus} disabled={loading}>
-          {loading
-            ? <ActivityIndicator size="small" color={isDark ? '#FFFFFF' : colors.primary} />
-            : <RefreshCw size={18} color={isDark ? '#FFFFFF' : colors.primary} />}
-        </TouchableOpacity>
-      </View>
+  const onCall = () => { if (driverInfo?.phoneNumber) Linking.openURL('tel:' + driverInfo.phoneNumber); };
+  const onText = () => { if (driverInfo?.phoneNumber) Linking.openURL('sms:' + driverInfo.phoneNumber); };
+  const onReport = () => {
+    Alert.alert(t('bus.report_title'), t('bus.report_body'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('bus.report_send'), onPress: () => { console.log('[bus] report issue TODO — child', selectedChild); } },
+    ]);
+  };
 
-      {/* Child selector */}
-      {children.length > 1 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing.md }}>
-          {children.map(c => (
-            <TouchableOpacity key={c.id} style={[styles.chip, selectedChild === c.id && styles.chipActive]} onPress={() => setSelectedChild(c.id)}>
-              <Text style={[styles.chipText, selectedChild === c.id && styles.chipTextActive]}>{c.fullName}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+  const pulseScale = pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1.8] });
+  const pulseOpacity = pulseAnim.interpolate({ inputRange: [0, 0.8, 1], outputRange: [0.5, 0, 0] });
+
+  const onboardLabel = children.length === 1
+    ? children[0].fullName.trim().split(/\s+/)[0]
+    : t('bus.onboard_other', { count: children.length });
+
+  return (
+    <View style={styles.container}>
+      {/* Map fills the scene (under the existing ParentTabs header + tab bar) */}
+      {mapInitialRegion ? (
+        <MapErrorBoundary>
+          <MapView
+            key={`${busData!.location.driverId}:${etaTarget ? 'two' : 'one'}`}
+            style={StyleSheet.absoluteFillObject}
+            provider={PROVIDER_DEFAULT}
+            initialRegion={mapInitialRegion}
+          >
+            <Marker coordinate={{ latitude: busData!.location.latitude, longitude: busData!.location.longitude }} title="Bus" anchor={{ x: 0.5, y: 0.5 }}>
+              <View style={styles.busMarker}>
+                {busData!.location.drivers?.vehicleType === 'taxi'
+                  ? <Car size={18} color="#fff" />
+                  : <Bus size={18} color="#fff" />}
+              </View>
+            </Marker>
+            {busData!.studentHome?.latitude && (
+              <Marker coordinate={{ latitude: busData!.studentHome.latitude, longitude: busData!.studentHome.longitude }} title="Home" pinColor="green" />
+            )}
+            {pickupCoords.lat && pickupCoords.lng ? (
+              <Marker coordinate={{ latitude: pickupCoords.lat, longitude: pickupCoords.lng }} title="Pickup Location" pinColor="red" />
+            ) : parentLocation ? (
+              <Marker coordinate={parentLocation} title="Your Location" pinColor="red" />
+            ) : null}
+          </MapView>
+        </MapErrorBoundary>
+      ) : (
+        <View style={[StyleSheet.absoluteFillObject, { backgroundColor: colors.bg }]} />
       )}
 
-      {/* Driver info — always visible when available */}
-      {driverInfo && (
-        <View style={styles.driverCard}>
-          <Text style={styles.sectionLabel}>{t('bus.driver_info')}</Text>
-          <View style={styles.driverRow}>
-            <View style={styles.driverAvatar}>
-              <User size={18} color={colors.primary} />
-            </View>
+      {/* Loading spinner over the map */}
+      {loading && !busData && (
+        <View style={styles.loadingOverlay} pointerEvents="none">
+          <ActivityIndicator size="large" color={isDark ? '#FFFFFF' : accent} />
+        </View>
+      )}
+
+      {/* ── TOP BANNER ───────────────────────────────────────── */}
+      {absent ? (
+        <View style={[styles.card, styles.topCard, { top: insets.top + 12 }, styles.absentCard]}>
+          <AlertCircle size={18} color={colors.warning} />
+          <Text style={styles.absentText}>{t('bus.absent_message')}</Text>
+        </View>
+      ) : (
+        <View style={[styles.card, styles.topCard, { top: insets.top + 12 }]}>
+          <View style={styles.statusStrip}>
+            {isActive ? (
+              <>
+                <View style={styles.pingWrap}>
+                  <Animated.View style={[styles.pingHalo, { backgroundColor: accent, transform: [{ scale: pulseScale }], opacity: pulseOpacity }]} />
+                  <View style={[styles.pingDot, { backgroundColor: accent }]} />
+                </View>
+                <Text style={[styles.statusLabel, { color: accent }]}>{t('bus.live')}</Text>
+                {secondsAgo != null && (
+                  <Text style={styles.updatedText}>{t('bus.updated_ago', { seconds: secondsAgo })}</Text>
+                )}
+              </>
+            ) : (
+              <>
+                <View style={[styles.pingDot, { backgroundColor: colors.textMuted }]} />
+                <Text style={[styles.statusLabel, { color: colors.textMuted }]}>{t('bus.not_active')}</Text>
+              </>
+            )}
+          </View>
+
+          <View style={styles.bannerMain}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.driverName}>{driverInfo.fullName}</Text>
-              {driverInfo.licenseNumber && <Text style={styles.driverMeta}>{t('bus.license')}: {driverInfo.licenseNumber}</Text>}
-              {driverInfo.phoneNumber && <Text style={[styles.driverMeta, { color: colors.primary }]}>{driverInfo.phoneNumber}</Text>}
+              {isActive && etaTime ? (
+                <>
+                  <Text style={styles.caption}>{t('bus.arrives_caption')}</Text>
+                  <View style={styles.etaRow}>
+                    <Text style={styles.etaTime}>{etaTime}</Text>
+                    {etaMinutes != null && (
+                      <View style={[styles.chip, { backgroundColor: accent + (isDark ? '22' : '18') }]}>
+                        <Text style={[styles.chipText, { color: accent }]}>{t('bus.in_min', { min: etaMinutes })}</Text>
+                      </View>
+                    )}
+                  </View>
+                  {distLabel && <Text style={styles.detailLine}>{t('bus.distance_away', { dist: distLabel })}</Text>}
+                </>
+              ) : (
+                <>
+                  <Text style={styles.caption}>{t('bus.not_active')}</Text>
+                  <Text style={[styles.detailLine, { marginTop: 4 }]}>{t('bus.not_active_desc')}</Text>
+                </>
+              )}
             </View>
-            {driverInfo.buses?.busNumber && (
-              <View style={styles.busBadge}>
-                <Bus size={12} color={colors.primary} />
-                <Text style={styles.busBadgeText}>#{driverInfo.buses.busNumber}</Text>
+
+            {children.length > 0 && (
+              <View style={{ alignItems: 'flex-end' }}>
+                <View style={styles.kidStack}>
+                  {children.slice(0, 4).map((c, i) => (
+                    <View
+                      key={c.id}
+                      style={[
+                        styles.kidAvatar,
+                        { backgroundColor: KID_COLORS[i % KID_COLORS.length], marginLeft: i === 0 ? 0 : -10, zIndex: 4 - i },
+                      ]}
+                    >
+                      <Text style={styles.kidInitials}>{initialsOf(c.fullName)}</Text>
+                    </View>
+                  ))}
+                </View>
+                <Text style={styles.onboardText}>{onboardLabel}</Text>
               </View>
             )}
           </View>
         </View>
       )}
 
-      {/* Absent */}
-      {absent && (
-        <View style={styles.absentCard}>
-          <AlertCircle size={18} color={colors.warning} />
-          <Text style={styles.absentText}>{t('bus.absent_message')}</Text>
-        </View>
-      )}
-
-      {/* Not active */}
-      {!isActive && !absent && !loading && (
-        <View style={styles.inactiveCard}>
-          <Bus size={28} color={colors.textMuted} />
-          <Text style={styles.inactiveTitle}>{t('bus.not_active')}</Text>
-          <Text style={styles.inactiveDesc}>{t('bus.not_active_desc')}</Text>
-        </View>
-      )}
-
-      {/* Active */}
-      {isActive && busData && (
-        <>
-          <View style={styles.activeCard}>
-            <View style={styles.activeRow}>
-              <View>
-                <Text style={styles.activeTitle}>{t('bus.bus_active')}</Text>
-                <Text style={styles.activeSub}>{t('bus.bus_number', { number: busData.location.drivers?.buses?.busNumber || 'N/A' })}</Text>
-              </View>
-              <View style={styles.pingDot} />
+      {/* ── BOTTOM DRIVER + ACTION BAR ────────────────────────── */}
+      {!absent && driverInfo && (
+        <View style={[styles.card, styles.bottomCard, { bottom: insets.bottom + 12 }]}>
+          <View style={styles.driverRow}>
+            <View style={[styles.driverAvatar, { backgroundColor: accent }]}>
+              <Text style={styles.driverAvatarText}>{initialsOf(driverInfo.fullName)}</Text>
             </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.driverName} numberOfLines={1}>{driverInfo.fullName}</Text>
+              <Text style={styles.driverSub} numberOfLines={1}>
+                {driverInfo.licenseNumber
+                  ? `${t('bus.driver')} · ${t('bus.license')} ${driverInfo.licenseNumber}`
+                  : t('bus.driver')}
+              </Text>
+            </View>
+            {driverInfo.buses?.busNumber && (
+              <View style={styles.busBadge}>
+                <Bus size={12} color={isDark ? '#F8FAFC' : colors.text} />
+                <Text style={styles.busBadgeText}>#{driverInfo.buses.busNumber}</Text>
+              </View>
+            )}
           </View>
 
-          {etaTime && (
-            <View style={styles.etaCard}>
-              <Text style={styles.etaLabel}>{t('bus.arrives_at')}</Text>
-              <Text style={styles.etaTime}>{etaTime}</Text>
-              <Text style={styles.etaNote}>{pickupCoords.lat ? t('bus.eta_pickup_location', { defaultValue: 'Based on your pickup location' }) : parentLocation ? t('bus.eta_your_location') : t('bus.eta_home_location')}</Text>
-            </View>
-          )}
-
-          {mapInitialRegion && (
-            <View style={styles.mapContainer}>
-              <MapErrorBoundary>
-                <MapView
-                  // Remount only when the framed pair changes (different
-                  // driver, or the parent point becoming known) so a fresh
-                  // active bus is re-framed once — but live socket/poll
-                  // updates keep the same key, preserving the user's zoom/pan.
-                  key={`${busData.location.driverId}:${etaTarget ? 'two' : 'one'}`}
-                  style={styles.map}
-                  provider={PROVIDER_DEFAULT}
-                  initialRegion={mapInitialRegion}
-                >
-                  <Marker coordinate={{ latitude: busData.location.latitude, longitude: busData.location.longitude }} title="Bus" anchor={{ x: 0.5, y: 0.5 }}>
-                    <View style={styles.busMarker}>
-                      {busData.location.drivers?.vehicleType === 'taxi'
-                        ? <Car size={18} color="#fff" />
-                        : <Bus size={18} color="#fff" />}
-                    </View>
-                  </Marker>
-                  {busData.studentHome?.latitude && (
-                    <Marker coordinate={{ latitude: busData.studentHome.latitude, longitude: busData.studentHome.longitude }} title="Home" pinColor="green" />
-                  )}
-                  {pickupCoords.lat && pickupCoords.lng ? (
-                    <Marker coordinate={{ latitude: pickupCoords.lat, longitude: pickupCoords.lng }} title="Pickup Location" pinColor="red" />
-                  ) : parentLocation ? (
-                    <Marker coordinate={parentLocation} title="Your Location" pinColor="red" />
-                  ) : null}
-                </MapView>
-              </MapErrorBoundary>
-            </View>
-          )}
-        </>
+          <View style={styles.actionRow}>
+            <TouchableOpacity
+              style={[styles.actionBtn, !driverInfo.phoneNumber && { opacity: 0.5 }]}
+              onPress={onCall}
+              disabled={!driverInfo.phoneNumber}
+              activeOpacity={0.7}
+            >
+              <Phone size={16} color={isDark ? '#F8FAFC' : colors.text} />
+              <Text style={styles.actionLabel}>{t('bus.call')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionBtn, !driverInfo.phoneNumber && { opacity: 0.5 }]}
+              onPress={onText}
+              disabled={!driverInfo.phoneNumber}
+              activeOpacity={0.7}
+            >
+              <MessageSquare size={16} color={isDark ? '#F8FAFC' : colors.text} />
+              <Text style={styles.actionLabel}>{t('bus.text')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.actionBtn} onPress={onReport} activeOpacity={0.7}>
+              <Shield size={16} color={isDark ? '#F87171' : colors.danger} />
+              <Text style={[styles.actionLabel, { color: isDark ? '#F87171' : colors.danger }]}>{t('bus.report')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       )}
-
-      {/* Pickup location (GPS pin) */}
-      <TouchableOpacity style={styles.pickupRow} onPress={() => navigation.navigate('SetPickupLocation')} activeOpacity={0.7}>
-        <View style={[styles.pickupIcon, { backgroundColor: hasPickupLocation ? colors.success + '22' : colors.warning + '22' }]}>
-          <MapPin size={16} color={hasPickupLocation ? colors.success : colors.warning} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.pickupLabel}>{t('pickup.profile_row')}</Text>
-          <Text style={[styles.pickupSub, { color: hasPickupLocation ? colors.success : colors.warning }]}>
-            {hasPickupLocation === null ? '...' : hasPickupLocation ? t('pickup.set') : t('pickup.not_set')}
-          </Text>
-        </View>
-        <ChevronRight size={16} color={colors.textMuted} />
-      </TouchableOpacity>
-
-      {/* Residence info — inline */}
-      <View style={styles.residenceCard}>
-        <Text style={styles.sectionLabel}>Residence Type</Text>
-        <View style={styles.residenceRow}>
-          {([
-            { type: 'apartment' as const, label: 'Apartment', Icon: Building2 },
-            { type: 'house' as const, label: 'House', Icon: Home },
-          ]).map(({ type, label, Icon }) => {
-            const selected = residenceType === type;
-            return (
-              <TouchableOpacity
-                key={type}
-                style={[styles.residenceOption, selected && styles.residenceOptionSelected]}
-                onPress={() => { setResidenceType(type); setResidenceDirty(true); }}
-                activeOpacity={0.7}
-              >
-                <Icon size={20} color={isDark ? (selected ? '#000000' : '#FFFFFF') : (selected ? colors.primary : colors.textMuted)} />
-                <Text style={[styles.residenceOptionLabel, selected && { color: isDark ? '#000000' : colors.primary }]}>{label}</Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        <Text style={[styles.sectionLabel, { marginTop: spacing.md }]}>
-          {residenceType === 'apartment' ? 'Building Number' : 'Block Number'}
-        </Text>
-        <TextInput
-          style={styles.blockInput}
-          placeholder={residenceType === 'apartment' ? 'e.g. Building A or Building 3' : 'e.g. Block 1 or Block B'}
-          placeholderTextColor={colors.textMuted}
-          value={blockNumber}
-          onChangeText={v => { setBlockNumber(v); setResidenceDirty(true); }}
-        />
-
-        {residenceDirty && (
-          <TouchableOpacity style={styles.saveResidenceBtn} onPress={handleSaveResidence} disabled={savingResidence} activeOpacity={0.8}>
-            {savingResidence
-              ? <ActivityIndicator size="small" color="#fff" />
-              : <><Check size={15} color="#fff" /><Text style={styles.saveResidenceBtnText}>Save</Text></>}
-          </TouchableOpacity>
-        )}
-      </View>
-    </ScrollView>
+    </View>
   );
 }
 
 const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').useColors>, isDark: boolean) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: spacing.md, paddingBottom: 40 },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing.md },
-  title: { fontSize: font.xxl, fontWeight: '700', color: colors.text },
-  subtitle: { fontSize: font.sm, color: colors.textMuted, marginTop: 2 },
-  refreshBtn: { width: 40, height: 40, borderRadius: radius.sm, backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : colors.primaryLight, alignItems: 'center', justifyContent: 'center' },
-  chip: { borderWidth: 1.5, borderColor: isDark ? '#FFFFFF' : colors.border, borderRadius: radius.full, paddingHorizontal: 14, paddingVertical: 8, marginRight: spacing.sm, backgroundColor: isDark ? 'transparent' : colors.card },
-  chipActive: { borderColor: isDark ? '#FFFFFF' : colors.primary, backgroundColor: isDark ? '#FFFFFF' : colors.primaryLight },
-  chipText: { fontSize: font.sm, color: isDark ? '#FFFFFF' : colors.textSecondary, fontWeight: '500' },
-  chipTextActive: { color: isDark ? '#000000' : colors.primary, fontWeight: '700' },
-  driverCard: { backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm, ...shadow.sm },
-  sectionLabel: { fontSize: font.xs, fontWeight: '700', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.sm },
-  driverRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  driverAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center' },
-  driverName: { fontSize: font.md, fontWeight: '600', color: colors.text },
-  driverMeta: { fontSize: font.sm, color: colors.textSecondary, marginTop: 2 },
-  busBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.primaryLight, borderRadius: radius.full, paddingHorizontal: 8, paddingVertical: 4 },
-  busBadgeText: { fontSize: font.xs, fontWeight: '700', color: colors.primary },
-  absentCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.warningLight, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm, borderWidth: 1, borderColor: '#FDE68A' },
-  absentText: { color: '#92400E', fontSize: font.sm, flex: 1 },
-  inactiveCard: { backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.xl, alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm, borderWidth: 1, borderColor: colors.border },
-  inactiveTitle: { fontSize: font.md, fontWeight: '600', color: colors.textSecondary },
-  inactiveDesc: { fontSize: font.sm, color: colors.textMuted, textAlign: 'center' },
-  activeCard: { backgroundColor: colors.successLight, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm, borderWidth: 1.5, borderColor: '#6EE7B7', ...shadow.sm },
-  activeRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  activeTitle: { fontSize: font.md, fontWeight: '700', color: '#065F46' },
-  activeSub: { fontSize: font.sm, color: '#047857', marginTop: 2 },
-  pingDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: colors.success },
-  etaCard: { backgroundColor: colors.primaryLight, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm },
-  etaLabel: { fontSize: font.xs, color: colors.primary, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
-  etaTime: { fontSize: 40, fontWeight: '800', color: colors.primaryDark, marginTop: 2 },
-  etaNote: { fontSize: font.xs, color: '#818CF8', marginTop: 4 },
-  mapContainer: { borderRadius: radius.md, overflow: 'hidden', marginBottom: spacing.sm, height: 280 },
-  map: { flex: 1 },
-  pickupRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm, ...shadow.sm },
-  pickupIcon: { width: 32, height: 32, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
-  pickupLabel: { fontSize: font.sm, fontWeight: '600', color: colors.text },
-  pickupSub: { fontSize: font.xs, fontWeight: '600', marginTop: 1 },
-  residenceCard: { backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm, ...shadow.sm },
-  residenceRow: { flexDirection: 'row', gap: spacing.sm },
-  residenceOption: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
-    paddingVertical: 12, borderRadius: radius.md, borderWidth: 2,
-    borderColor: isDark ? '#FFFFFF' : colors.border,
-    backgroundColor: isDark ? 'transparent' : undefined,
+  loadingOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+
+  card: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    backgroundColor: colors.card,
+    borderRadius: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: isDark ? 0.4 : 0.1,
+    shadowRadius: 24,
+    elevation: 6,
+    ...(isDark ? { borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' } : null),
   },
-  residenceOptionSelected: { borderColor: isDark ? '#FFFFFF' : colors.primary, backgroundColor: isDark ? '#FFFFFF' : colors.primaryLight },
-  residenceOptionLabel: { fontSize: font.sm, fontWeight: '600', color: isDark ? '#FFFFFF' : colors.textMuted },
-  blockInput: {
-    backgroundColor: colors.bg, borderRadius: radius.md,
-    borderWidth: 1.5, borderColor: colors.border,
-    paddingHorizontal: spacing.md, paddingVertical: 10,
-    fontSize: font.sm, color: colors.text,
-    marginBottom: spacing.sm,
+  topCard: { paddingTop: 8, paddingHorizontal: 18, paddingBottom: 16 },
+  bottomCard: { paddingTop: 14, paddingHorizontal: 18, paddingBottom: 14 },
+
+  statusStrip: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  pingWrap: { width: 8, height: 8, alignItems: 'center', justifyContent: 'center' },
+  pingHalo: { position: 'absolute', width: 8, height: 8, borderRadius: 4 },
+  pingDot: { width: 8, height: 8, borderRadius: 4 },
+  statusLabel: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.6 },
+  updatedText: { marginLeft: 'auto', fontSize: 11, fontWeight: '600', color: colors.textSecondary },
+
+  bannerMain: { flexDirection: 'row', alignItems: 'flex-end', gap: 14, marginTop: 4 },
+  caption: { fontSize: 11, fontWeight: '600', color: colors.textSecondary, marginBottom: 2, textTransform: 'uppercase', letterSpacing: 0.4 },
+  etaRow: { flexDirection: 'row', alignItems: 'baseline', gap: 6 },
+  etaTime: { fontSize: 34, fontWeight: '800', letterSpacing: -1, lineHeight: 36, color: colors.text },
+  chip: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
+  chipText: { fontSize: 12, fontWeight: '700' },
+  detailLine: { fontSize: 12, fontWeight: '500', color: colors.textSecondary, marginTop: 4 },
+
+  kidStack: { flexDirection: 'row' },
+  kidAvatar: {
+    width: 28, height: 28, borderRadius: 14,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2.5, borderColor: isDark ? '#1B232E' : '#FFFFFF',
   },
-  saveResidenceBtn: {
+  kidInitials: { fontSize: 11, fontWeight: '700', color: '#fff' },
+  onboardText: { fontSize: 11, fontWeight: '600', color: colors.textSecondary, marginTop: 4, textAlign: 'right' },
+
+  absentCard: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 16 },
+  absentText: { flex: 1, fontSize: font.sm, color: isDark ? '#FCD34D' : '#92400E', fontWeight: '500' },
+
+  driverRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
+  driverAvatar: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  driverAvatarText: { fontSize: 16, fontWeight: '700', color: '#fff' },
+  driverName: { fontSize: 14, fontWeight: '700', color: colors.text },
+  driverSub: { fontSize: 11, fontWeight: '500', color: colors.textSecondary, marginTop: 1 },
+  busBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#F1F5F9',
+    borderRadius: 8, paddingHorizontal: 9, paddingVertical: 5,
+  },
+  busBadgeText: { fontSize: 11, fontWeight: '700', color: isDark ? '#F8FAFC' : colors.text },
+
+  actionRow: { flexDirection: 'row', gap: 8 },
+  actionBtn: {
+    flex: 1, height: 44, borderRadius: 12,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
-    backgroundColor: colors.primary, borderRadius: radius.md,
-    paddingVertical: 10, marginTop: spacing.xs,
+    backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#F1F5F9',
+    borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.06)' : '#E5E9EF',
   },
-  saveResidenceBtnText: { fontSize: font.sm, fontWeight: '700', color: '#fff' },
+  actionLabel: { fontSize: 13, fontWeight: '700', color: isDark ? '#F8FAFC' : colors.text },
+
   busMarker: {
     backgroundColor: colors.primary, borderRadius: 20, padding: 6,
     borderWidth: 2, borderColor: '#fff',
