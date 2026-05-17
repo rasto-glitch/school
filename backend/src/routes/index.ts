@@ -354,8 +354,10 @@ export function createRouter(io: SocketServer) {
   router.get('/accounting/reports/tax', authenticate, authorize(...accountingRW), (req, res) => reports.getTaxReport(req as AuthRequest, res));
   router.post('/accounting/reports/rollup', authenticate, authorize(...accountingRW), (req, res) => reports.rollupCurrencies(req as AuthRequest, res));
 
-  // Teacher self-service: read-only "my salary"
+  // Teacher / supervisor self-service: read-only "my salary".
+  // getMyStaffInfo is role-agnostic (keyed by the JWT userId).
   router.get('/teacher/salary', authenticate, authorize('teacher'), (req, res) => staff.getMyStaffInfo(req as AuthRequest, res));
+  router.get('/supervisor/salary', authenticate, authorize('supervisor'), (req, res) => staff.getMyStaffInfo(req as AuthRequest, res));
 
   // ---- SUPERVISOR ----
   router.get('/supervisor/classes', authenticate, authorize('supervisor'), (req, res) => supervisor.getClasses(req as AuthRequest, res));

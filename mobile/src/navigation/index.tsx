@@ -10,6 +10,7 @@ import DriverSettingsScreen from '../screens/driver/DriverSettingsScreen';
 import SupervisorTabs from './SupervisorTabs';
 import SupervisorSettingsScreen from '../screens/supervisor/SupervisorSettingsScreen';
 import SupervisorNotificationsScreen from '../screens/supervisor/SupervisorNotificationsScreen';
+import SupervisorSalaryScreen from '../screens/supervisor/SupervisorSalaryScreen';
 import TeacherTabs from './TeacherTabs';
 import TeacherSettingsScreen from '../screens/teacher/TeacherSettingsScreen';
 import TeacherNotificationsScreen from '../screens/teacher/TeacherNotificationsScreen';
@@ -44,6 +45,7 @@ export type RootStackParamList = {
   SupervisorTabs: undefined;
   SupervisorSettings: undefined;
   SupervisorNotifications: undefined;
+  SupervisorSalary: undefined;
   TeacherTabs: undefined;
   TeacherSettings: undefined;
   TeacherNotifications: undefined;
@@ -133,6 +135,11 @@ export default function Navigation() {
               name="SupervisorNotifications"
               component={SupervisorNotificationsScreen}
               options={{ headerShown: true, headerTitle: 'Notifications', headerBackTitle: 'Back' }}
+            />
+            <Stack.Screen
+              name="SupervisorSalary"
+              component={SupervisorSalaryScreen}
+              options={{ headerShown: true, headerTitle: 'My Salary', headerBackTitle: 'Back' }}
             />
             <Stack.Screen
               name="AnnouncementDetail"

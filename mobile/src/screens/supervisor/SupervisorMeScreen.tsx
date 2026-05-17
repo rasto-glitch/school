@@ -3,7 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Image, Alert, Act
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { User, Settings, ShieldCheck, Plus, Pencil } from 'lucide-react-native';
+import { User, Settings, ShieldCheck, Plus, Pencil, Wallet, ChevronRight } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuthStore } from '../../store/authStore';
 import { useColors } from '../../store/themeStore';
@@ -87,6 +87,21 @@ export default function SupervisorMeScreen() {
         )}
       </View>
 
+      <TouchableOpacity
+        style={styles.actionCard}
+        activeOpacity={0.7}
+        onPress={() => navigation.navigate('SupervisorSalary')}
+      >
+        <View style={styles.actionIconBox}>
+          <Wallet size={18} color={colors.primary} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.actionTitle}>{t('salary.title', 'My Salary')}</Text>
+          <Text style={styles.actionSubtitle}>{t('salary.subtitle_short', 'View salary and payments')}</Text>
+        </View>
+        <ChevronRight size={18} color={colors.textMuted} />
+      </TouchableOpacity>
+
       {/* Info card */}
       <View style={styles.infoCard}>
         <View style={styles.infoRow}>
@@ -151,6 +166,10 @@ const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').u
     marginTop: spacing.sm,
   },
   schoolBadgeText: { fontSize: font.xs, color: '#fff', fontWeight: '600' },
+  actionCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.md, ...shadow.sm },
+  actionIconBox: { width: 36, height: 36, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primaryLight },
+  actionTitle: { fontSize: font.md, fontWeight: '700', color: colors.text },
+  actionSubtitle: { fontSize: font.xs, color: colors.textMuted, marginTop: 2 },
   infoCard: {
     backgroundColor: colors.card, borderRadius: radius.md,
     padding: spacing.md, marginBottom: spacing.md, ...shadow.sm,

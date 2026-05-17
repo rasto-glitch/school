@@ -167,6 +167,7 @@ export const supervisorApi = {
   getClasses: () => api.get('/supervisor/classes'),
   getStudentsByClass: (classId: string) => api.get(`/supervisor/classes/${classId}/students`),
   getAllStudents: () => api.get('/supervisor/students'),
+  getSalary: () => api.get('/supervisor/salary'),
   getAbsentToday: () => api.get('/supervisor/absent-today'),
   getAttendance: (classId: string, date: string) => api.get('/supervisor/attendance', { params: { classId, date } }),
   getAttendanceSummary: (date?: string) => api.get('/supervisor/attendance-summary', { params: date ? { date } : {} }),
