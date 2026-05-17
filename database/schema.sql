@@ -594,6 +594,98 @@ CREATE TABLE IF NOT EXISTS archived_students (
 CREATE INDEX IF NOT EXISTS idx_archived_students_school ON archived_students(school_id, created_at DESC);
 
 -- ============================================================
+-- ARCHIVED EMPLOYEES
+-- Unified snapshot for teacher / driver / supervisor / staff departures
+-- (see migration 013). Controller builds the role JSONB in TS; the
+-- archive_employee_atomic() function does the snapshot-insert + users-row
+-- delete in one transaction (deleting users cascades the teachers/drivers
+-- row, teacher_classes, bus_locations).
+-- ============================================================
+CREATE TABLE IF NOT EXISTS archived_employees (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  original_employee_id UUID,
+  role TEXT NOT NULL CHECK (role IN ('teacher', 'driver', 'supervisor', 'staff')),
+  full_name TEXT NOT NULL,
+  date_of_birth DATE,
+  age INTEGER,
+  phone_number TEXT,
+  email TEXT,
+  emergency_contact TEXT,
+  profile_picture TEXT,
+  position TEXT,
+  subject TEXT,
+  hire_date DATE,
+  departure_date DATE NOT NULL,
+  reason TEXT NOT NULL CHECK (reason IN ('resigned', 'terminated', 'contract_ended', 'retired', 'transferred', 'other')),
+  account JSONB DEFAULT '{}',
+  teaching JSONB DEFAULT '[]',
+  transport JSONB DEFAULT '{}',
+  employment JSONB DEFAULT '{}',
+  payment_history JSONB DEFAULT '[]',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_archived_employees_school ON archived_employees(school_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_archived_employees_role ON archived_employees(school_id, role);
+
+-- Rehire links (Phase 3 UI; inert until used).
+ALTER TABLE teachers       ADD COLUMN IF NOT EXISTS previous_archive_id UUID REFERENCES archived_employees(id) ON DELETE SET NULL;
+ALTER TABLE drivers        ADD COLUMN IF NOT EXISTS previous_archive_id UUID REFERENCES archived_employees(id) ON DELETE SET NULL;
+ALTER TABLE staff_members  ADD COLUMN IF NOT EXISTS previous_archive_id UUID REFERENCES archived_employees(id) ON DELETE SET NULL;
+
+CREATE OR REPLACE FUNCTION archive_employee_atomic(
+  p_school_id UUID,
+  p_user_id UUID,
+  p_original_employee_id UUID,
+  p_role TEXT,
+  p_full_name TEXT,
+  p_date_of_birth DATE,
+  p_age INTEGER,
+  p_phone_number TEXT,
+  p_email TEXT,
+  p_emergency_contact TEXT,
+  p_profile_picture TEXT,
+  p_position TEXT,
+  p_subject TEXT,
+  p_hire_date DATE,
+  p_departure_date DATE,
+  p_reason TEXT,
+  p_account JSONB,
+  p_teaching JSONB,
+  p_transport JSONB,
+  p_employment JSONB,
+  p_payment_history JSONB
+) RETURNS UUID
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_archive_id UUID;
+BEGIN
+  INSERT INTO archived_employees (
+    school_id, original_employee_id, role, full_name, date_of_birth, age,
+    phone_number, email, emergency_contact, profile_picture, position, subject,
+    hire_date, departure_date, reason,
+    account, teaching, transport, employment, payment_history
+  ) VALUES (
+    p_school_id, p_original_employee_id, p_role, p_full_name, p_date_of_birth, p_age,
+    p_phone_number, p_email, p_emergency_contact, p_profile_picture, p_position, p_subject,
+    p_hire_date, p_departure_date, p_reason,
+    COALESCE(p_account, '{}'::jsonb),
+    COALESCE(p_teaching, '[]'::jsonb),
+    COALESCE(p_transport, '{}'::jsonb),
+    COALESCE(p_employment, '{}'::jsonb),
+    COALESCE(p_payment_history, '[]'::jsonb)
+  )
+  RETURNING id INTO v_archive_id;
+
+  DELETE FROM users
+   WHERE id = p_user_id AND school_id = p_school_id;
+
+  RETURN v_archive_id;
+END;
+$$;
+
+-- ============================================================
 -- ACADEMIC POSTS
 -- Blog-style posts written by teachers for specific classes
 -- ============================================================

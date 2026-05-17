@@ -19,6 +19,114 @@ async function hasArchiveFeature(schoolId: string): Promise<boolean> {
   return (data?.features as Record<string, boolean> | null)?.archive === true;
 }
 
+// ---- EMPLOYEE ARCHIVE (teacher / driver / supervisor; staff = Phase 2) ----
+// Mirrors the student archive: the controller assembles the role-specific
+// JSONB in TS, then archive_employee_atomic() snapshots + deletes the users
+// row (cascading the teachers/drivers row) in one transaction.
+
+type ArchiveEmployeeRole = 'teacher' | 'driver' | 'supervisor' | 'staff';
+const EMPLOYEE_ARCHIVE_REASONS = ['resigned', 'terminated', 'contract_ended', 'retired', 'transferred', 'other'];
+
+function normalizeArchiveReason(raw: unknown): string {
+  const r = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  return EMPLOYEE_ARCHIVE_REASONS.includes(r) ? r : 'other';
+}
+
+// Snapshot of the users row — never includes password_hash.
+async function loadAccountSnapshot(userId: string, schoolId: string): Promise<Record<string, unknown> | null> {
+  const { data } = await supabase
+    .from('users')
+    .select('id, username, email, role, first_name, last_name, phone, profile_picture, is_active, password_changed_at, created_at')
+    .eq('id', userId).eq('school_id', schoolId).single();
+  return (data as Record<string, unknown> | null) ?? null;
+}
+
+interface PerformEmployeeArchiveArgs {
+  schoolId: string;
+  userId: string;
+  originalEmployeeId: string;
+  role: ArchiveEmployeeRole;
+  fullName: string;
+  dateOfBirth?: string | null;
+  age?: number | null;
+  phoneNumber?: string | null;
+  email?: string | null;
+  emergencyContact?: string | null;
+  profilePicture?: string | null;
+  position?: string | null;
+  subject?: string | null;
+  hireDate?: string | null;
+  departureDate: string;
+  reason: string;
+  account?: unknown;
+  teaching?: unknown;
+  transport?: unknown;
+  employment?: unknown;
+  paymentHistory?: unknown;
+}
+
+async function performEmployeeArchive(a: PerformEmployeeArchiveArgs): Promise<{ ok: true; archiveId: string } | { ok: false; error: string }> {
+  const { error, data } = await supabase.rpc('archive_employee_atomic', {
+    p_school_id: a.schoolId,
+    p_user_id: a.userId,
+    p_original_employee_id: a.originalEmployeeId,
+    p_role: a.role,
+    p_full_name: a.fullName,
+    p_date_of_birth: a.dateOfBirth ?? null,
+    p_age: a.age ?? null,
+    p_phone_number: a.phoneNumber ?? null,
+    p_email: a.email ?? null,
+    p_emergency_contact: a.emergencyContact ?? null,
+    p_profile_picture: a.profilePicture ?? null,
+    p_position: a.position ?? null,
+    p_subject: a.subject ?? null,
+    p_hire_date: a.hireDate ?? null,
+    p_departure_date: a.departureDate,
+    p_reason: a.reason,
+    p_account: a.account ?? {},
+    p_teaching: a.teaching ?? [],
+    p_transport: a.transport ?? {},
+    p_employment: a.employment ?? {},
+    p_payment_history: a.paymentHistory ?? [],
+  });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, archiveId: data as string };
+}
+
+// Teacher teaching-history snapshot: curriculum (class ↔ subject) + a count
+// summary of authored content that survives the delete (orphaned, not lost).
+async function buildTeacherTeachingSnapshot(teacherId: string, schoolId: string): Promise<unknown> {
+  const { data: cst } = await supabase
+    .from('class_subject_teachers')
+    .select('class_id, subject_id, classes(name), subjects(name)')
+    .eq('teacher_id', teacherId).eq('school_id', schoolId);
+
+  const byClass = new Map<string, { classId: string; className: string | null; subjects: string[] }>();
+  for (const row of (cst ?? []) as any[]) {
+    const cid = row.class_id as string;
+    let entry = byClass.get(cid);
+    if (!entry) { entry = { classId: cid, className: row.classes?.name ?? null, subjects: [] }; byClass.set(cid, entry); }
+    const sn = row.subjects?.name;
+    if (sn && !entry.subjects.includes(sn)) entry.subjects.push(sn);
+  }
+
+  const countOf = async (table: string) => {
+    const { count } = await supabase
+      .from(table).select('id', { count: 'exact', head: true })
+      .eq('teacher_id', teacherId).eq('school_id', schoolId);
+    return count ?? 0;
+  };
+  const [homework, assignments, grades, reports, weeklySummaries, academicPosts] = await Promise.all([
+    countOf('homework'), countOf('assignments'), countOf('grades'),
+    countOf('reports'), countOf('weekly_summaries'), countOf('academic_posts'),
+  ]);
+
+  return {
+    curriculum: Array.from(byClass.values()),
+    contentSummary: { homework, assignments, grades, reports, weeklySummaries, academicPosts },
+  };
+}
+
 // ---- STUDENTS ----
 export async function getStudents(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
@@ -869,6 +977,49 @@ export async function getArchivedStudent(req: AuthRequest, res: Response): Promi
 
   const { data, error } = await supabase
     .from('archived_students')
+    .select('*')
+    .eq('id', id)
+    .eq('school_id', schoolId)
+    .single();
+
+  if (error || !data) { res.status(404).json({ error: 'Archived record not found' }); return; }
+  res.json(toCC(data));
+}
+
+export async function getArchivedEmployees(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { search, role } = req.query as Record<string, string>;
+
+  if (!(await hasArchiveFeature(schoolId))) {
+    res.status(403).json({ error: 'Archive feature is not enabled for this school' });
+    return;
+  }
+
+  let query = supabase
+    .from('archived_employees')
+    .select('id, role, full_name, phone_number, email, position, subject, hire_date, departure_date, reason, created_at')
+    .eq('school_id', schoolId)
+    .order('created_at', { ascending: false });
+
+  if (role && ['teacher', 'driver', 'supervisor', 'staff'].includes(role)) query = query.eq('role', role);
+  if (search) query = query.ilike('full_name', `%${search}%`);
+
+  const { data, error } = await query;
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json(toCC(data));
+}
+
+export async function getArchivedEmployee(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { id } = req.params;
+
+  if (!(await hasArchiveFeature(schoolId))) {
+    res.status(403).json({ error: 'Archive feature is not enabled for this school' });
+    return;
+  }
+
+  const { data, error } = await supabase
+    .from('archived_employees')
     .select('*')
     .eq('id', id)
     .eq('school_id', schoolId)
@@ -1922,13 +2073,16 @@ export async function deleteTeacher(req: AuthRequest, res: Response): Promise<vo
   const { id } = req.params;
 
   const { data: teacher, error: findErr } = await supabase
-    .from('teachers').select('user_id').eq('id', id).eq('school_id', schoolId).single();
+    .from('teachers')
+    .select('id, user_id, full_name, phone_number, subject, emergency_contact, profile_picture, created_at')
+    .eq('id', id).eq('school_id', schoolId).single();
   if (findErr || !teacher) {
     res.status(404).json({ error: 'Teacher not found in this school' });
     return;
   }
 
-  // Nullify teacher_id on records we want to keep (homework, assignments, grades, reports)
+  // Preserve authored content (orphan, don't destroy). Runs before either
+  // path so the records survive the users→teachers cascade.
   await supabase.from('homework').update({ teacher_id: null } as any).eq('teacher_id', id).eq('school_id', schoolId);
   await supabase.from('assignments').update({ teacher_id: null } as any).eq('teacher_id', id).eq('school_id', schoolId);
   await supabase.from('grades').update({ teacher_id: null } as any).eq('teacher_id', id).eq('school_id', schoolId);
@@ -1936,14 +2090,32 @@ export async function deleteTeacher(req: AuthRequest, res: Response): Promise<vo
   await supabase.from('weekly_summaries').delete().eq('teacher_id', id).eq('school_id', schoolId);
   await supabase.from('subjects').update({ teacher_id: null }).eq('teacher_id', id).eq('school_id', schoolId);
 
-  // Delete teacher record (cascades teacher_classes)
+  const archiveOn = await hasArchiveFeature(schoolId);
+
+  if (archiveOn) {
+    const reason = normalizeArchiveReason(req.body?.reason);
+    const departureDate = (req.body?.departureDate as string | undefined) || new Date().toISOString().split('T')[0];
+    const teaching = await buildTeacherTeachingSnapshot(String(id), schoolId);
+    const account = await loadAccountSnapshot(teacher.user_id, schoolId);
+    const r = await performEmployeeArchive({
+      schoolId, userId: teacher.user_id, originalEmployeeId: teacher.id, role: 'teacher',
+      fullName: teacher.full_name, phoneNumber: teacher.phone_number, subject: teacher.subject,
+      emergencyContact: teacher.emergency_contact, profilePicture: teacher.profile_picture,
+      hireDate: teacher.created_at ? String(teacher.created_at).split('T')[0] : null,
+      departureDate, reason, account, teaching,
+    });
+    if (!r.ok) { res.status(500).json({ error: r.error }); return; }
+    await logAudit({ req, entityType: 'teacher', entityId: String(id), action: 'delete', before: teacher as Record<string, unknown>, label: teacher.full_name, reason: `Archived (${reason})` });
+    res.json({ message: 'Teacher archived', archived: true, archiveId: r.archiveId });
+    return;
+  }
+
+  // Archive feature off — hard delete (no historical record retained).
   const { error: delTeacherErr } = await supabase.from('teachers').delete().eq('id', id).eq('school_id', schoolId);
   if (delTeacherErr) { res.status(500).json({ error: delTeacherErr.message }); return; }
-
-  // Delete the user account
   const { error: delUserErr } = await supabase.from('users').delete().eq('id', teacher.user_id);
   if (delUserErr) { res.status(500).json({ error: delUserErr.message }); return; }
-
+  await logAudit({ req, entityType: 'teacher', entityId: String(id), action: 'delete', before: teacher as Record<string, unknown>, label: teacher.full_name, reason: 'Deleted (no archive)' });
   res.json({ message: 'Teacher removed' });
 }
 
@@ -1953,24 +2125,62 @@ export async function deleteDriver(req: AuthRequest, res: Response): Promise<voi
   const { id } = req.params;
 
   const { data: driver, error: findErr } = await supabase
-    .from('drivers').select('user_id').eq('id', id).eq('school_id', schoolId).single();
+    .from('drivers')
+    .select('id, user_id, full_name, phone_number, emergency_contact, license_number, bus_id, profile_picture, age, vehicle_type, created_at')
+    .eq('id', id).eq('school_id', schoolId).single();
   if (findErr || !driver) {
     res.status(404).json({ error: 'Driver not found in this school' });
     return;
   }
 
-  // Unlink students assigned to this driver
+  const archiveOn = await hasArchiveFeature(schoolId);
+
+  // Snapshot the transport ledger BEFORE unlinking — students roster and
+  // ride-record stats are gone once the driver row cascades away.
+  let transport: unknown = {};
+  if (archiveOn) {
+    const [{ data: roster }, { data: bus }, rideTotal, rideRode] = await Promise.all([
+      supabase.from('students').select('id, full_name').eq('driver_id', id).eq('school_id', schoolId),
+      driver.bus_id ? supabase.from('buses').select('bus_number, plate_number').eq('id', driver.bus_id).single() : Promise.resolve({ data: null }),
+      supabase.from('bus_ride_records').select('id', { count: 'exact', head: true }).eq('driver_id', id).eq('school_id', schoolId),
+      supabase.from('bus_ride_records').select('id', { count: 'exact', head: true }).eq('driver_id', id).eq('school_id', schoolId).eq('rode_bus', true),
+    ]);
+    transport = {
+      licenseNumber: driver.license_number ?? null,
+      vehicleType: driver.vehicle_type ?? null,
+      busNumber: (bus as any)?.bus_number ?? null,
+      plateNumber: (bus as any)?.plate_number ?? null,
+      studentsTransported: (roster ?? []).map((s: any) => ({ id: s.id, fullName: s.full_name })),
+      rideRecordStats: { total: rideTotal.count ?? 0, rode: rideRode.count ?? 0 },
+    };
+  }
+
+  // Unlink students; drop ephemeral GPS.
   await supabase.from('students').update({ driver_id: null }).eq('driver_id', id).eq('school_id', schoolId);
   await supabase.from('bus_locations').delete().eq('driver_id', id).eq('school_id', schoolId);
 
-  // Delete driver record
+  if (archiveOn) {
+    const reason = normalizeArchiveReason(req.body?.reason);
+    const departureDate = (req.body?.departureDate as string | undefined) || new Date().toISOString().split('T')[0];
+    const account = await loadAccountSnapshot(driver.user_id, schoolId);
+    const r = await performEmployeeArchive({
+      schoolId, userId: driver.user_id, originalEmployeeId: driver.id, role: 'driver',
+      fullName: driver.full_name, phoneNumber: driver.phone_number, age: driver.age,
+      emergencyContact: driver.emergency_contact, profilePicture: driver.profile_picture,
+      hireDate: driver.created_at ? String(driver.created_at).split('T')[0] : null,
+      departureDate, reason, account, transport,
+    });
+    if (!r.ok) { res.status(500).json({ error: r.error }); return; }
+    await logAudit({ req, entityType: 'driver', entityId: String(id), action: 'delete', before: driver as Record<string, unknown>, label: driver.full_name, reason: `Archived (${reason})` });
+    res.json({ message: 'Driver archived', archived: true, archiveId: r.archiveId });
+    return;
+  }
+
   const { error: delDriverErr } = await supabase.from('drivers').delete().eq('id', id).eq('school_id', schoolId);
   if (delDriverErr) { res.status(500).json({ error: delDriverErr.message }); return; }
-
-  // Delete the user account
   const { error: delUserErr } = await supabase.from('users').delete().eq('id', driver.user_id);
   if (delUserErr) { res.status(500).json({ error: delUserErr.message }); return; }
-
+  await logAudit({ req, entityType: 'driver', entityId: String(id), action: 'delete', before: driver as Record<string, unknown>, label: driver.full_name, reason: 'Deleted (no archive)' });
   res.json({ message: 'Driver removed' });
 }
 
@@ -2530,32 +2740,80 @@ export async function updateAccount(req: AuthRequest, res: Response): Promise<vo
 
 export async function deleteAccount(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
-  const { userId } = req.params;
+  const userId = String(req.params.userId);
 
   const { data: user, error: findErr } = await supabase
-    .from('users').select('id, role').eq('id', userId).eq('school_id', schoolId).single();
+    .from('users')
+    .select('id, role, username, email, first_name, last_name, phone, profile_picture, is_active, password_changed_at, created_at')
+    .eq('id', userId).eq('school_id', schoolId).single();
   if (findErr || !user) { res.status(404).json({ error: 'Account not found' }); return; }
 
+  if (user.role !== 'teacher' && user.role !== 'supervisor') {
+    res.status(400).json({ error: `Use the dedicated delete endpoint for role "${user.role}"` }); return;
+  }
+
+  const archiveOn = await hasArchiveFeature(schoolId);
+  const reason = normalizeArchiveReason(req.body?.reason);
+  const departureDate = (req.body?.departureDate as string | undefined) || new Date().toISOString().split('T')[0];
+  const account: Record<string, unknown> = {
+    id: user.id, username: user.username, email: user.email, role: user.role,
+    firstName: user.first_name, lastName: user.last_name, phone: user.phone,
+    profilePicture: user.profile_picture, isActive: user.is_active,
+    passwordChangedAt: user.password_changed_at, createdAt: user.created_at,
+  };
+  const fullName = `${user.first_name ?? ''} ${user.last_name ?? ''}`.trim() || (user.username as string);
+
   if (user.role === 'teacher') {
-    const { data: teacher } = await supabase.from('teachers').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
+    const { data: teacher } = await supabase
+      .from('teachers')
+      .select('id, full_name, phone_number, subject, emergency_contact, profile_picture, created_at')
+      .eq('user_id', userId).eq('school_id', schoolId).single();
     if (teacher) {
+      // Preserve authored content (orphan, don't destroy).
       await supabase.from('homework').update({ teacher_id: null } as any).eq('teacher_id', teacher.id).eq('school_id', schoolId);
       await supabase.from('assignments').update({ teacher_id: null } as any).eq('teacher_id', teacher.id).eq('school_id', schoolId);
       await supabase.from('grades').update({ teacher_id: null } as any).eq('teacher_id', teacher.id).eq('school_id', schoolId);
       await supabase.from('reports').update({ teacher_id: null } as any).eq('teacher_id', teacher.id).eq('school_id', schoolId);
       await supabase.from('weekly_summaries').delete().eq('teacher_id', teacher.id).eq('school_id', schoolId);
       await supabase.from('subjects').update({ teacher_id: null }).eq('teacher_id', teacher.id).eq('school_id', schoolId);
+
+      if (archiveOn) {
+        const teaching = await buildTeacherTeachingSnapshot(teacher.id, schoolId);
+        const r = await performEmployeeArchive({
+          schoolId, userId, originalEmployeeId: teacher.id, role: 'teacher',
+          fullName: teacher.full_name || fullName, phoneNumber: teacher.phone_number,
+          subject: teacher.subject, emergencyContact: teacher.emergency_contact,
+          profilePicture: teacher.profile_picture ?? (user.profile_picture as string | null),
+          hireDate: teacher.created_at ? String(teacher.created_at).split('T')[0] : null,
+          departureDate, reason, account, teaching,
+        });
+        if (!r.ok) { res.status(500).json({ error: r.error }); return; }
+        await logAudit({ req, entityType: 'teacher', entityId: String(teacher.id), action: 'delete', before: teacher as Record<string, unknown>, label: teacher.full_name, reason: `Archived (${reason})` });
+        res.json({ message: 'Account archived', archived: true, archiveId: r.archiveId });
+        return;
+      }
       await supabase.from('teachers').delete().eq('id', teacher.id).eq('school_id', schoolId);
     }
-  } else if (user.role === 'supervisor') {
-    // Supervisors have no dedicated profile table — nothing extra to clean up
-  } else {
-    res.status(400).json({ error: `Use the dedicated delete endpoint for role "${user.role}"` }); return;
+  } else if (archiveOn) {
+    // Supervisor — no profile table; the snapshot is the users row. (Per-
+    // supervisor authored artifacts have no owner column to attribute.)
+    const r = await performEmployeeArchive({
+      schoolId, userId, originalEmployeeId: user.id, role: 'supervisor',
+      fullName, email: user.email as string | null, phoneNumber: user.phone as string | null,
+      profilePicture: user.profile_picture as string | null,
+      hireDate: user.created_at ? String(user.created_at).split('T')[0] : null,
+      departureDate, reason, account,
+    });
+    if (!r.ok) { res.status(500).json({ error: r.error }); return; }
+    await logAudit({ req, entityType: 'supervisor', entityId: String(user.id), action: 'delete', before: account, label: fullName, reason: `Archived (${reason})` });
+    res.json({ message: 'Account archived', archived: true, archiveId: r.archiveId });
+    return;
   }
 
+  // Archive feature off (or teacher row missing) — hard delete.
   const { error: delErr } = await supabase.from('users').delete().eq('id', userId);
   if (delErr) { res.status(500).json({ error: delErr.message }); return; }
-
+  await logAudit({ req, entityType: user.role as 'teacher' | 'supervisor', entityId: String(userId), action: 'delete', before: account, label: fullName, reason: 'Deleted (no archive)' });
   res.json({ message: 'Account deleted' });
 }
 

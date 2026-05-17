@@ -15,7 +15,10 @@ export type AuditEntityType =
   | 'accounting_period'
   | 'payment_account'
   | 'fx_rate'
-  | 'late_fee';
+  | 'late_fee'
+  | 'teacher'
+  | 'driver'
+  | 'supervisor';
 
 interface LogParams {
   req: AuthRequest;
