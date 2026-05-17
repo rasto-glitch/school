@@ -6,6 +6,79 @@ import { notify, notifyMany } from '../utils/notify';
 import { streamStaffSalaryPdf, buildStaffSalaryXlsx, type StaffSalaryExportData } from '../utils/staffSalaryExport';
 import { logAudit } from '../utils/audit';
 import { assertPeriodOpen } from '../utils/period';
+import { hasArchiveFeature, normalizeArchiveReason } from '../utils/employeeArchive';
+
+// Snapshot a voided staff member into the unified archived_employees table
+// (role='staff'). Unlike teacher/driver archive, the staff_members row is
+// NOT deleted — it stays soft-voided so staff_salary_payments and accounting
+// period integrity survive. This archive row is the self-contained HR record
+// (personal + employment + salary/insurance history), intentionally
+// duplicating the accounting ledger. Insert-only: no users-row delete (staff
+// often have no account, and a linked account may be shared).
+async function snapshotStaffArchive(
+  schoolId: string,
+  staff: Record<string, any>,
+  rawReason: unknown,
+  departureDate: string,
+): Promise<{ ok: true; archiveId: string } | { ok: false; error: string }> {
+  const { data: payments } = await supabase
+    .from('staff_salary_payments')
+    .select('amount, currency, paid_on, period_label, notes, insurance_amount, insurance_percentage')
+    .eq('staff_id', staff.id).eq('school_id', schoolId).is('voided_at', null)
+    .order('paid_on', { ascending: true });
+
+  let account: Record<string, unknown> | null = null;
+  if (staff.user_id) {
+    const { data: u } = await supabase
+      .from('users')
+      .select('id, username, email, role, first_name, last_name, phone, profile_picture, is_active, password_changed_at, created_at')
+      .eq('id', staff.user_id).eq('school_id', schoolId).single();
+    account = (u as Record<string, unknown> | null) ?? null;
+  }
+
+  const insuranceHeld = await sumInsuranceHeld(staff.id, staff.currency);
+  const paymentHistory = (payments ?? []).map((p: any) => ({
+    amount: p.amount, currency: p.currency, paidOn: p.paid_on,
+    periodLabel: p.period_label ?? null, notes: p.notes ?? null,
+    insuranceAmount: p.insurance_amount ?? 0, insurancePercentage: p.insurance_percentage ?? null,
+  }));
+
+  const { data, error } = await supabase
+    .from('archived_employees')
+    .insert({
+      school_id: schoolId,
+      original_employee_id: staff.id,
+      role: 'staff',
+      full_name: staff.full_name,
+      phone_number: (account?.phone as string | null) ?? null,
+      email: (account?.email as string | null) ?? null,
+      profile_picture: (account?.profile_picture as string | null) ?? null,
+      position: staff.position ?? null,
+      hire_date: staff.created_at ? String(staff.created_at).split('T')[0] : null,
+      departure_date: departureDate,
+      reason: normalizeArchiveReason(rawReason),
+      account: account ?? {},
+      employment: {
+        salaryAmount: staff.salary_amount,
+        currency: staff.currency,
+        position: staff.position ?? null,
+        nextPaymentDate: staff.next_payment_date ?? null,
+        insurancePercentage: staff.insurance_percentage ?? null,
+        insuranceHeld,
+        insurancePaidOut: staff.insurance_paid_out ?? false,
+        insurancePaidOutAt: staff.insurance_paid_out_at ?? null,
+        insurancePaidOutAmount: staff.insurance_paid_out_amount ?? null,
+        insurancePaidOutCurrency: staff.insurance_paid_out_currency ?? null,
+        insurancePaidOutNotes: staff.insurance_paid_out_notes ?? null,
+      },
+      payment_history: paymentHistory,
+    })
+    .select('id')
+    .single();
+
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, archiveId: (data as { id: string }).id };
+}
 
 // ── Premium gate (shares the tuition_fees flag) ────────────────────────
 
@@ -310,7 +383,18 @@ export async function deleteStaff(req: AuthRequest, res: Response): Promise<void
     .eq('id', id).eq('school_id', schoolId).select().single();
   if (error) { res.status(500).json({ error: error.message }); return; }
   await logAudit({ req, entityType: 'staff_member', entityId: String(id), action: 'update', before, after, label: (before as { full_name?: string }).full_name, reason: reason ?? undefined });
-  res.json({ success: true });
+
+  // HR archive entry (additive — the soft-void above is the accounting
+  // source of truth). Best-effort: a snapshot failure must not undo the
+  // committed void, so we report it without failing the request.
+  let archived: { archived: true; archiveId: string } | { archived: false } = { archived: false };
+  if (await hasArchiveFeature(schoolId)) {
+    const departureDate = (req.body?.departureDate as string | undefined) || new Date().toISOString().split('T')[0];
+    const snap = await snapshotStaffArchive(schoolId, before as Record<string, any>, reason, departureDate);
+    if (snap.ok) archived = { archived: true, archiveId: snap.archiveId };
+    else console.error(`[staff archive] snapshot failed for staff ${id}: ${snap.error}`);
+  }
+  res.json({ success: true, ...archived });
 }
 
 export async function unvoidStaff(req: AuthRequest, res: Response): Promise<void> {

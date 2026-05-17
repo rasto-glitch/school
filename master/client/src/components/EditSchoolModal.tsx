@@ -2,6 +2,7 @@ import { useState, FormEvent } from 'react';
 import {
   updateSchool, resetAdminPassword, School, DEFAULT_FEATURES, SchoolFeatures,
   PREMIUM_ONLY_FEATURES, exportSchoolArchivePdf, exportSchoolArchiveXlsx,
+  exportSchoolEmployeeArchivePdf, exportSchoolEmployeeArchiveXlsx,
 } from '../api';
 import { PLANS, PLAN_IDS, PlanId, getPlan, formatMonthlyCost } from '../plans';
 
@@ -40,6 +41,8 @@ export default function EditSchoolModal({ school, onClose, onUpdated }: Props) {
   const [showArchivePurgeConfirm, setShowArchivePurgeConfirm] = useState(false);
   const [pdfBusy, setPdfBusy] = useState(false);
   const [xlsxBusy, setXlsxBusy] = useState(false);
+  const [empPdfBusy, setEmpPdfBusy] = useState(false);
+  const [empXlsxBusy, setEmpXlsxBusy] = useState(false);
 
   const [newPassword, setNewPassword] = useState('');
   const [pwError, setPwError] = useState('');
@@ -52,15 +55,39 @@ export default function EditSchoolModal({ school, onClose, onUpdated }: Props) {
   const archiveWasOn = school.features?.archive === true;
   const archiveTurningOff = archiveWasOn && features.archive !== true;
 
-  const triggerDownload = (blob: Blob, ext: 'pdf' | 'xlsx') => {
+  const triggerDownload = (blob: Blob, ext: 'pdf' | 'xlsx', prefix = 'archive') => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `archive-${school.slug}-${new Date().toISOString().split('T')[0]}.${ext}`;
+    a.download = `${prefix}-${school.slug}-${new Date().toISOString().split('T')[0]}.${ext}`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  };
+
+  const downloadEmployeePdf = async () => {
+    setEmpPdfBusy(true);
+    try {
+      const res = await exportSchoolEmployeeArchivePdf(school.id);
+      triggerDownload(res.data, 'pdf', 'employee-archive');
+    } catch {
+      setError('Failed to download employee PDF.');
+    } finally {
+      setEmpPdfBusy(false);
+    }
+  };
+
+  const downloadEmployeeXlsx = async () => {
+    setEmpXlsxBusy(true);
+    try {
+      const res = await exportSchoolEmployeeArchiveXlsx(school.id);
+      triggerDownload(res.data, 'xlsx', 'employee-archive');
+    } catch {
+      setError('Failed to download employee Excel.');
+    } finally {
+      setEmpXlsxBusy(false);
+    }
   };
 
   const downloadPdf = async () => {
@@ -279,15 +306,16 @@ export default function EditSchoolModal({ school, onClose, onUpdated }: Props) {
             <h3 className="font-semibold text-slate-900 text-lg mb-2">Disable Archive — irreversible</h3>
             <p className="text-sm text-slate-600 mb-4">
               Turning off the archive feature for <span className="font-medium">{school.name}</span> will
-              <span className="font-semibold text-red-600"> permanently delete every archived and graduated student record</span> for this school.
-              This cannot be undone. Download a backup first if you might need it.
+              <span className="font-semibold text-red-600"> permanently delete every archived/graduated student record and every archived employee record</span> for this school.
+              This cannot be undone. Download both backups first if you might need them.
             </p>
 
-            <div className="flex flex-col gap-2 mb-4">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Students</p>
+            <div className="flex flex-col gap-2 mb-3">
               <button
                 type="button"
                 onClick={downloadPdf}
-                disabled={pdfBusy || xlsxBusy || loading}
+                disabled={pdfBusy || xlsxBusy || empPdfBusy || empXlsxBusy || loading}
                 className="w-full py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-medium hover:bg-slate-50 disabled:opacity-60 transition-colors"
               >
                 {pdfBusy ? 'Preparing PDF…' : 'Download PDF'}
@@ -295,10 +323,30 @@ export default function EditSchoolModal({ school, onClose, onUpdated }: Props) {
               <button
                 type="button"
                 onClick={downloadXlsx}
-                disabled={pdfBusy || xlsxBusy || loading}
+                disabled={pdfBusy || xlsxBusy || empPdfBusy || empXlsxBusy || loading}
                 className="w-full py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-medium hover:bg-slate-50 disabled:opacity-60 transition-colors"
               >
                 {xlsxBusy ? 'Preparing Excel…' : 'Download Excel'}
+              </button>
+            </div>
+
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Employees</p>
+            <div className="flex flex-col gap-2 mb-4">
+              <button
+                type="button"
+                onClick={downloadEmployeePdf}
+                disabled={pdfBusy || xlsxBusy || empPdfBusy || empXlsxBusy || loading}
+                className="w-full py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-medium hover:bg-slate-50 disabled:opacity-60 transition-colors"
+              >
+                {empPdfBusy ? 'Preparing PDF…' : 'Download PDF'}
+              </button>
+              <button
+                type="button"
+                onClick={downloadEmployeeXlsx}
+                disabled={pdfBusy || xlsxBusy || empPdfBusy || empXlsxBusy || loading}
+                className="w-full py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-medium hover:bg-slate-50 disabled:opacity-60 transition-colors"
+              >
+                {empXlsxBusy ? 'Preparing Excel…' : 'Download Excel'}
               </button>
             </div>
 
@@ -314,7 +362,7 @@ export default function EditSchoolModal({ school, onClose, onUpdated }: Props) {
               <button
                 type="button"
                 onClick={() => performUpdate(true)}
-                disabled={loading || pdfBusy || xlsxBusy}
+                disabled={loading || pdfBusy || xlsxBusy || empPdfBusy || empXlsxBusy}
                 className="flex-1 py-2.5 rounded-lg bg-red-600 hover:bg-red-500 disabled:bg-red-300 text-white text-sm font-medium transition-colors"
               >
                 {loading ? 'Deleting…' : 'Confirm — I have a copy'}

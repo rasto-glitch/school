@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { createClient } from '@supabase/supabase-js';
 import bcrypt from 'bcryptjs';
 import { loadArchiveSnapshot, streamPdf, buildXlsx } from '../utils/archiveExport';
+import { loadEmployeeArchiveSnapshot, streamPdf as streamEmployeePdf, buildXlsx as buildEmployeeXlsx } from '../utils/employeeArchiveExport';
 
 const router = Router();
 
@@ -17,6 +18,10 @@ async function purgeArchive(schoolId: string): Promise<void> {
   await supabase.from('archived_students').delete().eq('school_id', schoolId);
   await supabase.from('students').delete()
     .eq('school_id', schoolId).eq('is_graduated', true);
+  // The archive feature is shared by students AND employees — turning it off
+  // must purge employee history too, or the feature-off invariant ("schools
+  // without the feature retain no historical records") would be violated.
+  await supabase.from('archived_employees').delete().eq('school_id', schoolId);
 }
 
 function safeFilename(s: string): string {
@@ -172,6 +177,33 @@ router.get('/:id/archive-export.xlsx', async (req: Request, res: Response) => {
     const buf = buildXlsx(snapshot);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="archive-${safeFilename(snapshot.schoolName)}-${new Date().toISOString().split('T')[0]}.xlsx"`);
+    res.send(buf);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Failed to build Excel' });
+  }
+});
+
+// Employee archive backup — same pre-disable purpose as the student export
+// above (the archive feature is shared by both).
+router.get('/:id/employee-archive-export.pdf', async (req: Request, res: Response) => {
+  const id = req.params.id as string;
+  try {
+    const snapshot = await loadEmployeeArchiveSnapshot(supabase, id);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="employee-archive-${safeFilename(snapshot.schoolName)}-${new Date().toISOString().split('T')[0]}.pdf"`);
+    streamEmployeePdf(snapshot, res);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? 'Failed to build PDF' });
+  }
+});
+
+router.get('/:id/employee-archive-export.xlsx', async (req: Request, res: Response) => {
+  const id = req.params.id as string;
+  try {
+    const snapshot = await loadEmployeeArchiveSnapshot(supabase, id);
+    const buf = buildEmployeeXlsx(snapshot);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="employee-archive-${safeFilename(snapshot.schoolName)}-${new Date().toISOString().split('T')[0]}.xlsx"`);
     res.send(buf);
   } catch (err: any) {
     res.status(500).json({ error: err?.message ?? 'Failed to build Excel' });

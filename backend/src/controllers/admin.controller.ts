@@ -7,30 +7,18 @@ import type { AuthRequest } from '../middleware/auth';
 import { toCC } from '../utils/transform';
 import { notify, notifyMany } from '../utils/notify';
 import { loadArchiveSnapshot, streamPdf, buildXlsx } from '../utils/archiveExport';
+import { loadEmployeeArchiveSnapshot, streamPdf as streamEmployeePdf, buildXlsx as buildEmployeeXlsx } from '../utils/employeeArchiveExport';
 import { streamCredentialsPdf, type CredentialEntry } from '../utils/credentialsPdf';
 import { logAudit } from '../utils/audit';
+import { hasArchiveFeature, normalizeArchiveReason } from '../utils/employeeArchive';
 
-// True iff this school has the historical-records feature enabled. When off,
-// no archived/graduated student record may be created, read, or persisted —
-// the corresponding actions become hard deletes.
-async function hasArchiveFeature(schoolId: string): Promise<boolean> {
-  const { data } = await supabase
-    .from('schools').select('features').eq('id', schoolId).single();
-  return (data?.features as Record<string, boolean> | null)?.archive === true;
-}
-
-// ---- EMPLOYEE ARCHIVE (teacher / driver / supervisor; staff = Phase 2) ----
+// ---- EMPLOYEE ARCHIVE (teacher / driver / supervisor; staff in staff.controller) ----
 // Mirrors the student archive: the controller assembles the role-specific
 // JSONB in TS, then archive_employee_atomic() snapshots + deletes the users
 // row (cascading the teachers/drivers row) in one transaction.
+// hasArchiveFeature / normalizeArchiveReason are shared via utils/employeeArchive.
 
 type ArchiveEmployeeRole = 'teacher' | 'driver' | 'supervisor' | 'staff';
-const EMPLOYEE_ARCHIVE_REASONS = ['resigned', 'terminated', 'contract_ended', 'retired', 'transferred', 'other'];
-
-function normalizeArchiveReason(raw: unknown): string {
-  const r = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
-  return EMPLOYEE_ARCHIVE_REASONS.includes(r) ? r : 'other';
-}
 
 // Snapshot of the users row — never includes password_hash.
 async function loadAccountSnapshot(userId: string, schoolId: string): Promise<Record<string, unknown> | null> {
@@ -984,6 +972,31 @@ export async function getArchivedStudent(req: AuthRequest, res: Response): Promi
 
   if (error || !data) { res.status(404).json({ error: 'Archived record not found' }); return; }
   res.json(toCC(data));
+}
+
+export async function exportEmployeeArchivePdf(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  if (!(await hasArchiveFeature(schoolId))) {
+    res.status(403).json({ error: 'Archive feature is not enabled for this school' });
+    return;
+  }
+  const snapshot = await loadEmployeeArchiveSnapshot(schoolId);
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="employee-archive-${snapshot.schoolName.replace(/[^a-z0-9-_]+/gi, '_')}-${new Date().toISOString().split('T')[0]}.pdf"`);
+  streamEmployeePdf(snapshot, res);
+}
+
+export async function exportEmployeeArchiveXlsx(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  if (!(await hasArchiveFeature(schoolId))) {
+    res.status(403).json({ error: 'Archive feature is not enabled for this school' });
+    return;
+  }
+  const snapshot = await loadEmployeeArchiveSnapshot(schoolId);
+  const buf = buildEmployeeXlsx(snapshot);
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="employee-archive-${snapshot.schoolName.replace(/[^a-z0-9-_]+/gi, '_')}-${new Date().toISOString().split('T')[0]}.xlsx"`);
+  res.send(buf);
 }
 
 export async function getArchivedEmployees(req: AuthRequest, res: Response): Promise<void> {
