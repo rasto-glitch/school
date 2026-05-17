@@ -314,7 +314,10 @@ export const feesApi = {
 
 // ---- STAFF SALARIES (premium, gated by tuition_fees) ----
 export const staffApi = {
-  getSetup: () => api.get<{ teachers: { teacherId: string; userId: string; fullName: string; subject: string | null; alreadyLinked: boolean }[] }>('/accounting/staff/setup'),
+  getSetup: () => api.get<{
+    teachers: { teacherId: string; userId: string; fullName: string; subject: string | null; alreadyLinked: boolean }[];
+    supervisors: { userId: string; fullName: string; alreadyLinked: boolean }[];
+  }>('/accounting/staff/setup'),
   list: (status?: 'active' | 'archived' | 'all') => api.get('/accounting/staff', { params: status ? { status } : {} }),
   create: (data: {
     userId?: string | null;

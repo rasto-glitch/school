@@ -9,7 +9,7 @@ import EmptyState from '../../components/common/EmptyState';
 import Modal from '../../components/common/Modal';
 import ReturningEmployeeSearch, { type ReturningEmployeeCandidate } from '../../components/common/ReturningEmployeeSearch';
 import { Plus, Trash2, Pencil, Users as UsersIcon, BellRing, Receipt, History, Megaphone, Archive as ArchiveIcon, RotateCcw, FileDown, FileSpreadsheet, Shield, ShieldCheck, CalendarClock } from 'lucide-react';
-import type { StaffMember, StaffSalaryPayment, StaffSetupTeacher } from '../../types';
+import type { StaffMember, StaffSalaryPayment, StaffSetupTeacher, StaffSetupSupervisor } from '../../types';
 
 type SubTab = 'active' | 'archive' | 'voided';
 
@@ -142,6 +142,7 @@ export default function StaffSalariesTab() {
   const [voidedPayments, setVoidedPayments] = useState<VoidedStaffPaymentRow[] | null>(null);
   const [unvoidBusy, setUnvoidBusy] = useState<string | null>(null);
   const [teachers, setTeachers] = useState<StaffSetupTeacher[]>([]);
+  const [supervisors, setSupervisors] = useState<StaffSetupSupervisor[]>([]);
   const [editing, setEditing] = useState<StaffForm | null>(null);
   const [saving, setSaving] = useState(false);
   const [staffPrevLabel, setStaffPrevLabel] = useState('');
@@ -180,6 +181,7 @@ export default function StaffSalariesTab() {
   const loadSetup = async () => {
     const r = await staffApi.getSetup();
     setTeachers(r.data.teachers as StaffSetupTeacher[]);
+    setSupervisors((r.data.supervisors ?? []) as StaffSetupSupervisor[]);
   };
   const loadAll = () => Promise.all([loadActive(), loadArchive()]);
   const loadVoided = async () => {
@@ -538,6 +540,11 @@ export default function StaffSalariesTab() {
     return teachers.filter(t => !t.alreadyLinked || t.userId === editing.userId);
   }, [teachers, editing]);
 
+  const availableSupervisors = useMemo(() => {
+    if (!editing) return supervisors;
+    return supervisors.filter(s => !s.alreadyLinked || s.userId === editing.userId);
+  }, [supervisors, editing]);
+
   const list = subTab === 'active' ? active : archived;
 
   return (
@@ -740,24 +747,43 @@ export default function StaffSalariesTab() {
         <Modal isOpen onClose={() => setEditing(null)} title={editing.id ? 'Edit staff' : 'Add staff'} size="lg">
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Linked teacher account (optional)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Linked teacher / supervisor account (optional)</label>
               <select
                 value={editing.userId}
                 onChange={e => {
                   const userId = e.target.value;
                   const t = teachers.find(x => x.userId === userId);
-                  setEditing({ ...editing, userId, fullName: t ? t.fullName : editing.fullName, position: t?.subject ? `Teacher · ${t.subject}` : editing.position });
+                  const sup = !t ? supervisors.find(x => x.userId === userId) : undefined;
+                  setEditing({
+                    ...editing,
+                    userId,
+                    fullName: t ? t.fullName : sup ? sup.fullName : editing.fullName,
+                    position: t ? (t.subject ? `Teacher · ${t.subject}` : 'Teacher') : sup ? 'Supervisor' : editing.position,
+                  });
                 }}
                 className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-gray-900 bg-white min-h-[44px] focus:outline-none focus:ring-2 focus:ring-primary-500"
               >
                 <option value="">— Custom employee (no account) —</option>
-                {availableTeachers.map(t => (
-                  <option key={t.userId} value={t.userId}>
-                    {t.fullName}{t.subject ? ` (${t.subject})` : ''}
-                  </option>
-                ))}
+                {availableTeachers.length > 0 && (
+                  <optgroup label="Teachers">
+                    {availableTeachers.map(t => (
+                      <option key={t.userId} value={t.userId}>
+                        {t.fullName}{t.subject ? ` (${t.subject})` : ''}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                {availableSupervisors.length > 0 && (
+                  <optgroup label="Supervisors">
+                    {availableSupervisors.map(s => (
+                      <option key={s.userId} value={s.userId}>
+                        {s.fullName}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
-              <p className="text-xs text-gray-500 mt-1">Linked teachers receive a push notification when you send a reminder.</p>
+              <p className="text-xs text-gray-500 mt-1">Linked teachers and supervisors receive a push notification when you send a reminder.</p>
             </div>
 
             <Input label="Full name" value={editing.fullName} onChange={e => setEditing({ ...editing, fullName: e.target.value })} placeholder="e.g. Sarah Ahmed" />

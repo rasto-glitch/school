@@ -271,7 +271,26 @@ export async function getStaffSetup(req: AuthRequest, res: Response): Promise<vo
     subject: t.subject,
     alreadyLinked: linkedUserIds.has(t.user_id),
   }));
-  res.json({ teachers: out });
+
+  // Supervisors have no profile table — link the staff/salary record
+  // directly to the users row (createStaff already accepts any same-school
+  // userId). Surface active, not-yet-linked supervisors here.
+  const { data: supervisorUsers, error: supErr } = await supabase
+    .from('users')
+    .select('id, first_name, last_name')
+    .eq('school_id', schoolId)
+    .eq('role', 'supervisor')
+    .eq('is_active', true)
+    .order('first_name');
+  if (supErr) { res.status(500).json({ error: supErr.message }); return; }
+
+  const supervisors = ((supervisorUsers ?? []) as { id: string; first_name: string; last_name: string }[]).map(u => ({
+    userId: u.id,
+    fullName: `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim(),
+    alreadyLinked: linkedUserIds.has(u.id),
+  }));
+
+  res.json({ teachers: out, supervisors });
 }
 
 export async function createStaff(req: AuthRequest, res: Response): Promise<void> {

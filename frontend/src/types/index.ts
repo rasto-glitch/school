@@ -452,6 +452,12 @@ export interface StaffSetupTeacher {
   alreadyLinked: boolean;
 }
 
+export interface StaffSetupSupervisor {
+  userId: string;
+  fullName: string;
+  alreadyLinked: boolean;
+}
+
 // Unified employee archive (teacher / driver / supervisor / staff).
 // Mirrors the archived_employees table after toCC() camelCasing.
 export type ArchivedEmployeeRole = 'teacher' | 'driver' | 'supervisor' | 'staff';
