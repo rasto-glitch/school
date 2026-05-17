@@ -9,6 +9,7 @@ import Card from '../../components/common/Card';
 import Input from '../../components/common/Input';
 import Select from '../../components/common/Select';
 import Button from '../../components/common/Button';
+import ArchiveReasonModal from '../../components/common/ArchiveReasonModal';
 import type { Teacher, Class } from '../../types';
 
 interface InactiveUser { id: string; firstName: string; lastName: string; username: string; role: string; }
@@ -31,6 +32,7 @@ export default function TeachersManagement() {
   const [editClassIds, setEditClassIds] = useState<string[]>([]);
   const [addClassIds, setAddClassIds] = useState<string[]>([]);
   const [removing, setRemoving] = useState(false);
+  const [removeOpen, setRemoveOpen] = useState(false);
 
   const load = () => {
     adminApi.getTeachers().then(r => setTeachers(r.data || []));
@@ -114,13 +116,17 @@ export default function TeachersManagement() {
     }
   };
 
-  const onRemove = async () => {
+  const onRemove = () => {
     if (!selectedTeacherId) { toast.error('Select a teacher first'); return; }
-    if (!confirm('Deactivate this teacher? They will no longer be able to log in.')) return;
+    setRemoveOpen(true);
+  };
+
+  const doRemove = async (reason: string, departureDate: string) => {
     setRemoving(true);
     try {
-      await adminApi.deleteTeacher(selectedTeacherId);
-      toast.success('Teacher deactivated');
+      await adminApi.deleteTeacher(selectedTeacherId, { reason, departureDate });
+      toast.success('Teacher removed');
+      setRemoveOpen(false);
       setSelectedTeacherId('');
       editForm.reset();
       setEditClassIds([]);
@@ -232,6 +238,13 @@ export default function TeachersManagement() {
           </Card>
         </div>
       </div>
+      <ArchiveReasonModal
+        isOpen={removeOpen}
+        onClose={() => setRemoveOpen(false)}
+        onConfirm={doRemove}
+        busy={removing}
+        entityLabel="teacher"
+      />
     </PageLayout>
   );
 }

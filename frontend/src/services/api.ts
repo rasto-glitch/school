@@ -158,6 +158,11 @@ export const adminApi = {
     api.get('/admin/archived-students/search', { params: { name, ...(dob ? { dob } : {}) } }),
   exportArchivePdf: () => api.get('/admin/archive/export.pdf', { responseType: 'blob' }),
   exportArchiveXlsx: () => api.get('/admin/archive/export.xlsx', { responseType: 'blob' }),
+  getArchivedEmployees: (params?: { role?: string; search?: string }) =>
+    api.get('/admin/archived-employees', { params: params ?? {} }),
+  getArchivedEmployee: (id: string) => api.get(`/admin/archived-employees/${id}`),
+  exportEmployeeArchivePdf: () => api.get('/admin/employee-archive/export.pdf', { responseType: 'blob' }),
+  exportEmployeeArchiveXlsx: () => api.get('/admin/employee-archive/export.xlsx', { responseType: 'blob' }),
   getParents: () => api.get('/admin/parents'),
   getParentProfile: (id: string) => api.get(`/admin/parents/${id}/profile`),
   updateParent: (id: string, data: object) => api.patch(`/admin/parents/${id}`, data),
@@ -171,11 +176,13 @@ export const adminApi = {
   getTeachers: () => api.get('/admin/teachers'),
   createTeacher: (data: object) => api.post('/admin/teachers', data),
   updateTeacher: (id: string, data: object) => api.put(`/admin/teachers/${id}`, data),
-  deleteTeacher: (id: string) => api.delete(`/admin/teachers/${id}`),
+  deleteTeacher: (id: string, body?: { reason?: string; departureDate?: string }) =>
+    api.delete(`/admin/teachers/${id}`, { data: body ?? {} }),
   getDrivers: () => api.get('/admin/drivers'),
   createDriver: (data: object) => api.post('/admin/drivers', data),
   updateDriver: (id: string, data: object) => api.put(`/admin/drivers/${id}`, data),
-  deleteDriver: (id: string) => api.delete(`/admin/drivers/${id}`),
+  deleteDriver: (id: string, body?: { reason?: string; departureDate?: string }) =>
+    api.delete(`/admin/drivers/${id}`, { data: body ?? {} }),
   getSubjects: () => api.get('/admin/subjects'),
   createSubject: (data: object) => api.post('/admin/subjects', data),
   updateSubject: (id: string, data: object) => api.put(`/admin/subjects/${id}`, data),

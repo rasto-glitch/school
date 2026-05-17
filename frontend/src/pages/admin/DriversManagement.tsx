@@ -9,6 +9,7 @@ import Card from '../../components/common/Card';
 import Input from '../../components/common/Input';
 import Select from '../../components/common/Select';
 import Button from '../../components/common/Button';
+import ArchiveReasonModal from '../../components/common/ArchiveReasonModal';
 import type { Class, Driver, Student } from '../../types';
 
 interface InactiveUser { id: string; firstName: string; lastName: string; username: string; role: string; }
@@ -112,6 +113,7 @@ export default function DriversManagement() {
   };
 
   const [removing, setRemoving] = useState(false);
+  const [removeOpen, setRemoveOpen] = useState(false);
 
   const onEdit = async (data: any) => {
     if (!selectedDriverId) { toast.error('Select a driver first'); return; }
@@ -130,13 +132,17 @@ export default function DriversManagement() {
     }
   };
 
-  const onRemove = async () => {
+  const onRemove = () => {
     if (!selectedDriverId) { toast.error('Select a driver first'); return; }
-    if (!confirm('Deactivate this driver? They will no longer be able to log in.')) return;
+    setRemoveOpen(true);
+  };
+
+  const doRemove = async (reason: string, departureDate: string) => {
     setRemoving(true);
     try {
-      await adminApi.deleteDriver(selectedDriverId);
-      toast.success('Driver deactivated');
+      await adminApi.deleteDriver(selectedDriverId, { reason, departureDate });
+      toast.success('Driver removed');
+      setRemoveOpen(false);
       setSelectedDriverId('');
       editForm.reset();
       load();
@@ -435,6 +441,13 @@ export default function DriversManagement() {
           </form>
         </Card>
       </div>
+      <ArchiveReasonModal
+        isOpen={removeOpen}
+        onClose={() => setRemoveOpen(false)}
+        onConfirm={doRemove}
+        busy={removing}
+        entityLabel="driver"
+      />
     </PageLayout>
   );
 }

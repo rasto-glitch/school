@@ -288,3 +288,41 @@ export interface StudentFeeRow {
 export interface ParentFeeRow extends StudentFeeRow {
   payments: FeePayment[];
 }
+
+// Unified employee archive (teacher / driver / supervisor / staff).
+// Kept in sync with frontend/src/types/index.ts (duplicated, no shared pkg).
+// No mobile UI consumes this yet — present so the shapes don't drift.
+export type ArchivedEmployeeRole = 'teacher' | 'driver' | 'supervisor' | 'staff';
+export type ArchivedEmployeeReason =
+  | 'resigned' | 'terminated' | 'contract_ended' | 'retired' | 'transferred' | 'other';
+
+export interface ArchivedEmployeeListItem {
+  id: string;
+  role: ArchivedEmployeeRole;
+  fullName: string;
+  phoneNumber: string | null;
+  email: string | null;
+  position: string | null;
+  subject: string | null;
+  hireDate: string | null;
+  departureDate: string | null;
+  reason: ArchivedEmployeeReason | string;
+  createdAt: string;
+}
+
+export interface ArchivedEmployee extends ArchivedEmployeeListItem {
+  originalEmployeeId: string | null;
+  dateOfBirth: string | null;
+  age: number | null;
+  emergencyContact: string | null;
+  profilePicture: string | null;
+  account: Record<string, unknown>;
+  teaching: any;
+  transport: any;
+  employment: any;
+  paymentHistory: {
+    amount: number; currency: string; paidOn: string;
+    periodLabel: string | null; notes: string | null;
+    insuranceAmount: number; insurancePercentage: number | null;
+  }[];
+}
