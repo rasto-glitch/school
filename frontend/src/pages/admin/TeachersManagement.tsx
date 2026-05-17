@@ -10,6 +10,7 @@ import Input from '../../components/common/Input';
 import Select from '../../components/common/Select';
 import Button from '../../components/common/Button';
 import ArchiveReasonModal from '../../components/common/ArchiveReasonModal';
+import ReturningEmployeeSearch, { type ReturningEmployeeCandidate } from '../../components/common/ReturningEmployeeSearch';
 import type { Teacher, Class } from '../../types';
 
 interface InactiveUser { id: string; firstName: string; lastName: string; username: string; role: string; }
@@ -33,6 +34,8 @@ export default function TeachersManagement() {
   const [addClassIds, setAddClassIds] = useState<string[]>([]);
   const [removing, setRemoving] = useState(false);
   const [removeOpen, setRemoveOpen] = useState(false);
+  const [prevArchiveId, setPrevArchiveId] = useState<string | null>(null);
+  const [prevArchiveLabel, setPrevArchiveLabel] = useState('');
 
   const load = () => {
     adminApi.getTeachers().then(r => setTeachers(r.data || []));
@@ -89,11 +92,14 @@ export default function TeachersManagement() {
         classIds: addClassIds,
         username: data.username || undefined,
         password: data.password || undefined,
+        previousArchiveId: prevArchiveId || undefined,
       });
       const tempPw = res.data?.tempPassword || 'Teacher@123';
       toast.success(`Teacher added! Login: ${res.data?.username} / Password: ${tempPw}. Assign their subjects in Class Management → Curriculum.`, { autoClose: 9000 });
       addForm.reset();
       setAddClassIds([]);
+      setPrevArchiveId(null);
+      setPrevArchiveLabel('');
       load();
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Failed to add teacher');
@@ -177,6 +183,18 @@ export default function TeachersManagement() {
                   <div className="text-xs text-amber-700 mt-2">If this is a returning teacher, click their record to reactivate. Otherwise just continue filling in the form for a new teacher.</div>
                 </div>
               )}
+              <ReturningEmployeeSearch
+                role="teacher"
+                nameQuery={watchedAddName}
+                linkedId={prevArchiveId}
+                linkedLabel={prevArchiveLabel}
+                onPick={(c: ReturningEmployeeCandidate) => {
+                  addForm.setValue('fullName', c.fullName);
+                  setPrevArchiveId(c.id);
+                  setPrevArchiveLabel(`${c.fullName} · ${c.reason}${c.departureDate ? ` ${c.departureDate}` : ''}`);
+                }}
+                onClear={() => { setPrevArchiveId(null); setPrevArchiveLabel(''); }}
+              />
               <Input placeholder="Primary Phone Number" {...addForm.register('phoneNumber')} />
               <Input placeholder="Emergency Contact" {...addForm.register('emergencyContact')} />
               <div>

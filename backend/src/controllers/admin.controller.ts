@@ -10,7 +10,7 @@ import { loadArchiveSnapshot, streamPdf, buildXlsx } from '../utils/archiveExpor
 import { loadEmployeeArchiveSnapshot, streamPdf as streamEmployeePdf, buildXlsx as buildEmployeeXlsx } from '../utils/employeeArchiveExport';
 import { streamCredentialsPdf, type CredentialEntry } from '../utils/credentialsPdf';
 import { logAudit } from '../utils/audit';
-import { hasArchiveFeature, normalizeArchiveReason } from '../utils/employeeArchive';
+import { hasArchiveFeature, normalizeArchiveReason, resolveEmployeeArchiveId } from '../utils/employeeArchive';
 
 // ---- EMPLOYEE ARCHIVE (teacher / driver / supervisor; staff in staff.controller) ----
 // Mirrors the student archive: the controller assembles the role-specific
@@ -1022,6 +1022,32 @@ export async function getArchivedEmployees(req: AuthRequest, res: Response): Pro
   res.json(toCC(data));
 }
 
+// Returning-employee lookup for the add-teacher/driver/staff forms.
+// Mirrors searchArchivedStudents.
+export async function searchArchivedEmployees(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  if (!(await hasArchiveFeature(schoolId))) {
+    res.json([]);
+    return;
+  }
+  const name = String(req.query.name ?? '').trim();
+  const role = String(req.query.role ?? '').trim();
+  if (name.length < 2) { res.json([]); return; }
+
+  let query = supabase
+    .from('archived_employees')
+    .select('id, role, full_name, phone_number, email, position, subject, hire_date, departure_date, reason')
+    .eq('school_id', schoolId)
+    .ilike('full_name', `%${name}%`)
+    .order('departure_date', { ascending: false })
+    .limit(8);
+  if (role && ['teacher', 'driver', 'supervisor', 'staff'].includes(role)) query = query.eq('role', role);
+
+  const { data, error } = await query;
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json(toCC(data ?? []));
+}
+
 export async function getArchivedEmployee(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
   const { id } = req.params;
@@ -1285,7 +1311,7 @@ export async function getTeachers(req: AuthRequest, res: Response): Promise<void
 
 export async function createTeacher(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
-  const { fullName, phoneNumber, emergencyContact, classIds, classId, username, password } = req.body;
+  const { fullName, phoneNumber, emergencyContact, classIds, classId, username, password, previousArchiveId } = req.body;
 
   const { data: schoolData } = await supabase.from('schools').select('abbreviation').eq('id', schoolId).single();
   const abbrev = (schoolData?.abbreviation || '').toLowerCase();
@@ -1319,6 +1345,8 @@ export async function createTeacher(req: AuthRequest, res: Response): Promise<vo
     return;
   }
 
+  const prevArchiveId = await resolveEmployeeArchiveId(previousArchiveId, schoolId, 'teacher');
+
   const { data: teacher, error: teacherErr } = await supabase.from('teachers').insert({
     school_id: schoolId,
     user_id: newUser.id,
@@ -1326,6 +1354,7 @@ export async function createTeacher(req: AuthRequest, res: Response): Promise<vo
     phone_number: phoneNumber || null,
     emergency_contact: emergencyContact || null,
     subject: null, // populated from the curriculum (class ↔ subject ↔ teacher) once assigned
+    previous_archive_id: prevArchiveId,
   }).select().single();
 
   if (teacherErr) { res.status(500).json({ error: teacherErr.message }); return; }
@@ -1408,7 +1437,7 @@ export async function getDrivers(req: AuthRequest, res: Response): Promise<void>
 
 export async function createDriver(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
-  const { fullName, phoneNumber, emergencyContact, licenseNumber, busNumber, age, username, password, studentIds, vehicleType } = req.body;
+  const { fullName, phoneNumber, emergencyContact, licenseNumber, busNumber, age, username, password, studentIds, vehicleType, previousArchiveId } = req.body;
 
   const { data: schoolData } = await supabase.from('schools').select('abbreviation').eq('id', schoolId).single();
   const abbrev = (schoolData?.abbreviation || '').toLowerCase();
@@ -1452,6 +1481,8 @@ export async function createDriver(req: AuthRequest, res: Response): Promise<voi
     }
   }
 
+  const prevArchiveId = await resolveEmployeeArchiveId(previousArchiveId, schoolId, 'driver');
+
   const { data: driver, error: driverErr } = await supabase.from('drivers').insert({
     school_id: schoolId,
     user_id: newUser.id,
@@ -1462,6 +1493,7 @@ export async function createDriver(req: AuthRequest, res: Response): Promise<voi
     bus_id: busId,
     age: age ? parseInt(age) : null,
     vehicle_type: vehicleType || 'bus',
+    previous_archive_id: prevArchiveId,
   }).select().single();
 
   if (driverErr) { res.status(500).json({ error: driverErr.message }); return; }

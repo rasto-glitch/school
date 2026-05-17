@@ -20,3 +20,22 @@ export function normalizeArchiveReason(raw: unknown): string {
   const r = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
   return (EMPLOYEE_ARCHIVE_REASONS as readonly string[]).includes(r) ? r : 'other';
 }
+
+// Validate a rehire link: the archive row must belong to this school AND
+// match the role being created. Lenient — an unknown/cross-tenant id just
+// yields null (link not set) rather than blocking the hire.
+export async function resolveEmployeeArchiveId(
+  previousArchiveId: unknown,
+  schoolId: string,
+  role: 'teacher' | 'driver' | 'supervisor' | 'staff',
+): Promise<string | null> {
+  if (!previousArchiveId || typeof previousArchiveId !== 'string') return null;
+  const { data } = await supabase
+    .from('archived_employees')
+    .select('id')
+    .eq('id', previousArchiveId)
+    .eq('school_id', schoolId)
+    .eq('role', role)
+    .single();
+  return data ? previousArchiveId : null;
+}

@@ -6,7 +6,7 @@ import { notify, notifyMany } from '../utils/notify';
 import { streamStaffSalaryPdf, buildStaffSalaryXlsx, type StaffSalaryExportData } from '../utils/staffSalaryExport';
 import { logAudit } from '../utils/audit';
 import { assertPeriodOpen } from '../utils/period';
-import { hasArchiveFeature, normalizeArchiveReason } from '../utils/employeeArchive';
+import { hasArchiveFeature, normalizeArchiveReason, resolveEmployeeArchiveId } from '../utils/employeeArchive';
 
 // Snapshot a voided staff member into the unified archived_employees table
 // (role='staff'). Unlike teacher/driver archive, the staff_members row is
@@ -101,6 +101,7 @@ interface StaffBody {
   nextPaymentDate?: string | null;
   isActive?: boolean;
   insurancePercentage?: number | null;
+  previousArchiveId?: string | null;
 }
 
 interface PaymentBody {
@@ -278,7 +279,7 @@ export async function createStaff(req: AuthRequest, res: Response): Promise<void
   const guard = await ensurePremium(schoolId);
   if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
 
-  const { userId, fullName, position, salaryAmount, currency, nextPaymentDate, isActive, insurancePercentage } = req.body as StaffBody;
+  const { userId, fullName, position, salaryAmount, currency, nextPaymentDate, isActive, insurancePercentage, previousArchiveId } = req.body as StaffBody;
   if (!fullName || !fullName.trim()) { res.status(400).json({ error: 'fullName is required' }); return; }
   if (typeof salaryAmount !== 'number' || salaryAmount < 0) { res.status(400).json({ error: 'salaryAmount must be a non-negative number' }); return; }
   if (!currency || currency.length < 1 || currency.length > 8) { res.status(400).json({ error: 'currency is required' }); return; }
@@ -298,6 +299,8 @@ export async function createStaff(req: AuthRequest, res: Response): Promise<void
     if (!u) { res.status(400).json({ error: 'Linked user not found in this school' }); return; }
   }
 
+  const prevArchiveId = await resolveEmployeeArchiveId(previousArchiveId, schoolId, 'staff');
+
   const { data, error } = await supabase.from('staff_members').insert({
     school_id: schoolId,
     user_id: userId ?? null,
@@ -308,6 +311,7 @@ export async function createStaff(req: AuthRequest, res: Response): Promise<void
     next_payment_date: nextPaymentDate || null,
     is_active: isActive ?? true,
     insurance_percentage: insurancePct,
+    previous_archive_id: prevArchiveId,
   }).select().single();
 
   if (error) {

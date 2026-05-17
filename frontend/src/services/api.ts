@@ -161,6 +161,8 @@ export const adminApi = {
   getArchivedEmployees: (params?: { role?: string; search?: string }) =>
     api.get('/admin/archived-employees', { params: params ?? {} }),
   getArchivedEmployee: (id: string) => api.get(`/admin/archived-employees/${id}`),
+  searchArchivedEmployees: (name: string, role?: string) =>
+    api.get('/admin/archived-employees/search', { params: { name, ...(role ? { role } : {}) } }),
   exportEmployeeArchivePdf: () => api.get('/admin/employee-archive/export.pdf', { responseType: 'blob' }),
   exportEmployeeArchiveXlsx: () => api.get('/admin/employee-archive/export.xlsx', { responseType: 'blob' }),
   getParents: () => api.get('/admin/parents'),
@@ -323,6 +325,7 @@ export const staffApi = {
     nextPaymentDate?: string | null;
     isActive?: boolean;
     insurancePercentage?: number | null;
+    previousArchiveId?: string | null;
   }) => api.post('/accounting/staff', data),
   update: (id: string, data: Partial<{
     userId: string | null;

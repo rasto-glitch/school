@@ -10,6 +10,7 @@ import Input from '../../components/common/Input';
 import Select from '../../components/common/Select';
 import Button from '../../components/common/Button';
 import ArchiveReasonModal from '../../components/common/ArchiveReasonModal';
+import ReturningEmployeeSearch, { type ReturningEmployeeCandidate } from '../../components/common/ReturningEmployeeSearch';
 import type { Class, Driver, Student } from '../../types';
 
 interface InactiveUser { id: string; firstName: string; lastName: string; username: string; role: string; }
@@ -99,11 +100,14 @@ export default function DriversManagement() {
         password: data.password || undefined,
         vehicleType: data.vehicleType || 'bus',
         studentIds: addStudentIds,
+        previousArchiveId: prevArchiveId || undefined,
       });
       const tempPw = res.data?.tempPassword || 'Driver@123';
       toast.success(`Driver added! Login: ${res.data?.username} / Password: ${tempPw}`);
       addForm.reset();
       setAddStudentIds([]);
+      setPrevArchiveId(null);
+      setPrevArchiveLabel('');
       load();
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Failed to add driver');
@@ -114,6 +118,8 @@ export default function DriversManagement() {
 
   const [removing, setRemoving] = useState(false);
   const [removeOpen, setRemoveOpen] = useState(false);
+  const [prevArchiveId, setPrevArchiveId] = useState<string | null>(null);
+  const [prevArchiveLabel, setPrevArchiveLabel] = useState('');
 
   const onEdit = async (data: any) => {
     if (!selectedDriverId) { toast.error('Select a driver first'); return; }
@@ -253,6 +259,18 @@ export default function DriversManagement() {
                 <div className="text-xs text-amber-700 mt-2">If this is a returning driver, click their record to reactivate. Otherwise just continue filling in the form for a new driver.</div>
               </div>
             )}
+            <ReturningEmployeeSearch
+              role="driver"
+              nameQuery={watchedAddName}
+              linkedId={prevArchiveId}
+              linkedLabel={prevArchiveLabel}
+              onPick={(c: ReturningEmployeeCandidate) => {
+                addForm.setValue('fullName', c.fullName);
+                setPrevArchiveId(c.id);
+                setPrevArchiveLabel(`${c.fullName} · ${c.reason}${c.departureDate ? ` ${c.departureDate}` : ''}`);
+              }}
+              onClear={() => { setPrevArchiveId(null); setPrevArchiveLabel(''); }}
+            />
             <Input placeholder="Primary Phone Number" {...addForm.register('phoneNumber')} />
             <Input placeholder="Emergency Contact" {...addForm.register('emergencyContact')} />
             <Input placeholder="Licence Number" {...addForm.register('licenseNumber')} />

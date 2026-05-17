@@ -7,6 +7,7 @@ import Input from '../../components/common/Input';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import EmptyState from '../../components/common/EmptyState';
 import Modal from '../../components/common/Modal';
+import ReturningEmployeeSearch, { type ReturningEmployeeCandidate } from '../../components/common/ReturningEmployeeSearch';
 import { Plus, Trash2, Pencil, Users as UsersIcon, BellRing, Receipt, History, Megaphone, Archive as ArchiveIcon, RotateCcw, FileDown, FileSpreadsheet, Shield, ShieldCheck, CalendarClock } from 'lucide-react';
 import type { StaffMember, StaffSalaryPayment, StaffSetupTeacher } from '../../types';
 
@@ -48,6 +49,7 @@ interface StaffForm {
   nextPaymentDate: string;
   isActive: boolean;
   insurancePercentage: string;
+  previousArchiveId?: string | null;
 }
 
 const empty: StaffForm = {
@@ -59,6 +61,7 @@ const empty: StaffForm = {
   nextPaymentDate: '',
   isActive: true,
   insurancePercentage: '',
+  previousArchiveId: null,
 };
 
 interface PaymentForm {
@@ -141,6 +144,7 @@ export default function StaffSalariesTab() {
   const [teachers, setTeachers] = useState<StaffSetupTeacher[]>([]);
   const [editing, setEditing] = useState<StaffForm | null>(null);
   const [saving, setSaving] = useState(false);
+  const [staffPrevLabel, setStaffPrevLabel] = useState('');
   const [notifyingId, setNotifyingId] = useState<string | null>(null);
   const [reactivatingId, setReactivatingId] = useState<string | null>(null);
   const [exporting, setExporting] = useState<string | null>(null);
@@ -262,10 +266,11 @@ export default function StaffSalariesTab() {
         await staffApi.update(editing.id, body);
         toast.success('Staff updated');
       } else {
-        await staffApi.create(body);
+        await staffApi.create({ ...body, previousArchiveId: editing.previousArchiveId || undefined });
         toast.success('Staff added');
       }
       setEditing(null);
+      setStaffPrevLabel('');
       await Promise.all([loadAll(), loadSetup()]);
     } catch (e: any) {
       toast.error(e.response?.data?.error || 'Failed to save');
@@ -756,6 +761,19 @@ export default function StaffSalariesTab() {
             </div>
 
             <Input label="Full name" value={editing.fullName} onChange={e => setEditing({ ...editing, fullName: e.target.value })} placeholder="e.g. Sarah Ahmed" />
+            {!editing.id && (
+              <ReturningEmployeeSearch
+                role="staff"
+                nameQuery={editing.fullName}
+                linkedId={editing.previousArchiveId ?? null}
+                linkedLabel={staffPrevLabel}
+                onPick={(c: ReturningEmployeeCandidate) => {
+                  setEditing({ ...editing, fullName: c.fullName, previousArchiveId: c.id });
+                  setStaffPrevLabel(`${c.fullName} · ${c.reason}${c.departureDate ? ` ${c.departureDate}` : ''}`);
+                }}
+                onClear={() => { setEditing({ ...editing, previousArchiveId: null }); setStaffPrevLabel(''); }}
+              />
+            )}
             <Input label="Position (optional)" value={editing.position} onChange={e => setEditing({ ...editing, position: e.target.value })} placeholder="e.g. Janitor, Bus Driver, Math Teacher" />
 
             <div className="grid grid-cols-2 gap-3">
