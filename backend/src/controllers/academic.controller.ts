@@ -151,6 +151,13 @@ export async function getPosts(req: AuthRequest, res: Response): Promise<void> {
   const { userId, role, schoolId } = req.user!;
   const { classId } = req.query as { classId?: string };
   const { limit, cursor } = parseCursorParams(req.query as Record<string, unknown>);
+  // Server-side search + "my posts" so filtering is correct at any scale
+  // (not limited to the pages a client has scrolled into memory).
+  const rawQ = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+  // Strip PostgREST-significant chars so a search term can't break the
+  // .or() filter grammar (commas / parens / wildcards).
+  const q = rawQ.replace(/[,()*%]/g, ' ').replace(/\s+/g, ' ').trim();
+  const mine = req.query.mine === '1' || req.query.mine === 'true';
 
   // Composite-keyset predicate ("older than the cursor row"), AND-ed as its
   // own OR-group alongside any role/class OR-group.
@@ -166,7 +173,12 @@ export async function getPosts(req: AuthRequest, res: Response): Promise<void> {
       .select(baseSelect)
       .eq('school_id', schoolId);
 
-    if (role === 'parent') {
+    if (mine) {
+      // "My posts" — only the caller's own, including their own drafts.
+      // Server-side so it's correct regardless of how far the client paged.
+      query = query.eq('author_user_id', userId);
+      if (classId) query = query.eq('class_id', classId);
+    } else if (role === 'parent') {
       // Collapsed union: published supervisor posts (school-wide) OR
       // published teacher posts for the child's classes — one keyset query
       // instead of two merged in memory.
@@ -187,6 +199,10 @@ export async function getPosts(req: AuthRequest, res: Response): Promise<void> {
         query = query.eq('is_published', true);
       }
     }
+
+    // Free-text search — its own AND-ed OR-group (composes with role/union
+    // group + cursor group; PostgREST ANDs separate .or() calls).
+    if (q) query = query.or(`title.ilike.%${q}%,subject.ilike.%${q}%`);
 
     if (cursorClause) query = query.or(cursorClause);
 

@@ -68,3 +68,36 @@ export function buildPage<T extends { createdAt?: string; created_at?: string; i
   }
   return { data, limit, nextCursor };
 }
+
+// Same as buildPage but the cursor's primary sort value is extracted by a
+// caller-supplied function instead of assuming a `created_at` field. Use
+// this for financial feeds that order by a *business* date (expense_date,
+// paid_on, applied_on, voided_at) rather than insertion time. The query
+// must `ORDER BY <thatColumn> DESC, id DESC` and over-fetch `limit + 1`.
+export function buildPageWith<T extends { id: string }>(
+  rows: T[],
+  limit: number,
+  sortValue: (row: T) => string,
+): Paginated<T> {
+  const hasMore = rows.length > limit;
+  const data = hasMore ? rows.slice(0, limit) : rows;
+  let nextCursor: string | null = null;
+  if (hasMore && data.length > 0) {
+    const last = data[data.length - 1];
+    nextCursor = encodeCursor(sortValue(last), last.id);
+  }
+  return { data, limit, nextCursor };
+}
+
+// PostgREST `.or()` predicate for "row strictly after the cursor" under a
+// `<col> DESC, id DESC` ordering. The id tiebreak is essential: business
+// dates collide constantly (many payments share a day), and date-only
+// keyset silently skips or duplicates rows across page boundaries — a
+// financial-correctness bug, not just a UX one.
+export function keysetAfter(
+  col: string,
+  cursor: { createdAt: string; id: string },
+): string {
+  const v = cursor.createdAt;
+  return `${col}.lt.${v},and(${col}.eq.${v},id.lt.${cursor.id})`;
+}

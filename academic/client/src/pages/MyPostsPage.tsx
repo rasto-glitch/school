@@ -1,10 +1,10 @@
 import { Link, useNavigate } from 'react-router-dom';
+import { GroupedVirtuoso } from 'react-virtuoso';
 import { usePaginated } from '../hooks/usePaginated';
 import { format } from 'date-fns';
 import { Plus, Pencil, Trash2, Globe, EyeOff } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { academicApi } from '../services/api';
-import { useAuthStore } from '../store/authStore';
 import Navbar from '../components/layout/Navbar';
 import type { AcademicPost } from '../types';
 
@@ -55,17 +55,12 @@ function PostRow({ post, onDelete, onToggle }: {
 }
 
 export default function MyPostsPage() {
-  const { user } = useAuthStore();
   const navigate = useNavigate();
+  // `mine=1` → the server returns only this user's own posts (incl. their
+  // drafts), correctly across all pages — no client-side filtering.
   const {
-    items: allPosts, setItems, loading, loadingMore, sentinelRef,
-  } = usePaginated<AcademicPost>(c => academicApi.getPosts(undefined, c));
-
-  // Teacher sees own + all published; show only their own (+ own drafts).
-  // The filter applies to whatever pages have loaded; auto-scroll keeps
-  // pulling more, so the list fills in progressively.
-  const posts = allPosts.filter(p => p.teachers?.user_id === user?.id || !p.is_published);
-  const setPosts = setItems;
+    items: posts, setItems: setPosts, loading, loadingMore, loadMore,
+  } = usePaginated<AcademicPost>(c => academicApi.getPosts(undefined, c, undefined, true));
 
   const handleDelete = async (id: string) => {
     if (!confirm('Delete this post?')) return;
@@ -88,8 +83,15 @@ export default function MyPostsPage() {
     }
   };
 
-  const published = posts.filter(p => p.is_published);
   const drafts = posts.filter(p => !p.is_published);
+  const published = posts.filter(p => p.is_published);
+  const sections = [
+    ...(drafts.length ? [{ label: `Drafts (${drafts.length})`, items: drafts }] : []),
+    ...(published.length ? [{ label: `Published (${published.length})`, items: published }] : []),
+  ];
+  const groupCounts = sections.map(s => s.items.length);
+  const groupLabels = sections.map(s => s.label);
+  const flat = sections.flatMap(s => s.items);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -118,24 +120,29 @@ export default function MyPostsPage() {
             </Link>
           </div>
         ) : (
-          <div className="space-y-6">
-            {drafts.length > 0 && (
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-6">
-                <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wide pt-5 pb-2">Drafts ({drafts.length})</h2>
-                {drafts.map(p => <PostRow key={p.id} post={p} onDelete={handleDelete} onToggle={handleToggle} />)}
+          <GroupedVirtuoso
+            useWindowScroll
+            groupCounts={groupCounts}
+            endReached={loadMore}
+            components={{
+              Footer: () => loadingMore
+                ? <p className="py-3 text-center text-sm text-gray-400">Loading…</p>
+                : null,
+            }}
+            groupContent={(index) => (
+              <div className="text-xs font-bold text-gray-400 uppercase tracking-wide py-3 bg-gray-50">
+                {groupLabels[index]}
               </div>
             )}
-            {published.length > 0 && (
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-6">
-                <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wide pt-5 pb-2">Published ({published.length})</h2>
-                {published.map(p => <PostRow key={p.id} post={p} onDelete={handleDelete} onToggle={handleToggle} />)}
-              </div>
-            )}
-            {loadingMore && (
-              <p className="py-3 text-center text-sm text-gray-400">Loading…</p>
-            )}
-            <div ref={sentinelRef} aria-hidden className="h-px" />
-          </div>
+            itemContent={(index) => {
+              const p = flat[index];
+              return (
+                <div className="bg-white border-x border-gray-100 px-6 first:border-t last:border-b">
+                  <PostRow post={p} onDelete={handleDelete} onToggle={handleToggle} />
+                </div>
+              );
+            }}
+          />
         )}
       </div>
     </div>

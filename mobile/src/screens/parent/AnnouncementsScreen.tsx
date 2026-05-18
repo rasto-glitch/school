@@ -1,5 +1,5 @@
 import { useMemo, useRef, useCallback } from 'react';
-import { View, Text, ScrollView, StyleSheet, RefreshControl, ActivityIndicator } from 'react-native';
+import { View, Text, FlatList, StyleSheet, RefreshControl, ActivityIndicator } from 'react-native';
 import { usePaginated } from '../../hooks/usePaginated';
 import { HeroListSkeleton } from '../../components/Skeleton';
 import { useTranslation } from 'react-i18next';
@@ -22,7 +22,7 @@ export default function AnnouncementsScreen() {
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const {
-    items, setItems, loading, loadingMore, refreshing, refresh, onScroll,
+    items, setItems, loading, loadingMore, refreshing, refresh, loadMore,
   } = usePaginated<Announcement>(parentApi.getAnnouncements);
   const initialized = useRef(false);
   const setUnreadCount = useBadgeStore(s => s.setUnreadCount);
@@ -48,42 +48,44 @@ export default function AnnouncementsScreen() {
   };
 
   return (
-    <ScrollView
+    <FlatList
       style={styles.container}
       contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.md }]}
-      onScroll={onScroll}
-      scrollEventThrottle={16}
+      data={items}
+      keyExtractor={(ann) => ann.id}
+      onEndReached={loadMore}
+      onEndReachedThreshold={0.6}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.primary} />}
-    >
-      <View style={styles.header}>
-        <Text style={styles.title}>{t('announcements.title')}</Text>
-        <Text style={styles.subtitle}>{t('announcements.subtitle')}</Text>
-      </View>
-
-      {loading ? (
-        <HeroListSkeleton />
-      ) : items.length === 0 ? (
-        <View style={styles.emptyBox}>
-          <Megaphone size={40} color={colors.textMuted} />
-          <Text style={styles.emptyText}>{t('announcements.no_announcements')}</Text>
+      ListHeaderComponent={
+        <View style={styles.header}>
+          <Text style={styles.title}>{t('announcements.title')}</Text>
+          <Text style={styles.subtitle}>{t('announcements.subtitle')}</Text>
         </View>
-      ) : (
-        <>
-          {items.map(ann => (
-            <AnnouncementCard
-              key={ann.id}
-              announcement={ann}
-              onPress={() => navigation.navigate('AnnouncementDetail', { announcement: ann })}
-              onPressComment={() => navigation.navigate('AnnouncementDetail', { announcement: ann, focusComment: true })}
-              onToggleLike={() => handleToggleLike(ann.id)}
-            />
-          ))}
-          {loadingMore && (
-            <ActivityIndicator style={{ marginVertical: spacing.md }} color={colors.primary} />
-          )}
-        </>
+      }
+      ListEmptyComponent={
+        loading
+          ? <HeroListSkeleton />
+          : (
+            <View style={styles.emptyBox}>
+              <Megaphone size={40} color={colors.textMuted} />
+              <Text style={styles.emptyText}>{t('announcements.no_announcements')}</Text>
+            </View>
+          )
+      }
+      ListFooterComponent={
+        loadingMore
+          ? <ActivityIndicator style={{ marginVertical: spacing.md }} color={colors.primary} />
+          : null
+      }
+      renderItem={({ item: ann }) => (
+        <AnnouncementCard
+          announcement={ann}
+          onPress={() => navigation.navigate('AnnouncementDetail', { announcement: ann })}
+          onPressComment={() => navigation.navigate('AnnouncementDetail', { announcement: ann, focusComment: true })}
+          onToggleLike={() => handleToggleLike(ann.id)}
+        />
       )}
-    </ScrollView>
+    />
   );
 }
 

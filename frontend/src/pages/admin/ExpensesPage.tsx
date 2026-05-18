@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Virtuoso } from 'react-virtuoso';
 import { toast } from 'react-toastify';
 import { Plus, RotateCcw, Edit2, Trash2, Tag, Repeat, Receipt, Archive, Calendar, History as HistoryIcon } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
-import { expensesApi, accountingApi, type ExpenseCategory, type ExpenseTemplate, type ExpenseRow, type PaymentAccount } from '../../services/api';
+import { expensesApi, accountingApi, drainPages, type ExpenseCategory, type ExpenseTemplate, type ExpenseRow, type PaymentAccount } from '../../services/api';
 import { fmtMoney as fmt } from '../../utils/money';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
@@ -394,7 +395,12 @@ function RecordTemplateForm({ template, onClose, onRecorded }: {
 
 // ── ONE-TIME TAB ────────────────────────────────────────────────────────
 function OneTimeTab() {
+  // Rows are keyset-paginated and accumulate across pages. `totals`/`count`
+  // are whole-set figures the backend computes over the full filtered set —
+  // they never change as you scroll. Filters reload from the first page.
   const [expenses, setExpenses] = useState<ExpenseRow[] | null>(null);
+  const [totals, setTotals] = useState<{ currency: string; total: number }[]>([]);
+  const [count, setCount] = useState(0);
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);
   const [filters, setFilters] = useState<{ startDate: string; endDate: string; categoryId: string; kind: 'all' | 'recurring' | 'one_time' }>({
     startDate: '', endDate: '', categoryId: '', kind: 'all',
@@ -402,8 +408,16 @@ function OneTimeTab() {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<ExpenseRow | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const cursorRef = useRef<string | null>(null);
+  const reqIdRef = useRef(0);
 
-  const reload = async () => {
+  const load = useCallback(async (cursor: string | null) => {
+    if (cursor === null) { setExpenses(null); cursorRef.current = null; setHasMore(false); }
+    else if (loadingMore || !cursorRef.current) return;
+    const myReq = ++reqIdRef.current;
+    if (cursor !== null) setLoadingMore(true);
     try {
       const [e, c] = await Promise.all([
         expensesApi.list({
@@ -411,24 +425,32 @@ function OneTimeTab() {
           endDate: filters.endDate || undefined,
           categoryId: filters.categoryId || undefined,
           kind: filters.kind === 'all' ? undefined : filters.kind,
+          cursor: cursor || undefined,
         }),
-        expensesApi.listCategories(),
+        cursor === null ? expensesApi.listCategories() : Promise.resolve(null),
       ]);
-      setExpenses(e.data);
-      setCategories(c.data);
+      if (myReq !== reqIdRef.current) return; // superseded by a newer reload
+      cursorRef.current = e.data.nextCursor;
+      setHasMore(!!e.data.nextCursor);
+      setExpenses(prev => (cursor === null || !prev ? e.data.data : [...prev, ...e.data.data]));
+      if (cursor === null) {
+        setTotals(e.data.totals);
+        setCount(e.data.count);
+        if (c) setCategories(c.data);
+      }
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to load expenses');
-      setExpenses([]);
+      if (myReq === reqIdRef.current && cursor === null) {
+        toast.error(err.response?.data?.error || 'Failed to load expenses');
+        setExpenses([]);
+      }
+    } finally {
+      if (cursor !== null) setLoadingMore(false);
     }
-  };
-  useEffect(() => { reload(); }, [filters.startDate, filters.endDate, filters.categoryId, filters.kind]);
+  }, [filters.startDate, filters.endDate, filters.categoryId, filters.kind, loadingMore]);
 
-  const totals = useMemo(() => {
-    if (!expenses) return [];
-    const map = new Map<string, number>();
-    for (const e of expenses) map.set(e.currency, (map.get(e.currency) ?? 0) + Number(e.amount || 0));
-    return Array.from(map.entries()).map(([cur, t]) => ({ currency: cur, total: t }));
-  }, [expenses]);
+  const reload = useCallback(() => load(null), [load]);
+  const loadMore = useCallback(() => { if (cursorRef.current) load(cursorRef.current); }, [load]);
+  useEffect(() => { load(null); }, [filters.startDate, filters.endDate, filters.categoryId, filters.kind]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const voidExpense = async (e: ExpenseRow) => {
     const reason = prompt('Reason for voiding (optional):') ?? undefined;
@@ -477,7 +499,7 @@ function OneTimeTab() {
         </div>
         {totals.length > 0 && (
           <div className="mt-3 pt-3 border-t border-gray-100 flex flex-wrap gap-3 text-sm">
-            <span className="text-gray-500">Total ({expenses.length}):</span>
+            <span className="text-gray-500">Total ({count}):</span>
             {totals.map(t => (
               <span key={t.currency} className="font-semibold text-gray-900">{fmt(t.total, t.currency)}</span>
             ))}
@@ -501,8 +523,18 @@ function OneTimeTab() {
           icon={<Receipt className="w-8 h-8 text-gray-400" />}
         />
       ) : (
-        <div className="space-y-2">
-          {expenses.map(e => (
+        <div>
+          <Virtuoso
+            useWindowScroll
+            data={expenses}
+            increaseViewportBy={600}
+            // Seamless background load — fires before the user hits bottom.
+            endReached={() => loadMore()}
+            components={{
+              // 8px gap between cards, matching the prior `space-y-2`.
+              Item: (props) => <div {...props} style={{ ...props.style, paddingBottom: 8 }} />,
+            }}
+            itemContent={(_i, e) => (
             <Card key={e.id}>
               <div className="flex items-start justify-between gap-3 flex-wrap">
                 <div className="min-w-0 flex-1">
@@ -528,7 +560,11 @@ function OneTimeTab() {
                 </div>
               </div>
             </Card>
-          ))}
+            )}
+          />
+          {(loadingMore || hasMore) && (
+            <div className="py-3 text-center text-xs text-gray-400">{loadingMore ? 'Loading more…' : ''}</div>
+          )}
         </div>
       )}
     </div>
@@ -775,8 +811,8 @@ function VoidedTab() {
 
   const reload = async () => {
     try {
-      const r = await expensesApi.listVoided();
-      setList(r.data);
+      const all = await drainPages<ExpenseRow & { voidedByName: string | null }>(c => expensesApi.listVoided(c));
+      setList(all);
     } catch (e: any) {
       toast.error(e.response?.data?.error || 'Failed to load voided expenses');
       setList([]);

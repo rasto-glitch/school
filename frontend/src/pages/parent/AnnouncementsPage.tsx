@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Virtuoso } from 'react-virtuoso';
 import { usePaginated } from '../../hooks/usePaginated';
 import { useTranslation } from 'react-i18next';
 import { Megaphone, Heart, MessageCircle } from 'lucide-react';
@@ -35,7 +36,7 @@ export default function AnnouncementsPage() {
   const { school } = useAuthStore();
   const setUnreadCount = useNotificationStore(s => s.setUnreadCount);
   const {
-    items: announcements, setItems: setAnnouncements, loading, loadingMore, error, reload, sentinelRef,
+    items: announcements, setItems: setAnnouncements, loading, loadingMore, error, reload, loadMore,
   } = usePaginated<Announcement>(adminApi.getAnnouncements);
   const navigate = useNavigate();
 
@@ -62,8 +63,17 @@ export default function AnnouncementsPage() {
       ) : announcements.length === 0 ? (
         <EmptyState title={t('announcements.no_announcements')} icon={<Megaphone className="w-8 h-8 text-gray-400" />} />
       ) : (
-        <div className="max-w-3xl space-y-4">
-          {announcements.map(ann => {
+        <Virtuoso
+          useWindowScroll
+          className="max-w-3xl mx-auto"
+          data={announcements}
+          endReached={loadMore}
+          components={{
+            Footer: () => loadingMore
+              ? <p className="py-3 text-center text-sm text-gray-400">Loading…</p>
+              : null,
+          }}
+          itemContent={(_index, ann) => {
             const announcerName = ann.users?.role === 'admin'
               ? (school?.name || 'School')
               : (`${ann.users?.first_name ?? ''} ${ann.users?.last_name ?? ''}`.trim() || 'School');
@@ -72,8 +82,7 @@ export default function AnnouncementsPage() {
 
             return (
               <article
-                key={ann.id}
-                className="bg-white border border-gray-100 rounded-2xl hover:shadow-md transition-all overflow-hidden cursor-pointer"
+                className="bg-white border border-gray-100 rounded-2xl hover:shadow-md transition-all overflow-hidden cursor-pointer mb-4"
                 onClick={() => navigate(`/parent/announcements/${ann.id}`)}
               >
                 <div className="p-5">
@@ -126,12 +135,8 @@ export default function AnnouncementsPage() {
                 </div>
               </article>
             );
-          })}
-          {loadingMore && (
-            <p className="py-3 text-center text-sm text-gray-400">Loading…</p>
-          )}
-          <div ref={sentinelRef} aria-hidden className="h-px" />
-        </div>
+          }}
+        />
       )}
     </PageLayout>
   );

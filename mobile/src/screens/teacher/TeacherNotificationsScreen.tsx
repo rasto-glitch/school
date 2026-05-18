@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { View, Text, ScrollView, StyleSheet, ActivityIndicator, TouchableOpacity, RefreshControl } from 'react-native';
+import { View, Text, SectionList, StyleSheet, ActivityIndicator, TouchableOpacity, RefreshControl } from 'react-native';
 import { CardListSkeleton } from '../../components/Skeleton';
 import { usePaginated } from '../../hooks/usePaginated';
 import { Bell, CheckCircle, Wallet } from 'lucide-react-native';
@@ -52,7 +52,7 @@ export default function TeacherNotificationsScreen() {
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const {
-    items: notifications, setItems, loading, loadingMore, refreshing, refresh, onScroll,
+    items: notifications, setItems, loading, loadingMore, refreshing, refresh, loadMore,
   } = usePaginated<Notif>(teacherApi.getNotifications);
   const [marking, setMarking] = useState<string | null>(null);
   const [markingAll, setMarkingAll] = useState(false);
@@ -86,84 +86,91 @@ export default function TeacherNotificationsScreen() {
     return format(d, 'MMM d, yyyy');
   };
 
-  const grouped: { label: string; items: Notif[] }[] = [];
-  notifications.forEach(n => {
-    const label = groupLabel(n.createdAt);
-    const existing = grouped.find(g => g.label === label);
-    if (existing) existing.items.push(n);
-    else grouped.push({ label, items: [n] });
-  });
+  const sections = useMemo(() => {
+    const grouped: { title: string; data: Notif[] }[] = [];
+    notifications.forEach(n => {
+      const label = groupLabel(n.createdAt);
+      const existing = grouped.find(g => g.title === label);
+      if (existing) existing.data.push(n);
+      else grouped.push({ title: label, data: [n] });
+    });
+    return grouped;
+  }, [notifications]);
 
   return (
-    <ScrollView
+    <SectionList
       style={styles.container}
       contentContainerStyle={styles.content}
-      onScroll={onScroll}
-      scrollEventThrottle={16}
+      sections={sections}
+      keyExtractor={(item) => item.id}
+      stickySectionHeadersEnabled={false}
+      onEndReached={loadMore}
+      onEndReachedThreshold={0.6}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.primary} />}
-    >
-      <View style={styles.titleRow}>
-        <Text style={styles.title}>Notifications</Text>
-        {unreadCount > 0 && (
-          <TouchableOpacity style={styles.markAllBtn} onPress={markAll} disabled={markingAll}>
-            {markingAll
-              ? <ActivityIndicator size="small" color={colors.primary} />
-              : <Text style={styles.markAllText}>Mark all read</Text>}
-          </TouchableOpacity>
-        )}
-      </View>
-      {unreadCount > 0 && <Text style={styles.unreadLabel}>{unreadCount} unread</Text>}
-
-      {loading ? (
-        <CardListSkeleton count={5} />
-      ) : notifications.length === 0 ? (
-        <View style={styles.empty}>
-          <Bell size={36} color={colors.textMuted} />
-          <Text style={styles.emptyText}>No notifications yet.</Text>
-        </View>
-      ) : (
+      ListHeaderComponent={
         <>
-        {grouped.map(({ label, items }) => (
-          <View key={label}>
-            <Text style={styles.groupLabel}>{label}</Text>
-            {items.map(n => {
-              const typed = TYPE_ICONS[n.notificationType ?? ''];
-              const Icon = typed?.Icon ?? Bell;
-              const iconBg = typed?.bg ?? (n.isRead ? colors.bg : colors.primaryLight);
-              const iconColor = typed?.color ?? (n.isRead ? colors.textMuted : colors.primary);
-              const { title, message } = localizeSalary(n.notificationType, n.title, n.message ?? '', t);
-              const handleTap = () => {
-                if (!n.isRead) markRead(n.id);
-                openNotificationTarget({ type: n.notificationType, relatedId: n.relatedId });
-              };
-              return (
-                <TouchableOpacity key={n.id} activeOpacity={0.75} onPress={handleTap} style={[styles.card, !n.isRead && styles.cardUnread]}>
-                  <View style={[styles.iconBox, { backgroundColor: iconBg }]}>
-                    <Icon size={16} color={iconColor} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.cardTitle, !n.isRead && styles.cardTitleUnread]}>{title}</Text>
-                    {message ? <Text style={styles.cardMsg} numberOfLines={2}>{message}</Text> : null}
-                    <Text style={styles.cardTime}>{format(parseISO(n.createdAt), 'h:mm a')}</Text>
-                  </View>
-                  {!n.isRead && (
-                    <TouchableOpacity onPress={() => markRead(n.id)} disabled={marking === n.id} style={styles.checkBtn}>
-                      {marking === n.id
-                        ? <ActivityIndicator size="small" color={colors.primary} />
-                        : <CheckCircle size={20} color={colors.primary} />}
-                    </TouchableOpacity>
-                  )}
-                </TouchableOpacity>
-              );
-            })}
+          <View style={styles.titleRow}>
+            <Text style={styles.title}>Notifications</Text>
+            {unreadCount > 0 && (
+              <TouchableOpacity style={styles.markAllBtn} onPress={markAll} disabled={markingAll}>
+                {markingAll
+                  ? <ActivityIndicator size="small" color={colors.primary} />
+                  : <Text style={styles.markAllText}>Mark all read</Text>}
+              </TouchableOpacity>
+            )}
           </View>
-        ))}
-        {loadingMore && (
-          <ActivityIndicator style={{ marginVertical: spacing.md }} color={colors.primary} />
-        )}
+          {unreadCount > 0 && <Text style={styles.unreadLabel}>{unreadCount} unread</Text>}
         </>
+      }
+      ListEmptyComponent={
+        loading
+          ? <CardListSkeleton count={5} />
+          : (
+            <View style={styles.empty}>
+              <Bell size={36} color={colors.textMuted} />
+              <Text style={styles.emptyText}>No notifications yet.</Text>
+            </View>
+          )
+      }
+      ListFooterComponent={
+        loadingMore
+          ? <ActivityIndicator style={{ marginVertical: spacing.md }} color={colors.primary} />
+          : null
+      }
+      renderSectionHeader={({ section }) => (
+        <Text style={styles.groupLabel}>{section.title}</Text>
       )}
-    </ScrollView>
+      renderItem={({ item: n }) => {
+        const typed = TYPE_ICONS[n.notificationType ?? ''];
+        const Icon = typed?.Icon ?? Bell;
+        const iconBg = typed?.bg ?? (n.isRead ? colors.bg : colors.primaryLight);
+        const iconColor = typed?.color ?? (n.isRead ? colors.textMuted : colors.primary);
+        const { title, message } = localizeSalary(n.notificationType, n.title, n.message ?? '', t);
+        const handleTap = () => {
+          if (!n.isRead) markRead(n.id);
+          openNotificationTarget({ type: n.notificationType, relatedId: n.relatedId });
+        };
+        return (
+          <TouchableOpacity activeOpacity={0.75} onPress={handleTap} style={[styles.card, !n.isRead && styles.cardUnread]}>
+            <View style={[styles.iconBox, { backgroundColor: iconBg }]}>
+              <Icon size={16} color={iconColor} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.cardTitle, !n.isRead && styles.cardTitleUnread]}>{title}</Text>
+              {message ? <Text style={styles.cardMsg} numberOfLines={2}>{message}</Text> : null}
+              <Text style={styles.cardTime}>{format(parseISO(n.createdAt), 'h:mm a')}</Text>
+            </View>
+            {!n.isRead && (
+              <TouchableOpacity onPress={() => markRead(n.id)} disabled={marking === n.id} style={styles.checkBtn}>
+                {marking === n.id
+                  ? <ActivityIndicator size="small" color={colors.primary} />
+                  : <CheckCircle size={20} color={colors.primary} />}
+              </TouchableOpacity>
+            )}
+          </TouchableOpacity>
+        );
+      }}
+    />
   );
 }
 

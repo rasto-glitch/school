@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, SectionList, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { usePaginated } from '../../hooks/usePaginated';
 import { CardListSkeleton } from '../../components/Skeleton';
 import { useTranslation } from 'react-i18next';
@@ -132,7 +132,7 @@ export default function NotificationsScreen() {
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const {
-    items, setItems, loading, loadingMore, onScroll,
+    items, setItems, loading, loadingMore, loadMore,
   } = usePaginated<Notification>(parentApi.getNotifications);
 
   const setUnreadCount = useBadgeStore(s => s.setUnreadCount);
@@ -152,60 +152,63 @@ export default function NotificationsScreen() {
     openNotificationTarget({ type: item.notificationType, relatedId: item.relatedId });
   };
 
-  const displayedGroups = useMemo(() => groupByDay(items), [items]);
+  const sections = useMemo(
+    () => groupByDay(items).map(g => ({ title: g.label, data: g.items })),
+    [items],
+  );
 
   return (
-    <ScrollView
+    <SectionList
       style={styles.container}
       contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.md }]}
-      onScroll={onScroll}
-      scrollEventThrottle={16}
-    >
-      <View style={styles.header}>
-        <Text style={styles.title}>{t('notifications.title')}</Text>
-        <Text style={styles.subtitle}>{t('notifications.subtitle')}</Text>
-      </View>
-
-      {loading ? (
-        <CardListSkeleton count={5} />
-      ) : items.length === 0 ? (
-        <Text style={styles.empty}>{t('notifications.no_notifications')}</Text>
-      ) : (
-        <>
-          {displayedGroups.map(group => (
-            <View key={group.label}>
-              <Text style={styles.dayLabel}>{group.label}</Text>
-              {group.items.map(item => {
-                const { Icon, bg, color } = getTypeIcon(item.notificationType);
-                const { title, message } = localizeTuition(item.notificationType, item.title, item.message, t);
-                return (
-                  <TouchableOpacity key={item.id} activeOpacity={0.75}
-                    style={[styles.card, !item.isRead && styles.cardUnread]}
-                    onPress={() => handlePress(item)}>
-                    <View style={styles.cardRow}>
-                      <View style={[styles.iconBox, { backgroundColor: bg }]}>
-                        <Icon size={18} color={color} />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <View style={styles.titleRow}>
-                          <Text style={styles.cardTitle} numberOfLines={1}>{title}</Text>
-                          {!item.isRead && <View style={styles.dot} />}
-                        </View>
-                        <Text style={styles.cardMessage} numberOfLines={2}>{message}</Text>
-                        <Text style={[styles.cardTime, { marginTop: 8 }]}>{formatTime(item.createdAt)}</Text>
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          ))}
-          {loadingMore && (
-            <ActivityIndicator style={{ marginVertical: spacing.md }} color={colors.primary} />
-          )}
-        </>
+      sections={sections}
+      keyExtractor={(item) => item.id}
+      stickySectionHeadersEnabled={false}
+      onEndReached={loadMore}
+      onEndReachedThreshold={0.6}
+      ListHeaderComponent={
+        <View style={styles.header}>
+          <Text style={styles.title}>{t('notifications.title')}</Text>
+          <Text style={styles.subtitle}>{t('notifications.subtitle')}</Text>
+        </View>
+      }
+      ListEmptyComponent={
+        loading
+          ? <CardListSkeleton count={5} />
+          : <Text style={styles.empty}>{t('notifications.no_notifications')}</Text>
+      }
+      ListFooterComponent={
+        loadingMore
+          ? <ActivityIndicator style={{ marginVertical: spacing.md }} color={colors.primary} />
+          : null
+      }
+      renderSectionHeader={({ section }) => (
+        <Text style={styles.dayLabel}>{section.title}</Text>
       )}
-    </ScrollView>
+      renderItem={({ item }) => {
+        const { Icon, bg, color } = getTypeIcon(item.notificationType);
+        const { title, message } = localizeTuition(item.notificationType, item.title, item.message, t);
+        return (
+          <TouchableOpacity activeOpacity={0.75}
+            style={[styles.card, !item.isRead && styles.cardUnread]}
+            onPress={() => handlePress(item)}>
+            <View style={styles.cardRow}>
+              <View style={[styles.iconBox, { backgroundColor: bg }]}>
+                <Icon size={18} color={color} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <View style={styles.titleRow}>
+                  <Text style={styles.cardTitle} numberOfLines={1}>{title}</Text>
+                  {!item.isRead && <View style={styles.dot} />}
+                </View>
+                <Text style={styles.cardMessage} numberOfLines={2}>{message}</Text>
+                <Text style={[styles.cardTime, { marginTop: 8 }]}>{formatTime(item.createdAt)}</Text>
+              </View>
+            </View>
+          </TouchableOpacity>
+        );
+      }}
+    />
   );
 }
 

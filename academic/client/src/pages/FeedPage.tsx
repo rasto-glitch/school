@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Virtuoso } from 'react-virtuoso';
 import { usePaginated } from '../hooks/usePaginated';
 import { format } from 'date-fns';
 import { Plus, FileText, Paperclip, AlignLeft, Search, Filter, Heart, MessageCircle, Bookmark } from 'lucide-react';
@@ -146,31 +147,34 @@ export default function FeedPage() {
   const { user } = useAuthStore();
   const [classes, setClasses] = useState<AcademicClass[]>([]);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [classFilter, setClassFilter] = useState('');
 
+  // Debounce the search box; the query goes to the server (so it matches
+  // ALL posts, not just the pages already scrolled into memory).
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(id);
+  }, [search]);
+
   const {
-    items: posts, setItems: setPosts, loading, loadingMore, reload, sentinelRef,
-  } = usePaginated<AcademicPost>(c => academicApi.getPosts(classFilter || undefined, c));
+    items: posts, setItems: setPosts, loading, loadingMore, reload, loadMore,
+  } = usePaginated<AcademicPost>(
+    c => academicApi.getPosts(classFilter || undefined, c, debouncedSearch || undefined),
+  );
 
   // Class list is small and unfiltered — fetched once.
   useEffect(() => {
     academicApi.getClasses().then(r => setClasses(r.data ?? [])).catch(() => {});
   }, []);
 
-  // Re-page from the top when the class filter changes (skip first mount —
-  // the hook already loaded page 1).
+  // Re-page from the top when the class filter or search term changes
+  // (skip first mount — the hook already loaded page 1).
   const firstRun = useRef(true);
   useEffect(() => {
     if (firstRun.current) { firstRun.current = false; return; }
     reload();
-  }, [classFilter, reload]);
-
-  const filtered = posts.filter(p =>
-    p.title.toLowerCase().includes(search.toLowerCase()) ||
-    p.subject?.toLowerCase().includes(search.toLowerCase()) ||
-    p.author_name?.toLowerCase().includes(search.toLowerCase()) ||
-    p.teachers?.full_name?.toLowerCase().includes(search.toLowerCase())
-  );
+  }, [classFilter, debouncedSearch, reload]);
 
   const handleToggleLike = async (postId: string) => {
     const prev = posts;
@@ -248,7 +252,7 @@ export default function FeedPage() {
           <div className="flex items-center justify-center py-20">
             <div className="w-6 h-6 border-2 border-primary-600 border-t-transparent rounded-full animate-spin" />
           </div>
-        ) : filtered.length === 0 ? (
+        ) : posts.length === 0 ? (
           <div className="text-center py-20 text-gray-400">
             <FileText className="w-10 h-10 mx-auto mb-3 opacity-40" />
             <p className="font-medium">No posts yet</p>
@@ -257,15 +261,21 @@ export default function FeedPage() {
             </p>
           </div>
         ) : (
-          <div className="grid gap-4">
-            {filtered.map(post => (
-              <PostCard key={post.id} post={post} onToggleLike={handleToggleLike} onToggleSave={handleToggleSave} />
-            ))}
-            {loadingMore && (
-              <p className="py-3 text-center text-sm text-gray-400">Loading…</p>
+          <Virtuoso
+            useWindowScroll
+            data={posts}
+            endReached={loadMore}
+            components={{
+              Footer: () => loadingMore
+                ? <p className="py-3 text-center text-sm text-gray-400">Loading…</p>
+                : null,
+            }}
+            itemContent={(_index, post) => (
+              <div className="mb-4">
+                <PostCard post={post} onToggleLike={handleToggleLike} onToggleSave={handleToggleSave} />
+              </div>
             )}
-            <div ref={sentinelRef} aria-hidden className="h-px" />
-          </div>
+          />
         )}
       </div>
     </div>

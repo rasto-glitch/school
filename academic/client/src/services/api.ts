@@ -30,9 +30,14 @@ export const authApi = {
 
 export const academicApi = {
   // Posts
-  getPosts: (classId?: string, cursor?: string | null) =>
+  getPosts: (classId?: string, cursor?: string | null, q?: string, mine?: boolean) =>
     api.get<Paginated<AcademicPost>>('/academic/posts', {
-      params: { ...(classId ? { classId } : {}), ...(cursor ? { cursor } : {}) },
+      params: {
+        ...(classId ? { classId } : {}),
+        ...(cursor ? { cursor } : {}),
+        ...(q ? { q } : {}),
+        ...(mine ? { mine: '1' } : {}),
+      },
     }),
   getPost: (id: string) => api.get(`/academic/posts/${id}`),
   createPost: (data: {

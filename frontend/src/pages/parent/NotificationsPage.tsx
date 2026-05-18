@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { Bell, Check } from 'lucide-react';
 import { parentApi } from '../../services/api';
+import { GroupedVirtuoso } from 'react-virtuoso';
 import { usePaginated } from '../../hooks/usePaginated';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
@@ -35,7 +36,7 @@ export default function NotificationsPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const {
-    items: notifications, setItems, loading, loadingMore, error, reload, sentinelRef,
+    items: notifications, setItems, loading, loadingMore, error, reload, loadMore,
   } = usePaginated<Notification>(parentApi.getNotifications);
 
   const markRead = async (id: string) => {
@@ -83,6 +84,10 @@ export default function NotificationsPage() {
   const unreadCount = notifications.filter(n => !n.isRead).length;
 
   const entries = Object.entries(groups);
+  const groupLabels = entries.map(([label]) => label);
+  const groupCounts = entries.map(([, items]) => items.length);
+  // Flat list aligned with groupCounts (same order the groups were built in).
+  const flat = entries.flatMap(([, items]) => items);
 
   return (
     <PageLayout title={t('notifications.title')} subtitle={unreadCount > 0 ? `${unreadCount} unread` : 'All caught up!'}>
@@ -91,40 +96,45 @@ export default function NotificationsPage() {
       ) : notifications.length === 0 ? (
         <EmptyState title={t('notifications.no_notifications')} icon={<Bell className="w-8 h-8 text-gray-400" />} />
       ) : (
-        <div className="space-y-6">
-          {entries.map(([date, items]) => (
-            <div key={date}>
-              <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">{date}</h2>
-              <div className="space-y-2">
-                {items.map((n) => (
-                  <Card key={n.id} hover onClick={() => handlePress(n)} className={`${!n.isRead ? 'border-primary-200 bg-primary-50/30' : ''}`}>
-                    <div className="flex items-start gap-3">
-                      <div className={`p-2 rounded-lg flex-shrink-0 ${typeColors[n.notificationType] || typeColors.general}`}>
-                        <Bell className="w-4 h-4" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-2">
-                          <p className={`text-sm ${!n.isRead ? 'font-semibold text-gray-900' : 'font-medium text-gray-700'}`}>{n.title}</p>
-                          {!n.isRead && (
-                            <button onClick={(e) => { e.stopPropagation(); markRead(n.id); }} className="p-1 hover:bg-white rounded-lg flex-shrink-0" title="Mark as read">
-                              <Check className="w-3 h-3 text-primary-600" />
-                            </button>
-                          )}
-                        </div>
-                        <p className="text-sm text-gray-500 mt-0.5">{n.message}</p>
-                        <p className="text-xs text-gray-400 mt-1">{format(parseISO(n.createdAt), 'h:mm a')}</p>
-                      </div>
-                    </div>
-                  </Card>
-                ))}
-              </div>
+        <GroupedVirtuoso
+          useWindowScroll
+          groupCounts={groupCounts}
+          endReached={loadMore}
+          components={{
+            Footer: () => loadingMore
+              ? <p className="py-3 text-center text-sm text-gray-400">Loading…</p>
+              : null,
+          }}
+          groupContent={(index) => (
+            <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider py-2 bg-gray-50">
+              {groupLabels[index]}
             </div>
-          ))}
-          {loadingMore && (
-            <p className="py-3 text-center text-sm text-gray-400">Loading…</p>
           )}
-          <div ref={sentinelRef} aria-hidden className="h-px" />
-        </div>
+          itemContent={(index) => {
+            const n = flat[index];
+            return (
+              <Card hover onClick={() => handlePress(n)} className={`mb-2 ${!n.isRead ? 'border-primary-200 bg-primary-50/30' : ''}`}>
+                <div className="flex items-start gap-3">
+                  <div className={`p-2 rounded-lg flex-shrink-0 ${typeColors[n.notificationType] || typeColors.general}`}>
+                    <Bell className="w-4 h-4" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className={`text-sm ${!n.isRead ? 'font-semibold text-gray-900' : 'font-medium text-gray-700'}`}>{n.title}</p>
+                      {!n.isRead && (
+                        <button onClick={(e) => { e.stopPropagation(); markRead(n.id); }} className="p-1 hover:bg-white rounded-lg flex-shrink-0" title="Mark as read">
+                          <Check className="w-3 h-3 text-primary-600" />
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-sm text-gray-500 mt-0.5">{n.message}</p>
+                    <p className="text-xs text-gray-400 mt-1">{format(parseISO(n.createdAt), 'h:mm a')}</p>
+                  </div>
+                </div>
+              </Card>
+            );
+          }}
+        />
       )}
     </PageLayout>
   );

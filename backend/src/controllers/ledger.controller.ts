@@ -168,7 +168,10 @@ async function buildLedger(
   const filtered = currency ? rows.filter(r => r.currency === currency) : rows;
   filtered.sort((a, b) => {
     if (a.date !== b.date) return a.date < b.date ? 1 : -1;
-    return a.source.localeCompare(b.source);
+    if (a.source !== b.source) return a.source.localeCompare(b.source);
+    // Unique final tiebreak — makes the cursor slice deterministic and
+    // keeps export row order stable across identical (date, source) groups.
+    return a.id.localeCompare(b.id);
   });
 
   // Totals per currency
@@ -211,6 +214,11 @@ async function buildLedger(
   };
 }
 
+// Page size for the ledger's row list. totals/categories are always
+// computed over the WHOLE filtered set (in buildLedger) and returned
+// untouched — a page boundary must never change a financial figure.
+const LEDGER_PAGE = 50;
+
 export async function getLedger(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
   const guard = await ensurePremium(schoolId);
@@ -218,7 +226,40 @@ export async function getLedger(req: AuthRequest, res: Response): Promise<void> 
 
   const result = await buildLedger(schoolId, req.query as Record<string, string>);
   if (!result.ok) { res.status(result.status).json({ error: result.error }); return; }
-  res.json(result.data);
+
+  // Row-list pagination only. The ledger is an in-memory merge of 3 tables,
+  // so buildLedger already has the full, fully-sorted set; we slice it.
+  // `type` (income|expense) filters the visible rows but NOT the summary —
+  // matching the page's prior client-side `typeFilter` semantics exactly.
+  const typeFilter = String((req.query.type ?? '')).toLowerCase();
+  const allRows = (typeFilter === 'income' || typeFilter === 'expense')
+    ? result.data.rows.filter(r => r.type === typeFilter)
+    : result.data.rows;
+
+  const rawCursor = req.query.cursor;
+  let startIdx = 0;
+  if (typeof rawCursor === 'string' && rawCursor) {
+    let cursorId = '';
+    try { cursorId = Buffer.from(rawCursor, 'base64url').toString('utf8'); } catch { cursorId = ''; }
+    if (cursorId) {
+      const at = allRows.findIndex(r => r.id === cursorId);
+      // Unknown cursor (data shifted) → start from the top, the safe
+      // non-breaking default used everywhere else in this codebase.
+      if (at >= 0) startIdx = at + 1;
+    }
+  }
+
+  const pageRows = allRows.slice(startIdx, startIdx + LEDGER_PAGE);
+  const hasMore = startIdx + LEDGER_PAGE < allRows.length;
+  const nextCursor = hasMore && pageRows.length > 0
+    ? Buffer.from(pageRows[pageRows.length - 1].id, 'utf8').toString('base64url')
+    : null;
+
+  res.json({
+    ...result.data,
+    rows: pageRows,
+    nextCursor,
+  });
 }
 
 export async function exportLedgerPdf(req: AuthRequest, res: Response): Promise<void> {

@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, Image,
+  View, Text, StyleSheet, ScrollView, FlatList, TouchableOpacity, Image,
   RefreshControl, ActivityIndicator, Animated,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
@@ -197,7 +197,7 @@ export default function LearnScreen() {
   const { postCount, clearPost } = useBadgeStore();
   const [tab, setTab] = useState<Tab>('ebooks');
   const {
-    items: posts, setItems: setPosts, loading: postsLoading, loadingMore, refreshing, refresh, onScroll,
+    items: posts, setItems: setPosts, loading: postsLoading, loadingMore, refreshing, refresh, loadMore,
   } = usePaginated<AcademicPost>(c => academicApi.getPosts(undefined, c));
   const [saved, setSaved] = useState<AcademicPost[]>([]);
   const [ebooks, setEbooks] = useState<Ebook[]>([]);
@@ -401,44 +401,51 @@ export default function LearnScreen() {
         </View>
       )}
 
-      <ScrollView
+      <FlatList
         contentContainerStyle={{ padding: spacing.md, paddingBottom: spacing.xl }}
-        onScroll={tab === 'posts' ? onScroll : undefined}
-        scrollEventThrottle={16}
+        data={mainList as { id: string }[]}
+        keyExtractor={(item) => item.id}
+        onEndReached={tab === 'posts' ? loadMore : undefined}
+        onEndReachedThreshold={0.6}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refreshAll} tintColor={colors.primary} />}
-      >
-        {loading ? (
-          <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
-        ) : mainList.length === 0 ? (
-          <View style={styles.empty}>
-            <FileText size={40} color={colors.textMuted} />
-            <Text style={[styles.emptyText, { color: colors.textMuted }]}>{emptyLabel}</Text>
-          </View>
-        ) : tab === 'ebooks' ? (
-          visibleEbooks.map(e => (
-            <EbookCard
-              key={e.id}
-              ebook={e}
-              progress={selectedChild ? progressByKey.get(`${selectedChild.id}:${e.id}`) : undefined}
-              onOpen={() => openEbook(e)}
-            />
-          ))
-        ) : (
-          (tab === 'posts' ? posts : saved).map(p => (
+        ListEmptyComponent={
+          loading
+            ? <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
+            : (
+              <View style={styles.empty}>
+                <FileText size={40} color={colors.textMuted} />
+                <Text style={[styles.emptyText, { color: colors.textMuted }]}>{emptyLabel}</Text>
+              </View>
+            )
+        }
+        ListFooterComponent={
+          tab === 'posts' && loadingMore
+            ? <ActivityIndicator style={{ marginVertical: spacing.md }} color={colors.primary} />
+            : null
+        }
+        renderItem={({ item }) => {
+          if (tab === 'ebooks') {
+            const e = item as Ebook;
+            return (
+              <EbookCard
+                ebook={e}
+                progress={selectedChild ? progressByKey.get(`${selectedChild.id}:${e.id}`) : undefined}
+                onOpen={() => openEbook(e)}
+              />
+            );
+          }
+          const p = item as AcademicPost;
+          return (
             <PostCard
-              key={p.id}
               post={p}
               onPress={() => navigation.navigate('PostDetail', { postId: p.id })}
               onPressComment={() => navigation.navigate('PostDetail', { postId: p.id, focusComment: true })}
               onToggleLike={() => handleToggleLike(p.id)}
               onToggleSave={() => handleToggleSave(p.id)}
             />
-          ))
-        )}
-        {tab === 'posts' && loadingMore && (
-          <ActivityIndicator style={{ marginVertical: spacing.md }} color={colors.primary} />
-        )}
-      </ScrollView>
+          );
+        }}
+      />
     </View>
   );
 }

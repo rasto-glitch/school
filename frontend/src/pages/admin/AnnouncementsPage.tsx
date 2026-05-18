@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { Virtuoso } from 'react-virtuoso';
 import { usePaginated } from '../../hooks/usePaginated';
 import { toast } from 'react-toastify';
 import { Megaphone, Trash2, Paperclip, X, Image as ImageIcon, Heart, MessageCircle } from 'lucide-react';
@@ -18,7 +19,7 @@ import { format, parseISO } from 'date-fns';
 export default function AnnouncementsPage() {
   const { school } = useAuthStore();
   const {
-    items: announcements, loading, loadingMore, reload, sentinelRef,
+    items: announcements, loading, loadingMore, reload, loadMore,
   } = usePaginated<Announcement>(adminApi.getAnnouncements);
   const [submitting, setSubmitting] = useState(false);
 
@@ -171,15 +172,23 @@ export default function AnnouncementsPage() {
           {loading ? <LoadingSpinner /> : announcements.length === 0 ? (
             <EmptyState title="No announcements yet" icon={<Megaphone className="w-8 h-8 text-gray-400" />} />
           ) : (
-            <div className="space-y-4">
-              {announcements.map(ann => {
+            <Virtuoso
+              useWindowScroll
+              data={announcements}
+              endReached={loadMore}
+              components={{
+                Footer: () => loadingMore
+                  ? <p className="py-3 text-center text-sm text-gray-400">Loading…</p>
+                  : null,
+              }}
+              itemContent={(_index, ann) => {
                 const announcerName = ann.users?.role === 'admin'
                   ? (school?.name || 'School')
                   : (`${ann.users?.first_name ?? ''} ${ann.users?.last_name ?? ''}`.trim() || 'School');
                 const avatar = ann.users?.profile_picture;
 
                 return (
-                  <article key={ann.id} className="bg-white border border-gray-100 rounded-2xl overflow-hidden">
+                  <article className="bg-white border border-gray-100 rounded-2xl overflow-hidden mb-4">
                     <div className="p-4">
                       <div className="flex items-center gap-3 mb-3">
                         {avatar ? (
@@ -220,12 +229,8 @@ export default function AnnouncementsPage() {
                     </div>
                   </article>
                 );
-              })}
-              {loadingMore && (
-                <p className="py-3 text-center text-sm text-gray-400">Loading…</p>
-              )}
-              <div ref={sentinelRef} aria-hidden className="h-px" />
-            </div>
+              }}
+            />
           )}
         </div>
       </div>

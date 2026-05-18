@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { feesApi, type ArchiveListItem, type ArchiveDetail } from '../../services/api';
+import { feesApi, drainPages, type ArchiveListItem, type ArchiveDetail } from '../../services/api';
 import { toast } from 'react-toastify';
 import Input from '../../components/common/Input';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
@@ -33,8 +33,10 @@ export default function TuitionArchiveTab() {
   const [exporting, setExporting] = useState<'pdf' | 'xlsx' | null>(null);
 
   useEffect(() => {
-    feesApi.listArchive()
-      .then(r => setItems(r.data))
+    // Backend is keyset-paginated; drain to the full set so the existing
+    // client-side search/filter keeps working unchanged.
+    drainPages<ArchiveListItem>(c => feesApi.listArchive(undefined, c))
+      .then(setItems)
       .catch((e: any) => toast.error(e.response?.data?.error || 'Failed to load archive'));
   }, []);
 

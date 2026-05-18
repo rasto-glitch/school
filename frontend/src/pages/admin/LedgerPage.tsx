@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useRef, useState } from 'react';
+import { TableVirtuoso, type TableComponents } from 'react-virtuoso';
 import { toast } from 'react-toastify';
 import { Calendar, TrendingUp, TrendingDown, Wallet, FileText, FileSpreadsheet, Filter as FilterIcon, BookOpen } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
@@ -38,6 +39,14 @@ function saveBlob(blob: Blob, filename: string) {
   URL.revokeObjectURL(a.href);
 }
 
+// Stable (module-scope) virtualized-table components — Virtuoso requires
+// referentially-stable component identities or it remounts every render.
+const LEDGER_TABLE_COMPONENTS: TableComponents<LedgerRow> = {
+  Table: (props) => <table {...props} className="w-full text-sm" />,
+  TableBody: forwardRef<HTMLTableSectionElement>((props, ref) => <tbody {...props} ref={ref} />),
+  TableRow: (props) => <tr {...props} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/60" />,
+};
+
 export default function LedgerPage() {
   const { school, user } = useAuthStore();
   const role = user?.role;
@@ -52,43 +61,76 @@ export default function LedgerPage() {
   const [currencyFilter, setCurrencyFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState<'all' | 'income' | 'expense'>('all');
 
+  // `rows` accumulates across pages. `totals`/`categories` are whole-set
+  // figures returned by the backend on every page (computed over the full
+  // filtered set, never the page) — a page boundary cannot change a number.
   const [rows, setRows] = useState<LedgerRow[] | null>(null);
   const [totals, setTotals] = useState<LedgerCurrencyTotal[]>([]);
   const [categories, setCategories] = useState<LedgerCategoryTotal[]>([]);
   const [defaultCurrency, setDefaultCurrency] = useState('USD');
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const cursorRef = useRef<string | null>(null);
+  const reqIdRef = useRef(0);
 
-  const reload = async () => {
-    setRows(null);
+  // type filter is now applied server-side so it composes with pagination
+  // (filtering only the current page would be wrong). It does NOT affect
+  // the summary cards — those stay whole-set, matching prior behavior.
+  const load = useCallback(async (cursor: string | null, typeOverride?: typeof typeFilter) => {
+    const effType = typeOverride ?? typeFilter;
     const enabled = (Object.keys(enabledSources) as SourceKey[]).filter(k => enabledSources[k]);
-    if (enabled.length === 0) {
-      setRows([]);
-      setTotals([]);
-      setCategories([]);
+    if (cursor === null) {
+      setRows(null);
+      cursorRef.current = null;
+      setHasMore(false);
+      if (enabled.length === 0) { setRows([]); setTotals([]); setCategories([]); return; }
+    } else if (loadingMore || !cursorRef.current) {
       return;
     }
+    const myReq = ++reqIdRef.current;
+    if (cursor !== null) setLoadingMore(true);
     try {
       const r = await ledgerApi.get({
         startDate: startDate || undefined,
         endDate: endDate || undefined,
         sources: enabled.join(','),
         currency: currencyFilter || undefined,
+        type: effType === 'all' ? undefined : effType,
+        cursor: cursor || undefined,
       });
-      setRows(r.data.rows);
-      setTotals(r.data.totals);
-      setCategories(r.data.categories);
-      setDefaultCurrency(r.data.defaultCurrency);
+      // A newer reload superseded this in-flight page — drop it.
+      if (myReq !== reqIdRef.current) return;
+      cursorRef.current = r.data.nextCursor;
+      setHasMore(!!r.data.nextCursor);
+      setRows(prev => (cursor === null || !prev ? r.data.rows : [...prev, ...r.data.rows]));
+      if (cursor === null) {
+        setTotals(r.data.totals);
+        setCategories(r.data.categories);
+        setDefaultCurrency(r.data.defaultCurrency);
+      }
     } catch (e: any) {
-      toast.error(e.response?.data?.error || 'Failed to load ledger');
-      setRows([]);
+      if (myReq === reqIdRef.current && cursor === null) {
+        toast.error(e.response?.data?.error || 'Failed to load ledger');
+        setRows([]);
+      }
+      // a failed page-load keeps what we have; next scroll retries
+    } finally {
+      if (cursor !== null) setLoadingMore(false);
     }
+  }, [typeFilter, enabledSources, startDate, endDate, currencyFilter, loadingMore]);
+
+  const reload = useCallback(() => load(null), [load]);
+  const loadMore = useCallback(() => { if (cursorRef.current) load(cursorRef.current); }, [load]);
+
+  useEffect(() => { load(null); /* eslint-disable-next-line */ }, []);
+
+  // type filter is server-side now → reload from the first page on change
+  const onChangeType = (v: 'all' | 'income' | 'expense') => {
+    setTypeFilter(v);
+    load(null, v);
   };
 
-  useEffect(() => { reload(); /* eslint-disable-next-line */ }, []);
-
-  const visibleRows = useMemo(() => {
-    if (!rows) return [];
-    return typeFilter === 'all' ? rows : rows.filter(r => r.type === typeFilter);
-  }, [rows, typeFilter]);
+  const visibleRows = rows ?? [];
 
   const [exporting, setExporting] = useState<'pdf' | 'xlsx' | null>(null);
   const exportLedger = async (kind: 'pdf' | 'xlsx') => {
@@ -181,7 +223,7 @@ export default function LedgerPage() {
               { value: 'expense', label: 'Expense only' },
             ]}
             value={typeFilter}
-            onChange={e => setTypeFilter(e.target.value as any)}
+            onChange={e => onChangeType(e.target.value as any)}
           />
           <div className="flex items-end">
             <Button onClick={reload} fullWidth>Apply</Button>
@@ -294,7 +336,7 @@ export default function LedgerPage() {
           <div className="flex items-center gap-2">
             <BookOpen className="w-4 h-4 text-gray-500" />
             <h3 className="font-semibold text-gray-900">Entries</h3>
-            {rows && <span className="text-xs text-gray-500">({visibleRows.length})</span>}
+            {rows && <span className="text-xs text-gray-500">({visibleRows.length}{hasMore ? '+' : ''})</span>}
           </div>
           <div className="flex items-center gap-2">
             <Button
@@ -328,9 +370,15 @@ export default function LedgerPage() {
           />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs font-medium text-gray-500 border-b border-gray-100">
+            <TableVirtuoso
+              useWindowScroll
+              data={visibleRows}
+              components={LEDGER_TABLE_COMPONENTS}
+              increaseViewportBy={600}
+              // Seamless background load — fires before the user hits bottom.
+              endReached={() => loadMore()}
+              fixedHeaderContent={() => (
+                <tr className="text-left text-xs font-medium text-gray-500 border-b border-gray-100 bg-white">
                   <th className="py-2 pr-3 whitespace-nowrap">Date</th>
                   <th className="py-2 pr-3">Source</th>
                   <th className="py-2 pr-3">Category</th>
@@ -338,35 +386,36 @@ export default function LedgerPage() {
                   <th className="py-2 pr-3 text-right whitespace-nowrap">In</th>
                   <th className="py-2 pr-3 text-right whitespace-nowrap">Out</th>
                 </tr>
-              </thead>
-              <tbody>
-                {visibleRows.map(r => (
-                  <tr key={r.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/60">
-                    <td className="py-2 pr-3 text-gray-700 whitespace-nowrap">{r.date}</td>
-                    <td className="py-2 pr-3">
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${
-                        r.source === 'fee_payment' ? 'bg-emerald-50 text-emerald-700'
-                        : r.source === 'staff_salary_payment' ? 'bg-amber-50 text-amber-700'
-                        : 'bg-rose-50 text-rose-700'
-                      }`}>
-                        {SOURCE_LABELS[r.source]}
-                      </span>
-                    </td>
-                    <td className="py-2 pr-3 text-gray-700">{r.category}</td>
-                    <td className="py-2 pr-3 text-gray-900">
-                      <div>{r.description}</div>
-                      {r.reference && <div className="text-xs text-gray-500">{r.reference}</div>}
-                    </td>
-                    <td className="py-2 pr-3 text-right font-medium text-emerald-700 whitespace-nowrap">
-                      {r.type === 'income' ? fmt(r.amount, r.currency) : ''}
-                    </td>
-                    <td className="py-2 pr-3 text-right font-medium text-rose-700 whitespace-nowrap">
-                      {r.type === 'expense' ? fmt(r.amount, r.currency) : ''}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+              )}
+              itemContent={(_i, r) => (
+                <>
+                  <td className="py-2 pr-3 text-gray-700 whitespace-nowrap">{r.date}</td>
+                  <td className="py-2 pr-3">
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${
+                      r.source === 'fee_payment' ? 'bg-emerald-50 text-emerald-700'
+                      : r.source === 'staff_salary_payment' ? 'bg-amber-50 text-amber-700'
+                      : 'bg-rose-50 text-rose-700'
+                    }`}>
+                      {SOURCE_LABELS[r.source]}
+                    </span>
+                  </td>
+                  <td className="py-2 pr-3 text-gray-700">{r.category}</td>
+                  <td className="py-2 pr-3 text-gray-900">
+                    <div>{r.description}</div>
+                    {r.reference && <div className="text-xs text-gray-500">{r.reference}</div>}
+                  </td>
+                  <td className="py-2 pr-3 text-right font-medium text-emerald-700 whitespace-nowrap">
+                    {r.type === 'income' ? fmt(r.amount, r.currency) : ''}
+                  </td>
+                  <td className="py-2 pr-3 text-right font-medium text-rose-700 whitespace-nowrap">
+                    {r.type === 'expense' ? fmt(r.amount, r.currency) : ''}
+                  </td>
+                </>
+              )}
+            />
+            {loadingMore && (
+              <div className="py-3 text-center text-xs text-gray-400">Loading more…</div>
+            )}
           </div>
         )}
       </Card>

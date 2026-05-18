@@ -317,9 +317,14 @@ export const chatApi = {
 
 // ---- ACADEMIC / LEARN ----
 export const academicApi = {
-  getPosts: (classId?: string, cursor?: string | null) =>
+  getPosts: (classId?: string, cursor?: string | null, q?: string, mine?: boolean) =>
     api.get<Paginated<AcademicPost>>('/academic/posts', {
-      params: { ...(classId ? { classId } : {}), ...(cursor ? { cursor } : {}) },
+      params: {
+        ...(classId ? { classId } : {}),
+        ...(cursor ? { cursor } : {}),
+        ...(q ? { q } : {}),
+        ...(mine ? { mine: '1' } : {}),
+      },
     }),
   getPost: (id: string) => api.get(`/academic/posts/${id}`),
   toggleLike: (postId: string) => api.post(`/academic/posts/${postId}/like`),

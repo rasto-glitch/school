@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell, Check, CheckCheck } from 'lucide-react';
 import { teacherApi } from '../../services/api';
+import { GroupedVirtuoso } from 'react-virtuoso';
 import { usePaginated } from '../../hooks/usePaginated';
 import { useNotificationStore } from '../../store/notificationStore';
 import PageLayout from '../../components/layout/PageLayout';
@@ -26,7 +27,7 @@ export default function TeacherNotificationsPage() {
   const navigate = useNavigate();
   const { setTeacherUnreadCount } = useNotificationStore();
   const {
-    items: notifications, setItems, loading, loadingMore, sentinelRef,
+    items: notifications, setItems, loading, loadingMore, loadMore,
   } = usePaginated<Notification>(teacherApi.getNotifications);
 
   useEffect(() => { setTeacherUnreadCount(0); }, [setTeacherUnreadCount]);
@@ -67,6 +68,10 @@ export default function TeacherNotificationsPage() {
 
   const groups = groupByDate(notifications);
   const unreadCount = notifications.filter(n => !n.isRead).length;
+  const entries = Object.entries(groups);
+  const groupLabels = entries.map(([label]) => label);
+  const groupCounts = entries.map(([, items]) => items.length);
+  const flat = entries.flatMap(([, items]) => items);
 
   return (
     <PageLayout title="Notifications" subtitle={unreadCount > 0 ? `${unreadCount} unread` : 'All caught up!'}>
@@ -80,40 +85,45 @@ export default function TeacherNotificationsPage() {
       {loading ? <LoadingSpinner /> : notifications.length === 0 ? (
         <EmptyState title="No notifications" icon={<Bell className="w-8 h-8 text-gray-400" />} />
       ) : (
-        <div className="space-y-6">
-          {Object.entries(groups).map(([date, items]) => (
-            <div key={date}>
-              <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">{date}</h2>
-              <div className="space-y-2">
-                {items.map(n => (
-                  <Card key={n.id} hover onClick={() => handlePress(n)} className={!n.isRead ? 'border-primary-200 bg-primary-50/30' : ''}>
-                    <div className="flex items-start gap-3">
-                      <div className="p-2 bg-primary-50 rounded-lg flex-shrink-0">
-                        <Bell className="w-4 h-4 text-primary-600" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-2">
-                          <p className={`text-sm ${!n.isRead ? 'font-semibold text-gray-900' : 'font-medium text-gray-700'}`}>{n.title}</p>
-                          {!n.isRead && (
-                            <button onClick={(e) => { e.stopPropagation(); markRead(n.id); }} className="p-1 hover:bg-white rounded-lg flex-shrink-0">
-                              <Check className="w-3 h-3 text-primary-600" />
-                            </button>
-                          )}
-                        </div>
-                        <p className="text-sm text-gray-500 mt-0.5">{n.message}</p>
-                        <p className="text-xs text-gray-400 mt-1">{format(parseISO(n.createdAt), 'h:mm a')}</p>
-                      </div>
-                    </div>
-                  </Card>
-                ))}
-              </div>
+        <GroupedVirtuoso
+          useWindowScroll
+          groupCounts={groupCounts}
+          endReached={loadMore}
+          components={{
+            Footer: () => loadingMore
+              ? <p className="py-3 text-center text-sm text-gray-400">Loading…</p>
+              : null,
+          }}
+          groupContent={(index) => (
+            <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider py-2 bg-gray-50">
+              {groupLabels[index]}
             </div>
-          ))}
-          {loadingMore && (
-            <p className="py-3 text-center text-sm text-gray-400">Loading…</p>
           )}
-          <div ref={sentinelRef} aria-hidden className="h-px" />
-        </div>
+          itemContent={(index) => {
+            const n = flat[index];
+            return (
+              <Card hover onClick={() => handlePress(n)} className={`mb-2 ${!n.isRead ? 'border-primary-200 bg-primary-50/30' : ''}`}>
+                <div className="flex items-start gap-3">
+                  <div className="p-2 bg-primary-50 rounded-lg flex-shrink-0">
+                    <Bell className="w-4 h-4 text-primary-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className={`text-sm ${!n.isRead ? 'font-semibold text-gray-900' : 'font-medium text-gray-700'}`}>{n.title}</p>
+                      {!n.isRead && (
+                        <button onClick={(e) => { e.stopPropagation(); markRead(n.id); }} className="p-1 hover:bg-white rounded-lg flex-shrink-0">
+                          <Check className="w-3 h-3 text-primary-600" />
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-sm text-gray-500 mt-0.5">{n.message}</p>
+                    <p className="text-xs text-gray-400 mt-1">{format(parseISO(n.createdAt), 'h:mm a')}</p>
+                  </div>
+                </div>
+              </Card>
+            );
+          }}
+        />
       )}
     </PageLayout>
   );

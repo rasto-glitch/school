@@ -4,6 +4,7 @@ import type { AuthRequest } from '../middleware/auth';
 import { toCC } from '../utils/transform';
 import { logAudit } from '../utils/audit';
 import { assertPeriodOpen } from '../utils/period';
+import { parseCursorParams, buildPageWith, keysetAfter } from '../utils/pagination';
 
 // ── Premium gate ────────────────────────────────────────────────────────
 async function ensurePremium(schoolId: string): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
@@ -289,24 +290,69 @@ export async function listExpenses(req: AuthRequest, res: Response): Promise<voi
   const { startDate, endDate, categoryId, kind } = req.query as {
     startDate?: string; endDate?: string; categoryId?: string; kind?: 'recurring' | 'one_time' | 'all';
   };
+  const { limit, cursor } = parseCursorParams(req.query as Record<string, unknown>);
 
-  let q = supabase
-    .from('expenses')
-    .select('*, category:expense_categories(id, name), template:expense_recurring_templates(id, name, cadence)')
-    .eq('school_id', schoolId)
-    .is('voided_at', null)
+  // Shared filter application — reused by the page query and the whole-set
+  // totals query so a page boundary can never change the displayed total.
+  const applyFilters = <T extends { gte: any; lte: any; eq: any; not: any; is: any }>(q: T): T => {
+    let x: any = q;
+    if (startDate) x = x.gte('expense_date', startDate);
+    if (endDate) x = x.lte('expense_date', endDate);
+    if (categoryId) x = x.eq('category_id', categoryId);
+    if (kind === 'recurring') x = x.not('template_id', 'is', null);
+    if (kind === 'one_time') x = x.is('template_id', null);
+    return x as T;
+  };
+
+  // Page: keyset on (expense_date DESC, id DESC). The secondary sort key
+  // changed from created_at to id — id is the only unique tiebreak, which
+  // keyset pagination requires to avoid skipping/duplicating rows that
+  // share an expense_date. Same-day display order is otherwise unchanged.
+  let q = applyFilters(
+    supabase
+      .from('expenses')
+      .select('*, category:expense_categories(id, name), template:expense_recurring_templates(id, name, cadence)')
+      .eq('school_id', schoolId)
+      .is('voided_at', null) as any,
+  )
     .order('expense_date', { ascending: false })
-    .order('created_at', { ascending: false });
+    .order('id', { ascending: false })
+    .limit(limit + 1);
+  if (cursor) q = q.or(keysetAfter('expense_date', cursor));
 
-  if (startDate) q = q.gte('expense_date', startDate);
-  if (endDate) q = q.lte('expense_date', endDate);
-  if (categoryId) q = q.eq('category_id', categoryId);
-  if (kind === 'recurring') q = q.not('template_id', 'is', null);
-  if (kind === 'one_time') q = q.is('template_id', null);
+  // Whole-set aggregate: a separate, narrow (amount,currency) scan over the
+  // exact same filter set. Drives the summary so it stays correct at any
+  // scroll depth — per the financial-pagination constraint.
+  const aggQ = applyFilters(
+    supabase
+      .from('expenses')
+      .select('amount, currency')
+      .eq('school_id', schoolId)
+      .is('voided_at', null) as any,
+  );
 
-  const { data, error } = await q;
+  const [{ data, error }, { data: aggData, error: aggErr }] = await Promise.all([q, aggQ]);
   if (error) { res.status(500).json({ error: error.message }); return; }
-  res.json(toCC(data ?? []));
+  if (aggErr) { res.status(500).json({ error: aggErr.message }); return; }
+
+  const totalsMap = new Map<string, number>();
+  for (const r of (aggData ?? []) as any[]) {
+    totalsMap.set(r.currency, (totalsMap.get(r.currency) ?? 0) + Number(r.amount || 0));
+  }
+  const totals = Array.from(totalsMap.entries()).map(([currency, total]) => ({ currency, total }));
+
+  const page = buildPageWith(
+    ((data ?? []) as any[]).map(r => ({ ...r, id: String(r.id) })),
+    limit,
+    r => r.expense_date as string,
+  );
+  res.json({
+    data: page.data.map(toCC),
+    limit: page.limit,
+    nextCursor: page.nextCursor,
+    totals,
+    count: (aggData ?? []).length,
+  });
 }
 
 export async function createExpense(req: AuthRequest, res: Response): Promise<void> {
@@ -444,15 +490,25 @@ export async function listVoidedExpenses(req: AuthRequest, res: Response): Promi
   const guard = await ensurePremium(schoolId);
   if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
 
-  const { data, error } = await supabase
+  const { limit, cursor } = parseCursorParams(req.query as Record<string, unknown>);
+  let q = supabase
     .from('expenses')
     .select('*, category:expense_categories(id, name)')
     .eq('school_id', schoolId)
     .not('voided_at', 'is', null)
-    .order('voided_at', { ascending: false });
+    .order('voided_at', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(limit + 1);
+  if (cursor) q = q.or(keysetAfter('voided_at', cursor));
+  const { data, error } = await q;
   if (error) { res.status(500).json({ error: error.message }); return; }
 
-  const voiderIds = Array.from(new Set((data ?? []).map((e: any) => e.voided_by).filter(Boolean)));
+  const page = buildPageWith(
+    ((data ?? []) as any[]).map(r => ({ ...r, id: String(r.id) })),
+    limit,
+    r => r.voided_at as string,
+  );
+  const voiderIds = Array.from(new Set(page.data.map((e: any) => e.voided_by).filter(Boolean)));
   const { data: users } = voiderIds.length
     ? await supabase.from('users').select('id, first_name, last_name').in('id', voiderIds)
     : { data: [] as any[] };
@@ -461,8 +517,12 @@ export async function listVoidedExpenses(req: AuthRequest, res: Response): Promi
     const name = `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim();
     if (name) nameByUser.set(u.id, name);
   }
-  res.json((data ?? []).map((e: any) => ({
-    ...(toCC(e) as Record<string, unknown>),
-    voidedByName: e.voided_by ? nameByUser.get(e.voided_by) ?? null : null,
-  })));
+  res.json({
+    data: page.data.map((e: any) => ({
+      ...(toCC(e) as Record<string, unknown>),
+      voidedByName: e.voided_by ? nameByUser.get(e.voided_by) ?? null : null,
+    })),
+    limit: page.limit,
+    nextCursor: page.nextCursor,
+  });
 }

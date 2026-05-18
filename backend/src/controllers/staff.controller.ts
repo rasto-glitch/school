@@ -7,6 +7,7 @@ import { streamStaffSalaryPdf, buildStaffSalaryXlsx, type StaffSalaryExportData 
 import { logAudit } from '../utils/audit';
 import { assertPeriodOpen } from '../utils/period';
 import { hasArchiveFeature, normalizeArchiveReason, resolveEmployeeArchiveId } from '../utils/employeeArchive';
+import { parseCursorParams, buildPageWith, keysetAfter } from '../utils/pagination';
 
 // Snapshot a voided staff member into the unified archived_employees table
 // (role='staff'). Unlike teacher/driver archive, the staff_members row is
@@ -463,14 +464,24 @@ export async function listVoidedStaff(req: AuthRequest, res: Response): Promise<
   const guard = await ensurePremium(schoolId);
   if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
 
-  const { data, error } = await supabase
+  const { limit, cursor } = parseCursorParams(req.query as Record<string, unknown>);
+  let q = supabase
     .from('staff_members')
     .select('id, full_name, position, salary_amount, currency, voided_at, voided_by, void_reason')
     .eq('school_id', schoolId)
     .not('voided_at', 'is', null)
-    .order('voided_at', { ascending: false });
+    .order('voided_at', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(limit + 1);
+  if (cursor) q = q.or(keysetAfter('voided_at', cursor));
+  const { data, error } = await q;
   if (error) { res.status(500).json({ error: error.message }); return; }
-  const voiderIds = Array.from(new Set((data ?? []).map((p: any) => p.voided_by).filter(Boolean)));
+  const page = buildPageWith(
+    ((data ?? []) as any[]).map(r => ({ ...r, id: String(r.id) })),
+    limit,
+    r => r.voided_at as string,
+  );
+  const voiderIds = Array.from(new Set(page.data.map((p: any) => p.voided_by).filter(Boolean)));
   const { data: users } = voiderIds.length
     ? await supabase.from('users').select('id, first_name, last_name').in('id', voiderIds)
     : { data: [] as any[] };
@@ -479,10 +490,14 @@ export async function listVoidedStaff(req: AuthRequest, res: Response): Promise<
     const name = `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim();
     if (name) nameByUser.set(u.id, name);
   }
-  res.json((data ?? []).map((p: any) => ({
-    ...(toCC(p) as Record<string, unknown>),
-    voidedByName: p.voided_by ? nameByUser.get(p.voided_by) ?? null : null,
-  })));
+  res.json({
+    data: page.data.map((p: any) => ({
+      ...(toCC(p) as Record<string, unknown>),
+      voidedByName: p.voided_by ? nameByUser.get(p.voided_by) ?? null : null,
+    })),
+    limit: page.limit,
+    nextCursor: page.nextCursor,
+  });
 }
 
 // ── Salary payments ────────────────────────────────────────────────────
@@ -497,14 +512,56 @@ export async function listStaffPayments(req: AuthRequest, res: Response): Promis
   const { data: staff } = await supabase.from('staff_members').select('id').eq('id', id).eq('school_id', schoolId).is('voided_at', null).single();
   if (!staff) { res.status(404).json({ error: 'Staff member not found' }); return; }
 
-  const { data, error } = await supabase
+  const { limit, cursor } = parseCursorParams(req.query as Record<string, unknown>);
+
+  // Page: keyset on (paid_on DESC, id DESC). id is the unique tiebreak that
+  // keyset pagination requires — many salary payments share a paid_on.
+  let q = supabase
     .from('staff_salary_payments')
     .select('id, amount, currency, paid_on, period_label, notes, insurance_amount, insurance_percentage, recorded_by, created_at')
     .eq('staff_id', id)
     .is('voided_at', null)
-    .order('paid_on', { ascending: false });
+    .order('paid_on', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(limit + 1);
+  if (cursor) q = q.or(keysetAfter('paid_on', cursor));
+
+  // Whole-set totals per currency (gross / insurance / net). The history
+  // modal's summary must reflect ALL payments, not the current page — a
+  // page boundary must never change a financial figure.
+  const aggQ = supabase
+    .from('staff_salary_payments')
+    .select('amount, currency, insurance_amount')
+    .eq('staff_id', id)
+    .is('voided_at', null);
+
+  const [{ data, error }, { data: aggData, error: aggErr }] = await Promise.all([q, aggQ]);
   if (error) { res.status(500).json({ error: error.message }); return; }
-  res.json(toCC(data ?? []));
+  if (aggErr) { res.status(500).json({ error: aggErr.message }); return; }
+
+  const tMap = new Map<string, { currency: string; gross: number; insurance: number; net: number; count: number }>();
+  for (const r of (aggData ?? []) as any[]) {
+    const cur = r.currency as string;
+    let t = tMap.get(cur);
+    if (!t) { t = { currency: cur, gross: 0, insurance: 0, net: 0, count: 0 }; tMap.set(cur, t); }
+    t.gross += Number(r.amount) || 0;
+    t.insurance += Number(r.insurance_amount) || 0;
+    t.net = Math.round((t.gross - t.insurance) * 100) / 100;
+    t.count += 1;
+  }
+
+  const page = buildPageWith(
+    ((data ?? []) as any[]).map(r => ({ ...r, id: String(r.id) })),
+    limit,
+    r => r.paid_on as string,
+  );
+  res.json({
+    data: page.data.map(toCC),
+    limit: page.limit,
+    nextCursor: page.nextCursor,
+    totals: Array.from(tMap.values()),
+    count: (aggData ?? []).length,
+  });
 }
 
 export async function recordStaffPayment(req: AuthRequest, res: Response): Promise<void> {
@@ -653,15 +710,25 @@ export async function listVoidedStaffPayments(req: AuthRequest, res: Response): 
   const guard = await ensurePremium(schoolId);
   if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
 
-  const { data, error } = await supabase
+  const { limit, cursor } = parseCursorParams(req.query as Record<string, unknown>);
+  let q = supabase
     .from('staff_salary_payments')
     .select('id, amount, currency, paid_on, period_label, notes, insurance_amount, voided_at, voided_by, void_reason, staff_id, staff_members(full_name)')
     .eq('school_id', schoolId)
     .not('voided_at', 'is', null)
-    .order('voided_at', { ascending: false });
+    .order('voided_at', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(limit + 1);
+  if (cursor) q = q.or(keysetAfter('voided_at', cursor));
+  const { data, error } = await q;
   if (error) { res.status(500).json({ error: error.message }); return; }
 
-  const voiderIds = Array.from(new Set((data ?? []).map((p: any) => p.voided_by).filter(Boolean)));
+  const page = buildPageWith(
+    ((data ?? []) as any[]).map(r => ({ ...r, id: String(r.id) })),
+    limit,
+    r => r.voided_at as string,
+  );
+  const voiderIds = Array.from(new Set(page.data.map((p: any) => p.voided_by).filter(Boolean)));
   const { data: users } = voiderIds.length
     ? await supabase.from('users').select('id, first_name, last_name').in('id', voiderIds)
     : { data: [] as any[] };
@@ -670,20 +737,24 @@ export async function listVoidedStaffPayments(req: AuthRequest, res: Response): 
     const name = `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim();
     if (name) nameByUser.set(u.id, name);
   }
-  res.json((data ?? []).map((p: any) => ({
-    id: p.id,
-    amount: Number(p.amount),
-    currency: p.currency,
-    paidOn: p.paid_on,
-    periodLabel: p.period_label,
-    notes: p.notes,
-    insuranceAmount: Number(p.insurance_amount) || 0,
-    voidedAt: p.voided_at,
-    voidReason: p.void_reason,
-    voidedByName: p.voided_by ? nameByUser.get(p.voided_by) ?? null : null,
-    staffId: p.staff_id,
-    staffName: p.staff_members?.full_name ?? null,
-  })));
+  res.json({
+    data: page.data.map((p: any) => ({
+      id: p.id,
+      amount: Number(p.amount),
+      currency: p.currency,
+      paidOn: p.paid_on,
+      periodLabel: p.period_label,
+      notes: p.notes,
+      insuranceAmount: Number(p.insurance_amount) || 0,
+      voidedAt: p.voided_at,
+      voidReason: p.void_reason,
+      voidedByName: p.voided_by ? nameByUser.get(p.voided_by) ?? null : null,
+      staffId: p.staff_id,
+      staffName: p.staff_members?.full_name ?? null,
+    })),
+    limit: page.limit,
+    nextCursor: page.nextCursor,
+  });
 }
 
 // ── Insurance payout (admin/accountant only, archived staff) ──────────

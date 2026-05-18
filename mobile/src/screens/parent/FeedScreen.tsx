@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet,
+  View, Text, FlatList, StyleSheet,
   RefreshControl, TouchableOpacity, ActivityIndicator,
 } from 'react-native';
 import { usePaginated } from '../../hooks/usePaginated';
@@ -34,7 +34,7 @@ export default function FeedScreen() {
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { reportCount, bookingCount, homeworkCount, assignmentCount, gradeCount } = useBadgeStore();
   const {
-    items: announcements, setItems: setAnnouncements, loading, loadingMore, refreshing, refresh, onScroll,
+    items: announcements, setItems: setAnnouncements, loading, loadingMore, refreshing, refresh, loadMore,
   } = usePaginated<Announcement>(parentApi.getAnnouncements);
   const [grades, setGrades] = useState<Grade[]>([]);
 
@@ -64,90 +64,94 @@ export default function FeedScreen() {
   ].filter(Boolean) as { label: string; icon: any; bg: string; iconColor: string; tab: string; count: number }[];
 
   return (
-    <ScrollView
+    <FlatList
       style={styles.container}
       contentContainerStyle={[styles.content, { paddingTop: spacing.md }]}
-      onScroll={onScroll}
-      scrollEventThrottle={16}
+      data={announcements}
+      keyExtractor={(ann) => ann.id}
+      onEndReached={loadMore}
+      onEndReachedThreshold={0.6}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refreshAll} tintColor={colors.primary} />}
-    >
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.greeting}>{t('dashboard.subtitle', { name: user?.firstName })}</Text>
-        <Text style={styles.title}>{t('dashboard.title')}</Text>
-      </View>
-
-      {/* Quick links grid */}
-      <View style={styles.grid}>
-        {shortcuts.map(({ label, icon: Icon, bg, iconColor, tab, count }) => (
-          <TouchableOpacity key={label} style={styles.shortcut} onPress={() => navigation.navigate(tab)} activeOpacity={0.7}>
-            <View style={[styles.shortcutIcon, { backgroundColor: bg }]}>
-              <Icon size={16} color={iconColor} />
-              {count > 0 && (
-                <View style={styles.shortcutBadge}>
-                  <Text style={styles.shortcutBadgeText}>{count > 99 ? '99+' : count}</Text>
-                </View>
-              )}
-            </View>
-            <Text style={styles.shortcutLabel} numberOfLines={1}>{label}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {/* Recent Grades */}
-      {feat('grades') && grades.length > 0 && (
+      ListHeaderComponent={
         <>
-          <TouchableOpacity onPress={() => navigation.navigate('Grades')} activeOpacity={0.8} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm }}>
-            <Text style={[styles.sectionLabel, { marginBottom: 0 }]}>{t('nav.grades', 'Grades')}</Text>
-            <Text style={{ fontSize: font.xs, color: colors.primary, fontWeight: '600' }}>See all →</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigation.navigate('Grades')} activeOpacity={0.8}>
-          <View style={styles.gradesRow}>
-            {grades.map(g => {
-              const pct = g.grade != null && g.maxGrade ? Math.round((g.grade / g.maxGrade) * 100) : null;
-              const color = pct == null ? colors.textMuted : pct >= 80 ? colors.success : pct >= 60 ? colors.warning : colors.danger;
-              return (
-                <View key={g.id} style={styles.gradeCard}>
-                  <View style={[styles.gradeCircle, { borderColor: color }]}>
-                    <Text style={[styles.gradeScore, { color }]}>{g.grade ?? '—'}</Text>
-                  </View>
-                  <Text style={styles.gradeSubject} numberOfLines={1}>{g.subject || '—'}</Text>
-                  {g.students?.fullName && <Text style={styles.gradeStudent} numberOfLines={1}>{g.students.fullName}</Text>}
-                </View>
-              );
-            })}
+          {/* Header */}
+          <View style={styles.header}>
+            <Text style={styles.greeting}>{t('dashboard.subtitle', { name: user?.firstName })}</Text>
+            <Text style={styles.title}>{t('dashboard.title')}</Text>
           </View>
-          </TouchableOpacity>
-        </>
-      )}
 
-      {/* Section label */}
-      <Text style={styles.sectionLabel}>{t('dashboard.latest_activity')}</Text>
+          {/* Quick links grid */}
+          <View style={styles.grid}>
+            {shortcuts.map(({ label, icon: Icon, bg, iconColor, tab, count }) => (
+              <TouchableOpacity key={label} style={styles.shortcut} onPress={() => navigation.navigate(tab)} activeOpacity={0.7}>
+                <View style={[styles.shortcutIcon, { backgroundColor: bg }]}>
+                  <Icon size={16} color={iconColor} />
+                  {count > 0 && (
+                    <View style={styles.shortcutBadge}>
+                      <Text style={styles.shortcutBadgeText}>{count > 99 ? '99+' : count}</Text>
+                    </View>
+                  )}
+                </View>
+                <Text style={styles.shortcutLabel} numberOfLines={1}>{label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
 
-      {loading ? (
-        <DashboardSkeleton />
-      ) : announcements.length === 0 ? (
-        <View style={styles.emptyBox}>
-          <FileText size={40} color={colors.textMuted} />
-          <Text style={styles.emptyText}>{t('dashboard.no_activity')}</Text>
-        </View>
-      ) : (
-        <>
-          {announcements.map(ann => (
-            <AnnouncementCard
-              key={ann.id}
-              announcement={ann}
-              onPress={() => navigation.navigate('AnnouncementDetail', { announcement: ann })}
-              onPressComment={() => navigation.navigate('AnnouncementDetail', { announcement: ann, focusComment: true })}
-              onToggleLike={() => handleToggleLike(ann.id)}
-            />
-          ))}
-          {loadingMore && (
-            <ActivityIndicator style={{ marginVertical: spacing.md }} color={colors.primary} />
+          {/* Recent Grades */}
+          {feat('grades') && grades.length > 0 && (
+            <>
+              <TouchableOpacity onPress={() => navigation.navigate('Grades')} activeOpacity={0.8} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm }}>
+                <Text style={[styles.sectionLabel, { marginBottom: 0 }]}>{t('nav.grades', 'Grades')}</Text>
+                <Text style={{ fontSize: font.xs, color: colors.primary, fontWeight: '600' }}>See all →</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => navigation.navigate('Grades')} activeOpacity={0.8}>
+              <View style={styles.gradesRow}>
+                {grades.map(g => {
+                  const pct = g.grade != null && g.maxGrade ? Math.round((g.grade / g.maxGrade) * 100) : null;
+                  const color = pct == null ? colors.textMuted : pct >= 80 ? colors.success : pct >= 60 ? colors.warning : colors.danger;
+                  return (
+                    <View key={g.id} style={styles.gradeCard}>
+                      <View style={[styles.gradeCircle, { borderColor: color }]}>
+                        <Text style={[styles.gradeScore, { color }]}>{g.grade ?? '—'}</Text>
+                      </View>
+                      <Text style={styles.gradeSubject} numberOfLines={1}>{g.subject || '—'}</Text>
+                      {g.students?.fullName && <Text style={styles.gradeStudent} numberOfLines={1}>{g.students.fullName}</Text>}
+                    </View>
+                  );
+                })}
+              </View>
+              </TouchableOpacity>
+            </>
           )}
+
+          {/* Section label */}
+          <Text style={styles.sectionLabel}>{t('dashboard.latest_activity')}</Text>
         </>
+      }
+      ListEmptyComponent={
+        loading
+          ? <DashboardSkeleton />
+          : (
+            <View style={styles.emptyBox}>
+              <FileText size={40} color={colors.textMuted} />
+              <Text style={styles.emptyText}>{t('dashboard.no_activity')}</Text>
+            </View>
+          )
+      }
+      ListFooterComponent={
+        loadingMore
+          ? <ActivityIndicator style={{ marginVertical: spacing.md }} color={colors.primary} />
+          : null
+      }
+      renderItem={({ item: ann }) => (
+        <AnnouncementCard
+          announcement={ann}
+          onPress={() => navigation.navigate('AnnouncementDetail', { announcement: ann })}
+          onPressComment={() => navigation.navigate('AnnouncementDetail', { announcement: ann, focusComment: true })}
+          onToggleLike={() => handleToggleLike(ann.id)}
+        />
       )}
-    </ScrollView>
+    />
   );
 }
 

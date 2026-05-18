@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
-import { staffApi, accountingApi, type PaymentAccount } from '../../services/api';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Virtuoso } from 'react-virtuoso';
+import { staffApi, accountingApi, drainPages, type PaymentAccount } from '../../services/api';
 import { fmtMoney } from '../../utils/money';
 import { toast } from 'react-toastify';
 import Button from '../../components/common/Button';
@@ -157,6 +158,11 @@ export default function StaffSalariesTab() {
 
   const [historyTarget, setHistoryTarget] = useState<StaffMember | null>(null);
   const [history, setHistory] = useState<StaffSalaryPayment[] | null>(null);
+  // Whole-set per-currency totals for the history modal summary — computed
+  // by the backend over ALL payments, never the loaded page.
+  const [historyTotals, setHistoryTotals] = useState<{ currency: string; gross: number; insurance: number; net: number; count: number }[]>([]);
+  const historyCursor = useRef<string | null>(null);
+  const [historyLoadingMore, setHistoryLoadingMore] = useState(false);
 
   const [massReminder, setMassReminder] = useState<MassReminderForm | null>(null);
   const [sendingMass, setSendingMass] = useState(false);
@@ -185,9 +191,12 @@ export default function StaffSalariesTab() {
   };
   const loadAll = () => Promise.all([loadActive(), loadArchive()]);
   const loadVoided = async () => {
-    const [s, p] = await Promise.all([staffApi.listVoided(), staffApi.listVoidedPayments()]);
-    setVoidedStaff(s.data as VoidedStaffRow[]);
-    setVoidedPayments(p.data as VoidedStaffPaymentRow[]);
+    const [s, p] = await Promise.all([
+      drainPages<VoidedStaffRow>(c => staffApi.listVoided(c)),
+      drainPages<VoidedStaffPaymentRow>(c => staffApi.listVoidedPayments(c)),
+    ]);
+    setVoidedStaff(s);
+    setVoidedPayments(p);
   };
 
   useEffect(() => {
@@ -390,17 +399,40 @@ export default function StaffSalariesTab() {
     } finally { setSavingPayment(false); }
   };
 
-  const openHistory = async (s: StaffMember) => {
-    setHistoryTarget(s);
+  // Loads page 1 of a staff member's payment history (resets accumulation)
+  // and captures the whole-set per-currency totals for the summary.
+  const fetchHistory = useCallback(async (staffId: string) => {
     setHistory(null);
+    historyCursor.current = null;
     try {
-      const r = await staffApi.listPayments(s.id);
-      setHistory(r.data as StaffSalaryPayment[]);
+      const r = await staffApi.listPayments(staffId);
+      setHistory(r.data.data);
+      setHistoryTotals(r.data.totals);
+      historyCursor.current = r.data.nextCursor;
     } catch (e: any) {
       toast.error(e.response?.data?.error || 'Failed to load payment history');
       setHistoryTarget(null);
     }
+  }, []);
+
+  const openHistory = async (s: StaffMember) => {
+    setHistoryTarget(s);
+    await fetchHistory(s.id);
   };
+
+  const loadHistoryMore = useCallback(async () => {
+    if (!historyTarget || historyLoadingMore || !historyCursor.current) return;
+    setHistoryLoadingMore(true);
+    try {
+      const r = await staffApi.listPayments(historyTarget.id, historyCursor.current);
+      historyCursor.current = r.data.nextCursor;
+      setHistory(prev => [...(prev ?? []), ...r.data.data]);
+    } catch {
+      // keep what we have; next scroll retries
+    } finally {
+      setHistoryLoadingMore(false);
+    }
+  }, [historyTarget, historyLoadingMore]);
 
   const deletePaymentEntry = async (p: StaffSalaryPayment) => {
     if (!historyTarget) return;
@@ -408,8 +440,7 @@ export default function StaffSalariesTab() {
     try {
       await staffApi.deletePayment(p.id);
       toast.success('Payment deleted');
-      const r = await staffApi.listPayments(historyTarget.id);
-      setHistory(r.data as StaffSalaryPayment[]);
+      await fetchHistory(historyTarget.id);
       await loadAll();
     } catch (e: any) {
       toast.error(e.response?.data?.error || 'Failed to delete payment');
@@ -980,11 +1011,20 @@ export default function StaffSalariesTab() {
           {history === null ? <LoadingSpinner /> : history.length === 0 ? (
             <p className="text-sm text-gray-500 py-6 text-center">No payments recorded yet.</p>
           ) : (
-            <div className="space-y-2">
-              {history.map(p => {
-                const ins = p.insuranceAmount || 0;
-                const net = Math.round((p.amount - ins) * 100) / 100;
-                return (
+            <div>
+              <Virtuoso
+                style={{ height: '60vh' }}
+                data={history}
+                increaseViewportBy={400}
+                // Seamless background load while the user reads — no button.
+                endReached={() => loadHistoryMore()}
+                components={{
+                  Item: (props) => <div {...props} style={{ ...props.style, paddingBottom: 8 }} />,
+                }}
+                itemContent={(_i, p) => {
+                  const ins = p.insuranceAmount || 0;
+                  const net = Math.round((p.amount - ins) * 100) / 100;
+                  return (
                   <div key={p.id} className="flex items-start justify-between gap-3 bg-gray-50 rounded-xl px-4 py-3">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
@@ -1008,28 +1048,29 @@ export default function StaffSalariesTab() {
                       </button>
                     )}
                   </div>
-                );
-              })}
+                  );
+                }}
+              />
+              {historyLoadingMore && <div className="py-2 text-center text-xs text-gray-400">Loading more…</div>}
               {(() => {
-                const same = history.filter(p => p.currency === historyTarget.currency);
-                if (same.length === 0) return null;
-                const totalGross = same.reduce((s, p) => s + p.amount, 0);
-                const totalIns = same.reduce((s, p) => s + (p.insuranceAmount || 0), 0);
-                const totalNet = Math.round((totalGross - totalIns) * 100) / 100;
-                if (totalIns === 0) return null;
+                // Whole-set totals from the backend — reflects ALL payments,
+                // not just the loaded page. Matches prior behavior: only the
+                // staff member's own currency, hidden when no insurance.
+                const t = historyTotals.find(x => x.currency === historyTarget.currency);
+                if (!t || t.count === 0 || t.insurance === 0) return null;
                 return (
                   <div className="mt-3 pt-3 border-t border-gray-200 grid grid-cols-3 gap-2 text-center">
                     <div className="bg-gray-50 rounded-lg py-2 px-3">
                       <div className="text-xs text-gray-500">Total gross</div>
-                      <div className="font-semibold text-gray-900">{fmtMoney(totalGross, historyTarget.currency)}</div>
+                      <div className="font-semibold text-gray-900">{fmtMoney(t.gross, historyTarget.currency)}</div>
                     </div>
                     <div className="bg-indigo-50 rounded-lg py-2 px-3">
                       <div className="text-xs text-indigo-600">Insurance withheld</div>
-                      <div className="font-semibold text-indigo-900">{fmtMoney(totalIns, historyTarget.currency)}</div>
+                      <div className="font-semibold text-indigo-900">{fmtMoney(t.insurance, historyTarget.currency)}</div>
                     </div>
                     <div className="bg-emerald-50 rounded-lg py-2 px-3">
                       <div className="text-xs text-emerald-700">Total net</div>
-                      <div className="font-semibold text-emerald-900">{fmtMoney(totalNet, historyTarget.currency)}</div>
+                      <div className="font-semibold text-emerald-900">{fmtMoney(t.net, historyTarget.currency)}</div>
                     </div>
                   </div>
                 );

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { feesApi } from '../../services/api';
+import { feesApi, drainPages } from '../../services/api';
 import { toast } from 'react-toastify';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
@@ -47,9 +47,12 @@ export default function TuitionVoidedTab() {
 
   const reload = async () => {
     try {
-      const [p, q] = await Promise.all([feesApi.listVoidedPlans(), feesApi.listVoidedPayments()]);
-      setPlans(p.data as VoidedPlan[]);
-      setPayments(q.data as VoidedPayment[]);
+      const [p, q] = await Promise.all([
+        drainPages<VoidedPlan>(c => feesApi.listVoidedPlans(c)),
+        drainPages<VoidedPayment>(c => feesApi.listVoidedPayments(c)),
+      ]);
+      setPlans(p);
+      setPayments(q);
     } catch (e: any) {
       toast.error(e.response?.data?.error || 'Failed to load voided records');
       setPlans([]);

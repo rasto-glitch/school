@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { useAuthStore } from '../store/authStore';
-import type { Paginated, Notification, Announcement } from '../types';
+import type { Paginated, Notification, Announcement, StaffSalaryPayment } from '../types';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
@@ -62,6 +62,25 @@ api.interceptors.response.use(
 );
 
 export default api;
+
+// Drains a keyset-paginated endpoint into one array by following
+// `nextCursor`. Used for bounded audit lists (voided plans/payments/
+// expenses/staff) whose screens still want the full set: the backend
+// query is now bounded per request, but the UI keeps its existing
+// counts/grouping. The cap is a safety valve, not an expected limit.
+export async function drainPages<T>(
+  fetcher: (cursor?: string) => Promise<{ data: { data: T[]; nextCursor: string | null } }>,
+): Promise<T[]> {
+  const out: T[] = [];
+  let cursor: string | undefined;
+  for (let i = 0; i < 1000; i++) {
+    const r = await fetcher(cursor);
+    out.push(...r.data.data);
+    if (!r.data.nextCursor) break;
+    cursor = r.data.nextCursor;
+  }
+  return out;
+}
 
 // ---- AUTH ----
 export const authApi = {
@@ -341,7 +360,9 @@ export const feesApi = {
   updatePlan: (id: string, data: object) => api.put(`/accounting/plans/${id}`, data),
   deletePlan: (id: string, reason?: string) => api.delete(`/accounting/plans/${id}`, { data: { reason } }),
   unvoidPlan: (id: string) => api.post(`/accounting/plans/${id}/unvoid`),
-  listVoidedPlans: () => api.get('/accounting/plans/voided'),
+  // Keyset-paginated; drain with drainPages() for the full audit list.
+  listVoidedPlans: (cursor?: string) =>
+    api.get<{ data: any[]; limit: number; nextCursor: string | null }>('/accounting/plans/voided', { params: cursor ? { cursor } : {} }),
   assignPlan: (id: string, data?: { studentIds?: string[] }) => api.post(`/accounting/plans/${id}/assign`, data ?? {}),
   // Students / families
   listStudentFees: () => api.get('/accounting/students'),
@@ -359,9 +380,12 @@ export const feesApi = {
     api.post(`/accounting/payments/${paymentId}/refund`, data),
   deletePayment: (paymentId: string, reason?: string) => api.delete(`/accounting/payments/${paymentId}`, { data: { reason } }),
   unvoidPayment: (paymentId: string) => api.post(`/accounting/payments/${paymentId}/unvoid`),
-  listVoidedPayments: () => api.get('/accounting/payments/voided'),
+  listVoidedPayments: (cursor?: string) =>
+    api.get<{ data: any[]; limit: number; nextCursor: string | null }>('/accounting/payments/voided', { params: cursor ? { cursor } : {} }),
   // Late fees
-  listLateFees: (studentFeeId?: string) => api.get('/accounting/late-fees', { params: studentFeeId ? { studentFeeId } : {} }),
+  // Keyset-paginated envelope { data, limit, nextCursor }. Pass cursor to page.
+  listLateFees: (studentFeeId?: string, cursor?: string) =>
+    api.get('/accounting/late-fees', { params: { ...(studentFeeId ? { studentFeeId } : {}), ...(cursor ? { cursor } : {}) } }),
   voidLateFee: (id: string, reason?: string) => api.delete(`/accounting/late-fees/${id}`, { data: { reason } }),
   applyLateFeesNow: () => api.post('/accounting/late-fees/apply-now'),
   // Config
@@ -385,7 +409,13 @@ export const feesApi = {
   // Parent
   getParentFees: () => api.get('/parent/fees'),
   // Archive — payment history for archived + graduated students
-  listArchive: (search?: string) => api.get<ArchiveListItem[]>('/accounting/archive', { params: { search } }),
+  // Keyset-paginated envelope; drain with drainPages() for the full set
+  // (the archive screen filters/searches client-side over everything).
+  listArchive: (search?: string, cursor?: string) =>
+    api.get<{ data: ArchiveListItem[]; limit: number; nextCursor: string | null }>(
+      '/accounting/archive',
+      { params: { ...(search ? { search } : {}), ...(cursor ? { cursor } : {}) } },
+    ),
   getArchiveDetail: (kind: 'archived' | 'graduated', id: string) =>
     api.get<ArchiveDetail>(`/accounting/archive/${kind}/${id}`),
   downloadArchivePdf: (kind: 'archived' | 'graduated', id: string) =>
@@ -425,13 +455,24 @@ export const staffApi = {
   }>) => api.put(`/accounting/staff/${id}`, data),
   remove: (id: string, reason?: string) => api.delete(`/accounting/staff/${id}`, { data: { reason } }),
   unvoid: (id: string) => api.post(`/accounting/staff/${id}/unvoid`),
-  listVoided: () => api.get('/accounting/staff/voided'),
-  listPayments: (id: string) => api.get(`/accounting/staff/${id}/payments`),
+  listVoided: (cursor?: string) =>
+    api.get<{ data: any[]; limit: number; nextCursor: string | null }>('/accounting/staff/voided', { params: cursor ? { cursor } : {} }),
+  // Keyset-paginated rows; `totals` (per-currency gross/insurance/net) and
+  // `count` are whole-set — the history modal summary uses them, not the page.
+  listPayments: (id: string, cursor?: string) =>
+    api.get<{
+      data: StaffSalaryPayment[];
+      limit: number;
+      nextCursor: string | null;
+      totals: { currency: string; gross: number; insurance: number; net: number; count: number }[];
+      count: number;
+    }>(`/accounting/staff/${id}/payments`, { params: cursor ? { cursor } : {} }),
   recordPayment: (id: string, data: { amount: number; currency?: string; paidOn: string; periodLabel?: string | null; notes?: string | null; insuranceAmount?: number | null; insurancePercentage?: number | null; taxAmount?: number; taxLabel?: string | null; paymentAccountId?: string | null }) =>
     api.post(`/accounting/staff/${id}/payments`, data),
   deletePayment: (paymentId: string, reason?: string) => api.delete(`/accounting/staff-payments/${paymentId}`, { data: { reason } }),
   unvoidPayment: (paymentId: string) => api.post(`/accounting/staff-payments/${paymentId}/unvoid`),
-  listVoidedPayments: () => api.get('/accounting/staff-payments/voided'),
+  listVoidedPayments: (cursor?: string) =>
+    api.get<{ data: any[]; limit: number; nextCursor: string | null }>('/accounting/staff-payments/voided', { params: cursor ? { cursor } : {} }),
   notifyDue: (id: string) => api.post(`/accounting/staff/${id}/notify-due`),
   notifyAllDue: (data?: { title?: string; message?: string; dueWithinDays?: number }) =>
     api.post('/accounting/staff/notify-due-all', data ?? {}),
@@ -522,9 +563,16 @@ export const expensesApi = {
   recordTemplate: (id: string, data?: { expenseDate?: string; amount?: number; notes?: string | null; paymentMethod?: string | null; taxAmount?: number; taxLabel?: string | null; paymentAccountId?: string | null }) =>
     api.post<{ expense: ExpenseRow; nextDueDate: string }>(`/accounting/expense-templates/${id}/record`, data ?? {}),
 
-  // Expenses
-  list: (params?: { startDate?: string; endDate?: string; categoryId?: string; kind?: 'recurring' | 'one_time' | 'all' }) =>
-    api.get<ExpenseRow[]>('/accounting/expenses', { params }),
+  // Expenses — keyset-paginated rows; `totals`/`count` are whole-set
+  // (computed by the backend over the full filtered set, never the page).
+  list: (params?: { startDate?: string; endDate?: string; categoryId?: string; kind?: 'recurring' | 'one_time' | 'all'; cursor?: string }) =>
+    api.get<{
+      data: ExpenseRow[];
+      limit: number;
+      nextCursor: string | null;
+      totals: { currency: string; total: number }[];
+      count: number;
+    }>('/accounting/expenses', { params }),
   create: (data: {
     name: string;
     amount: number;
@@ -553,7 +601,8 @@ export const expensesApi = {
   }>) => api.patch<ExpenseRow>(`/accounting/expenses/${id}`, data),
   void: (id: string, reason?: string) => api.delete(`/accounting/expenses/${id}`, { data: { reason } }),
   unvoid: (id: string) => api.post(`/accounting/expenses/${id}/unvoid`),
-  listVoided: () => api.get<(ExpenseRow & { voidedByName: string | null })[]>('/accounting/expenses/voided'),
+  listVoided: (cursor?: string) =>
+    api.get<{ data: (ExpenseRow & { voidedByName: string | null })[]; limit: number; nextCursor: string | null }>('/accounting/expenses/voided', { params: cursor ? { cursor } : {} }),
 };
 
 // ---- LEDGER (aggregate read) ----
@@ -652,12 +701,16 @@ export const ledgerApi = {
     endDate?: string;
     sources?: string;
     currency?: string;
+    type?: 'income' | 'expense';
+    cursor?: string;
   }) =>
     api.get<{
       rows: LedgerRow[];
       totals: LedgerCurrencyTotal[];
       categories: LedgerCategoryTotal[];
       defaultCurrency: string;
+      // Row-list pagination cursor. totals/categories are always whole-set.
+      nextCursor: string | null;
     }>('/accounting/ledger', { params }),
   downloadPdf: (params?: { startDate?: string; endDate?: string; sources?: string; currency?: string }) =>
     api.get('/accounting/ledger/export.pdf', { params, responseType: 'blob' }),

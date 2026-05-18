@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { usePaginated } from '../../hooks/usePaginated';
 import {
-  View, Text, ScrollView, StyleSheet, TouchableOpacity,
+  View, Text, ScrollView, FlatList, StyleSheet, TouchableOpacity,
   TextInput, ActivityIndicator, Alert, Modal, Image, Switch,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -10,7 +10,6 @@ import { Plus, X, Send, Trash2, Image as ImageIcon, FileText } from 'lucide-reac
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CardListSkeleton } from '../../components/Skeleton';
 import { academicApi } from '../../services/api';
-import { useAuthStore } from '../../store/authStore';
 import { useColors } from '../../store/themeStore';
 import { spacing, radius, font, shadow } from '../../theme';
 import { subjectsForClass, type SubjectOpt, type TeachingEntry } from '../../utils/subjects';
@@ -23,14 +22,13 @@ export default function TeacherPostsScreen({ subject, classes, subjects, teachin
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const navigation = useNavigation<any>();
-  const { user } = useAuthStore();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
+  // `mine=1` → server returns only this teacher's own posts (incl. drafts),
+  // correct across all pages — no client-side filtering.
   const {
-    items: allPosts, setItems: setPosts, loading, loadingMore, reload, onScroll,
-  } = usePaginated<AcademicPost>(c => academicApi.getPosts(undefined, c));
-  // Show only this teacher's own posts; auto-load keeps filling as you scroll.
-  const posts = allPosts.filter(p => p.author_user_id === user?.id);
+    items: posts, setItems: setPosts, loading, loadingMore, reload, loadMore,
+  } = usePaginated<AcademicPost>(c => academicApi.getPosts(undefined, c, undefined, true));
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -124,53 +122,56 @@ export default function TeacherPostsScreen({ subject, classes, subjects, teachin
 
   return (
     <View style={{ flex: 1 }}>
-      <ScrollView
+      <FlatList
         contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 80 }]}
-        onScroll={onScroll}
-        scrollEventThrottle={16}
-      >
-        {loading ? (
-          <CardListSkeleton count={3} />
-        ) : posts.length === 0 ? (
-          <View style={styles.empty}>
-            <FileText size={40} color={colors.textMuted} />
-            <Text style={styles.emptyText}>No posts yet. Tap + to write one.</Text>
-          </View>
-        ) : (
-          posts.map(p => (
-            <TouchableOpacity
-              key={p.id}
-              style={styles.card}
-              activeOpacity={0.8}
-              onPress={() => navigation.navigate('PostDetail', { postId: p.id })}
-            >
-              <View style={{ flex: 1 }}>
-                <View style={styles.cardMetaRow}>
-                  {p.classes?.name && (
-                    <View style={[styles.tag, { backgroundColor: colors.bg }]}>
-                      <Text style={[styles.tagText, { color: colors.textMuted }]}>{p.classes.name}</Text>
-                    </View>
-                  )}
-                  {!p.is_published && (
-                    <View style={[styles.tag, { backgroundColor: '#FEF3C7' }]}>
-                      <Text style={[styles.tagText, { color: '#92400E' }]}>Draft</Text>
-                    </View>
-                  )}
-                </View>
-                <Text style={styles.cardTitle} numberOfLines={2}>{p.title}</Text>
-                {p.body && <Text style={styles.cardBody} numberOfLines={2}>{p.body}</Text>}
-                <Text style={styles.cardDate}>{new Date(p.created_at).toLocaleDateString()}</Text>
+        data={posts}
+        keyExtractor={(p) => p.id}
+        onEndReached={loadMore}
+        onEndReachedThreshold={0.6}
+        ListEmptyComponent={
+          loading
+            ? <CardListSkeleton count={3} />
+            : (
+              <View style={styles.empty}>
+                <FileText size={40} color={colors.textMuted} />
+                <Text style={styles.emptyText}>No posts yet. Tap + to write one.</Text>
               </View>
-              <TouchableOpacity onPress={() => handleDelete(p)} hitSlop={8} style={{ paddingLeft: 8 }}>
-                <Trash2 size={16} color={colors.textMuted} />
-              </TouchableOpacity>
+            )
+        }
+        ListFooterComponent={
+          loadingMore
+            ? <ActivityIndicator style={{ marginVertical: spacing.md }} color={colors.primary} />
+            : null
+        }
+        renderItem={({ item: p }) => (
+          <TouchableOpacity
+            style={styles.card}
+            activeOpacity={0.8}
+            onPress={() => navigation.navigate('PostDetail', { postId: p.id })}
+          >
+            <View style={{ flex: 1 }}>
+              <View style={styles.cardMetaRow}>
+                {p.classes?.name && (
+                  <View style={[styles.tag, { backgroundColor: colors.bg }]}>
+                    <Text style={[styles.tagText, { color: colors.textMuted }]}>{p.classes.name}</Text>
+                  </View>
+                )}
+                {!p.is_published && (
+                  <View style={[styles.tag, { backgroundColor: '#FEF3C7' }]}>
+                    <Text style={[styles.tagText, { color: '#92400E' }]}>Draft</Text>
+                  </View>
+                )}
+              </View>
+              <Text style={styles.cardTitle} numberOfLines={2}>{p.title}</Text>
+              {p.body && <Text style={styles.cardBody} numberOfLines={2}>{p.body}</Text>}
+              <Text style={styles.cardDate}>{new Date(p.created_at).toLocaleDateString()}</Text>
+            </View>
+            <TouchableOpacity onPress={() => handleDelete(p)} hitSlop={8} style={{ paddingLeft: 8 }}>
+              <Trash2 size={16} color={colors.textMuted} />
             </TouchableOpacity>
-          ))
+          </TouchableOpacity>
         )}
-        {loadingMore && (
-          <ActivityIndicator style={{ marginVertical: spacing.md }} color={colors.primary} />
-        )}
-      </ScrollView>
+      />
 
       {/* Floating + button */}
       <TouchableOpacity

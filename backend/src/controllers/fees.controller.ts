@@ -8,6 +8,7 @@ import { streamArchivePaymentPdf, buildArchivePaymentXlsx, type ArchivePaymentEx
 import { logAudit } from '../utils/audit';
 import { assertPeriodOpen } from '../utils/period';
 import { allocateReceiptNumber } from '../utils/receiptNumber';
+import { parseCursorParams, buildPageWith, keysetAfter } from '../utils/pagination';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -362,15 +363,25 @@ export async function listVoidedPlans(req: AuthRequest, res: Response): Promise<
   const guard = await ensurePremium(schoolId);
   if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
 
-  const { data, error } = await supabase
+  const { limit, cursor } = parseCursorParams(req.query as Record<string, unknown>);
+  let q = supabase
     .from('fee_plans')
     .select('id, name, total_amount, currency, applies_to, academic_year, is_active, created_at, voided_at, voided_by, void_reason')
     .eq('school_id', schoolId)
     .not('voided_at', 'is', null)
-    .order('voided_at', { ascending: false });
+    .order('voided_at', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(limit + 1);
+  if (cursor) q = q.or(keysetAfter('voided_at', cursor));
+  const { data, error } = await q;
   if (error) { res.status(500).json({ error: error.message }); return; }
 
-  const voiderIds = Array.from(new Set((data ?? []).map((p: any) => p.voided_by).filter(Boolean)));
+  const page = buildPageWith(
+    ((data ?? []) as any[]).map(r => ({ ...r, id: String(r.id) })),
+    limit,
+    r => r.voided_at as string,
+  );
+  const voiderIds = Array.from(new Set(page.data.map((p: any) => p.voided_by).filter(Boolean)));
   const { data: users } = voiderIds.length
     ? await supabase.from('users').select('id, first_name, last_name').in('id', voiderIds)
     : { data: [] as any[] };
@@ -379,10 +390,14 @@ export async function listVoidedPlans(req: AuthRequest, res: Response): Promise<
     const name = `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim();
     if (name) nameByUser.set(u.id, name);
   }
-  res.json((data ?? []).map((p: any) => ({
-    ...(toCC(p) as Record<string, unknown>),
-    voidedByName: p.voided_by ? nameByUser.get(p.voided_by) ?? null : null,
-  })));
+  res.json({
+    data: page.data.map((p: any) => ({
+      ...(toCC(p) as Record<string, unknown>),
+      voidedByName: p.voided_by ? nameByUser.get(p.voided_by) ?? null : null,
+    })),
+    limit: page.limit,
+    nextCursor: page.nextCursor,
+  });
 }
 
 // Assign a plan to students (all / by class / explicit). Creates student_fees rows
@@ -1182,15 +1197,27 @@ export async function listLateFees(req: AuthRequest, res: Response): Promise<voi
   if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
 
   const studentFeeId = (req.query.studentFeeId as string | undefined) ?? null;
+  const { limit, cursor } = parseCursorParams(req.query as Record<string, unknown>);
+  // Keyset on (applied_on DESC, id DESC). id is the unique tiebreak keyset
+  // pagination requires — late fees applied in the same nightly run share
+  // an applied_on date.
   let q = supabase
     .from('student_fee_late_fees')
     .select('id, student_fee_id, fee_installment_id, amount, applied_on, voided_at, void_reason, created_at, fee_installments(sequence, due_date)')
     .eq('school_id', schoolId)
-    .order('applied_on', { ascending: false });
+    .order('applied_on', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(limit + 1);
   if (studentFeeId) q = q.eq('student_fee_id', studentFeeId);
+  if (cursor) q = q.or(keysetAfter('applied_on', cursor));
   const { data, error } = await q;
   if (error) { res.status(500).json({ error: error.message }); return; }
-  res.json((data ?? []).map(toCC));
+  const page = buildPageWith(
+    ((data ?? []) as any[]).map(r => ({ ...r, id: String(r.id) })),
+    limit,
+    r => r.applied_on as string,
+  );
+  res.json({ data: page.data.map(toCC), limit: page.limit, nextCursor: page.nextCursor });
 }
 
 export async function voidLateFee(req: AuthRequest, res: Response): Promise<void> {
@@ -1228,15 +1255,25 @@ export async function listVoidedPayments(req: AuthRequest, res: Response): Promi
   const guard = await ensurePremium(schoolId);
   if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
 
-  const { data, error } = await supabase
+  const { limit, cursor } = parseCursorParams(req.query as Record<string, unknown>);
+  let q = supabase
     .from('fee_payments')
     .select('id, amount, paid_on, method, reference, notes, voided_at, voided_by, void_reason, student_fee_id, student_fees(students(id, full_name), fee_plans(name, currency))')
     .eq('school_id', schoolId)
     .not('voided_at', 'is', null)
-    .order('voided_at', { ascending: false });
+    .order('voided_at', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(limit + 1);
+  if (cursor) q = q.or(keysetAfter('voided_at', cursor));
+  const { data, error } = await q;
   if (error) { res.status(500).json({ error: error.message }); return; }
 
-  const voiderIds = Array.from(new Set((data ?? []).map((p: any) => p.voided_by).filter(Boolean)));
+  const page = buildPageWith(
+    ((data ?? []) as any[]).map(r => ({ ...r, id: String(r.id) })),
+    limit,
+    r => r.voided_at as string,
+  );
+  const voiderIds = Array.from(new Set(page.data.map((p: any) => p.voided_by).filter(Boolean)));
   const { data: users } = voiderIds.length
     ? await supabase.from('users').select('id, first_name, last_name').in('id', voiderIds)
     : { data: [] as any[] };
@@ -1245,22 +1282,26 @@ export async function listVoidedPayments(req: AuthRequest, res: Response): Promi
     const name = `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim();
     if (name) nameByUser.set(u.id, name);
   }
-  res.json((data ?? []).map((p: any) => ({
-    id: p.id,
-    amount: Number(p.amount),
-    paidOn: p.paid_on,
-    method: p.method,
-    reference: p.reference,
-    notes: p.notes,
-    voidedAt: p.voided_at,
-    voidReason: p.void_reason,
-    voidedByName: p.voided_by ? nameByUser.get(p.voided_by) ?? null : null,
-    studentFeeId: p.student_fee_id,
-    studentId: p.student_fees?.students?.id ?? null,
-    studentName: p.student_fees?.students?.full_name ?? null,
-    planName: p.student_fees?.fee_plans?.name ?? null,
-    currency: p.student_fees?.fee_plans?.currency ?? 'USD',
-  })));
+  res.json({
+    data: page.data.map((p: any) => ({
+      id: p.id,
+      amount: Number(p.amount),
+      paidOn: p.paid_on,
+      method: p.method,
+      reference: p.reference,
+      notes: p.notes,
+      voidedAt: p.voided_at,
+      voidReason: p.void_reason,
+      voidedByName: p.voided_by ? nameByUser.get(p.voided_by) ?? null : null,
+      studentFeeId: p.student_fee_id,
+      studentId: p.student_fees?.students?.id ?? null,
+      studentName: p.student_fees?.students?.full_name ?? null,
+      planName: p.student_fees?.fee_plans?.name ?? null,
+      currency: p.student_fees?.fee_plans?.currency ?? 'USD',
+    })),
+    limit: page.limit,
+    nextCursor: page.nextCursor,
+  });
 }
 
 // ── Adjustments (admin only) ────────────────────────────────────────────
@@ -1937,7 +1978,29 @@ export async function listArchivePaymentRecords(req: AuthRequest, res: Response)
       || (r.className ?? '').toLowerCase().includes(search),
     );
   }
-  res.json(combined);
+
+  // Row-list pagination over the already-built, search-filtered set. This
+  // is an in-memory merge of two bounded sources (archived + graduated),
+  // so we slice rather than keyset. Cursor = opaque base64 of the unique
+  // `${kind}:${id}` key; an unknown cursor restarts from the top (safe).
+  const ARCHIVE_PAGE = 50;
+  const keyOf = (r: ArchiveListItem) => `${r.kind}:${r.id}`;
+  const rawCursor = req.query.cursor;
+  let startIdx = 0;
+  if (typeof rawCursor === 'string' && rawCursor) {
+    let want = '';
+    try { want = Buffer.from(rawCursor, 'base64url').toString('utf8'); } catch { want = ''; }
+    if (want) {
+      const at = combined.findIndex(r => keyOf(r) === want);
+      if (at >= 0) startIdx = at + 1;
+    }
+  }
+  const pageRows = combined.slice(startIdx, startIdx + ARCHIVE_PAGE);
+  const hasMore = startIdx + ARCHIVE_PAGE < combined.length;
+  const nextCursor = hasMore && pageRows.length > 0
+    ? Buffer.from(keyOf(pageRows[pageRows.length - 1]), 'utf8').toString('base64url')
+    : null;
+  res.json({ data: pageRows, limit: ARCHIVE_PAGE, nextCursor });
 }
 
 async function loadArchiveDetail(schoolId: string, kind: 'archived' | 'graduated', id: string): Promise<ArchivePaymentExportData | null> {
