@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { usePaginated } from '../../hooks/usePaginated';
 import { useTranslation } from 'react-i18next';
 import { Megaphone, Heart, MessageCircle } from 'lucide-react';
 import { adminApi, parentApi, announcementApi } from '../../services/api';
@@ -33,22 +34,16 @@ export default function AnnouncementsPage() {
   const { t } = useTranslation();
   const { school } = useAuthStore();
   const setUnreadCount = useNotificationStore(s => s.setUnreadCount);
-  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const {
+    items: announcements, setItems: setAnnouncements, loading, loadingMore, error, reload, sentinelRef,
+  } = usePaginated<Announcement>(adminApi.getAnnouncements);
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
-    setError(false);
-    adminApi.getAnnouncements()
-      .then(r => setAnnouncements(r.data || []))
-      .catch(() => setError(true))
-      .finally(() => setLoading(false));
     parentApi.markTypeRead('announcement')
       .then(() => parentApi.getUnreadCount().then(r => setUnreadCount(r.data?.count ?? 0)))
       .catch(() => {});
-  }, [retryKey]);
+  }, [setUnreadCount]);
 
   const handleToggleLike = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -63,7 +58,7 @@ export default function AnnouncementsPage() {
   return (
     <PageLayout title={t('announcements.title')} subtitle={t('announcements.subtitle')}>
       {loading ? <AnnouncementsSkeleton /> : error ? (
-        <ErrorMessage onRetry={() => setRetryKey(k => k + 1)} />
+        <ErrorMessage onRetry={reload} />
       ) : announcements.length === 0 ? (
         <EmptyState title={t('announcements.no_announcements')} icon={<Megaphone className="w-8 h-8 text-gray-400" />} />
       ) : (
@@ -132,6 +127,10 @@ export default function AnnouncementsPage() {
               </article>
             );
           })}
+          {loadingMore && (
+            <p className="py-3 text-center text-sm text-gray-400">Loading…</p>
+          )}
+          <div ref={sentinelRef} aria-hidden className="h-px" />
         </div>
       )}
     </PageLayout>

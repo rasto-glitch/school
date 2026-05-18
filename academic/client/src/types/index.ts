@@ -23,6 +23,12 @@ export interface AcademicClass {
   gradeLevel?: string;
 }
 
+export interface Paginated<T> {
+  data: T[];
+  limit: number;
+  nextCursor: string | null;
+}
+
 export interface AcademicPost {
   id: string;
   title: string;

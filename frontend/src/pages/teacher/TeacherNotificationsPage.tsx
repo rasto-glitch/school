@@ -26,7 +26,7 @@ export default function TeacherNotificationsPage() {
   const navigate = useNavigate();
   const { setTeacherUnreadCount } = useNotificationStore();
   const {
-    items: notifications, setItems, loading, loadingMore, hasMore, loadMore,
+    items: notifications, setItems, loading, loadingMore, sentinelRef,
   } = usePaginated<Notification>(teacherApi.getNotifications);
 
   useEffect(() => { setTeacherUnreadCount(0); }, [setTeacherUnreadCount]);
@@ -109,15 +109,10 @@ export default function TeacherNotificationsPage() {
               </div>
             </div>
           ))}
-          {hasMore && (
-            <button
-              onClick={loadMore}
-              disabled={loadingMore}
-              className="w-full py-3 text-sm font-medium text-primary-600 border border-primary-200 rounded-xl hover:bg-primary-50 transition-colors disabled:opacity-50"
-            >
-              {loadingMore ? 'Loading…' : 'See previous notifications'}
-            </button>
+          {loadingMore && (
+            <p className="py-3 text-center text-sm text-gray-400">Loading…</p>
           )}
+          <div ref={sentinelRef} aria-hidden className="h-px" />
         </div>
       )}
     </PageLayout>

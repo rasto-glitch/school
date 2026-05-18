@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { useAuthStore } from '../store/authStore';
-import type { Paginated, Notification } from '../types';
+import type { Paginated, Notification, Announcement, AcademicPost } from '../types';
 
 export const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://school-production-3ccc.up.railway.app/api';
 
@@ -164,7 +164,8 @@ export const parentApi = {
   getAssignments: (params?: Record<string, string>) => api.get('/parent/assignments', { params }),
   getGrades: (studentId?: string) => api.get('/parent/grades', { params: studentId ? { studentId } : {} }),
   getReports: (params?: Record<string, string>) => api.get('/parent/reports', { params }),
-  getAnnouncements: () => api.get('/parent/announcements'),
+  getAnnouncements: (cursor?: string | null) =>
+    api.get<Paginated<Announcement>>('/parent/announcements', { params: cursor ? { cursor } : {} }),
   getBusLocation: (studentId?: string) => api.get('/parent/bus-location', { params: { studentId } }),
   getNotifications: (cursor?: string | null) =>
     api.get<Paginated<Notification>>('/parent/notifications', { params: cursor ? { cursor } : {} }),
@@ -230,7 +231,8 @@ export const supervisorApi = {
   getStudentBrief: (id: string) => api.get(`/supervisor/student-brief/${id}`),
   getHomeworkById: (id: string) => api.get(`/supervisor/homework/${id}`),
   getAssignmentById: (id: string) => api.get(`/supervisor/assignments/${id}`),
-  getAnnouncements: () => api.get('/supervisor/announcements'),
+  getAnnouncements: (cursor?: string | null) =>
+    api.get<Paginated<Announcement>>('/supervisor/announcements', { params: cursor ? { cursor } : {} }),
   getAnnouncementById: (id: string) => api.get(`/supervisor/announcements/${id}`),
   getNotifications: (cursor?: string | null) =>
     api.get<Paginated<Notification>>('/supervisor/notifications', { params: cursor ? { cursor } : {} }),
@@ -286,7 +288,8 @@ export const teacherApi = {
   markNotificationRead: (id: string) => api.patch(`/teacher/notifications/${id}/read`),
   getUnreadCount: () => api.get('/teacher/notifications/unread-count'),
   markAllRead: () => api.patch('/teacher/notifications/read-all'),
-  getAnnouncements: () => api.get('/teacher/announcements'),
+  getAnnouncements: (cursor?: string | null) =>
+    api.get<Paginated<Announcement>>('/teacher/announcements', { params: cursor ? { cursor } : {} }),
   getSchedule: () => api.get('/teacher/schedule'),
   getSalary: () => api.get('/teacher/salary'),
 };
@@ -314,7 +317,10 @@ export const chatApi = {
 
 // ---- ACADEMIC / LEARN ----
 export const academicApi = {
-  getPosts: (classId?: string) => api.get('/academic/posts', { params: classId ? { classId } : {} }),
+  getPosts: (classId?: string, cursor?: string | null) =>
+    api.get<Paginated<AcademicPost>>('/academic/posts', {
+      params: { ...(classId ? { classId } : {}), ...(cursor ? { cursor } : {}) },
+    }),
   getPost: (id: string) => api.get(`/academic/posts/${id}`),
   toggleLike: (postId: string) => api.post(`/academic/posts/${postId}/like`),
   toggleSave: (postId: string) => api.post(`/academic/posts/${postId}/save`),

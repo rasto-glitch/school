@@ -1,4 +1,5 @@
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo } from 'react';
+import { usePaginated } from '../../hooks/usePaginated';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
   TextInput, ActivityIndicator, Alert, Modal, Image, Switch,
@@ -25,8 +26,11 @@ export default function TeacherPostsScreen({ subject, classes, subjects, teachin
   const { user } = useAuthStore();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
-  const [posts, setPosts] = useState<AcademicPost[]>([]);
-  const [loading, setLoading] = useState(true);
+  const {
+    items: allPosts, setItems: setPosts, loading, loadingMore, reload, onScroll,
+  } = usePaginated<AcademicPost>(c => academicApi.getPosts(undefined, c));
+  // Show only this teacher's own posts; auto-load keeps filling as you scroll.
+  const posts = allPosts.filter(p => p.author_user_id === user?.id);
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -46,18 +50,6 @@ export default function TeacherPostsScreen({ subject, classes, subjects, teachin
     else if (selectedSubject && !subjectOptions.some(o => o.name === selectedSubject)) setSelectedSubject('');
   }, [classId, subjectOptions.length]);
 
-  const load = useCallback(() => {
-    academicApi.getPosts()
-      .then(r => {
-        const all: AcademicPost[] = r.data || [];
-        // Show only this teacher's own posts here
-        setPosts(all.filter(p => p.author_user_id === user?.id));
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [user?.id]);
-
-  useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
     if (classes.length > 0 && !classId) setClassId(classes[0].id);
@@ -108,7 +100,7 @@ export default function TeacherPostsScreen({ subject, classes, subjects, teachin
       });
       resetForm();
       setShowForm(false);
-      load();
+      reload();
     } catch {
       Alert.alert('Error', 'Could not create post.');
     } finally {
@@ -132,7 +124,11 @@ export default function TeacherPostsScreen({ subject, classes, subjects, teachin
 
   return (
     <View style={{ flex: 1 }}>
-      <ScrollView contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 80 }]}>
+      <ScrollView
+        contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 80 }]}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+      >
         {loading ? (
           <CardListSkeleton count={3} />
         ) : posts.length === 0 ? (
@@ -170,6 +166,9 @@ export default function TeacherPostsScreen({ subject, classes, subjects, teachin
               </TouchableOpacity>
             </TouchableOpacity>
           ))
+        )}
+        {loadingMore && (
+          <ActivityIndicator style={{ marginVertical: spacing.md }} color={colors.primary} />
         )}
       </ScrollView>
 

@@ -54,7 +54,10 @@ export default function TeacherDashboardScreen() {
       setScheduleDays(sched.value.data?.scheduleDays ?? []);
       setScheduleCells(sched.value.data?.assignments ?? []);
     }
-    if (ann.status === 'fulfilled') setAnnouncements(ann.value.data || []);
+    if (ann.status === 'fulfilled') {
+      const b = ann.value.data;
+      setAnnouncements(Array.isArray(b) ? b : b?.data ?? []);
+    }
   }, []);
 
   const handleToggleAnnouncementLike = async (id: string) => {

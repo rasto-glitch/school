@@ -1,8 +1,9 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   View, Text, ScrollView, StyleSheet,
-  RefreshControl, TouchableOpacity,
+  RefreshControl, TouchableOpacity, ActivityIndicator,
 } from 'react-native';
+import { usePaginated } from '../../hooks/usePaginated';
 import { DashboardSkeleton } from '../../components/Skeleton';
 import { useTranslation } from 'react-i18next';
 import { useNavigation } from '@react-navigation/native';
@@ -32,27 +33,18 @@ export default function FeedScreen() {
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { reportCount, bookingCount, homeworkCount, assignmentCount, gradeCount } = useBadgeStore();
-  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const {
+    items: announcements, setItems: setAnnouncements, loading, loadingMore, refreshing, refresh, onScroll,
+  } = usePaginated<Announcement>(parentApi.getAnnouncements);
   const [grades, setGrades] = useState<Grade[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
 
-  const load = async () => {
-    const [ann, gr] = await Promise.allSettled([
-      parentApi.getAnnouncements(),
-      parentApi.getGrades(),
-    ]);
-    if (ann.status === 'fulfilled') setAnnouncements(ann.value.data || []);
-    if (gr.status === 'fulfilled') setGrades((gr.value.data || []).slice(0, 3));
-  };
+  const loadGrades = useCallback(() => {
+    parentApi.getGrades().then(r => setGrades((r.data || []).slice(0, 3))).catch(() => {});
+  }, []);
+  useEffect(() => { loadGrades(); }, [loadGrades]);
 
-  useEffect(() => { load().finally(() => setLoading(false)); }, []);
-  useRefreshOnFocus(load);
-
-  const onRefresh = () => {
-    setRefreshing(true);
-    load().finally(() => setRefreshing(false));
-  };
+  const refreshAll = useCallback(() => { refresh(); loadGrades(); }, [refresh, loadGrades]);
+  useRefreshOnFocus(refreshAll);
 
   const handleToggleLike = async (id: string) => {
     setAnnouncements(prev => prev.map(a => a.id === id ? {
@@ -75,7 +67,9 @@ export default function FeedScreen() {
     <ScrollView
       style={styles.container}
       contentContainerStyle={[styles.content, { paddingTop: spacing.md }]}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+      onScroll={onScroll}
+      scrollEventThrottle={16}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refreshAll} tintColor={colors.primary} />}
     >
       {/* Header */}
       <View style={styles.header}>
@@ -138,15 +132,20 @@ export default function FeedScreen() {
           <Text style={styles.emptyText}>{t('dashboard.no_activity')}</Text>
         </View>
       ) : (
-        announcements.map(ann => (
-          <AnnouncementCard
-            key={ann.id}
-            announcement={ann}
-            onPress={() => navigation.navigate('AnnouncementDetail', { announcement: ann })}
-            onPressComment={() => navigation.navigate('AnnouncementDetail', { announcement: ann, focusComment: true })}
-            onToggleLike={() => handleToggleLike(ann.id)}
-          />
-        ))
+        <>
+          {announcements.map(ann => (
+            <AnnouncementCard
+              key={ann.id}
+              announcement={ann}
+              onPress={() => navigation.navigate('AnnouncementDetail', { announcement: ann })}
+              onPressComment={() => navigation.navigate('AnnouncementDetail', { announcement: ann, focusComment: true })}
+              onToggleLike={() => handleToggleLike(ann.id)}
+            />
+          ))}
+          {loadingMore && (
+            <ActivityIndicator style={{ marginVertical: spacing.md }} color={colors.primary} />
+          )}
+        </>
       )}
     </ScrollView>
   );

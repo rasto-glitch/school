@@ -30,7 +30,10 @@ export default function ParentDashboard() {
       parentApi.getAnnouncements(),
     ]).then(([c, ann]) => {
       if (c.status === 'fulfilled') setChildren(c.value.data || []);
-      if (ann.status === 'fulfilled') setAnnouncements(ann.value.data || []);
+      if (ann.status === 'fulfilled') {
+        const body = ann.value.data;
+        setAnnouncements(Array.isArray(body) ? body : body?.data ?? []);
+      }
       if ([c, ann].every(r => r.status === 'rejected')) setError(true);
     }).finally(() => setLoading(false));
   }, [retryKey]);

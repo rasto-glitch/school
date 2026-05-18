@@ -35,7 +35,7 @@ export default function NotificationsPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const {
-    items: notifications, setItems, loading, loadingMore, error, hasMore, loadMore, reload,
+    items: notifications, setItems, loading, loadingMore, error, reload, sentinelRef,
   } = usePaginated<Notification>(parentApi.getNotifications);
 
   const markRead = async (id: string) => {
@@ -120,15 +120,10 @@ export default function NotificationsPage() {
               </div>
             </div>
           ))}
-          {hasMore && (
-            <button
-              onClick={loadMore}
-              disabled={loadingMore}
-              className="w-full py-3 text-sm font-medium text-primary-600 border border-primary-200 rounded-xl hover:bg-primary-50 transition-colors disabled:opacity-50"
-            >
-              {loadingMore ? 'Loading…' : 'See previous notifications'}
-            </button>
+          {loadingMore && (
+            <p className="py-3 text-center text-sm text-gray-400">Loading…</p>
           )}
+          <div ref={sentinelRef} aria-hidden className="h-px" />
         </div>
       )}
     </PageLayout>

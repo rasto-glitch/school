@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { usePaginated } from '../../hooks/usePaginated';
 import { toast } from 'react-toastify';
 import { Megaphone, Trash2, Paperclip, X, Image as ImageIcon, Heart, MessageCircle } from 'lucide-react';
 import { adminApi } from '../../services/api';
@@ -16,8 +17,9 @@ import { format, parseISO } from 'date-fns';
 
 export default function AnnouncementsPage() {
   const { school } = useAuthStore();
-  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
-  const [loading, setLoading] = useState(true);
+  const {
+    items: announcements, loading, loadingMore, reload, sentinelRef,
+  } = usePaginated<Announcement>(adminApi.getAnnouncements);
   const [submitting, setSubmitting] = useState(false);
 
   const { register, handleSubmit, reset } = useForm<{
@@ -31,10 +33,6 @@ export default function AnnouncementsPage() {
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
   const [uploadingCover, setUploadingCover] = useState(false);
 
-  const load = () => {
-    adminApi.getAnnouncements().then(r => setAnnouncements(r.data || [])).finally(() => setLoading(false));
-  };
-  useEffect(() => { load(); }, []);
 
   const onCoverChange = (file: File | null) => {
     setCoverFile(file);
@@ -65,7 +63,7 @@ export default function AnnouncementsPage() {
       onCoverChange(null);
       if (fileRef.current) fileRef.current.value = '';
       if (imageRef.current) imageRef.current.value = '';
-      load();
+      reload();
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Failed');
     } finally {
@@ -78,7 +76,7 @@ export default function AnnouncementsPage() {
     if (!confirm('Delete this announcement?')) return;
     await adminApi.deleteAnnouncement(id);
     toast.success('Deleted');
-    load();
+    reload();
   };
 
   return (
@@ -173,7 +171,7 @@ export default function AnnouncementsPage() {
           {loading ? <LoadingSpinner /> : announcements.length === 0 ? (
             <EmptyState title="No announcements yet" icon={<Megaphone className="w-8 h-8 text-gray-400" />} />
           ) : (
-            <div className="space-y-4 max-h-[800px] overflow-y-auto pr-1">
+            <div className="space-y-4">
               {announcements.map(ann => {
                 const announcerName = ann.users?.role === 'admin'
                   ? (school?.name || 'School')
@@ -223,6 +221,10 @@ export default function AnnouncementsPage() {
                   </article>
                 );
               })}
+              {loadingMore && (
+                <p className="py-3 text-center text-sm text-gray-400">Loading…</p>
+              )}
+              <div ref={sentinelRef} aria-hidden className="h-px" />
             </div>
           )}
         </div>

@@ -19,7 +19,8 @@ export default function DashboardScreen() {
       parentApi.getAnnouncements(),
     ]).then(([hw, ann]) => {
       setHomework((hw.data || []).slice(0, 3));
-      setAnnouncements((ann.data || []).slice(0, 3));
+      const annBody = ann.data;
+      setAnnouncements((Array.isArray(annBody) ? annBody : annBody?.data ?? []).slice(0, 3));
     }).finally(() => setLoading(false));
   }, []);
 

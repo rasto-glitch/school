@@ -24,7 +24,7 @@ export default function SupervisorNotificationsScreen() {
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const {
-    items: notifications, setItems, loading, loadingMore, refreshing, hasMore, loadMore, refresh,
+    items: notifications, setItems, loading, loadingMore, refreshing, refresh, onScroll,
   } = usePaginated<Notif>(supervisorApi.getNotifications);
   const [marking, setMarking] = useState<string | null>(null);
   const [markingAll, setMarkingAll] = useState(false);
@@ -70,6 +70,8 @@ export default function SupervisorNotificationsScreen() {
     <ScrollView
       style={styles.container}
       contentContainerStyle={styles.content}
+      onScroll={onScroll}
+      scrollEventThrottle={16}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.primary} />}
     >
       <View style={styles.titleRow}>
@@ -125,12 +127,8 @@ export default function SupervisorNotificationsScreen() {
             })}
           </View>
         ))}
-        {hasMore && (
-          <TouchableOpacity style={styles.markAllBtn} disabled={loadingMore} onPress={loadMore}>
-            {loadingMore
-              ? <ActivityIndicator size="small" color={colors.primary} />
-              : <Text style={styles.markAllText}>See previous notifications</Text>}
-          </TouchableOpacity>
+        {loadingMore && (
+          <ActivityIndicator style={{ marginVertical: spacing.md }} color={colors.primary} />
         )}
         </>
       )}

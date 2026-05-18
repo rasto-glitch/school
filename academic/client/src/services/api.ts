@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { useAuthStore } from '../store/authStore';
+import type { Paginated, AcademicPost } from '../types';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
@@ -29,8 +30,10 @@ export const authApi = {
 
 export const academicApi = {
   // Posts
-  getPosts: (classId?: string) =>
-    api.get('/academic/posts', { params: classId ? { classId } : {} }),
+  getPosts: (classId?: string, cursor?: string | null) =>
+    api.get<Paginated<AcademicPost>>('/academic/posts', {
+      params: { ...(classId ? { classId } : {}), ...(cursor ? { cursor } : {}) },
+    }),
   getPost: (id: string) => api.get(`/academic/posts/${id}`),
   createPost: (data: {
     title: string; subject?: string; classId?: string;

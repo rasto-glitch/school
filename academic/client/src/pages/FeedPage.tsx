@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { usePaginated } from '../hooks/usePaginated';
 import { format } from 'date-fns';
 import { Plus, FileText, Paperclip, AlignLeft, Search, Filter, Heart, MessageCircle, Bookmark } from 'lucide-react';
 import { academicApi } from '../services/api';
@@ -143,21 +144,26 @@ function PostCard({ post, onToggleLike, onToggleSave }: {
 
 export default function FeedPage() {
   const { user } = useAuthStore();
-  const [posts, setPosts] = useState<AcademicPost[]>([]);
   const [classes, setClasses] = useState<AcademicClass[]>([]);
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [classFilter, setClassFilter] = useState('');
 
+  const {
+    items: posts, setItems: setPosts, loading, loadingMore, reload, sentinelRef,
+  } = usePaginated<AcademicPost>(c => academicApi.getPosts(classFilter || undefined, c));
+
+  // Class list is small and unfiltered — fetched once.
   useEffect(() => {
-    Promise.all([
-      academicApi.getPosts(classFilter || undefined),
-      academicApi.getClasses(),
-    ]).then(([postsRes, classesRes]) => {
-      setPosts(postsRes.data ?? []);
-      setClasses(classesRes.data ?? []);
-    }).finally(() => setLoading(false));
-  }, [classFilter]);
+    academicApi.getClasses().then(r => setClasses(r.data ?? [])).catch(() => {});
+  }, []);
+
+  // Re-page from the top when the class filter changes (skip first mount —
+  // the hook already loaded page 1).
+  const firstRun = useRef(true);
+  useEffect(() => {
+    if (firstRun.current) { firstRun.current = false; return; }
+    reload();
+  }, [classFilter, reload]);
 
   const filtered = posts.filter(p =>
     p.title.toLowerCase().includes(search.toLowerCase()) ||
@@ -255,6 +261,10 @@ export default function FeedPage() {
             {filtered.map(post => (
               <PostCard key={post.id} post={post} onToggleLike={handleToggleLike} onToggleSave={handleToggleSave} />
             ))}
+            {loadingMore && (
+              <p className="py-3 text-center text-sm text-gray-400">Loading…</p>
+            )}
+            <div ref={sentinelRef} aria-hidden className="h-px" />
           </div>
         )}
       </div>

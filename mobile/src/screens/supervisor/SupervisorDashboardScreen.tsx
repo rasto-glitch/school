@@ -58,7 +58,10 @@ export default function SupervisorDashboardScreen() {
     ]);
     if (ab.status === 'fulfilled') setAbsentList(ab.value.data || []);
     if (sm.status === 'fulfilled') setSummary((sm.value.data || []).filter((c: ClassSummary) => c.total > 0));
-    if (ann.status === 'fulfilled') setAnnouncements(ann.value.data || []);
+    if (ann.status === 'fulfilled') {
+      const b = ann.value.data;
+      setAnnouncements(Array.isArray(b) ? b : b?.data ?? []);
+    }
   }, []);
 
   const handleToggleAnnouncementLike = async (id: string) => {

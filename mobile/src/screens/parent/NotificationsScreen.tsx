@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { usePaginated } from '../../hooks/usePaginated';
 import { CardListSkeleton } from '../../components/Skeleton';
 import { useTranslation } from 'react-i18next';
@@ -132,7 +132,7 @@ export default function NotificationsScreen() {
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const {
-    items, setItems, loading, loadingMore, hasMore, loadMore,
+    items, setItems, loading, loadingMore, onScroll,
   } = usePaginated<Notification>(parentApi.getNotifications);
 
   const setUnreadCount = useBadgeStore(s => s.setUnreadCount);
@@ -158,6 +158,8 @@ export default function NotificationsScreen() {
     <ScrollView
       style={styles.container}
       contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.md }]}
+      onScroll={onScroll}
+      scrollEventThrottle={16}
     >
       <View style={styles.header}>
         <Text style={styles.title}>{t('notifications.title')}</Text>
@@ -198,10 +200,8 @@ export default function NotificationsScreen() {
               })}
             </View>
           ))}
-          {hasMore && (
-            <TouchableOpacity style={styles.prevButton} activeOpacity={0.7} disabled={loadingMore} onPress={loadMore}>
-              <Text style={styles.prevButtonText}>{loadingMore ? 'Loading…' : 'See previous notifications'}</Text>
-            </TouchableOpacity>
+          {loadingMore && (
+            <ActivityIndicator style={{ marginVertical: spacing.md }} color={colors.primary} />
           )}
         </>
       )}

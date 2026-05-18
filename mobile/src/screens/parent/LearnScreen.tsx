@@ -226,7 +226,13 @@ export default function LearnScreen() {
         academicApi.getEbookProgress(),
         parentApi.getChildren(),
       ]);
-      if (p.status === 'fulfilled') setPosts(p.value.data ?? []);
+      if (p.status === 'fulfilled') {
+        // Envelope-safe: getPosts is now keyset-paginated. This tabbed
+        // aggregate screen shows the first page; full pagination of the
+        // Posts tab is a tracked follow-up.
+        const b = p.value.data as AcademicPost[] | { data: AcademicPost[] };
+        setPosts(Array.isArray(b) ? b : b?.data ?? []);
+      }
       if (s.status === 'fulfilled') setSaved(s.value.data ?? []);
       if (e.status === 'fulfilled') setEbooks(e.value.data ?? []);
       if (pr.status === 'fulfilled') setProgress(pr.value.data ?? []);

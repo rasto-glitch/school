@@ -4,6 +4,7 @@ import { safeExt } from '../utils/upload';
 import type { AuthRequest } from '../middleware/auth';
 import { notifyMany } from '../utils/notify';
 import { subjectAllowedForClass } from '../utils/curriculum';
+import { parseCursorParams, buildPage } from '../utils/pagination';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -149,66 +150,55 @@ async function decoratePosts(posts: any[], viewerUserId: string): Promise<any[]>
 export async function getPosts(req: AuthRequest, res: Response): Promise<void> {
   const { userId, role, schoolId } = req.user!;
   const { classId } = req.query as { classId?: string };
+  const { limit, cursor } = parseCursorParams(req.query as Record<string, unknown>);
+
+  // Composite-keyset predicate ("older than the cursor row"), AND-ed as its
+  // own OR-group alongside any role/class OR-group.
+  const cursorClause = cursor
+    ? `created_at.lt.${cursor.createdAt},and(created_at.eq.${cursor.createdAt},id.lt.${cursor.id})`
+    : null;
 
   try {
     const baseSelect = 'id, title, subject, body, content_type, content, attachment_url, attachment_name, image_url, is_published, created_at, updated_at, class_id, teacher_id, author_user_id, author_role, classes(name), teachers(full_name, subject, user_id)';
 
-    if (role === 'parent') {
-      const classIds = await getParentClassIds(userId);
-      // Teacher posts for child classes + school-wide supervisor posts
-      const teacherPosts = classIds.length > 0 ? supabase
-        .from('academic_posts')
-        .select(baseSelect)
-        .eq('school_id', schoolId)
-        .eq('is_published', true)
-        .eq('author_role', 'teacher')
-        .in('class_id', classIds) : null;
-      const supervisorPosts = supabase
-        .from('academic_posts')
-        .select(baseSelect)
-        .eq('school_id', schoolId)
-        .eq('is_published', true)
-        .eq('author_role', 'supervisor');
-
-      const [tRes, sRes] = await Promise.all([
-        teacherPosts ?? Promise.resolve({ data: [] as any[], error: null }),
-        supervisorPosts,
-      ]);
-      if (tRes.error || sRes.error) {
-        res.status(500).json({ error: tRes.error?.message ?? sRes.error?.message });
-        return;
-      }
-      const merged = [...(tRes.data ?? []), ...(sRes.data ?? [])].sort(
-        (a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      );
-      const decorated = await decoratePosts(merged, userId);
-      res.json(decorated);
-      return;
-    }
-
     let query = supabase
       .from('academic_posts')
       .select(baseSelect)
-      .eq('school_id', schoolId)
-      .order('created_at', { ascending: false });
+      .eq('school_id', schoolId);
 
-    if (classId) query = query.eq('class_id', classId);
-
-    if (role === 'teacher') {
-      const teacherId = await getTeacherId(userId);
-      if (!teacherId) { res.json([]); return; }
-      query = query.or(`is_published.eq.true,and(author_user_id.eq.${userId},author_role.eq.teacher)`);
-    } else if (role === 'supervisor') {
-      // Supervisors see all published + their own drafts
-      query = query.or(`is_published.eq.true,and(author_user_id.eq.${userId},author_role.eq.supervisor)`);
-    } else {
+    if (role === 'parent') {
+      // Collapsed union: published supervisor posts (school-wide) OR
+      // published teacher posts for the child's classes — one keyset query
+      // instead of two merged in memory.
+      const classIds = await getParentClassIds(userId);
       query = query.eq('is_published', true);
+      query = classIds.length > 0
+        ? query.or(`author_role.eq.supervisor,and(author_role.eq.teacher,class_id.in.(${classIds.join(',')}))`)
+        : query.eq('author_role', 'supervisor');
+    } else {
+      if (classId) query = query.eq('class_id', classId);
+      if (role === 'teacher') {
+        const teacherId = await getTeacherId(userId);
+        if (!teacherId) { res.json({ data: [], limit, nextCursor: null }); return; }
+        query = query.or(`is_published.eq.true,and(author_user_id.eq.${userId},author_role.eq.teacher)`);
+      } else if (role === 'supervisor') {
+        query = query.or(`is_published.eq.true,and(author_user_id.eq.${userId},author_role.eq.supervisor)`);
+      } else {
+        query = query.eq('is_published', true);
+      }
     }
 
-    const { data, error } = await query;
+    if (cursorClause) query = query.or(cursorClause);
+
+    const { data, error } = await query
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
+      .limit(limit + 1);
     if (error) { res.status(500).json({ error: error.message }); return; }
-    const decorated = await decoratePosts(data ?? [], userId);
-    res.json(decorated);
+
+    const page = buildPage((data ?? []) as { id: string; created_at: string }[], limit);
+    const decorated = await decoratePosts(page.data, userId);
+    res.json({ data: decorated, limit: page.limit, nextCursor: page.nextCursor });
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch posts' });
   }

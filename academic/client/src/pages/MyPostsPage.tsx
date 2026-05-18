@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { usePaginated } from '../hooks/usePaginated';
 import { format } from 'date-fns';
 import { Plus, Pencil, Trash2, Globe, EyeOff } from 'lucide-react';
 import { toast } from 'react-toastify';
@@ -57,20 +57,15 @@ function PostRow({ post, onDelete, onToggle }: {
 export default function MyPostsPage() {
   const { user } = useAuthStore();
   const navigate = useNavigate();
-  const [posts, setPosts] = useState<AcademicPost[]>([]);
-  const [loading, setLoading] = useState(true);
+  const {
+    items: allPosts, setItems, loading, loadingMore, sentinelRef,
+  } = usePaginated<AcademicPost>(c => academicApi.getPosts(undefined, c));
 
-  const load = () =>
-    academicApi.getPosts()
-      .then(r => {
-        // Filter to only own posts (teacher sees own + all published, we show only own)
-        const all: AcademicPost[] = r.data ?? [];
-        // user.id is the user_id, post.teachers.user_id should match
-        setPosts(all.filter(p => p.teachers?.user_id === user?.id || !p.is_published));
-      })
-      .finally(() => setLoading(false));
-
-  useEffect(() => { load(); }, []);
+  // Teacher sees own + all published; show only their own (+ own drafts).
+  // The filter applies to whatever pages have loaded; auto-scroll keeps
+  // pulling more, so the list fills in progressively.
+  const posts = allPosts.filter(p => p.teachers?.user_id === user?.id || !p.is_published);
+  const setPosts = setItems;
 
   const handleDelete = async (id: string) => {
     if (!confirm('Delete this post?')) return;
@@ -136,6 +131,10 @@ export default function MyPostsPage() {
                 {published.map(p => <PostRow key={p.id} post={p} onDelete={handleDelete} onToggle={handleToggle} />)}
               </div>
             )}
+            {loadingMore && (
+              <p className="py-3 text-center text-sm text-gray-400">Loading…</p>
+            )}
+            <div ref={sentinelRef} aria-hidden className="h-px" />
           </div>
         )}
       </div>

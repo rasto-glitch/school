@@ -5,6 +5,7 @@ import { supabase } from '../config/supabase';
 import { safeExt } from '../utils/upload';
 import type { AuthRequest } from '../middleware/auth';
 import { toCC } from '../utils/transform';
+import { parseCursorParams, buildPage } from '../utils/pagination';
 import { notify, notifyMany } from '../utils/notify';
 import { loadArchiveSnapshot, streamPdf, buildXlsx } from '../utils/archiveExport';
 import { loadEmployeeArchiveSnapshot, streamPdf as streamEmployeePdf, buildXlsx as buildEmployeeXlsx } from '../utils/employeeArchiveExport';
@@ -1978,16 +1979,30 @@ const ANNOUNCEMENT_SELECT = '*, users:created_by(id, first_name, last_name, role
 
 export async function getAnnouncements(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId, userId } = req.user!;
+  const { limit, cursor } = parseCursorParams(req.query as Record<string, unknown>);
   const cutoff = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
-  const { data, error } = await supabase
+
+  let query = supabase
     .from('announcements')
     .select(ANNOUNCEMENT_SELECT)
     .eq('school_id', schoolId)
-    .gte('created_at', cutoff)
-    .order('created_at', { ascending: false });
+    .gte('created_at', cutoff);
+  if (cursor) {
+    query = query.or(
+      `created_at.lt.${cursor.createdAt},and(created_at.eq.${cursor.createdAt},id.lt.${cursor.id})`,
+    );
+  }
+
+  const { data, error } = await query
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(limit + 1);
   if (error) { res.status(500).json({ error: error.message }); return; }
-  const decorated = await decorateAnnouncements(data ?? [], userId);
-  res.json(toCC(decorated));
+
+  // Page first, then decorate only the rows we return (bounded fan-out).
+  const page = buildPage((data ?? []) as { id: string; created_at: string }[], limit);
+  const decorated = await decorateAnnouncements(page.data, userId);
+  res.json({ data: toCC(decorated), limit: page.limit, nextCursor: page.nextCursor });
 }
 
 export async function getAnnouncementById(req: AuthRequest, res: Response): Promise<void> {

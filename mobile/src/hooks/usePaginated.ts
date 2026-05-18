@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 import type { AxiosResponse } from 'axios';
 import type { Paginated } from '../types';
 
@@ -48,14 +49,23 @@ export function usePaginated<T>(fetcher: Fetcher<T>) {
     setLoadingMore(true);
     fetcherRef.current(cursorRef.current)
       .then(r => apply(r.data, true))
-      .catch(() => { /* keep what we have */ })
+      .catch(() => { /* keep what we have; next scroll retries */ })
       .finally(() => setLoadingMore(false));
   }, [loadingMore]);
 
   useEffect(() => { reload(); }, [reload]);
 
+  // Seamless auto-load: wire `onScroll`/`scrollEventThrottle={16}` on the
+  // ScrollView. The next page fetches 500px before the bottom, so it's
+  // arriving while the user is still reading — no button, no visible stop.
+  const onScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
+    const distanceFromBottom = contentSize.height - contentOffset.y - layoutMeasurement.height;
+    if (distanceFromBottom < 500) loadMore();
+  }, [loadMore]);
+
   return {
     items, setItems, loading, loadingMore, refreshing, error, hasMore,
-    loadMore, reload, refresh: () => reload(true),
+    loadMore, reload, refresh: () => reload(true), onScroll,
   };
 }

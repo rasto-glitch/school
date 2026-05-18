@@ -5,29 +5,23 @@ import type { Paginated } from '../types';
 type Fetcher<T> = (cursor: string | null) => Promise<AxiosResponse<Paginated<T>>>;
 
 /**
- * Drives a keyset-paginated list with no data-fetching library.
- * - `items`     accumulated rows across pages
- * - `loadMore`  fetches the next page (no-op when exhausted / in flight)
- * - `setItems`  exposed for optimistic local edits (mark-as-read etc.)
- *
- * A bare-array (legacy) response is tolerated so a backend/web deploy skew
- * can't blank the screen.
+ * Keyset-paginated list with seamless auto-load (no library). Attach
+ * `sentinelRef` to an element at the end of the list; the next page fetches
+ * 600px before it scrolls into view. Tolerates a legacy bare-array body so
+ * a backend/client deploy skew can't blank the screen.
  */
 export function usePaginated<T>(fetcher: Fetcher<T>) {
   const [items, setItems] = useState<T[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(false);
-  const [hasMore, setHasMore] = useState(false);
   const cursorRef = useRef<string | null>(null);
   const fetcherRef = useRef(fetcher);
   fetcherRef.current = fetcher;
 
   const apply = (body: Paginated<T> | T[], append: boolean) => {
     const page: T[] = Array.isArray(body) ? body : body.data;
-    const next: string | null = Array.isArray(body) ? null : body.nextCursor;
-    cursorRef.current = next;
-    setHasMore(!!next);
+    cursorRef.current = Array.isArray(body) ? null : body.nextCursor;
     setItems(prev => (append ? [...prev, ...page] : page));
   };
 
@@ -52,10 +46,6 @@ export function usePaginated<T>(fetcher: Fetcher<T>) {
 
   useEffect(() => { reload(); }, [reload]);
 
-  // Seamless auto-load: attach `sentinelRef` to an element at the end of
-  // the list. It fetches the next page 600px BEFORE the sentinel enters the
-  // viewport, so the next chunk is already arriving while the user is still
-  // reading — no button, no visible stop.
   const observerRef = useRef<IntersectionObserver | null>(null);
   const sentinelRef = useCallback((node: HTMLElement | null) => {
     observerRef.current?.disconnect();
@@ -68,5 +58,5 @@ export function usePaginated<T>(fetcher: Fetcher<T>) {
   }, [loadMore]);
   useEffect(() => () => observerRef.current?.disconnect(), []);
 
-  return { items, setItems, loading, loadingMore, error, hasMore, loadMore, reload, sentinelRef };
+  return { items, setItems, loading, loadingMore, error, loadMore, reload, sentinelRef };
 }

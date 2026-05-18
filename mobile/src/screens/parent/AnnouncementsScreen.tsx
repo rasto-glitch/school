@@ -1,5 +1,6 @@
-import { useState, useMemo, useRef, useCallback } from 'react';
-import { View, Text, ScrollView, StyleSheet, RefreshControl } from 'react-native';
+import { useMemo, useRef, useCallback } from 'react';
+import { View, Text, ScrollView, StyleSheet, RefreshControl, ActivityIndicator } from 'react-native';
+import { usePaginated } from '../../hooks/usePaginated';
 import { HeroListSkeleton } from '../../components/Skeleton';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -20,28 +21,22 @@ export default function AnnouncementsScreen() {
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const [items, setItems] = useState<Announcement[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const {
+    items, setItems, loading, loadingMore, refreshing, refresh, onScroll,
+  } = usePaginated<Announcement>(parentApi.getAnnouncements);
   const initialized = useRef(false);
   const setUnreadCount = useBadgeStore(s => s.setUnreadCount);
 
-  const load = () => parentApi.getAnnouncements().then(r => setItems(r.data || []));
-
   useFocusEffect(
     useCallback(() => {
-      if (!initialized.current) {
-        initialized.current = true;
-        load().finally(() => setLoading(false));
-      } else {
-        load();
-      }
+      // The hook already fetches page 1 on mount; only re-fetch on
+      // subsequent focuses. refresh() uses the spinner, not the skeleton.
+      if (initialized.current) refresh();
+      else initialized.current = true;
       parentApi.markTypeRead('announcement').catch(() => {});
       parentApi.getUnreadCount().then(r => setUnreadCount(r.data?.count ?? 0)).catch(() => {});
-    }, [])
+    }, [refresh, setUnreadCount])
   );
-
-  const onRefresh = () => { setRefreshing(true); load().finally(() => setRefreshing(false)); };
 
   const handleToggleLike = async (id: string) => {
     setItems(prev => prev.map(a => a.id === id ? {
@@ -56,7 +51,9 @@ export default function AnnouncementsScreen() {
     <ScrollView
       style={styles.container}
       contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.md }]}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+      onScroll={onScroll}
+      scrollEventThrottle={16}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.primary} />}
     >
       <View style={styles.header}>
         <Text style={styles.title}>{t('announcements.title')}</Text>
@@ -71,15 +68,20 @@ export default function AnnouncementsScreen() {
           <Text style={styles.emptyText}>{t('announcements.no_announcements')}</Text>
         </View>
       ) : (
-        items.map(ann => (
-          <AnnouncementCard
-            key={ann.id}
-            announcement={ann}
-            onPress={() => navigation.navigate('AnnouncementDetail', { announcement: ann })}
-            onPressComment={() => navigation.navigate('AnnouncementDetail', { announcement: ann, focusComment: true })}
-            onToggleLike={() => handleToggleLike(ann.id)}
-          />
-        ))
+        <>
+          {items.map(ann => (
+            <AnnouncementCard
+              key={ann.id}
+              announcement={ann}
+              onPress={() => navigation.navigate('AnnouncementDetail', { announcement: ann })}
+              onPressComment={() => navigation.navigate('AnnouncementDetail', { announcement: ann, focusComment: true })}
+              onToggleLike={() => handleToggleLike(ann.id)}
+            />
+          ))}
+          {loadingMore && (
+            <ActivityIndicator style={{ marginVertical: spacing.md }} color={colors.primary} />
+          )}
+        </>
       )}
     </ScrollView>
   );

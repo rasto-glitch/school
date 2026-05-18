@@ -140,16 +140,29 @@ export async function getAssignments(req: AuthRequest, res: Response): Promise<v
 
 export async function getAnnouncements(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId, userId } = req.user!;
+  const { limit, cursor } = parseCursorParams(req.query as Record<string, unknown>);
   const cutoff = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
-  const { data, error } = await supabase.from('announcements')
+
+  let query = supabase.from('announcements')
     .select('*, users:created_by(id, first_name, last_name, role, profile_picture)')
     .eq('school_id', schoolId)
     .in('target_audience', ['all', 'parents'])
-    .gte('created_at', cutoff)
-    .order('created_at', { ascending: false });
+    .gte('created_at', cutoff);
+  if (cursor) {
+    query = query.or(
+      `created_at.lt.${cursor.createdAt},and(created_at.eq.${cursor.createdAt},id.lt.${cursor.id})`,
+    );
+  }
+
+  const { data, error } = await query
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(limit + 1);
   if (error) { res.status(500).json({ error: error.message }); return; }
-  const decorated = await decorateAnnouncements(data ?? [], userId);
-  res.json(toCC(decorated));
+
+  const page = buildPage((data ?? []) as { id: string; created_at: string }[], limit);
+  const decorated = await decorateAnnouncements(page.data, userId);
+  res.json({ data: toCC(decorated), limit: page.limit, nextCursor: page.nextCursor });
 }
 
 export async function getHomeworkById(req: AuthRequest, res: Response): Promise<void> {

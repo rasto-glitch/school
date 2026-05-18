@@ -23,7 +23,7 @@ function groupByDate(notifications: Notification[]) {
 export default function SupervisorNotificationsPage() {
   const navigate = useNavigate();
   const {
-    items: notifications, setItems, loading, loadingMore, hasMore, loadMore,
+    items: notifications, setItems, loading, loadingMore, sentinelRef,
   } = usePaginated<Notification>(supervisorApi.getNotifications);
 
   const markRead = async (id: string) => {
@@ -104,15 +104,10 @@ export default function SupervisorNotificationsPage() {
               </div>
             </div>
           ))}
-          {hasMore && (
-            <button
-              onClick={loadMore}
-              disabled={loadingMore}
-              className="w-full py-3 text-sm font-medium text-primary-600 border border-primary-200 rounded-xl hover:bg-primary-50 transition-colors disabled:opacity-50"
-            >
-              {loadingMore ? 'Loading…' : 'See previous notifications'}
-            </button>
+          {loadingMore && (
+            <p className="py-3 text-center text-sm text-gray-400">Loading…</p>
           )}
+          <div ref={sentinelRef} aria-hidden className="h-px" />
         </div>
       )}
     </PageLayout>

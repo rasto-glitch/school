@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { useAuthStore } from '../store/authStore';
-import type { Paginated, Notification } from '../types';
+import type { Paginated, Notification, Announcement } from '../types';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
@@ -120,7 +120,8 @@ export const parentApi = {
   getArchivedChild: (id: string) => api.get(`/parent/archived-children/${id}`),
   getHomework: (params?: Record<string, string>) => api.get('/parent/homework', { params }),
   getAssignments: (params?: Record<string, string>) => api.get('/parent/assignments', { params }),
-  getAnnouncements: () => api.get('/parent/announcements'),
+  getAnnouncements: (cursor?: string | null) =>
+    api.get<Paginated<Announcement>>('/parent/announcements', { params: cursor ? { cursor } : {} }),
   getReports: (params?: Record<string, string>) => api.get('/parent/reports', { params }),
   getGrades: (studentId?: string) => api.get('/parent/grades', { params: studentId ? { studentId } : {} }),
   getBusLocation: (studentId?: string) => api.get('/parent/bus-location', { params: { studentId } }),
@@ -272,7 +273,8 @@ export const adminApi = {
   sendNotification: (data: object) => api.post('/admin/notifications', data),
   getUnreadNotificationCount: () => api.get('/admin/notifications/unread-count'),
   markAllNotificationsRead: () => api.patch('/admin/notifications/read-all'),
-  getAnnouncements: () => api.get('/admin/announcements'),
+  getAnnouncements: (cursor?: string | null) =>
+    api.get<Paginated<Announcement>>('/admin/announcements', { params: cursor ? { cursor } : {} }),
   createAnnouncement: (data: FormData | object) =>
     api.post('/admin/announcements', data,
       data instanceof FormData ? { headers: { 'Content-Type': 'multipart/form-data' } } : {}),
