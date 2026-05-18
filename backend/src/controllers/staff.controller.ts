@@ -20,6 +20,7 @@ async function snapshotStaffArchive(
   staff: Record<string, any>,
   rawReason: unknown,
   departureDate: string,
+  actor: { id: string; name: string; role: string },
 ): Promise<{ ok: true; archiveId: string } | { ok: false; error: string }> {
   const { data: payments } = await supabase
     .from('staff_salary_payments')
@@ -72,6 +73,9 @@ async function snapshotStaffArchive(
         insurancePaidOutNotes: staff.insurance_paid_out_notes ?? null,
       },
       payment_history: paymentHistory,
+      archived_by: actor.id,
+      archived_by_name: actor.name,
+      archived_by_role: actor.role,
     })
     .select('id')
     .single();
@@ -430,7 +434,7 @@ export async function deleteStaff(req: AuthRequest, res: Response): Promise<void
   let archived: { archived: true; archiveId: string } | { archived: false } = { archived: false };
   if (await hasArchiveFeature(schoolId)) {
     const departureDate = (req.body?.departureDate as string | undefined) || new Date().toISOString().split('T')[0];
-    const snap = await snapshotStaffArchive(schoolId, before as Record<string, any>, reason, departureDate);
+    const snap = await snapshotStaffArchive(schoolId, before as Record<string, any>, reason, departureDate, { id: userId, name: req.user!.username, role: req.user!.role });
     if (snap.ok) archived = { archived: true, archiveId: snap.archiveId };
     else console.error(`[staff archive] snapshot failed for staff ${id}: ${snap.error}`);
   }

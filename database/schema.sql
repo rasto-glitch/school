@@ -589,9 +589,58 @@ CREATE TABLE IF NOT EXISTS archived_students (
   classes_attended JSONB DEFAULT '[]',
   grades JSONB DEFAULT '[]',
   payment_history JSONB DEFAULT '[]',
+  archived_by UUID REFERENCES users(id) ON DELETE SET NULL,  -- actor; text copies below survive the actor's own deletion
+  archived_by_name TEXT,
+  archived_by_role TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_archived_students_school ON archived_students(school_id, created_at DESC);
+
+-- Atomic snapshot-insert + students-row delete (see migration 010 / 015).
+-- The controller builds the JSONB; this function just commits the pair.
+CREATE OR REPLACE FUNCTION archive_student_atomic(
+  p_school_id UUID,
+  p_student_id UUID,
+  p_full_name TEXT,
+  p_date_of_birth DATE,
+  p_enrollment_date DATE,
+  p_departure_date DATE,
+  p_reason TEXT,
+  p_parent_full_name TEXT,
+  p_parent_phone TEXT,
+  p_classes_attended JSONB,
+  p_grades JSONB,
+  p_payment_history JSONB,
+  p_archived_by UUID,
+  p_archived_by_name TEXT,
+  p_archived_by_role TEXT
+) RETURNS UUID
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_archive_id UUID;
+BEGIN
+  INSERT INTO archived_students (
+    school_id, original_student_id, full_name, date_of_birth, enrollment_date,
+    departure_date, reason, parent_full_name, parent_phone,
+    classes_attended, grades, payment_history,
+    archived_by, archived_by_name, archived_by_role
+  ) VALUES (
+    p_school_id, p_student_id, p_full_name, p_date_of_birth, p_enrollment_date,
+    p_departure_date, p_reason, p_parent_full_name, p_parent_phone,
+    COALESCE(p_classes_attended, '[]'::jsonb),
+    COALESCE(p_grades, '[]'::jsonb),
+    COALESCE(p_payment_history, '[]'::jsonb),
+    p_archived_by, p_archived_by_name, p_archived_by_role
+  )
+  RETURNING id INTO v_archive_id;
+
+  DELETE FROM students
+   WHERE id = p_student_id AND school_id = p_school_id;
+
+  RETURN v_archive_id;
+END;
+$$;
 
 -- ============================================================
 -- ARCHIVED EMPLOYEES
@@ -623,6 +672,9 @@ CREATE TABLE IF NOT EXISTS archived_employees (
   transport JSONB DEFAULT '{}',
   employment JSONB DEFAULT '{}',
   payment_history JSONB DEFAULT '[]',
+  archived_by UUID REFERENCES users(id) ON DELETE SET NULL,  -- actor; text copies below survive the actor's own deletion
+  archived_by_name TEXT,
+  archived_by_role TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_archived_employees_school ON archived_employees(school_id, created_at DESC);
@@ -654,7 +706,10 @@ CREATE OR REPLACE FUNCTION archive_employee_atomic(
   p_teaching JSONB,
   p_transport JSONB,
   p_employment JSONB,
-  p_payment_history JSONB
+  p_payment_history JSONB,
+  p_archived_by UUID,
+  p_archived_by_name TEXT,
+  p_archived_by_role TEXT
 ) RETURNS UUID
 LANGUAGE plpgsql
 AS $$
@@ -665,7 +720,8 @@ BEGIN
     school_id, original_employee_id, role, full_name, date_of_birth, age,
     phone_number, email, emergency_contact, profile_picture, position, subject,
     hire_date, departure_date, reason,
-    account, teaching, transport, employment, payment_history
+    account, teaching, transport, employment, payment_history,
+    archived_by, archived_by_name, archived_by_role
   ) VALUES (
     p_school_id, p_original_employee_id, p_role, p_full_name, p_date_of_birth, p_age,
     p_phone_number, p_email, p_emergency_contact, p_profile_picture, p_position, p_subject,
@@ -674,7 +730,8 @@ BEGIN
     COALESCE(p_teaching, '[]'::jsonb),
     COALESCE(p_transport, '{}'::jsonb),
     COALESCE(p_employment, '{}'::jsonb),
-    COALESCE(p_payment_history, '[]'::jsonb)
+    COALESCE(p_payment_history, '[]'::jsonb),
+    p_archived_by, p_archived_by_name, p_archived_by_role
   )
   RETURNING id INTO v_archive_id;
 
@@ -816,7 +873,8 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   entity_type TEXT NOT NULL CHECK (entity_type IN (
     'student','fee_plan','student_fee','fee_payment','staff_member','staff_salary_payment',
     'expense_category','expense_template','expense',
-    'accounting_period','payment_account','fx_rate','late_fee'
+    'accounting_period','payment_account','fx_rate','late_fee',
+    'teacher','driver','supervisor','admin'
   )),
   entity_id UUID NOT NULL,
   action TEXT NOT NULL CHECK (action IN ('create','update','delete')),

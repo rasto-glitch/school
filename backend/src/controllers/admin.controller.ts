@@ -51,6 +51,11 @@ interface PerformEmployeeArchiveArgs {
   transport?: unknown;
   employment?: unknown;
   paymentHistory?: unknown;
+  // Actor (F2): who performed the archive. Stored as text too so it
+  // survives this actor's own later deletion.
+  actorId: string;
+  actorName: string;
+  actorRole: string;
 }
 
 async function performEmployeeArchive(a: PerformEmployeeArchiveArgs): Promise<{ ok: true; archiveId: string } | { ok: false; error: string }> {
@@ -76,6 +81,9 @@ async function performEmployeeArchive(a: PerformEmployeeArchiveArgs): Promise<{ 
     p_transport: a.transport ?? {},
     p_employment: a.employment ?? {},
     p_payment_history: a.paymentHistory ?? [],
+    p_archived_by: a.actorId,
+    p_archived_by_name: a.actorName,
+    p_archived_by_role: a.actorRole,
   });
   if (error) return { ok: false, error: error.message };
   return { ok: true, archiveId: data as string };
@@ -921,6 +929,9 @@ export async function archiveStudent(req: AuthRequest, res: Response): Promise<v
     p_classes_attended: classesAttended,
     p_grades: gradesSnapshot,
     p_payment_history: paymentHistory,
+    p_archived_by: req.user!.userId,
+    p_archived_by_name: req.user!.username,
+    p_archived_by_role: req.user!.role,
   });
 
   if (rpcErr) {
@@ -2148,6 +2159,7 @@ export async function deleteTeacher(req: AuthRequest, res: Response): Promise<vo
       emergencyContact: teacher.emergency_contact, profilePicture: teacher.profile_picture,
       hireDate: teacher.created_at ? String(teacher.created_at).split('T')[0] : null,
       departureDate, reason, account, teaching,
+      actorId: req.user!.userId, actorName: req.user!.username, actorRole: req.user!.role,
     });
     if (!r.ok) { res.status(500).json({ error: r.error }); return; }
     await logAudit({ req, entityType: 'teacher', entityId: String(id), action: 'delete', before: teacher as Record<string, unknown>, label: teacher.full_name, reason: `Archived (${reason})` });
@@ -2214,6 +2226,7 @@ export async function deleteDriver(req: AuthRequest, res: Response): Promise<voi
       emergencyContact: driver.emergency_contact, profilePicture: driver.profile_picture,
       hireDate: driver.created_at ? String(driver.created_at).split('T')[0] : null,
       departureDate, reason, account, transport,
+      actorId: req.user!.userId, actorName: req.user!.username, actorRole: req.user!.role,
     });
     if (!r.ok) { res.status(500).json({ error: r.error }); return; }
     await logAudit({ req, entityType: 'driver', entityId: String(id), action: 'delete', before: driver as Record<string, unknown>, label: driver.full_name, reason: `Archived (${reason})` });
@@ -2847,6 +2860,7 @@ export async function deleteAccount(req: AuthRequest, res: Response): Promise<vo
           profilePicture: teacher.profile_picture ?? (user.profile_picture as string | null),
           hireDate: teacher.created_at ? String(teacher.created_at).split('T')[0] : null,
           departureDate, reason, account, teaching,
+          actorId: req.user!.userId, actorName: req.user!.username, actorRole: req.user!.role,
         });
         if (!r.ok) { res.status(500).json({ error: r.error }); return; }
         await logAudit({ req, entityType: 'teacher', entityId: String(teacher.id), action: 'delete', before: teacher as Record<string, unknown>, label: teacher.full_name, reason: `Archived (${reason})` });
@@ -2865,6 +2879,7 @@ export async function deleteAccount(req: AuthRequest, res: Response): Promise<vo
       profilePicture: user.profile_picture as string | null,
       hireDate: user.created_at ? String(user.created_at).split('T')[0] : null,
       departureDate, reason, account,
+      actorId: req.user!.userId, actorName: req.user!.username, actorRole: req.user!.role,
     });
     if (!r.ok) { res.status(500).json({ error: r.error }); return; }
     await logAudit({ req, entityType: bareRole, entityId: String(user.id), action: 'delete', before: account, label: fullName, reason: `Archived (${reason})` });
