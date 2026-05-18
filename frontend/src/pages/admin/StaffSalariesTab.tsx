@@ -7,9 +7,8 @@ import Input from '../../components/common/Input';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import EmptyState from '../../components/common/EmptyState';
 import Modal from '../../components/common/Modal';
-import ReturningEmployeeSearch, { type ReturningEmployeeCandidate } from '../../components/common/ReturningEmployeeSearch';
 import { Plus, Trash2, Pencil, Users as UsersIcon, BellRing, Receipt, History, Megaphone, Archive as ArchiveIcon, RotateCcw, FileDown, FileSpreadsheet, Shield, ShieldCheck, CalendarClock } from 'lucide-react';
-import type { StaffMember, StaffSalaryPayment, StaffSetupTeacher, StaffSetupSupervisor } from '../../types';
+import type { StaffMember, StaffSalaryPayment, StaffSetupTeacher, StaffSetupSupervisor, StaffSetupAdmin } from '../../types';
 
 type SubTab = 'active' | 'archive' | 'voided';
 
@@ -143,9 +142,9 @@ export default function StaffSalariesTab() {
   const [unvoidBusy, setUnvoidBusy] = useState<string | null>(null);
   const [teachers, setTeachers] = useState<StaffSetupTeacher[]>([]);
   const [supervisors, setSupervisors] = useState<StaffSetupSupervisor[]>([]);
+  const [admins, setAdmins] = useState<StaffSetupAdmin[]>([]);
   const [editing, setEditing] = useState<StaffForm | null>(null);
   const [saving, setSaving] = useState(false);
-  const [staffPrevLabel, setStaffPrevLabel] = useState('');
   const [notifyingId, setNotifyingId] = useState<string | null>(null);
   const [reactivatingId, setReactivatingId] = useState<string | null>(null);
   const [exporting, setExporting] = useState<string | null>(null);
@@ -182,6 +181,7 @@ export default function StaffSalariesTab() {
     const r = await staffApi.getSetup();
     setTeachers(r.data.teachers as StaffSetupTeacher[]);
     setSupervisors((r.data.supervisors ?? []) as StaffSetupSupervisor[]);
+    setAdmins((r.data.admins ?? []) as StaffSetupAdmin[]);
   };
   const loadAll = () => Promise.all([loadActive(), loadArchive()]);
   const loadVoided = async () => {
@@ -241,7 +241,9 @@ export default function StaffSalariesTab() {
   const save = async () => {
     if (!editing) return;
     const total = Number(editing.salaryAmount);
-    if (!editing.fullName.trim() || isNaN(total) || total < 0) { toast.error('Name and salary amount are required'); return; }
+    if (!editing.id && !editing.userId) { toast.error('Pick an employee from the roster'); return; }
+    if (isNaN(total) || total < 0) { toast.error('Salary amount is required'); return; }
+    if (!editing.fullName.trim()) { toast.error('Name is required'); return; }
     if (!editing.currency.trim()) { toast.error('Currency is required'); return; }
 
     let insurancePct: number | null = null;
@@ -266,13 +268,12 @@ export default function StaffSalariesTab() {
     try {
       if (editing.id) {
         await staffApi.update(editing.id, body);
-        toast.success('Staff updated');
+        toast.success('Salary updated');
       } else {
-        await staffApi.create({ ...body, previousArchiveId: editing.previousArchiveId || undefined });
-        toast.success('Staff added');
+        await staffApi.create(body);
+        toast.success('Added to payroll');
       }
       setEditing(null);
-      setStaffPrevLabel('');
       await Promise.all([loadAll(), loadSetup()]);
     } catch (e: any) {
       toast.error(e.response?.data?.error || 'Failed to save');
@@ -545,6 +546,11 @@ export default function StaffSalariesTab() {
     return supervisors.filter(s => !s.alreadyLinked || s.userId === editing.userId);
   }, [supervisors, editing]);
 
+  const availableAdmins = useMemo(() => {
+    if (!editing) return admins;
+    return admins.filter(a => !a.alreadyLinked || a.userId === editing.userId);
+  }, [admins, editing]);
+
   const list = subTab === 'active' ? active : archived;
 
   return (
@@ -566,11 +572,11 @@ export default function StaffSalariesTab() {
 
       {subTab === 'active' && (
         <div className="flex items-center justify-between mb-4">
-          <p className="text-sm text-gray-500">Track teacher and staff salaries. Linked teachers receive in-app notifications when reminders are sent.</p>
+          <p className="text-sm text-gray-500">Salaries for employees created in Admin → Employees. Pick a teacher/supervisor/administrator to put them on payroll; non-login staff appear automatically. Linked employees get in-app reminders.</p>
           <div className="flex gap-2 flex-wrap">
             <Button variant="ghost" onClick={openBulkNextPayment} icon={<CalendarClock className="w-4 h-4" />}>Set next payment</Button>
             <Button variant="ghost" onClick={() => setMassReminder({ ...emptyMass })} icon={<Megaphone className="w-4 h-4" />}>Mass reminder</Button>
-            <Button onClick={openNew} icon={<Plus className="w-4 h-4" />}>Add staff</Button>
+            <Button onClick={openNew} icon={<Plus className="w-4 h-4" />}>Add to payroll</Button>
           </div>
         </div>
       )}
@@ -648,7 +654,7 @@ export default function StaffSalariesTab() {
 
       {subTab !== 'voided' && (list === null ? <LoadingSpinner /> : list.length === 0 ? (
         subTab === 'active' ? (
-          <EmptyState title="No staff yet" description="Add a teacher or custom employee to start tracking salaries." icon={<UsersIcon className="w-8 h-8 text-gray-400" />} />
+          <EmptyState title="No one on payroll yet" description="Pick a teacher, supervisor or administrator to put them on payroll. Non-login staff added in Admin → Employees → Staff appear here automatically." icon={<UsersIcon className="w-8 h-8 text-gray-400" />} />
         ) : (
           <EmptyState title="Archive is empty" description="Deactivated or removed staff will appear here." icon={<ArchiveIcon className="w-8 h-8 text-gray-400" />} />
         )
@@ -744,63 +750,64 @@ export default function StaffSalariesTab() {
       ))}
 
       {editing && (
-        <Modal isOpen onClose={() => setEditing(null)} title={editing.id ? 'Edit staff' : 'Add staff'} size="lg">
+        <Modal isOpen onClose={() => setEditing(null)} title={editing.id ? 'Edit salary' : 'Add to payroll'} size="lg">
           <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Linked teacher / supervisor account (optional)</label>
-              <select
-                value={editing.userId}
-                onChange={e => {
-                  const userId = e.target.value;
-                  const t = teachers.find(x => x.userId === userId);
-                  const sup = !t ? supervisors.find(x => x.userId === userId) : undefined;
-                  setEditing({
-                    ...editing,
-                    userId,
-                    fullName: t ? t.fullName : sup ? sup.fullName : editing.fullName,
-                    position: t ? (t.subject ? `Teacher · ${t.subject}` : 'Teacher') : sup ? 'Supervisor' : editing.position,
-                  });
-                }}
-                className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-gray-900 bg-white min-h-[44px] focus:outline-none focus:ring-2 focus:ring-primary-500"
-              >
-                <option value="">— Custom employee (no account) —</option>
-                {availableTeachers.length > 0 && (
-                  <optgroup label="Teachers">
-                    {availableTeachers.map(t => (
-                      <option key={t.userId} value={t.userId}>
-                        {t.fullName}{t.subject ? ` (${t.subject})` : ''}
-                      </option>
-                    ))}
-                  </optgroup>
-                )}
-                {availableSupervisors.length > 0 && (
-                  <optgroup label="Supervisors">
-                    {availableSupervisors.map(s => (
-                      <option key={s.userId} value={s.userId}>
-                        {s.fullName}
-                      </option>
-                    ))}
-                  </optgroup>
-                )}
-              </select>
-              <p className="text-xs text-gray-500 mt-1">Linked teachers and supervisors receive a push notification when you send a reminder.</p>
-            </div>
-
-            <Input label="Full name" value={editing.fullName} onChange={e => setEditing({ ...editing, fullName: e.target.value })} placeholder="e.g. Sarah Ahmed" />
-            {!editing.id && (
-              <ReturningEmployeeSearch
-                role="staff"
-                nameQuery={editing.fullName}
-                linkedId={editing.previousArchiveId ?? null}
-                linkedLabel={staffPrevLabel}
-                onPick={(c: ReturningEmployeeCandidate) => {
-                  setEditing({ ...editing, fullName: c.fullName, previousArchiveId: c.id });
-                  setStaffPrevLabel(`${c.fullName} · ${c.reason}${c.departureDate ? ` ${c.departureDate}` : ''}`);
-                }}
-                onClear={() => { setEditing({ ...editing, previousArchiveId: null }); setStaffPrevLabel(''); }}
-              />
+            {!editing.id ? (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Employee</label>
+                <select
+                  value={editing.userId}
+                  onChange={e => {
+                    const userId = e.target.value;
+                    const t = teachers.find(x => x.userId === userId);
+                    const sup = !t ? supervisors.find(x => x.userId === userId) : undefined;
+                    const adm = !t && !sup ? admins.find(x => x.userId === userId) : undefined;
+                    setEditing({
+                      ...editing,
+                      userId,
+                      fullName: t ? t.fullName : sup ? sup.fullName : adm ? adm.fullName : '',
+                      position: t ? (t.subject ? `Teacher · ${t.subject}` : 'Teacher') : sup ? 'Supervisor' : adm ? 'Administrator' : '',
+                    });
+                  }}
+                  className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-gray-900 bg-white min-h-[44px] focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="">— Select an employee —</option>
+                  {availableTeachers.length > 0 && (
+                    <optgroup label="Teachers">
+                      {availableTeachers.map(t => (
+                        <option key={t.userId} value={t.userId}>
+                          {t.fullName}{t.subject ? ` (${t.subject})` : ''}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {availableSupervisors.length > 0 && (
+                    <optgroup label="Supervisors">
+                      {availableSupervisors.map(s => (
+                        <option key={s.userId} value={s.userId}>{s.fullName}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {availableAdmins.length > 0 && (
+                    <optgroup label="Administration">
+                      {availableAdmins.map(a => (
+                        <option key={a.userId} value={a.userId}>{a.fullName}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Teachers, supervisors and administrators come from Admin → Employees. Non-login staff (janitors, cooks…) are added in
+                  {' '}Admin → Employees → Staff and appear on this list automatically — no need to add them here.
+                </p>
+              </div>
+            ) : (
+              <div className="bg-gray-50 rounded-xl px-4 py-3">
+                <div className="text-sm font-semibold text-gray-900">{editing.fullName}</div>
+                {editing.position && <div className="text-xs text-gray-500 mt-0.5">{editing.position}</div>}
+                <div className="text-xs text-gray-400 mt-1">Name &amp; position are managed in Admin → Employees.</div>
+              </div>
             )}
-            <Input label="Position (optional)" value={editing.position} onChange={e => setEditing({ ...editing, position: e.target.value })} placeholder="e.g. Janitor, Bus Driver, Math Teacher" />
 
             <div className="grid grid-cols-2 gap-3">
               <Input label="Salary amount" type="number" step="0.01" value={editing.salaryAmount} onChange={e => setEditing({ ...editing, salaryAmount: e.target.value })} />
@@ -830,7 +837,7 @@ export default function StaffSalariesTab() {
 
             <div className="flex gap-2 justify-end pt-2">
               <Button variant="ghost" onClick={() => setEditing(null)}>Cancel</Button>
-              <Button onClick={save} loading={saving}>{editing.id ? 'Save changes' : 'Add staff'}</Button>
+              <Button onClick={save} loading={saving}>{editing.id ? 'Save changes' : 'Add to payroll'}</Button>
             </div>
           </div>
         </Modal>

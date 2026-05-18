@@ -329,6 +329,7 @@ export const staffApi = {
   getSetup: () => api.get<{
     teachers: { teacherId: string; userId: string; fullName: string; subject: string | null; alreadyLinked: boolean }[];
     supervisors: { userId: string; fullName: string; alreadyLinked: boolean }[];
+    admins: { userId: string; fullName: string; alreadyLinked: boolean }[];
   }>('/accounting/staff/setup'),
   list: (status?: 'active' | 'archived' | 'all') => api.get('/accounting/staff', { params: status ? { status } : {} }),
   create: (data: {
