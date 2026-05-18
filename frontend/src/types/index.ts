@@ -192,6 +192,14 @@ export interface Notification {
   createdAt: string;
 }
 
+// Keyset-paginated list envelope. `nextCursor` is null when the list is
+// exhausted; pass it back as `?cursor=` to fetch the next page.
+export interface Paginated<T> {
+  data: T[];
+  limit: number;
+  nextCursor: string | null;
+}
+
 export interface BusLocation {
   id: string;
   driverId: string;

@@ -1,5 +1,6 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { usePaginated } from '../../hooks/usePaginated';
 import { CardListSkeleton } from '../../components/Skeleton';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -130,19 +131,16 @@ export default function NotificationsScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const [items, setItems] = useState<Notification[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showPrevious, setShowPrevious] = useState(false);
+  const {
+    items, setItems, loading, loadingMore, hasMore, loadMore,
+  } = usePaginated<Notification>(parentApi.getNotifications);
 
   const setUnreadCount = useBadgeStore(s => s.setUnreadCount);
 
   useEffect(() => {
     parentApi.markAllRead().catch(() => {});
     setUnreadCount(0);
-    parentApi.getNotifications()
-      .then(r => setItems(r.data || []))
-      .finally(() => setLoading(false));
-  }, []);
+  }, [setUnreadCount]);
 
   const markRead = async (id: string) => {
     await parentApi.markRead(id);
@@ -154,11 +152,7 @@ export default function NotificationsScreen() {
     openNotificationTarget({ type: item.notificationType, relatedId: item.relatedId });
   };
 
-  const groups = useMemo(() => groupByDay(items), [items]);
-  const recentGroups = useMemo(() => groups.filter(g => g.label === 'Today' || g.label === 'Yesterday'), [groups]);
-  const olderGroups = useMemo(() => groups.filter(g => g.label !== 'Today' && g.label !== 'Yesterday'), [groups]);
-  const showingSplit = recentGroups.length > 0 && olderGroups.length > 0;
-  const displayedGroups = showPrevious || !showingSplit ? groups : recentGroups;
+  const displayedGroups = useMemo(() => groupByDay(items), [items]);
 
   return (
     <ScrollView
@@ -204,9 +198,9 @@ export default function NotificationsScreen() {
               })}
             </View>
           ))}
-          {showingSplit && !showPrevious && (
-            <TouchableOpacity style={styles.prevButton} activeOpacity={0.7} onPress={() => setShowPrevious(true)}>
-              <Text style={styles.prevButtonText}>See previous notifications</Text>
+          {hasMore && (
+            <TouchableOpacity style={styles.prevButton} activeOpacity={0.7} disabled={loadingMore} onPress={loadMore}>
+              <Text style={styles.prevButtonText}>{loadingMore ? 'Loading…' : 'See previous notifications'}</Text>
             </TouchableOpacity>
           )}
         </>

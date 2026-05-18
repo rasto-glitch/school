@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { Bell, Check } from 'lucide-react';
 import { parentApi } from '../../services/api';
+import { usePaginated } from '../../hooks/usePaginated';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
 import EmptyState from '../../components/common/EmptyState';
@@ -34,23 +34,13 @@ const typeColors: Record<string, string> = {
 export default function NotificationsPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-  const [retryKey, setRetryKey] = useState(0);
-  const [showPrevious, setShowPrevious] = useState(false);
-
-  useEffect(() => {
-    setError(false);
-    parentApi.getNotifications()
-      .then(r => setNotifications(r.data || []))
-      .catch(() => setError(true))
-      .finally(() => setLoading(false));
-  }, [retryKey]);
+  const {
+    items: notifications, setItems, loading, loadingMore, error, hasMore, loadMore, reload,
+  } = usePaginated<Notification>(parentApi.getNotifications);
 
   const markRead = async (id: string) => {
     await parentApi.markRead(id);
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
+    setItems(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
   };
 
   const handlePress = async (n: Notification) => {
@@ -92,23 +82,17 @@ export default function NotificationsPage() {
   const groups = groupByDate(notifications, t);
   const unreadCount = notifications.filter(n => !n.isRead).length;
 
-  const todayStr = t('common.today');
-  const yesterdayStr = t('common.yesterday');
-  const allEntries = Object.entries(groups);
-  const recentEntries = allEntries.filter(([d]) => d === todayStr || d === yesterdayStr);
-  const olderEntries = allEntries.filter(([d]) => d !== todayStr && d !== yesterdayStr);
-  const showingSplit = recentEntries.length > 0 && olderEntries.length > 0;
-  const displayedEntries = showPrevious || !showingSplit ? allEntries : recentEntries;
+  const entries = Object.entries(groups);
 
   return (
     <PageLayout title={t('notifications.title')} subtitle={unreadCount > 0 ? `${unreadCount} unread` : 'All caught up!'}>
       {loading ? <NotificationListSkeleton /> : error ? (
-        <ErrorMessage onRetry={() => setRetryKey(k => k + 1)} />
+        <ErrorMessage onRetry={reload} />
       ) : notifications.length === 0 ? (
         <EmptyState title={t('notifications.no_notifications')} icon={<Bell className="w-8 h-8 text-gray-400" />} />
       ) : (
         <div className="space-y-6">
-          {displayedEntries.map(([date, items]) => (
+          {entries.map(([date, items]) => (
             <div key={date}>
               <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">{date}</h2>
               <div className="space-y-2">
@@ -136,12 +120,13 @@ export default function NotificationsPage() {
               </div>
             </div>
           ))}
-          {showingSplit && !showPrevious && (
+          {hasMore && (
             <button
-              onClick={() => setShowPrevious(true)}
-              className="w-full py-3 text-sm font-medium text-primary-600 border border-primary-200 rounded-xl hover:bg-primary-50 transition-colors"
+              onClick={loadMore}
+              disabled={loadingMore}
+              className="w-full py-3 text-sm font-medium text-primary-600 border border-primary-200 rounded-xl hover:bg-primary-50 transition-colors disabled:opacity-50"
             >
-              See previous notifications
+              {loadingMore ? 'Loading…' : 'See previous notifications'}
             </button>
           )}
         </div>

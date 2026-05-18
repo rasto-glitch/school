@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell, Check, CheckCheck } from 'lucide-react';
 import { supervisorApi } from '../../services/api';
+import { usePaginated } from '../../hooks/usePaginated';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
 import EmptyState from '../../components/common/EmptyState';
@@ -22,24 +22,18 @@ function groupByDate(notifications: Notification[]) {
 
 export default function SupervisorNotificationsPage() {
   const navigate = useNavigate();
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    supervisorApi.getNotifications()
-      .then(r => setNotifications(r.data || []))
-      .catch(() => setNotifications([]))
-      .finally(() => setLoading(false));
-  }, []);
+  const {
+    items: notifications, setItems, loading, loadingMore, hasMore, loadMore,
+  } = usePaginated<Notification>(supervisorApi.getNotifications);
 
   const markRead = async (id: string) => {
     await supervisorApi.markNotificationRead(id);
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
+    setItems(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
   };
 
   const markAllRead = async () => {
     await supervisorApi.markAllRead();
-    setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+    setItems(prev => prev.map(n => ({ ...n, isRead: true })));
   };
 
   const handlePress = (n: Notification) => {
@@ -110,6 +104,15 @@ export default function SupervisorNotificationsPage() {
               </div>
             </div>
           ))}
+          {hasMore && (
+            <button
+              onClick={loadMore}
+              disabled={loadingMore}
+              className="w-full py-3 text-sm font-medium text-primary-600 border border-primary-200 rounded-xl hover:bg-primary-50 transition-colors disabled:opacity-50"
+            >
+              {loadingMore ? 'Loading…' : 'See previous notifications'}
+            </button>
+          )}
         </div>
       )}
     </PageLayout>

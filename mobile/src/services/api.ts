@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { useAuthStore } from '../store/authStore';
+import type { Paginated, Notification } from '../types';
 
 export const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://school-production-3ccc.up.railway.app/api';
 
@@ -165,7 +166,8 @@ export const parentApi = {
   getReports: (params?: Record<string, string>) => api.get('/parent/reports', { params }),
   getAnnouncements: () => api.get('/parent/announcements'),
   getBusLocation: (studentId?: string) => api.get('/parent/bus-location', { params: { studentId } }),
-  getNotifications: () => api.get('/parent/notifications'),
+  getNotifications: (cursor?: string | null) =>
+    api.get<Paginated<Notification>>('/parent/notifications', { params: cursor ? { cursor } : {} }),
   markRead: (id: string) => api.patch(`/parent/notifications/${id}/read`),
   getPickupLocation: () => api.get('/parent/pickup-location'),
   updatePickupLocation: (latitude: number, longitude: number, residenceType?: string, blockNumber?: string) => api.put('/parent/pickup-location', { latitude, longitude, residenceType, blockNumber }),
@@ -230,7 +232,8 @@ export const supervisorApi = {
   getAssignmentById: (id: string) => api.get(`/supervisor/assignments/${id}`),
   getAnnouncements: () => api.get('/supervisor/announcements'),
   getAnnouncementById: (id: string) => api.get(`/supervisor/announcements/${id}`),
-  getNotifications: () => api.get('/supervisor/notifications'),
+  getNotifications: (cursor?: string | null) =>
+    api.get<Paginated<Notification>>('/supervisor/notifications', { params: cursor ? { cursor } : {} }),
   getUnreadCount: () => api.get('/supervisor/notifications/unread-count'),
   markNotificationRead: (id: string) => api.patch(`/supervisor/notifications/${id}/read`),
   markAllRead: () => api.patch('/supervisor/notifications/read-all'),
@@ -278,7 +281,8 @@ export const teacherApi = {
   getActivePeriod: () => api.get('/supervisor/weekly-period'),
   getWeeklySummary: (params?: Record<string, string>) => api.get('/teacher/weekly-summary', { params }),
   upsertWeeklySummary: (data: object) => api.post('/teacher/weekly-summary', data),
-  getNotifications: () => api.get('/teacher/notifications'),
+  getNotifications: (cursor?: string | null) =>
+    api.get<Paginated<Notification>>('/teacher/notifications', { params: cursor ? { cursor } : {} }),
   markNotificationRead: (id: string) => api.patch(`/teacher/notifications/${id}/read`),
   getUnreadCount: () => api.get('/teacher/notifications/unread-count'),
   markAllRead: () => api.patch('/teacher/notifications/read-all'),

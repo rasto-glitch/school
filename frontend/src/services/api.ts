@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { useAuthStore } from '../store/authStore';
+import type { Paginated, Notification } from '../types';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
@@ -105,7 +106,8 @@ export const supervisorApi = {
   getSubjects: () => api.get('/supervisor/subjects'),
   getStudentBrief: (id: string) => api.get(`/supervisor/student-brief/${id}`),
   getAllStudents: (params?: Record<string, string>) => api.get('/supervisor/students', { params }),
-  getNotifications: () => api.get('/supervisor/notifications'),
+  getNotifications: (cursor?: string | null) =>
+    api.get<Paginated<Notification>>('/supervisor/notifications', { params: cursor ? { cursor } : {} }),
   getUnreadCount: () => api.get('/supervisor/notifications/unread-count'),
   markNotificationRead: (id: string) => api.patch(`/supervisor/notifications/${id}/read`),
   markAllRead: () => api.patch('/supervisor/notifications/read-all'),
@@ -122,7 +124,8 @@ export const parentApi = {
   getReports: (params?: Record<string, string>) => api.get('/parent/reports', { params }),
   getGrades: (studentId?: string) => api.get('/parent/grades', { params: studentId ? { studentId } : {} }),
   getBusLocation: (studentId?: string) => api.get('/parent/bus-location', { params: { studentId } }),
-  getNotifications: () => api.get('/parent/notifications'),
+  getNotifications: (cursor?: string | null) =>
+    api.get<Paginated<Notification>>('/parent/notifications', { params: cursor ? { cursor } : {} }),
   markRead: (id: string) => api.patch(`/parent/notifications/${id}/read`),
   createAppointment: (data: object) => api.post('/parent/appointments', data),
   getAppointments: () => api.get('/parent/appointments'),
@@ -164,7 +167,8 @@ export const teacherApi = {
   getClasses: () => api.get('/teacher/classes'),
   getSettings: () => api.get('/teacher/settings'),
   getSchedule: () => api.get('/teacher/schedule'),
-  getNotifications: () => api.get('/teacher/notifications'),
+  getNotifications: (cursor?: string | null) =>
+    api.get<Paginated<Notification>>('/teacher/notifications', { params: cursor ? { cursor } : {} }),
   markNotificationRead: (id: string) => api.patch(`/teacher/notifications/${id}/read`),
   getUnreadCount: () => api.get('/teacher/notifications/unread-count'),
   markAllRead: () => api.patch('/teacher/notifications/read-all'),

@@ -195,6 +195,14 @@ export interface Notification {
   createdAt: string;
 }
 
+// Keyset-paginated list envelope. `nextCursor` is null when exhausted;
+// pass it back as `?cursor=` for the next page.
+export interface Paginated<T> {
+  data: T[];
+  limit: number;
+  nextCursor: string | null;
+}
+
 export interface ChatUser {
   id: string;
   firstName: string;

@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { supabase } from '../config/supabase';
 import type { AuthRequest } from '../middleware/auth';
 import { toCC } from '../utils/transform';
+import { parseCursorParams, buildPage } from '../utils/pagination';
 import { emitToAdmins } from '../utils/notify';
 import { decorateAnnouncements } from './admin.controller';
 import { getLocksForStudents, isFeatureLocked } from '../utils/locks';
@@ -324,16 +325,30 @@ export async function getDriverInfo(req: AuthRequest, res: Response): Promise<vo
 
 export async function getNotifications(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId, userId } = req.user!;
+  const { limit, cursor } = parseCursorParams(req.query as Record<string, unknown>);
+
   const { data: user } = await supabase.from('users').select('id').eq('id', userId).single();
-  if (!user) { res.json([]); return; }
+  if (!user) { res.json({ data: [], limit, nextCursor: null }); return; }
 
   const cutoff = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
-  const { data, error } = await supabase.from('notifications')
+  let query = supabase.from('notifications')
     .select('*').eq('school_id', schoolId).eq('user_id', userId)
-    .gte('created_at', cutoff)
-    .order('created_at', { ascending: false });
+    .gte('created_at', cutoff);
+
+  // Composite keyset: older than the cursor row in (created_at, id) order.
+  if (cursor) {
+    query = query.or(
+      `created_at.lt.${cursor.createdAt},and(created_at.eq.${cursor.createdAt},id.lt.${cursor.id})`,
+    );
+  }
+
+  const { data, error } = await query
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(limit + 1); // over-fetch one to detect "has more"
   if (error) { res.status(500).json({ error: error.message }); return; }
-  res.json(toCC(data));
+
+  res.json(buildPage(toCC(data) as { id: string; createdAt: string }[], limit));
 }
 
 export async function markNotificationRead(req: AuthRequest, res: Response): Promise<void> {

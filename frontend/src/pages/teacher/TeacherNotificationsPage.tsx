@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell, Check, CheckCheck } from 'lucide-react';
 import { teacherApi } from '../../services/api';
+import { usePaginated } from '../../hooks/usePaginated';
 import { useNotificationStore } from '../../store/notificationStore';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
@@ -23,26 +24,21 @@ function groupByDate(notifications: Notification[]) {
 
 export default function TeacherNotificationsPage() {
   const navigate = useNavigate();
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [loading, setLoading] = useState(true);
   const { setTeacherUnreadCount } = useNotificationStore();
+  const {
+    items: notifications, setItems, loading, loadingMore, hasMore, loadMore,
+  } = usePaginated<Notification>(teacherApi.getNotifications);
 
-  useEffect(() => {
-    setTeacherUnreadCount(0);
-    teacherApi.getNotifications()
-      .then(r => setNotifications(r.data || []))
-      .catch(() => setNotifications([]))
-      .finally(() => setLoading(false));
-  }, []);
+  useEffect(() => { setTeacherUnreadCount(0); }, [setTeacherUnreadCount]);
 
   const markRead = async (id: string) => {
     await teacherApi.markNotificationRead(id);
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
+    setItems(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
   };
 
   const markAllRead = async () => {
     await teacherApi.markAllRead();
-    setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+    setItems(prev => prev.map(n => ({ ...n, isRead: true })));
   };
 
   const handlePress = (n: Notification) => {
@@ -113,6 +109,15 @@ export default function TeacherNotificationsPage() {
               </div>
             </div>
           ))}
+          {hasMore && (
+            <button
+              onClick={loadMore}
+              disabled={loadingMore}
+              className="w-full py-3 text-sm font-medium text-primary-600 border border-primary-200 rounded-xl hover:bg-primary-50 transition-colors disabled:opacity-50"
+            >
+              {loadingMore ? 'Loading…' : 'See previous notifications'}
+            </button>
+          )}
         </div>
       )}
     </PageLayout>

@@ -1,6 +1,7 @@
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useState, useMemo } from 'react';
 import { View, Text, ScrollView, StyleSheet, ActivityIndicator, TouchableOpacity, RefreshControl } from 'react-native';
 import { CardListSkeleton } from '../../components/Skeleton';
+import { usePaginated } from '../../hooks/usePaginated';
 import { Bell, CheckCircle } from 'lucide-react-native';
 import { format, isToday, isYesterday, parseISO } from 'date-fns';
 import { supervisorApi } from '../../services/api';
@@ -22,20 +23,11 @@ export default function SupervisorNotificationsScreen() {
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
-  const [notifications, setNotifications] = useState<Notif[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const {
+    items: notifications, setItems, loading, loadingMore, refreshing, hasMore, loadMore, refresh,
+  } = usePaginated<Notif>(supervisorApi.getNotifications);
   const [marking, setMarking] = useState<string | null>(null);
   const [markingAll, setMarkingAll] = useState(false);
-
-  const load = useCallback(() => {
-    return supervisorApi.getNotifications()
-      .then(r => setNotifications(r.data || []))
-      .catch(() => {});
-  }, []);
-
-  useEffect(() => { load().finally(() => setLoading(false)); }, [load]);
-  const onRefresh = () => { setRefreshing(true); load().finally(() => setRefreshing(false)); };
 
   const unreadCount = notifications.filter(n => !n.isRead).length;
 
@@ -43,7 +35,7 @@ export default function SupervisorNotificationsScreen() {
     setMarking(id);
     try {
       await supervisorApi.markNotificationRead(id);
-      setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
+      setItems(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
     } finally {
       setMarking(null);
     }
@@ -53,7 +45,7 @@ export default function SupervisorNotificationsScreen() {
     setMarkingAll(true);
     try {
       await supervisorApi.markAllRead();
-      setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+      setItems(prev => prev.map(n => ({ ...n, isRead: true })));
     } finally {
       setMarkingAll(false);
     }
@@ -78,7 +70,7 @@ export default function SupervisorNotificationsScreen() {
     <ScrollView
       style={styles.container}
       contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.primary} />}
     >
       <View style={styles.titleRow}>
         <Text style={styles.title}>Notifications</Text>
@@ -100,7 +92,8 @@ export default function SupervisorNotificationsScreen() {
           <Text style={styles.emptyText}>No notifications yet.</Text>
         </View>
       ) : (
-        grouped.map(({ label, items }) => (
+        <>
+        {grouped.map(({ label, items }) => (
           <View key={label}>
             <Text style={styles.groupLabel}>{label}</Text>
             {items.map(n => {
@@ -131,7 +124,15 @@ export default function SupervisorNotificationsScreen() {
               );
             })}
           </View>
-        ))
+        ))}
+        {hasMore && (
+          <TouchableOpacity style={styles.markAllBtn} disabled={loadingMore} onPress={loadMore}>
+            {loadingMore
+              ? <ActivityIndicator size="small" color={colors.primary} />
+              : <Text style={styles.markAllText}>See previous notifications</Text>}
+          </TouchableOpacity>
+        )}
+        </>
       )}
     </ScrollView>
   );
