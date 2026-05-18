@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { toast } from 'react-toastify';
-import { FileText, FileSpreadsheet, DatabaseBackup } from 'lucide-react';
+import { FileText, FileSpreadsheet, DatabaseBackup, ShieldCheck } from 'lucide-react';
 import { adminApi } from '../../services/api';
 import PageLayout from '../../components/layout/PageLayout';
 import ArchivedStudentsTab from './ArchivedStudentsTab';
@@ -63,6 +63,29 @@ export default function ArchiveManagement() {
     }
   };
 
+  const [verifyBusy, setVerifyBusy] = useState(false);
+  const verifyIntegrity = async () => {
+    setVerifyBusy(true);
+    try {
+      const res = await adminApi.verifyArchiveIntegrity();
+      const d = res.data as { ok: boolean; tamperedCount: number; unhashedCount: number };
+      if (d.ok) {
+        toast.success(
+          d.unhashedCount > 0
+            ? `Integrity OK. ${d.unhashedCount} pre-019 record(s) without a baseline hash.`
+            : 'Integrity verified — no tampering detected.',
+          { autoClose: 7000 },
+        );
+      } else {
+        toast.error(`Integrity check FAILED: ${d.tamperedCount} altered/broken record(s). Investigate immediately.`, { autoClose: 12000 });
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to verify integrity');
+    } finally {
+      setVerifyBusy(false);
+    }
+  };
+
   return (
     <PageLayout title="Archive">
       <div className="flex items-center justify-between flex-wrap gap-3 mb-6">
@@ -111,6 +134,15 @@ export default function ArchiveManagement() {
           >
             <DatabaseBackup className="w-4 h-4" />
             {backupBusy ? 'Preparing…' : 'Full backup (JSON)'}
+          </button>
+          <button
+            onClick={verifyIntegrity}
+            disabled={verifyBusy}
+            title="Recompute every snapshot hash + the audit chain and report any tampering"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+          >
+            <ShieldCheck className="w-4 h-4" />
+            {verifyBusy ? 'Checking…' : 'Verify integrity'}
           </button>
         </div>
       </div>

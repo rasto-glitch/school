@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getSchools, toggleSchoolStatus, deleteSchool, School } from '../api';
+import { getSchools, toggleSchoolStatus, deleteSchool, verifySchoolIntegrity, School } from '../api';
 import { getPlan, formatMonthlyCost } from '../plans';
 import CreateSchoolModal from '../components/CreateSchoolModal';
 import EditSchoolModal from '../components/EditSchoolModal';
@@ -195,6 +195,25 @@ function SchoolCard({
   onToggle: () => void;
   onDelete: () => void;
 }) {
+  const [verifying, setVerifying] = useState(false);
+  const onVerify = async () => {
+    setVerifying(true);
+    try {
+      const { data } = await verifySchoolIntegrity(school.id);
+      if (data.ok) {
+        alert(`✅ ${school.name}: archive & audit chain intact.` +
+          (data.unhashedCount ? `\n(${data.unhashedCount} pre-019 record(s) without a baseline hash.)` : ''));
+      } else {
+        const lines = data.issues.filter(i => i.kind !== 'unhashed')
+          .map(i => `• ${i.kind} — ${i.table_name} ${i.row_id} (${i.detail})`).join('\n');
+        alert(`⛔ ${school.name}: ${data.tamperedCount} tampered/broken record(s)!\n\n${lines}`);
+      }
+    } catch (e: any) {
+      alert(`Integrity check failed: ${e?.response?.data?.error || e.message}`);
+    } finally {
+      setVerifying(false);
+    }
+  };
   return (
     <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
       {/* Color bar */}
@@ -272,6 +291,14 @@ function SchoolCard({
             }`}
           >
             {toggling ? '...' : school.is_active ? 'Deactivate' : 'Activate'}
+          </button>
+          <button
+            onClick={onVerify}
+            disabled={verifying}
+            title="Recompute snapshot hashes + audit chain (tamper check)"
+            className="flex-1 text-xs font-medium py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 transition-colors disabled:opacity-50"
+          >
+            {verifying ? '...' : 'Verify'}
           </button>
           <button
             onClick={onDelete}

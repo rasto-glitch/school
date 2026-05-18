@@ -594,6 +594,7 @@ CREATE TABLE IF NOT EXISTS archived_students (
   archived_by_role TEXT,
   original_parent_id UUID REFERENCES parents(id) ON DELETE SET NULL,  -- links the snapshot back to the parent account (F6 parent read-only access)
   snapshot_version INTEGER NOT NULL DEFAULT 1,  -- F10: snapshot JSONB shape version
+  content_hash TEXT,  -- E-a: SHA-256 tamper-evidence (set by BEFORE INSERT trigger)
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_archived_students_school ON archived_students(school_id, created_at DESC);
@@ -680,6 +681,7 @@ CREATE TABLE IF NOT EXISTS archived_employees (
   archived_by_name TEXT,
   archived_by_role TEXT,
   snapshot_version INTEGER NOT NULL DEFAULT 1,  -- F10: snapshot JSONB shape version
+  content_hash TEXT,  -- E-a: SHA-256 tamper-evidence (set by BEFORE INSERT trigger)
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_archived_employees_school ON archived_employees(school_id, created_at DESC);
@@ -967,11 +969,140 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   actor_role TEXT,
   label TEXT,
   reason TEXT,
+  chain_seq BIGINT,   -- E-a: per-school hash chain
+  prev_hash TEXT,
+  row_hash  TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_audit_logs_school ON audit_logs(school_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_entity ON audit_logs(school_id, entity_type, entity_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_actor ON audit_logs(school_id, actor_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_chain ON audit_logs(school_id, chain_seq);
+
+-- ============================================================
+-- TAMPER-EVIDENCE (migration 019 / Phase E-a)
+-- Content hashes on archive snapshots + a per-school hash chain on
+-- audit_logs. Hashing is done in BEFORE INSERT triggers so it is
+-- path-independent; canonicalisation lives here once and is reused by
+-- verify_school_integrity(). Hash columns are themselves protected by the
+-- 016 append-only triggers.
+-- ============================================================
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+CREATE OR REPLACE FUNCTION _sha(t text) RETURNS text
+LANGUAGE sql IMMUTABLE AS $$ SELECT encode(digest(coalesce(t,''), 'sha256'), 'hex') $$;
+
+CREATE OR REPLACE FUNCTION _canon_archived_student(r archived_students) RETURNS text
+LANGUAGE sql IMMUTABLE AS $$
+  SELECT concat_ws('|', 'as.v1',
+    r.school_id::text, coalesce(r.original_student_id::text,''),
+    coalesce(r.full_name,''), coalesce(r.date_of_birth::text,''),
+    coalesce(r.enrollment_date::text,''), coalesce(r.departure_date::text,''),
+    coalesce(r.reason,''), coalesce(r.parent_full_name,''), coalesce(r.parent_phone,''),
+    coalesce(r.classes_attended::text,'[]'), coalesce(r.grades::text,'[]'),
+    coalesce(r.payment_history::text,'[]'), coalesce(r.archived_by::text,''),
+    coalesce(r.archived_by_name,''), coalesce(r.archived_by_role,''),
+    coalesce(r.original_parent_id::text,''), coalesce(r.snapshot_version::text,'1'),
+    coalesce(r.created_at::text,''))
+$$;
+
+CREATE OR REPLACE FUNCTION _canon_archived_employee(r archived_employees) RETURNS text
+LANGUAGE sql IMMUTABLE AS $$
+  SELECT concat_ws('|', 'ae.v1',
+    r.school_id::text, coalesce(r.original_employee_id::text,''), coalesce(r.role,''),
+    coalesce(r.full_name,''), coalesce(r.date_of_birth::text,''), coalesce(r.age::text,''),
+    coalesce(r.phone_number,''), coalesce(r.email,''), coalesce(r.emergency_contact,''),
+    coalesce(r.profile_picture,''), coalesce(r.position,''), coalesce(r.subject,''),
+    coalesce(r.hire_date::text,''), coalesce(r.departure_date::text,''), coalesce(r.reason,''),
+    coalesce(r.account::text,'{}'), coalesce(r.teaching::text,'[]'),
+    coalesce(r.transport::text,'{}'), coalesce(r.employment::text,'{}'),
+    coalesce(r.payment_history::text,'[]'), coalesce(r.archived_by::text,''),
+    coalesce(r.archived_by_name,''), coalesce(r.archived_by_role,''),
+    coalesce(r.snapshot_version::text,'1'), coalesce(r.created_at::text,''))
+$$;
+
+CREATE OR REPLACE FUNCTION _canon_audit(r audit_logs) RETURNS text
+LANGUAGE sql IMMUTABLE AS $$
+  SELECT concat_ws('|', 'al.v1',
+    r.chain_seq::text, r.school_id::text, coalesce(r.entity_type,''),
+    coalesce(r.entity_id::text,''), coalesce(r.action,''),
+    coalesce(r.changes::text,'{}'), coalesce(r.actor_id::text,''),
+    coalesce(r.actor_username,''), coalesce(r.actor_role,''),
+    coalesce(r.label,''), coalesce(r.reason,''), coalesce(r.created_at::text,''))
+$$;
+
+CREATE OR REPLACE FUNCTION hash_archived_student() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN NEW.content_hash := _sha(_canon_archived_student(NEW)); RETURN NEW; END $$;
+
+CREATE OR REPLACE FUNCTION hash_archived_employee() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN NEW.content_hash := _sha(_canon_archived_employee(NEW)); RETURN NEW; END $$;
+
+CREATE OR REPLACE FUNCTION hash_audit_log() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE v_seq BIGINT; v_prev TEXT;
+BEGIN
+  PERFORM pg_advisory_xact_lock(hashtext('audit_chain:' || NEW.school_id::text));
+  SELECT chain_seq, row_hash INTO v_seq, v_prev
+    FROM audit_logs WHERE school_id = NEW.school_id ORDER BY chain_seq DESC LIMIT 1;
+  NEW.chain_seq := coalesce(v_seq, 0) + 1;
+  NEW.prev_hash := coalesce(v_prev, 'GENESIS');
+  NEW.row_hash  := _sha(NEW.prev_hash || '|' || _canon_audit(NEW));
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS trg_archived_students_hash ON archived_students;
+CREATE TRIGGER trg_archived_students_hash BEFORE INSERT ON archived_students
+  FOR EACH ROW EXECUTE FUNCTION hash_archived_student();
+DROP TRIGGER IF EXISTS trg_archived_employees_hash ON archived_employees;
+CREATE TRIGGER trg_archived_employees_hash BEFORE INSERT ON archived_employees
+  FOR EACH ROW EXECUTE FUNCTION hash_archived_employee();
+DROP TRIGGER IF EXISTS trg_audit_logs_hash ON audit_logs;
+CREATE TRIGGER trg_audit_logs_hash BEFORE INSERT ON audit_logs
+  FOR EACH ROW EXECUTE FUNCTION hash_audit_log();
+
+-- Empty result = intact; one row per detected problem.
+CREATE OR REPLACE FUNCTION verify_school_integrity(p_school_id UUID)
+RETURNS TABLE(kind TEXT, table_name TEXT, row_id UUID, detail TEXT)
+LANGUAGE plpgsql AS $$
+DECLARE r RECORD; v_prev TEXT := 'GENESIS'; v_expect BIGINT := 0;
+BEGIN
+  FOR r IN SELECT * FROM archived_students WHERE school_id = p_school_id LOOP
+    IF r.content_hash IS NULL THEN
+      RETURN QUERY SELECT 'unhashed','archived_students',r.id,'no content_hash (pre-019)';
+    ELSIF r.content_hash <> _sha(_canon_archived_student(r)) THEN
+      RETURN QUERY SELECT 'content_altered','archived_students',r.id,r.full_name;
+    END IF;
+  END LOOP;
+  FOR r IN SELECT * FROM archived_employees WHERE school_id = p_school_id LOOP
+    IF r.content_hash IS NULL THEN
+      RETURN QUERY SELECT 'unhashed','archived_employees',r.id,'no content_hash (pre-019)';
+    ELSIF r.content_hash <> _sha(_canon_archived_employee(r)) THEN
+      RETURN QUERY SELECT 'content_altered','archived_employees',r.id,r.full_name;
+    END IF;
+  END LOOP;
+  FOR r IN SELECT * FROM audit_logs WHERE school_id = p_school_id ORDER BY chain_seq LOOP
+    v_expect := v_expect + 1;
+    IF r.chain_seq IS NULL OR r.row_hash IS NULL THEN
+      RETURN QUERY SELECT 'unhashed','audit_logs',r.id,'no chain (pre-019)'; CONTINUE;
+    END IF;
+    IF r.chain_seq <> v_expect THEN
+      RETURN QUERY SELECT 'sequence_gap','audit_logs',r.id,
+        format('expected seq %s, got %s', v_expect, r.chain_seq);
+      v_expect := r.chain_seq;
+    END IF;
+    IF r.prev_hash <> v_prev THEN
+      RETURN QUERY SELECT 'chain_broken','audit_logs',r.id,
+        format('prev_hash mismatch at seq %s', r.chain_seq);
+    END IF;
+    IF r.row_hash <> _sha(r.prev_hash || '|' || _canon_audit(r)) THEN
+      RETURN QUERY SELECT 'content_altered','audit_logs',r.id,
+        format('row_hash mismatch at seq %s', r.chain_seq);
+    END IF;
+    v_prev := r.row_hash;
+  END LOOP;
+END $$;
 
 -- ============================================================
 -- DEMO SCHOOL SEED

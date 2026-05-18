@@ -173,6 +173,7 @@ export const adminApi = {
   exportEmployeeArchivePdf: () => api.get('/admin/employee-archive/export.pdf', { responseType: 'blob' }),
   exportEmployeeArchiveXlsx: () => api.get('/admin/employee-archive/export.xlsx', { responseType: 'blob' }),
   exportFullArchiveBackup: () => api.get('/admin/archive/full-backup.json', { responseType: 'blob' }),
+  verifyArchiveIntegrity: () => api.get('/admin/integrity/verify'),
   getParents: () => api.get('/admin/parents'),
   getParentProfile: (id: string) => api.get(`/admin/parents/${id}/profile`),
   updateParent: (id: string, data: object) => api.patch(`/admin/parents/${id}`, data),

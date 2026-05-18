@@ -2617,6 +2617,27 @@ export async function exportArchiveXlsx(req: AuthRequest, res: Response): Promis
 // employee, raw. The school can take this any time so they always hold
 // their own copy — independent of the provider-side pre-purge backup the
 // master portal retains on cancellation. Archive-feature gated.
+// E-a: recompute every snapshot hash + the audit chain and report any
+// tampering. Empty issues array = cryptographically intact.
+export async function verifyArchiveIntegrity(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  if (!(await hasArchiveFeature(schoolId))) {
+    res.status(403).json({ error: 'Archive feature is not enabled for this school' });
+    return;
+  }
+  const { data, error } = await supabase.rpc('verify_school_integrity', { p_school_id: schoolId });
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  const issues = (data ?? []) as { kind: string; table_name: string; row_id: string; detail: string }[];
+  const tampered = issues.filter(i => i.kind !== 'unhashed');
+  res.json({
+    ok: tampered.length === 0,
+    checkedAt: new Date().toISOString(),
+    issues: toCC(issues),
+    tamperedCount: tampered.length,
+    unhashedCount: issues.length - tampered.length,
+  });
+}
+
 export async function exportFullArchiveBackup(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
   if (!(await hasArchiveFeature(schoolId))) {

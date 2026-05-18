@@ -90,6 +90,7 @@ export function createRouter(io: SocketServer) {
   router.get('/admin/employee-archive/export.pdf', authenticate, authorize('admin'), (req, res) => admin.exportEmployeeArchivePdf(req as AuthRequest, res));
   router.get('/admin/employee-archive/export.xlsx', authenticate, authorize('admin'), (req, res) => admin.exportEmployeeArchiveXlsx(req as AuthRequest, res));
   router.get('/admin/archive/full-backup.json', authenticate, authorize('admin'), (req, res) => admin.exportFullArchiveBackup(req as AuthRequest, res));
+  router.get('/admin/integrity/verify', authenticate, authorize('admin'), (req, res) => admin.verifyArchiveIntegrity(req as AuthRequest, res));
   router.get('/admin/archived-employees/:id/export.json', authenticate, authorize('admin'), (req, res) => admin.exportArchivedEmployeeRecord(req as AuthRequest, res));
   router.post('/admin/archived-employees/:id/restore', authenticate, authorize('admin'), (req, res) => admin.restoreArchivedEmployee(req as AuthRequest, res));
   router.get('/admin/archived-employees/:id', authenticate, authorize('admin'), (req, res) => admin.getArchivedEmployee(req as AuthRequest, res));

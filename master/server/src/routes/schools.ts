@@ -307,6 +307,23 @@ router.patch('/:id/admin-password', async (req: Request, res: Response) => {
   res.json({ message: 'Admin password updated.' });
 });
 
+// GET /api/schools/:id/integrity — provider-side tamper check. Recomputes
+// every snapshot hash + the audit chain for the school (Phase E-a).
+router.get('/:id/integrity', async (req: Request, res: Response) => {
+  const id = req.params.id as string;
+  const { data, error } = await supabase.rpc('verify_school_integrity', { p_school_id: id });
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  const issues = (data ?? []) as { kind: string; table_name: string; row_id: string; detail: string }[];
+  const tampered = issues.filter(i => i.kind !== 'unhashed');
+  res.json({
+    ok: tampered.length === 0,
+    checkedAt: new Date().toISOString(),
+    tamperedCount: tampered.length,
+    unhashedCount: issues.length - tampered.length,
+    issues,
+  });
+});
+
 // DELETE /api/schools/:id — permanently delete (cascades via FK).
 // Routed through delete_school_cascade(): the append-only triggers on
 // audit_logs / archived_* would otherwise block the schools-FK cascade.

@@ -135,6 +135,11 @@ export const exportSchoolEmployeeArchivePdf = (id: string) =>
 export const exportSchoolEmployeeArchiveXlsx = (id: string) =>
   api.get(`/schools/${id}/employee-archive-export.xlsx`, { responseType: 'blob' });
 
+export const verifySchoolIntegrity = (id: string) =>
+  api.get<{ ok: boolean; tamperedCount: number; unhashedCount: number;
+    issues: { kind: string; table_name: string; row_id: string; detail: string }[] }>(
+    `/schools/${id}/integrity`);
+
 // ── Chat audit ──────────────────────────────────────────────────────────────
 
 export interface AuditUser {
