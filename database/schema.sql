@@ -704,9 +704,15 @@ CREATE TABLE IF NOT EXISTS archive_backups (
   employee_count INTEGER,
   reason TEXT,
   created_by_name TEXT,
+  sha256 TEXT,                                       -- E-b: checksum of the stored file
+  verified_at TIMESTAMPTZ,
+  verify_status TEXT NOT NULL DEFAULT 'unverified'
+    CHECK (verify_status IN ('unverified', 'verified', 'failed', 'missing')),
+  verify_detail TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_archive_backups_school ON archive_backups(school_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_archive_backups_verify ON archive_backups(verify_status, verified_at);
 
 -- ============================================================
 -- APPEND-ONLY ENFORCEMENT (migration 016 / finding F3)

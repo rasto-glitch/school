@@ -140,6 +140,28 @@ export const verifySchoolIntegrity = (id: string) =>
     issues: { kind: string; table_name: string; row_id: string; detail: string }[] }>(
     `/schools/${id}/integrity`);
 
+export interface ArchiveBackup {
+  id: string;
+  kind: 'pre_purge' | 'manual';
+  storage_path: string;
+  byte_size: number | null;
+  student_count: number | null;
+  employee_count: number | null;
+  reason: string | null;
+  created_by_name: string | null;
+  sha256: string | null;
+  verified_at: string | null;
+  verify_status: 'unverified' | 'verified' | 'failed' | 'missing';
+  verify_detail: string | null;
+  created_at: string;
+}
+
+export const listSchoolBackups = (id: string) =>
+  api.get<ArchiveBackup[]>(`/schools/${id}/backups`);
+
+export const verifySchoolBackup = (id: string, backupId: string) =>
+  api.post<{ status: string; detail: string }>(`/schools/${id}/backups/${backupId}/verify`);
+
 // ── Chat audit ──────────────────────────────────────────────────────────────
 
 export interface AuditUser {

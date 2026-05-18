@@ -4,6 +4,7 @@ import { getPlan, formatMonthlyCost } from '../plans';
 import CreateSchoolModal from '../components/CreateSchoolModal';
 import EditSchoolModal from '../components/EditSchoolModal';
 import DeleteConfirmModal from '../components/DeleteConfirmModal';
+import BackupsModal from '../components/BackupsModal';
 import MasterHeader from '../components/MasterHeader';
 import type { MasterView } from '../App';
 
@@ -196,6 +197,7 @@ function SchoolCard({
   onDelete: () => void;
 }) {
   const [verifying, setVerifying] = useState(false);
+  const [showBackups, setShowBackups] = useState(false);
   const onVerify = async () => {
     setVerifying(true);
     try {
@@ -301,6 +303,13 @@ function SchoolCard({
             {verifying ? '...' : 'Verify'}
           </button>
           <button
+            onClick={() => setShowBackups(true)}
+            title="Retained backups & verification"
+            className="flex-1 text-xs font-medium py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
+          >
+            Backups
+          </button>
+          <button
             onClick={onDelete}
             className="flex-1 text-xs font-medium py-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 transition-colors"
           >
@@ -308,6 +317,7 @@ function SchoolCard({
           </button>
         </div>
       </div>
+      {showBackups && <BackupsModal school={school} onClose={() => setShowBackups(false)} />}
     </div>
   );
 }

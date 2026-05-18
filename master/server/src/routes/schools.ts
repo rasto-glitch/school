@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { createClient } from '@supabase/supabase-js';
+import { createHash } from 'crypto';
 import bcrypt from 'bcryptjs';
 import { loadArchiveSnapshot, streamPdf, buildXlsx } from '../utils/archiveExport';
 import { loadEmployeeArchiveSnapshot, streamPdf as streamEmployeePdf, buildXlsx as buildEmployeeXlsx } from '../utils/employeeArchiveExport';
@@ -43,6 +44,7 @@ async function buildAndStoreBackup(
     archivedEmployees: employees ?? [],
   }, null, 2), 'utf8');
 
+  const sha256 = createHash('sha256').update(payload).digest('hex');
   const path = `archive-backups/${schoolId}/${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
   const up = await supabase.storage.from(BACKUP_BUCKET).upload(path, payload, {
     contentType: 'application/json',
@@ -60,6 +62,7 @@ async function buildAndStoreBackup(
     employee_count: (employees ?? []).length,
     reason,
     created_by_name: createdByName,
+    sha256,
   });
   if (ins.error) throw new Error(`backup record failed: ${ins.error.message}`);
 
@@ -75,6 +78,45 @@ async function purgeArchive(schoolId: string): Promise<void> {
   await buildAndStoreBackup(schoolId, 'pre_purge', 'Archive feature disabled', 'operator');
   const { error } = await supabase.rpc('purge_school_archive', { p_school_id: schoolId });
   if (error) throw new Error(`purge failed: ${error.message}`);
+}
+
+// Re-download a stored backup, re-hash it, parse it, and check the row
+// counts match what we recorded. Updates verify_status/verified_at on the
+// archive_backups row. Same logic runs from the backend nightly sweep.
+async function verifyBackupRow(b: {
+  id: string; storage_bucket: string; storage_path: string;
+  sha256: string | null; student_count: number | null; employee_count: number | null;
+}): Promise<{ status: 'verified' | 'failed' | 'missing'; detail: string }> {
+  let status: 'verified' | 'failed' | 'missing';
+  let detail = '';
+  try {
+    const dl = await supabase.storage.from(b.storage_bucket).download(b.storage_path);
+    if (dl.error || !dl.data) {
+      status = 'missing'; detail = `download failed: ${dl.error?.message ?? 'no data'}`;
+    } else {
+      const buf = Buffer.from(await dl.data.arrayBuffer());
+      const sha = createHash('sha256').update(buf).digest('hex');
+      if (b.sha256 && sha !== b.sha256) {
+        status = 'failed'; detail = 'sha256 mismatch — file altered or corrupted';
+      } else {
+        const parsed = JSON.parse(buf.toString('utf8'));
+        const sN = Array.isArray(parsed.archivedStudents) ? parsed.archivedStudents.length : -1;
+        const eN = Array.isArray(parsed.archivedEmployees) ? parsed.archivedEmployees.length : -1;
+        if ((b.student_count ?? sN) !== sN || (b.employee_count ?? eN) !== eN) {
+          status = 'failed'; detail = `count mismatch (students ${sN}/${b.student_count}, employees ${eN}/${b.employee_count})`;
+        } else {
+          status = 'verified';
+          detail = `sha256 ok, parsed, ${sN} students + ${eN} employees`;
+        }
+      }
+    }
+  } catch (e) {
+    status = 'failed'; detail = `verify threw: ${(e as Error).message}`;
+  }
+  await supabase.from('archive_backups')
+    .update({ verify_status: status, verified_at: new Date().toISOString(), verify_detail: detail })
+    .eq('id', b.id);
+  return { status, detail };
 }
 
 function safeFilename(s: string): string {
@@ -305,6 +347,31 @@ router.patch('/:id/admin-password', async (req: Request, res: Response) => {
 
   if (error) { res.status(400).json({ error: error.message }); return; }
   res.json({ message: 'Admin password updated.' });
+});
+
+// GET /api/schools/:id/backups — retained backups + verification state.
+router.get('/:id/backups', async (req: Request, res: Response) => {
+  const id = req.params.id as string;
+  const { data, error } = await supabase
+    .from('archive_backups')
+    .select('id, kind, storage_path, byte_size, student_count, employee_count, reason, created_by_name, sha256, verified_at, verify_status, verify_detail, created_at')
+    .eq('school_id', id)
+    .order('created_at', { ascending: false });
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json(data ?? []);
+});
+
+// POST /api/schools/:id/backups/:backupId/verify — re-download, re-hash,
+// parse, count-check a single retained backup.
+router.post('/:id/backups/:backupId/verify', async (req: Request, res: Response) => {
+  const { id, backupId } = req.params as { id: string; backupId: string };
+  const { data: b, error } = await supabase
+    .from('archive_backups')
+    .select('id, storage_bucket, storage_path, sha256, student_count, employee_count')
+    .eq('id', backupId).eq('school_id', id).single();
+  if (error || !b) { res.status(404).json({ error: 'Backup not found' }); return; }
+  const r = await verifyBackupRow(b as any);
+  res.json(r);
 });
 
 // GET /api/schools/:id/integrity — provider-side tamper check. Recomputes

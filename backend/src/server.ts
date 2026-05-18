@@ -8,6 +8,7 @@ import dotenv from 'dotenv';
 import jwt from 'jsonwebtoken';
 import { createRouter } from './routes/index';
 import { setIo } from './utils/notify';
+import { startBackupVerifySchedule } from './utils/backupVerify';
 import { logger } from './utils/logger';
 
 dotenv.config();
@@ -188,6 +189,7 @@ const PORT = process.env.PORT || 5000;
 httpServer.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV}`);
+  startBackupVerifySchedule();
 });
 
 export { io };
