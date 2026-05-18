@@ -1,7 +1,9 @@
 import { useSearchParams } from 'react-router-dom';
 import PageLayout from '../../components/layout/PageLayout';
+import { useAuthStore } from '../../store/authStore';
 import TeacherEmployeesTab from './employees/TeacherEmployeesTab';
 import AccountEmployeesTab from './employees/AccountEmployeesTab';
+import StaffEmployeesTab from './employees/StaffEmployeesTab';
 
 // Unified Employees page. Replaces the old standalone /admin/teachers page.
 // Sub-tabs: Teacher · Supervisor · Administration · Staff. Each tab owns the
@@ -11,16 +13,21 @@ import AccountEmployeesTab from './employees/AccountEmployeesTab';
 // The active tab is mirrored to the ?tab= query param so deep links and the
 // /admin/teachers → /admin/employees redirect land on the right place.
 
-type EmpTab = 'teacher' | 'supervisor' | 'admin';
-
-const TABS: { key: EmpTab; label: string }[] = [
-  { key: 'teacher', label: 'Teachers' },
-  { key: 'supervisor', label: 'Supervisors' },
-  { key: 'admin', label: 'Administration' },
-];
+type EmpTab = 'teacher' | 'supervisor' | 'admin' | 'staff';
 
 export default function EmployeesManagement() {
   const [searchParams, setSearchParams] = useSearchParams();
+  // Staff is backed by the accounting-premium staff_members table; hide the
+  // sub-tab entirely when the accounting module is off.
+  const staffEnabled = useAuthStore(s => s.school?.features?.tuition_fees === true);
+
+  const TABS: { key: EmpTab; label: string }[] = [
+    { key: 'teacher', label: 'Teachers' },
+    { key: 'supervisor', label: 'Supervisors' },
+    { key: 'admin', label: 'Administration' },
+    ...(staffEnabled ? [{ key: 'staff' as const, label: 'Staff' }] : []),
+  ];
+
   const raw = (searchParams.get('tab') || 'teacher') as EmpTab;
   const active: EmpTab = TABS.some(t => t.key === raw) ? raw : 'teacher';
 
@@ -31,7 +38,7 @@ export default function EmployeesManagement() {
   };
 
   return (
-    <PageLayout title="Employees" subtitle="Add, manage and archive teachers, supervisors and administration">
+    <PageLayout title="Employees" subtitle="Add, manage and archive every employee">
       <div className="space-y-6">
         <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
           {TABS.map(t => (
@@ -48,6 +55,7 @@ export default function EmployeesManagement() {
         {active === 'teacher' && <TeacherEmployeesTab />}
         {active === 'supervisor' && <AccountEmployeesTab role="supervisor" singular="Supervisor" />}
         {active === 'admin' && <AccountEmployeesTab role="admin" singular="Administrator" />}
+        {active === 'staff' && staffEnabled && <StaffEmployeesTab />}
       </div>
     </PageLayout>
   );

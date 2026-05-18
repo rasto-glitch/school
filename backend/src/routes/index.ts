@@ -111,6 +111,16 @@ export function createRouter(io: SocketServer) {
   router.put('/admin/drivers/:id', authenticate, authorize('admin'), (req, res) => admin.updateDriver(req as AuthRequest, res));
   router.delete('/admin/drivers/:id', authenticate, authorize('admin'), (req, res) => admin.deleteDriver(req as AuthRequest, res));
 
+  // Staff HR (Employees → Staff sub-tab). Admin owns staff identity +
+  // archive; salary/insurance/payments stay accountant-only on the
+  // /accounting/staff routes. Same controller, same staff_members table —
+  // the controller's ensurePremium (tuition_fees) gate still applies, so
+  // the UI hides this sub-tab when the accounting module is off.
+  router.get('/admin/staff', authenticate, authorize('admin'), (req, res) => staff.listStaff(req as AuthRequest, res));
+  router.post('/admin/staff', authenticate, authorize('admin'), (req, res) => staff.createStaff(req as AuthRequest, res));
+  router.put('/admin/staff/:id', authenticate, authorize('admin'), (req, res) => staff.updateStaff(req as AuthRequest, res));
+  router.delete('/admin/staff/:id', authenticate, authorize('admin'), (req, res) => staff.deleteStaff(req as AuthRequest, res));
+
   router.get('/admin/subjects', authenticate, authorize('admin', 'teacher'), (req, res) => admin.getSubjects(req as AuthRequest, res));
   router.post('/admin/subjects', authenticate, authorize('admin'), (req, res) => admin.createSubject(req as AuthRequest, res));
   router.put('/admin/subjects/:id', authenticate, authorize('admin'), (req, res) => admin.updateSubject(req as AuthRequest, res));

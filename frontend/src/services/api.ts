@@ -206,6 +206,17 @@ export const adminApi = {
     api.get('/admin/users/inactive/search', { params: { name, role } }),
   reactivateUser: (userId: string, newPassword?: string) =>
     api.post(`/admin/users/${userId}/reactivate`, newPassword ? { newPassword } : {}),
+  // Staff HR (Employees → Staff sub-tab). Identity + archive only; salary
+  // is set by the accountant in the Accounting portal. Reuses the staff
+  // controller via admin-authorized routes.
+  getStaff: (status?: 'active' | 'archived' | 'all') =>
+    api.get('/admin/staff', { params: status ? { status } : {} }),
+  createStaff: (data: { fullName: string; position?: string | null; salaryAmount: number; currency: string; previousArchiveId?: string | null }) =>
+    api.post('/admin/staff', data),
+  updateStaff: (id: string, data: { fullName?: string; position?: string | null }) =>
+    api.put(`/admin/staff/${id}`, data),
+  archiveStaff: (id: string, body?: { reason?: string; departureDate?: string }) =>
+    api.delete(`/admin/staff/${id}`, { data: body ?? {} }),
   getPendingAppointmentCount: () => api.get('/admin/appointments/pending-count'),
   getAppointments: () => api.get('/admin/appointments'),
   respondToAppointment: (id: string, data: object) => api.put(`/admin/appointments/${id}`, data),
