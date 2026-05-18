@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Search, Archive, FileText } from 'lucide-react';
+import { Search, Archive, FileText, Download, RotateCcw } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
+import { toast } from 'react-toastify';
 import { adminApi } from '../../services/api';
 import { useDebounce } from '../../hooks/useDebounce';
 import Card from '../../components/common/Card';
@@ -39,8 +40,10 @@ const money = (a: number, c: string) => `${(Number(a) || 0).toLocaleString('en-U
 export default function ArchivedEmployeesTab() {
   const [rows, setRows] = useState<ArchivedEmployeeListItem[]>([]);
   const [roleFilter, setRoleFilter] = useState('');
+  const [reasonFilter, setReasonFilter] = useState('');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
+  const [restoring, setRestoring] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detail, setDetail] = useState<ArchivedEmployee | null>(null);
@@ -51,11 +54,43 @@ export default function ArchivedEmployeesTab() {
     setLoading(true);
     adminApi.getArchivedEmployees({
       ...(roleFilter ? { role: roleFilter } : {}),
+      ...(reasonFilter ? { reason: reasonFilter } : {}),
       ...(debouncedSearch ? { search: debouncedSearch } : {}),
     })
       .then(r => setRows(r.data || []))
       .finally(() => setLoading(false));
-  }, [roleFilter, debouncedSearch]);
+  }, [roleFilter, reasonFilter, debouncedSearch]);
+
+  const exportRecord = async () => {
+    if (!detail) return;
+    try {
+      const r = await adminApi.exportArchivedEmployeeRecord(detail.id);
+      const url = URL.createObjectURL(r.data as Blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `archived-employee-${(detail.fullName || 'employee').replace(/[^a-z0-9-_]+/gi, '_')}.json`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      toast.error(e.response?.data?.error || 'Failed to export');
+    }
+  };
+
+  const restore = async () => {
+    if (!detail) return;
+    if (!confirm(`Restore ${detail.fullName}? This recreates their identity (linked to the kept snapshot). Content/curriculum is NOT rehydrated.`)) return;
+    setRestoring(true);
+    try {
+      const r = await adminApi.restoreArchivedEmployee(detail.id);
+      const creds = r.data?.username ? ` Login: ${r.data.username} / ${r.data.tempPassword}` : '';
+      toast.success(`${detail.fullName} restored.${creds}`, { autoClose: 10000 });
+      setDetailOpen(false);
+      setDetail(null);
+      load();
+    } catch (e: any) {
+      toast.error(e.response?.data?.error || 'Failed to restore');
+    } finally { setRestoring(false); }
+  };
 
   useEffect(() => { load(); }, [load]);
 
@@ -88,6 +123,21 @@ export default function ArchivedEmployeesTab() {
             placeholder="All roles"
             value={roleFilter}
             onChange={e => setRoleFilter(e.target.value)}
+          />
+        </div>
+        <div className="w-44">
+          <Select
+            options={[
+              { value: 'resigned', label: 'Resigned' },
+              { value: 'terminated', label: 'Terminated' },
+              { value: 'contract_ended', label: 'Contract ended' },
+              { value: 'retired', label: 'Retired' },
+              { value: 'transferred', label: 'Transferred' },
+              { value: 'other', label: 'Other' },
+            ]}
+            placeholder="All reasons"
+            value={reasonFilter}
+            onChange={e => setReasonFilter(e.target.value)}
           />
         </div>
         {!loading && (
@@ -297,6 +347,22 @@ export default function ArchivedEmployeesTab() {
                 </p>
               </div>
             )}
+
+            <div className="flex justify-end gap-2 pt-4 border-t border-gray-100">
+              <button
+                onClick={exportRecord}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"
+              >
+                <Download className="w-4 h-4" /> Download JSON
+              </button>
+              <button
+                onClick={restore}
+                disabled={restoring}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-60"
+              >
+                <RotateCcw className="w-4 h-4" /> {restoring ? 'Restoring…' : 'Restore'}
+              </button>
+            </div>
           </div>
         ) : null}
       </Modal>

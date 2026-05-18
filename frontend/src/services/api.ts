@@ -154,15 +154,20 @@ export const adminApi = {
   getStudentBrief: (id: string) => api.get(`/admin/students/${id}/brief`),
   getGraduatedStudents: (search?: string) => api.get('/admin/students/graduated', { params: search ? { search } : {} }),
   archiveStudent: (id: string, data: { reason: string; departureDate: string }) => api.post(`/admin/students/${id}/archive`, data),
-  getArchivedStudents: (search?: string) => api.get('/admin/archived-students', { params: search ? { search } : {} }),
+  getArchivedStudents: (params?: { search?: string; reason?: string }) =>
+    api.get('/admin/archived-students', { params: params ?? {} }),
   getArchivedStudent: (id: string) => api.get(`/admin/archived-students/${id}`),
+  exportArchivedStudentRecord: (id: string) => api.get(`/admin/archived-students/${id}/export.json`, { responseType: 'blob' }),
+  restoreArchivedStudent: (id: string) => api.post(`/admin/archived-students/${id}/restore`),
   searchArchivedStudents: (name: string, dob?: string) =>
     api.get('/admin/archived-students/search', { params: { name, ...(dob ? { dob } : {}) } }),
   exportArchivePdf: () => api.get('/admin/archive/export.pdf', { responseType: 'blob' }),
   exportArchiveXlsx: () => api.get('/admin/archive/export.xlsx', { responseType: 'blob' }),
-  getArchivedEmployees: (params?: { role?: string; search?: string }) =>
+  getArchivedEmployees: (params?: { role?: string; search?: string; reason?: string }) =>
     api.get('/admin/archived-employees', { params: params ?? {} }),
   getArchivedEmployee: (id: string) => api.get(`/admin/archived-employees/${id}`),
+  exportArchivedEmployeeRecord: (id: string) => api.get(`/admin/archived-employees/${id}/export.json`, { responseType: 'blob' }),
+  restoreArchivedEmployee: (id: string) => api.post(`/admin/archived-employees/${id}/restore`),
   searchArchivedEmployees: (name: string, role?: string) =>
     api.get('/admin/archived-employees/search', { params: { name, ...(role ? { role } : {}) } }),
   exportEmployeeArchivePdf: () => api.get('/admin/employee-archive/export.pdf', { responseType: 'blob' }),

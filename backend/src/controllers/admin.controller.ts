@@ -993,20 +993,28 @@ export async function archiveStudent(req: AuthRequest, res: Response): Promise<v
 
 export async function getArchivedStudents(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
-  const { search } = req.query as Record<string, string>;
+  const { search, reason, departureFrom, departureTo } = req.query as Record<string, string>;
 
   if (!(await hasArchiveFeature(schoolId))) {
     res.status(403).json({ error: 'Archive feature is not enabled for this school' });
     return;
   }
 
+  // F9: cap the result set and allow reason / departure-date filtering so a
+  // multi-year archive stays bounded. Default cap 500.
+  const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? '200'), 10) || 200, 1), 500);
+
   let query = supabase
     .from('archived_students')
     .select('id, full_name, date_of_birth, enrollment_date, departure_date, reason, parent_full_name, parent_phone, classes_attended, created_at')
     .eq('school_id', schoolId)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .limit(limit);
 
   if (search) query = query.ilike('full_name', `%${search}%`);
+  if (reason && ['transferred', 'withdrew', 'graduated'].includes(reason)) query = query.eq('reason', reason);
+  if (departureFrom) query = query.gte('departure_date', departureFrom);
+  if (departureTo) query = query.lte('departure_date', departureTo);
 
   const { data, error } = await query;
   if (error) { res.status(500).json({ error: error.message }); return; }
@@ -1060,20 +1068,26 @@ export async function exportEmployeeArchiveXlsx(req: AuthRequest, res: Response)
 
 export async function getArchivedEmployees(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
-  const { search, role } = req.query as Record<string, string>;
+  const { search, role, reason, departureFrom, departureTo } = req.query as Record<string, string>;
 
   if (!(await hasArchiveFeature(schoolId))) {
     res.status(403).json({ error: 'Archive feature is not enabled for this school' });
     return;
   }
 
+  const limit = Math.min(Math.max(parseInt(String(req.query.limit ?? '200'), 10) || 200, 1), 500);
+
   let query = supabase
     .from('archived_employees')
     .select('id, role, full_name, phone_number, email, position, subject, hire_date, departure_date, reason, created_at')
     .eq('school_id', schoolId)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    .limit(limit);
 
   if (role && ['teacher', 'driver', 'supervisor', 'staff', 'admin'].includes(role)) query = query.eq('role', role);
+  if (reason && ['resigned', 'terminated', 'contract_ended', 'retired', 'transferred', 'other'].includes(reason)) query = query.eq('reason', reason);
+  if (departureFrom) query = query.gte('departure_date', departureFrom);
+  if (departureTo) query = query.lte('departure_date', departureTo);
   if (search) query = query.ilike('full_name', `%${search}%`);
 
   const { data, error } = await query;
@@ -1125,6 +1139,155 @@ export async function getArchivedEmployee(req: AuthRequest, res: Response): Prom
 
   if (error || !data) { res.status(404).json({ error: 'Archived record not found' }); return; }
   res.json(toCC(data));
+}
+
+// ---- PER-RECORD DOSSIER EXPORT (finding F7) ----
+// Single archived student / employee as a downloadable JSON dossier.
+function sendJsonDownload(res: Response, filename: string, body: unknown): void {
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.send(JSON.stringify(body, null, 2));
+}
+
+export async function exportArchivedStudentRecord(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { id } = req.params;
+  if (!(await hasArchiveFeature(schoolId))) { res.status(403).json({ error: 'Archive feature is not enabled for this school' }); return; }
+  const { data, error } = await supabase.from('archived_students').select('*').eq('id', id).eq('school_id', schoolId).single();
+  if (error || !data) { res.status(404).json({ error: 'Archived record not found' }); return; }
+  const safe = String((data as any).full_name || 'student').replace(/[^a-z0-9-_]+/gi, '_');
+  sendJsonDownload(res, `archived-student-${safe}.json`, {
+    schemaVersion: (data as any).snapshot_version ?? 1,
+    kind: 'archived_student',
+    generatedAt: new Date().toISOString(),
+    record: toCC(data),
+  });
+}
+
+export async function exportArchivedEmployeeRecord(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { id } = req.params;
+  if (!(await hasArchiveFeature(schoolId))) { res.status(403).json({ error: 'Archive feature is not enabled for this school' }); return; }
+  const { data, error } = await supabase.from('archived_employees').select('*').eq('id', id).eq('school_id', schoolId).single();
+  if (error || !data) { res.status(404).json({ error: 'Archived record not found' }); return; }
+  const safe = String((data as any).full_name || 'employee').replace(/[^a-z0-9-_]+/gi, '_');
+  sendJsonDownload(res, `archived-employee-${safe}.json`, {
+    schemaVersion: (data as any).snapshot_version ?? 1,
+    kind: 'archived_employee',
+    generatedAt: new Date().toISOString(),
+    record: toCC(data),
+  });
+}
+
+// ---- RESTORE / UN-ARCHIVE (finding F12) ----
+// Identity-only: recreates the core live row and links it to the
+// (retained, append-only) snapshot via previous_archive_id. Historical
+// content is NOT rehydrated — the immutable snapshot stays as the record.
+export async function restoreArchivedStudent(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { id } = req.params;
+  if (!(await hasArchiveFeature(schoolId))) { res.status(403).json({ error: 'Archive feature is not enabled for this school' }); return; }
+
+  const { data: arch } = await supabase.from('archived_students').select('*').eq('id', id).eq('school_id', schoolId).single();
+  if (!arch) { res.status(404).json({ error: 'Archived record not found' }); return; }
+
+  // Re-link the parent only if that parent account still exists.
+  let parentId: string | null = null;
+  if ((arch as any).original_parent_id) {
+    const { data: p } = await supabase.from('parents').select('id').eq('id', (arch as any).original_parent_id).eq('school_id', schoolId).single();
+    parentId = p ? (arch as any).original_parent_id : null;
+  }
+
+  const { data: student, error } = await supabase.from('students').insert({
+    school_id: schoolId,
+    full_name: (arch as any).full_name,
+    date_of_birth: (arch as any).date_of_birth ?? null,
+    parent_id: parentId,
+    is_graduated: false,
+    previous_archive_id: (arch as any).id,
+  }).select().single();
+  if (error) { res.status(500).json({ error: error.message }); return; }
+
+  await logAudit({ req, entityType: 'student', entityId: String((student as any).id), action: 'create', after: student as Record<string, unknown>, label: (student as any).full_name, reason: 'Restored from archive' });
+  res.status(201).json({ ...(toCC(student) as object), parentRelinked: !!parentId });
+}
+
+export async function restoreArchivedEmployee(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { id } = req.params;
+  if (!(await hasArchiveFeature(schoolId))) { res.status(403).json({ error: 'Archive feature is not enabled for this school' }); return; }
+
+  const { data: arch } = await supabase.from('archived_employees').select('*').eq('id', id).eq('school_id', schoolId).single();
+  if (!arch) { res.status(404).json({ error: 'Archived record not found' }); return; }
+
+  const role = (arch as any).role as string;
+  const acct = ((arch as any).account ?? {}) as Record<string, any>;
+
+  // Staff have no users row — just recreate the staff_members shell
+  // (salary defaults; the accountant sets the real figure).
+  if (role === 'staff') {
+    const { data: staff, error } = await supabase.from('staff_members').insert({
+      school_id: schoolId,
+      full_name: (arch as any).full_name,
+      position: (arch as any).position ?? null,
+      salary_amount: 0,
+      currency: 'USD',
+      is_active: true,
+      previous_archive_id: (arch as any).id,
+    }).select().single();
+    if (error) { res.status(500).json({ error: error.message }); return; }
+    await logAudit({ req, entityType: 'staff_member', entityId: String((staff as any).id), action: 'create', after: staff as Record<string, unknown>, label: (staff as any).full_name, reason: 'Restored from archive' });
+    res.status(201).json({ kind: 'staff', ...(toCC(staff) as object) });
+    return;
+  }
+
+  // teacher / driver / supervisor / admin — recreate the users row. The
+  // username almost certainly freed up (the user was deleted on archive);
+  // if it's taken, guide the operator to the Employees add form instead.
+  const username = String(acct.username || '').trim();
+  if (!username) { res.status(400).json({ error: 'Snapshot has no username — re-add via the Employees tab.' }); return; }
+  const { data: clash } = await supabase.from('users').select('id').eq('school_id', schoolId).eq('username', username).maybeSingle();
+  if (clash) { res.status(409).json({ error: `Username "${username}" is in use. Re-add this employee from the Employees tab (it will link the archive).` }); return; }
+
+  const tempPassword = `Restore@${Math.floor(1000 + Math.random() * 9000)}`;
+  const rounds = parseInt(process.env.BCRYPT_ROUNDS || '10');
+  const passwordHash = await bcrypt.hash(tempPassword, rounds);
+
+  const fullName = String((arch as any).full_name || '').trim();
+  const [firstName, ...rest] = fullName.split(/\s+/);
+  const lastName = rest.join(' ');
+
+  const { data: user, error: userErr } = await supabase.from('users').insert({
+    school_id: schoolId,
+    first_name: acct.first_name ?? firstName ?? fullName,
+    last_name: acct.last_name ?? lastName ?? '',
+    email: (arch as any).email ?? acct.email ?? null,
+    phone: (arch as any).phone_number ?? acct.phone ?? null,
+    username,
+    password_hash: passwordHash,
+    role,
+  }).select().single();
+  if (userErr) { res.status(userErr.message.includes('unique') ? 409 : 500).json({ error: userErr.message }); return; }
+
+  if (role === 'teacher') {
+    await supabase.from('teachers').insert({
+      school_id: schoolId, user_id: (user as any).id,
+      full_name: (arch as any).full_name, phone_number: (arch as any).phone_number ?? null,
+      emergency_contact: (arch as any).emergency_contact ?? null,
+      previous_archive_id: (arch as any).id,
+    });
+  } else if (role === 'driver') {
+    await supabase.from('drivers').insert({
+      school_id: schoolId, user_id: (user as any).id,
+      full_name: (arch as any).full_name, phone_number: (arch as any).phone_number ?? null,
+      emergency_contact: (arch as any).emergency_contact ?? null,
+      previous_archive_id: (arch as any).id,
+    });
+  }
+  // supervisor / admin: users row only (no profile table — matches createAccount).
+
+  await logAudit({ req, entityType: role as 'teacher' | 'driver' | 'supervisor' | 'admin', entityId: String((user as any).id), action: 'create', after: user as Record<string, unknown>, label: fullName, reason: 'Restored from archive' });
+  res.status(201).json({ kind: role, username, tempPassword, userId: (user as any).id });
 }
 
 // Search archived students for the "returning student" prompt on the

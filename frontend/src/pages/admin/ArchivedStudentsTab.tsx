@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Search, Archive, FileText } from 'lucide-react';
+import { Search, Archive, FileText, Download, RotateCcw } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
+import { toast } from 'react-toastify';
 import { adminApi } from '../../services/api';
 import { useDebounce } from '../../hooks/useDebounce';
 import Card from '../../components/common/Card';
@@ -38,7 +39,9 @@ export default function ArchivedStudentsTab() {
   const [classes, setClasses]       = useState<Class[]>([]);
   const [classFilter, setClassFilter] = useState('');
   const [search, setSearch]         = useState('');
+  const [reasonFilter, setReasonFilter] = useState('');
   const [loading, setLoading]       = useState(false);
+  const [restoring, setRestoring]   = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detail, setDetail]         = useState<any | null>(null);
@@ -57,10 +60,10 @@ export default function ArchivedStudentsTab() {
 
   const load = useCallback(() => {
     setLoading(true);
-    adminApi.getArchivedStudents(debouncedSearch || undefined)
+    adminApi.getArchivedStudents({ search: debouncedSearch || undefined, reason: reasonFilter || undefined })
       .then(r => setStudents(r.data || []))
       .finally(() => setLoading(false));
-  }, [debouncedSearch]);
+  }, [debouncedSearch, reasonFilter]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -74,6 +77,36 @@ export default function ArchivedStudentsTab() {
     } finally {
       setDetailLoading(false);
     }
+  };
+
+  const exportRecord = async () => {
+    if (!detail) return;
+    try {
+      const r = await adminApi.exportArchivedStudentRecord(detail.id);
+      const url = URL.createObjectURL(r.data as Blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `archived-student-${(detail.fullName || 'student').replace(/[^a-z0-9-_]+/gi, '_')}.json`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      toast.error(e.response?.data?.error || 'Failed to export');
+    }
+  };
+
+  const restore = async () => {
+    if (!detail) return;
+    if (!confirm(`Restore ${detail.fullName} as a live student? The archived snapshot is kept; this creates a fresh student linked to it (no class/grades).`)) return;
+    setRestoring(true);
+    try {
+      const r = await adminApi.restoreArchivedStudent(detail.id);
+      toast.success(`${detail.fullName} restored${r.data?.parentRelinked ? ' (parent re-linked)' : ''}. Set their class in Students.`, { autoClose: 8000 });
+      setDetailOpen(false);
+      setDetail(null);
+      load();
+    } catch (e: any) {
+      toast.error(e.response?.data?.error || 'Failed to restore');
+    } finally { setRestoring(false); }
   };
 
   const gradeMap     = detail ? buildGradeMap(detail.grades || []) : {};
@@ -107,6 +140,18 @@ export default function ArchivedStudentsTab() {
             placeholder="All Classes"
             value={classFilter}
             onChange={e => setClassFilter(e.target.value)}
+          />
+        </div>
+        <div className="w-44">
+          <Select
+            options={[
+              { value: 'transferred', label: 'Transferred' },
+              { value: 'withdrew', label: 'Withdrew' },
+              { value: 'graduated', label: 'Graduated' },
+            ]}
+            placeholder="All reasons"
+            value={reasonFilter}
+            onChange={e => setReasonFilter(e.target.value)}
           />
         </div>
         {!loading && (
@@ -308,6 +353,21 @@ export default function ArchivedStudentsTab() {
               )}
             </div>
 
+            <div className="flex justify-end gap-2 pt-4 border-t border-gray-100">
+              <button
+                onClick={exportRecord}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"
+              >
+                <Download className="w-4 h-4" /> Download JSON
+              </button>
+              <button
+                onClick={restore}
+                disabled={restoring}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-60"
+              >
+                <RotateCcw className="w-4 h-4" /> {restoring ? 'Restoring…' : 'Restore'}
+              </button>
+            </div>
           </div>
         ) : null}
       </Modal>

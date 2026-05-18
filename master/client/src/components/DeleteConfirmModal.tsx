@@ -43,6 +43,13 @@ export default function DeleteConfirmModal({ school, onClose, onConfirm }: Props
             and all associated records.
           </div>
 
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4 text-sm text-amber-800">
+            This also destroys the <strong>archived students &amp; employees</strong> and the
+            <strong> audit history</strong>. Unlike turning the archive feature off, a full school
+            delete does <strong>not</strong> auto-retain a backup — export the archive first if you
+            need a copy.
+          </div>
+
           <div className="mb-4">
             <label className="block text-xs font-medium text-slate-700 mb-1">
               Type <span className="font-mono bg-slate-100 px-1 rounded">{school.slug}</span> to confirm
