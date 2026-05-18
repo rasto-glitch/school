@@ -58,10 +58,10 @@ export default function StudentsManagement() {
   const debouncedSearch = useDebounce(search, 400);
 
   const load = () => {
-    const params: Record<string, string> = { limit: '1000' };
+    const params: Record<string, string> = {};
     if (debouncedSearch) params.search = debouncedSearch;
     if (classFilter) params.classId = classFilter;
-    adminApi.getStudents(params).then(r => setStudents(r.data?.students || []));
+    adminApi.getAllStudents(params).then(r => setStudents(r.data?.students || []));
   };
 
   useEffect(() => {

@@ -328,15 +328,21 @@ export async function getMessages(req: AuthRequest, res: Response): Promise<void
     .from('messages')
     .select('id, sender_id, content, type, attachment_url, attachment_name, attachment_size, is_deleted, edited_at, created_at')
     .eq('conversation_id', id)
+    // Composite ordering so messages sharing a created_at have a stable,
+    // deterministic order (id tiebreak) — prevents the cursor skipping or
+    // duplicating messages on identical timestamps.
     .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
     .limit(LIMIT);
 
   if (before) {
-    // Get the created_at of the cursor message
     const { data: cursor } = await supabase
-      .from('messages').select('created_at').eq('id', before).single();
+      .from('messages').select('created_at, id').eq('id', before).single();
     if (cursor) {
-      query = query.lt('created_at', cursor.created_at);
+      // "Older than the cursor row" in (created_at, id) order.
+      query = query.or(
+        `created_at.lt.${cursor.created_at},and(created_at.eq.${cursor.created_at},id.lt.${cursor.id})`,
+      );
     }
   }
 

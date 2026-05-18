@@ -8,6 +8,7 @@ import { useNavigation } from '@react-navigation/native';
 import { Heart, MessageCircle, Bookmark, BookOpen, FileText } from 'lucide-react-native';
 import { academicApi, parentApi } from '../../services/api';
 import { useRefreshOnFocus } from '../../hooks/useRefreshOnFocus';
+import { usePaginated } from '../../hooks/usePaginated';
 import { useColors, useIsDark } from '../../store/themeStore';
 import { useBadgeStore } from '../../store/badgeStore';
 import { spacing, radius, font } from '../../theme';
@@ -195,14 +196,16 @@ export default function LearnScreen() {
   const navigation = useNavigation<any>();
   const { postCount, clearPost } = useBadgeStore();
   const [tab, setTab] = useState<Tab>('ebooks');
-  const [posts, setPosts] = useState<AcademicPost[]>([]);
+  const {
+    items: posts, setItems: setPosts, loading: postsLoading, loadingMore, refreshing, refresh, onScroll,
+  } = usePaginated<AcademicPost>(c => academicApi.getPosts(undefined, c));
   const [saved, setSaved] = useState<AcademicPost[]>([]);
   const [ebooks, setEbooks] = useState<Ebook[]>([]);
   const [progress, setProgress] = useState<EbookProgress[]>([]);
   const [children, setChildren] = useState<Student[]>([]);
   const [selectedChildId, setSelectedChildId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const [auxLoading, setAuxLoading] = useState(true);
+  const loading = postsLoading || auxLoading;
   const [segmentedWidth, setSegmentedWidth] = useState(0);
   const underlineX = useRef(new Animated.Value(0)).current;
 
@@ -217,22 +220,16 @@ export default function LearnScreen() {
     }).start();
   }, [tab, segmentedWidth, underlineX]);
 
-  const load = useCallback(async () => {
+  // Posts come from the paginated hook (auto-load). The other tabs' data
+  // (saved / ebooks / progress / children) are not paginated — fetched here.
+  const loadAux = useCallback(async () => {
     try {
-      const [p, s, e, pr, c] = await Promise.allSettled([
-        academicApi.getPosts(),
+      const [s, e, pr, c] = await Promise.allSettled([
         academicApi.getSavedPosts(),
         academicApi.getEbooks(),
         academicApi.getEbookProgress(),
         parentApi.getChildren(),
       ]);
-      if (p.status === 'fulfilled') {
-        // Envelope-safe: getPosts is now keyset-paginated. This tabbed
-        // aggregate screen shows the first page; full pagination of the
-        // Posts tab is a tracked follow-up.
-        const b = p.value.data as AcademicPost[] | { data: AcademicPost[] };
-        setPosts(Array.isArray(b) ? b : b?.data ?? []);
-      }
       if (s.status === 'fulfilled') setSaved(s.value.data ?? []);
       if (e.status === 'fulfilled') setEbooks(e.value.data ?? []);
       if (pr.status === 'fulfilled') setProgress(pr.value.data ?? []);
@@ -244,8 +241,9 @@ export default function LearnScreen() {
     } catch {}
   }, []);
 
-  useEffect(() => { load().finally(() => setLoading(false)); }, [load]);
-  useRefreshOnFocus(load);
+  useEffect(() => { loadAux().finally(() => setAuxLoading(false)); }, [loadAux]);
+  const refreshAll = useCallback(() => { refresh(); loadAux(); }, [refresh, loadAux]);
+  useRefreshOnFocus(refreshAll);
 
   // When the user enters the Posts sub-tab, clear the post badge.
   useEffect(() => {
@@ -266,17 +264,11 @@ export default function LearnScreen() {
     return ebooks.filter(e => !e.class_id || e.class_id === classId);
   }, [ebooks, selectedChild]);
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await load();
-    setRefreshing(false);
-  };
-
   const handleToggleLike = async (postId: string) => {
     setPosts(prev => prev.map(p => p.id === postId
       ? { ...p, liked_by_me: !p.liked_by_me, likes_count: (p.likes_count ?? 0) + (p.liked_by_me ? -1 : 1) }
       : p));
-    try { await academicApi.toggleLike(postId); } catch { load(); }
+    try { await academicApi.toggleLike(postId); } catch { refreshAll(); }
   };
 
   const handleToggleSave = async (postId: string) => {
@@ -286,7 +278,7 @@ export default function LearnScreen() {
     setSaved(prev => newSaved
       ? (target ? [{ ...target, saved_by_me: true }, ...prev.filter(p => p.id !== postId)] : prev)
       : prev.filter(p => p.id !== postId));
-    try { await academicApi.toggleSave(postId); } catch { load(); }
+    try { await academicApi.toggleSave(postId); } catch { refreshAll(); }
   };
 
   const openEbook = (ebook: Ebook) => {
@@ -411,7 +403,9 @@ export default function LearnScreen() {
 
       <ScrollView
         contentContainerStyle={{ padding: spacing.md, paddingBottom: spacing.xl }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+        onScroll={tab === 'posts' ? onScroll : undefined}
+        scrollEventThrottle={16}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refreshAll} tintColor={colors.primary} />}
       >
         {loading ? (
           <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
@@ -440,6 +434,9 @@ export default function LearnScreen() {
               onToggleSave={() => handleToggleSave(p.id)}
             />
           ))
+        )}
+        {tab === 'posts' && loadingMore && (
+          <ActivityIndicator style={{ marginVertical: spacing.md }} color={colors.primary} />
         )}
       </ScrollView>
     </View>

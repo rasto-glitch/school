@@ -43,7 +43,7 @@ export default function ClassesPage() {
     loadClasses();
     loadSubjects();
     loadCurriculum();
-    adminApi.getStudents().then(r => setStudents(r.data?.students || []));
+    adminApi.getAllStudents().then(r => setStudents(r.data?.students || []));
     loadTeachers();
   }, []);
 

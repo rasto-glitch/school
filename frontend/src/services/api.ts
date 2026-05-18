@@ -178,6 +178,25 @@ export const teacherApi = {
 // ---- ADMIN ----
 export const adminApi = {
   getStudents: (params?: Record<string, string>) => api.get('/admin/students', { params }),
+  // Bulk lookup: pages through /admin/students (using the returned `total`)
+  // and returns EVERY matching row. For assignment/dropdown screens that
+  // need the full set — never silently truncates at >1000 students.
+  getAllStudents: async (params?: Record<string, string>) => {
+    const limit = 500;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const all: any[] = [];
+    for (let page = 1; page <= 200; page++) {
+      const r = await api.get('/admin/students', {
+        params: { ...(params || {}), page: String(page), limit: String(limit) },
+      });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const batch: any[] = r.data?.students ?? [];
+      all.push(...batch);
+      const total: number = r.data?.total ?? all.length;
+      if (batch.length === 0 || all.length >= total) break;
+    }
+    return { data: { students: all, total: all.length } };
+  },
   createStudent: (data: object) => api.post('/admin/students', data),
   updateStudent: (id: string, data: object) => api.put(`/admin/students/${id}`, data),
   deleteStudent: (id: string) => api.delete(`/admin/students/${id}`),

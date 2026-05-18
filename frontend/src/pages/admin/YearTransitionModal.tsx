@@ -37,7 +37,7 @@ export default function YearTransitionModal({ currentYear, onClose, onDone }: Pr
 
   useEffect(() => {
     Promise.all([
-      adminApi.getStudents({ limit: '500' }),
+      adminApi.getAllStudents(),
       adminApi.getClasses(),
     ]).then(([sRes, cRes]) => {
       setStudents(sRes.data?.students || []);

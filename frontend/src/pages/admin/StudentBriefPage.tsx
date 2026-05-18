@@ -37,7 +37,7 @@ export default function StudentBriefPage() {
   const searchRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    adminApi.getStudents({ limit: '500' }).then(r => setStudents(r.data?.students || []));
+    adminApi.getAllStudents().then(r => setStudents(r.data?.students || []));
   }, []);
 
   useEffect(() => {
