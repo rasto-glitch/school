@@ -30,7 +30,7 @@ export default function AdminDashboard() {
 
   const quickLinks = [
     { to: '/admin/students', label: 'Manage Students', desc: 'Add, edit, remove or assign students' },
-    { to: '/admin/teachers', label: 'Manage Teachers', desc: 'Add, edit teachers and assign classes' },
+    { to: '/admin/employees', label: 'Manage Employees', desc: 'Teachers, supervisors and administration' },
     { to: '/admin/drivers', label: 'Manage Drivers', desc: 'Add, edit drivers and assign students' },
     { to: '/admin/accounts', label: 'Create Account', desc: 'Create user accounts for all roles' },
     { to: '/admin/appointments', label: 'Appointments', desc: 'View and respond to parent requests' },

@@ -605,7 +605,7 @@ CREATE TABLE IF NOT EXISTS archived_employees (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
   original_employee_id UUID,
-  role TEXT NOT NULL CHECK (role IN ('teacher', 'driver', 'supervisor', 'staff')),
+  role TEXT NOT NULL CHECK (role IN ('teacher', 'driver', 'supervisor', 'staff', 'admin')),
   full_name TEXT NOT NULL,
   date_of_birth DATE,
   age INTEGER,

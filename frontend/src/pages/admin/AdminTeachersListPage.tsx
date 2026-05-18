@@ -38,7 +38,7 @@ export default function AdminTeachersListPage() {
       <div className="space-y-4">
         <div className="flex flex-wrap gap-3 items-center">
           <Button variant="ghost" size="sm" icon={<ArrowLeft className="w-4 h-4" />} onClick={() => navigate('/admin/dashboard')}>Back</Button>
-          <Button variant="primary" size="sm" onClick={() => navigate('/admin/teachers')}>+ Add / Edit Teachers</Button>
+          <Button variant="primary" size="sm" onClick={() => navigate('/admin/employees')}>+ Add / Edit Teachers</Button>
         </div>
 
         <Input placeholder="Search by name or subject..." icon={<Search className="w-4 h-4" />} value={search} onChange={e => setSearch(e.target.value)} />

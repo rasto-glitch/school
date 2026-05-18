@@ -290,7 +290,24 @@ export async function getStaffSetup(req: AuthRequest, res: Response): Promise<vo
     alreadyLinked: linkedUserIds.has(u.id),
   }));
 
-  res.json({ teachers: out, supervisors });
+  // Admins are payroll-eligible too (Employees → Administration). Same
+  // pattern: no profile table, link the salary record to the users row.
+  const { data: adminUsers, error: admErr } = await supabase
+    .from('users')
+    .select('id, first_name, last_name')
+    .eq('school_id', schoolId)
+    .eq('role', 'admin')
+    .eq('is_active', true)
+    .order('first_name');
+  if (admErr) { res.status(500).json({ error: admErr.message }); return; }
+
+  const admins = ((adminUsers ?? []) as { id: string; first_name: string; last_name: string }[]).map(u => ({
+    userId: u.id,
+    fullName: `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim(),
+    alreadyLinked: linkedUserIds.has(u.id),
+  }));
+
+  res.json({ teachers: out, supervisors, admins });
 }
 
 export async function createStaff(req: AuthRequest, res: Response): Promise<void> {

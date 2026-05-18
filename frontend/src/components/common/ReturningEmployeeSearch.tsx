@@ -26,7 +26,7 @@ export interface ReturningEmployeeCandidate {
 }
 
 interface Props {
-  role: 'teacher' | 'driver' | 'staff';
+  role: 'teacher' | 'driver' | 'staff' | 'supervisor' | 'admin';
   /** The fullName the admin is currently typing. */
   nameQuery: string;
   /** Linked archive id (null when not linked). Owned by the parent. */

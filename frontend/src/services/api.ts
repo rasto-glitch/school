@@ -195,13 +195,14 @@ export const adminApi = {
   createAccount: (data: object) => api.post('/admin/accounts', data),
   getAccounts: () => api.get('/admin/accounts'),
   updateAccount: (userId: string, data: object) => api.put(`/admin/accounts/${userId}`, data),
-  deleteAccount: (userId: string) => api.delete(`/admin/accounts/${userId}`),
+  deleteAccount: (userId: string, body?: { reason?: string; departureDate?: string }) =>
+    api.delete(`/admin/accounts/${userId}`, { data: body ?? {} }),
   exportCredentialsPdf: (params: { role: 'parent' | 'teacher' | 'driver'; classId?: string; parentId?: string }) =>
     api.get('/admin/accounts/credentials.pdf', { params, responseType: 'blob' }),
   getResetRequests: () => api.get('/admin/reset-requests'),
   resetUserPassword: (userId: string, newPassword: string) =>
     api.post(`/admin/users/${userId}/reset-password`, { newPassword }),
-  searchInactiveUsers: (name: string, role: 'teacher' | 'driver' | 'parent' | 'supervisor' | 'reception' | 'accountant') =>
+  searchInactiveUsers: (name: string, role: 'teacher' | 'driver' | 'parent' | 'supervisor' | 'reception' | 'accountant' | 'admin') =>
     api.get('/admin/users/inactive/search', { params: { name, role } }),
   reactivateUser: (userId: string, newPassword?: string) =>
     api.post(`/admin/users/${userId}/reactivate`, newPassword ? { newPassword } : {}),

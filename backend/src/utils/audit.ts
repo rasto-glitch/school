@@ -18,7 +18,8 @@ export type AuditEntityType =
   | 'late_fee'
   | 'teacher'
   | 'driver'
-  | 'supervisor';
+  | 'supervisor'
+  | 'admin';
 
 interface LogParams {
   req: AuthRequest;

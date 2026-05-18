@@ -27,7 +27,7 @@ export function normalizeArchiveReason(raw: unknown): string {
 export async function resolveEmployeeArchiveId(
   previousArchiveId: unknown,
   schoolId: string,
-  role: 'teacher' | 'driver' | 'supervisor' | 'staff',
+  role: 'teacher' | 'driver' | 'supervisor' | 'staff' | 'admin',
 ): Promise<string | null> {
   if (!previousArchiveId || typeof previousArchiveId !== 'string') return null;
   const { data } = await supabase

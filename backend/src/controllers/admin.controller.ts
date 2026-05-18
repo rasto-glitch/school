@@ -18,7 +18,7 @@ import { hasArchiveFeature, normalizeArchiveReason, resolveEmployeeArchiveId } f
 // row (cascading the teachers/drivers row) in one transaction.
 // hasArchiveFeature / normalizeArchiveReason are shared via utils/employeeArchive.
 
-type ArchiveEmployeeRole = 'teacher' | 'driver' | 'supervisor' | 'staff';
+type ArchiveEmployeeRole = 'teacher' | 'driver' | 'supervisor' | 'staff' | 'admin';
 
 // Snapshot of the users row — never includes password_hash.
 async function loadAccountSnapshot(userId: string, schoolId: string): Promise<Record<string, unknown> | null> {
@@ -1014,7 +1014,7 @@ export async function getArchivedEmployees(req: AuthRequest, res: Response): Pro
     .eq('school_id', schoolId)
     .order('created_at', { ascending: false });
 
-  if (role && ['teacher', 'driver', 'supervisor', 'staff'].includes(role)) query = query.eq('role', role);
+  if (role && ['teacher', 'driver', 'supervisor', 'staff', 'admin'].includes(role)) query = query.eq('role', role);
   if (search) query = query.ilike('full_name', `%${search}%`);
 
   const { data, error } = await query;
@@ -1041,7 +1041,7 @@ export async function searchArchivedEmployees(req: AuthRequest, res: Response): 
     .ilike('full_name', `%${name}%`)
     .order('departure_date', { ascending: false })
     .limit(8);
-  if (role && ['teacher', 'driver', 'supervisor', 'staff'].includes(role)) query = query.eq('role', role);
+  if (role && ['teacher', 'driver', 'supervisor', 'staff', 'admin'].includes(role)) query = query.eq('role', role);
 
   const { data, error } = await query;
   if (error) { res.status(500).json({ error: error.message }); return; }
@@ -2490,7 +2490,7 @@ export async function searchInactiveUsers(req: AuthRequest, res: Response): Prom
   const name = String(req.query.name ?? '').trim();
   const role = String(req.query.role ?? '').trim();
   if (name.length < 2 || !role) { res.json([]); return; }
-  if (!['teacher', 'driver', 'parent', 'supervisor', 'reception', 'accountant'].includes(role)) {
+  if (!['teacher', 'driver', 'parent', 'supervisor', 'reception', 'accountant', 'admin'].includes(role)) {
     res.status(400).json({ error: 'Invalid role' }); return;
   }
 
@@ -2793,8 +2793,24 @@ export async function deleteAccount(req: AuthRequest, res: Response): Promise<vo
     .eq('id', userId).eq('school_id', schoolId).single();
   if (findErr || !user) { res.status(404).json({ error: 'Account not found' }); return; }
 
-  if (user.role !== 'teacher' && user.role !== 'supervisor') {
+  if (user.role !== 'teacher' && user.role !== 'supervisor' && user.role !== 'admin') {
     res.status(400).json({ error: `Use the dedicated delete endpoint for role "${user.role}"` }); return;
+  }
+
+  // Safety guards for admin accounts: never let the operator archive their
+  // own login, and never remove the school's last active admin (that would
+  // lock the school out of its own admin portal).
+  if (user.role === 'admin') {
+    if (String(req.user!.userId) === userId) {
+      res.status(400).json({ error: "You can't archive your own admin account." }); return;
+    }
+    const { count } = await supabase
+      .from('users')
+      .select('id', { count: 'exact', head: true })
+      .eq('school_id', schoolId).eq('role', 'admin').eq('is_active', true);
+    if ((count ?? 0) <= 1) {
+      res.status(400).json({ error: 'This is the last active admin. Add another admin before archiving this one.' }); return;
+    }
   }
 
   const archiveOn = await hasArchiveFeature(schoolId);
@@ -2840,17 +2856,18 @@ export async function deleteAccount(req: AuthRequest, res: Response): Promise<vo
       await supabase.from('teachers').delete().eq('id', teacher.id).eq('school_id', schoolId);
     }
   } else if (archiveOn) {
-    // Supervisor — no profile table; the snapshot is the users row. (Per-
-    // supervisor authored artifacts have no owner column to attribute.)
+    // Supervisor / admin — no profile table; the snapshot is the users row.
+    // (Authored artifacts have no owner column to attribute.)
+    const bareRole = user.role as 'supervisor' | 'admin';
     const r = await performEmployeeArchive({
-      schoolId, userId, originalEmployeeId: user.id, role: 'supervisor',
+      schoolId, userId, originalEmployeeId: user.id, role: bareRole,
       fullName, email: user.email as string | null, phoneNumber: user.phone as string | null,
       profilePicture: user.profile_picture as string | null,
       hireDate: user.created_at ? String(user.created_at).split('T')[0] : null,
       departureDate, reason, account,
     });
     if (!r.ok) { res.status(500).json({ error: r.error }); return; }
-    await logAudit({ req, entityType: 'supervisor', entityId: String(user.id), action: 'delete', before: account, label: fullName, reason: `Archived (${reason})` });
+    await logAudit({ req, entityType: bareRole, entityId: String(user.id), action: 'delete', before: account, label: fullName, reason: `Archived (${reason})` });
     res.json({ message: 'Account archived', archived: true, archiveId: r.archiveId });
     return;
   }
@@ -2858,7 +2875,7 @@ export async function deleteAccount(req: AuthRequest, res: Response): Promise<vo
   // Archive feature off (or teacher row missing) — hard delete.
   const { error: delErr } = await supabase.from('users').delete().eq('id', userId);
   if (delErr) { res.status(500).json({ error: delErr.message }); return; }
-  await logAudit({ req, entityType: user.role as 'teacher' | 'supervisor', entityId: String(userId), action: 'delete', before: account, label: fullName, reason: 'Deleted (no archive)' });
+  await logAudit({ req, entityType: user.role as 'teacher' | 'supervisor' | 'admin', entityId: String(userId), action: 'delete', before: account, label: fullName, reason: 'Deleted (no archive)' });
   res.json({ message: 'Account deleted' });
 }
 

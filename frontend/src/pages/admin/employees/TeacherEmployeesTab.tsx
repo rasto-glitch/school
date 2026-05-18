@@ -2,20 +2,22 @@ import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'react-toastify';
 import { History } from 'lucide-react';
-import { adminApi } from '../../services/api';
-import { useDebounce } from '../../hooks/useDebounce';
-import PageLayout from '../../components/layout/PageLayout';
-import Card from '../../components/common/Card';
-import Input from '../../components/common/Input';
-import Select from '../../components/common/Select';
-import Button from '../../components/common/Button';
-import ArchiveReasonModal from '../../components/common/ArchiveReasonModal';
-import ReturningEmployeeSearch, { type ReturningEmployeeCandidate } from '../../components/common/ReturningEmployeeSearch';
-import type { Teacher, Class } from '../../types';
+import { adminApi } from '../../../services/api';
+import { useDebounce } from '../../../hooks/useDebounce';
+import Card from '../../../components/common/Card';
+import Input from '../../../components/common/Input';
+import Select from '../../../components/common/Select';
+import Button from '../../../components/common/Button';
+import ArchiveReasonModal from '../../../components/common/ArchiveReasonModal';
+import ReturningEmployeeSearch, { type ReturningEmployeeCandidate } from '../../../components/common/ReturningEmployeeSearch';
+import type { Teacher, Class } from '../../../types';
 
 interface InactiveUser { id: string; firstName: string; lastName: string; username: string; role: string; }
 
-export default function TeachersManagement() {
+// Teacher sub-tab of the Employees page. Behaviour is identical to the old
+// standalone /admin/teachers page — only the outer PageLayout wrapper moved
+// up to EmployeesManagement.
+export default function TeacherEmployeesTab() {
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
   const [selectedTeacherId, setSelectedTeacherId] = useState('');
@@ -153,7 +155,7 @@ export default function TeachersManagement() {
   };
 
   return (
-    <PageLayout title="Teachers Management">
+    <>
       <div className="space-y-8">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Add Teacher */}
@@ -263,6 +265,6 @@ export default function TeachersManagement() {
         busy={removing}
         entityLabel="teacher"
       />
-    </PageLayout>
+    </>
   );
 }

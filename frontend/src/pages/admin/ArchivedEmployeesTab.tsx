@@ -11,13 +11,14 @@ import Modal from '../../components/common/Modal';
 import type { ArchivedEmployee, ArchivedEmployeeListItem } from '../../types';
 
 const ROLE_LABEL: Record<string, string> = {
-  teacher: 'Teacher', driver: 'Driver', supervisor: 'Supervisor', staff: 'Staff',
+  teacher: 'Teacher', driver: 'Driver', supervisor: 'Supervisor', staff: 'Staff', admin: 'Administration',
 };
 const ROLE_COLOR: Record<string, string> = {
   teacher: 'bg-indigo-100 text-indigo-700',
   driver: 'bg-cyan-100 text-cyan-700',
   supervisor: 'bg-violet-100 text-violet-700',
   staff: 'bg-emerald-100 text-emerald-700',
+  admin: 'bg-purple-100 text-purple-700',
 };
 const REASON_LABEL: Record<string, string> = {
   resigned: 'Resigned', terminated: 'Terminated', contract_ended: 'Contract ended',
@@ -28,6 +29,7 @@ const ROLE_FILTERS = [
   { value: 'teacher', label: 'Teachers' },
   { value: 'driver', label: 'Drivers' },
   { value: 'supervisor', label: 'Supervisors' },
+  { value: 'admin', label: 'Administration' },
   { value: 'staff', label: 'Staff' },
 ];
 
