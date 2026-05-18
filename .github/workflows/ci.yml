@@ -24,6 +24,8 @@ jobs:
       - run: npm run typecheck
       - name: Tenant-scoping check
         run: npm run check:tenant-scoping
+      - name: Dependency vulnerability audit (high+)
+        run: npm run audit:ci
 
   frontend:
     name: Frontend (typecheck)

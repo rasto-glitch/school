@@ -363,21 +363,53 @@ export async function bulkUploadStudents(req: AuthRequest, res: Response): Promi
     return;
   }
 
+  // Hardened parse. The uploaded buffer is attacker-controlled (any admin),
+  // so: (1) cap rows at read time via `sheetRows` to bound DoS/ReDoS
+  // amplification even within the 10 MB multer limit, (2) only ever touch
+  // the first sheet, (3) scrub prototype-polluting keys from the row
+  // objects — the header row becomes the object keys, so a column literally
+  // named `__proto__`/`constructor`/`prototype` must never reach `obj[key]`.
+  const MAX_UPLOAD_ROWS = 5000;
   let workbook: XLSX.WorkBook;
   try {
-    workbook = XLSX.read(req.file.buffer, { type: 'buffer', cellDates: true });
+    workbook = XLSX.read(req.file.buffer, {
+      type: 'buffer',
+      cellDates: true,
+      sheetRows: MAX_UPLOAD_ROWS + 1, // +1 for the header row
+    });
   } catch {
     res.status(400).json({ error: 'Could not parse the file. Make sure it is a valid .xlsx or .xls file.' });
     return;
   }
 
-  const rows: Record<string, unknown>[] = XLSX.utils.sheet_to_json(
-    workbook.Sheets[workbook.SheetNames[0]],
+  const firstSheetName = workbook.SheetNames[0];
+  if (!firstSheetName || !workbook.Sheets[firstSheetName]) {
+    res.status(400).json({ error: 'The file has no readable sheet.' });
+    return;
+  }
+
+  const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+  const rawRows: Record<string, unknown>[] = XLSX.utils.sheet_to_json(
+    workbook.Sheets[firstSheetName],
     { raw: false, dateNF: 'yyyy-mm-dd', defval: '' }
   );
 
+  const rows: Record<string, unknown>[] = rawRows.map(r => {
+    const clean: Record<string, unknown> = Object.create(null);
+    for (const k of Object.keys(r)) {
+      if (FORBIDDEN_KEYS.has(k)) continue;
+      clean[k] = r[k];
+    }
+    return clean;
+  });
+
   if (rows.length === 0) {
     res.status(400).json({ error: 'The file has no data rows.' });
+    return;
+  }
+
+  if (rows.length > MAX_UPLOAD_ROWS) {
+    res.status(400).json({ error: `Too many rows. Split the upload into files of at most ${MAX_UPLOAD_ROWS} students.` });
     return;
   }
 

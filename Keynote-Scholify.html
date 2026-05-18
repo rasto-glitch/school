@@ -1,0 +1,1137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scholify — Keynote</title>
+
+<!--
+  ════════════════════════════════════════════════════════════════════════
+  SCHOLIFY — KEYNOTE  (self-contained, fed to "claude design")
+  ════════════════════════════════════════════════════════════════════════
+
+  FOR CLAUDE DESIGN — read before generating the PowerPoint:
+
+  • Aesthetic: Apple Keynote. Dark stage (#0E0F12), one accent per pillar,
+    huge light-weight type, generous negative space, no clutter.
+  • Transitions: Apple "Magic Move" / morph. Elements sharing the SAME
+    data-morph="<key>" on consecutive slides MORPH (position, scale, color)
+    between slides — the wordmark, the pillar words, the phone, the receipt.
+    Everything else: 600ms fade + 24px rise. Section dividers: cross-dissolve.
+  • One <section> = one slide, in order. data-screen-label = the slide name.
+
+  • EVERY DEVICE MOCKUP IS REBUILT 1:1 FROM THE REAL SCHOLIFY SOURCE CODE
+    (mobile = Expo/React-Native screens; web = Vite/React + Tailwind). Each
+    frame carries an HTML comment naming the exact source file. The visual
+    system is the app's REAL theme, not invented:
+        mobile  bg #F2F2F7 · card #FFFFFF · text #111827 · 2ndary #6B7280
+                muted #9CA3AF · border #E5E7EB · primary #4F46E5
+                primaryLight #EEF2FF · primaryDark #3730A3
+                success #10B981 · warning #F59E0B · danger #EF4444
+        screen header = 24px/700 title + 13px muted subtitle (real copy)
+    Real product facts honored: Grades = Year→Term table with SCHOOL-DEFINED
+    mark columns + colored badges (never hardcoded); Bus = map-first light
+    overlay, GPS 30s, alerts 10·5·2 + arriving, "Updated Ns ago", km, kid
+    avatars; receipts RCP-YYYY-NNNNN; closed periods reject edits HTTP 423;
+    tuition can lock Grades/Reports until paid; shared teacher+supervisor
+    salary screen. If real screenshots are supplied, drop them into the
+    frame marked by the matching "REAL SCREEN" comment, 1:1.
+  ════════════════════════════════════════════════════════════════════════
+-->
+
+<style>
+  :root{
+    --bg:#0E0F12; --ink:#F8FAFC; --muted:#8A93A3; --dim:#3A4150;
+    --amber-a:#FF9F40; --amber-b:#F472B6;
+    --indigo-a:#6366F1; --indigo-b:#A5B4FC;
+    --emerald-a:#10B981; --emerald-b:#5BD3AC;
+    --line:rgba(255,255,255,0.07);
+    --font:-apple-system,BlinkMacSystemFont,'SF Pro Display','Inter','Segoe UI',Roboto,sans-serif;
+    /* real app tokens (used inside device mockups) */
+    --a-bg:#F2F2F7; --a-card:#FFFFFF; --a-text:#111827; --a-sec:#6B7280;
+    --a-mut:#9CA3AF; --a-bd:#E5E7EB; --a-pri:#4F46E5; --a-priL:#EEF2FF;
+    --a-priD:#3730A3; --a-ok:#10B981; --a-warn:#F59E0B; --a-dng:#EF4444;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{background:var(--bg);color:var(--ink);font-family:var(--font);overflow:hidden;-webkit-font-smoothing:antialiased}
+
+  deck-stage{position:fixed;inset:0;display:block}
+  section{position:absolute;inset:0;display:flex;opacity:0;visibility:hidden;transition:opacity .7s cubic-bezier(.4,0,.2,1)}
+  section.active{opacity:1;visibility:visible;z-index:2}
+  section.leaving{opacity:0;visibility:visible;z-index:1;transition:opacity .5s ease}
+
+  .fill{flex:1;display:flex}
+  .center{align-items:center;justify-content:center}
+  .col{flex-direction:column}
+  .row{display:flex}
+  .pad120{padding:0 120px}
+
+  .hero{font-size:140px;font-weight:300;letter-spacing:-.04em;line-height:.98}
+  .hero-md{font-size:92px;font-weight:300;letter-spacing:-.035em;line-height:1.04}
+  .title{font-size:70px;font-weight:600;letter-spacing:-.03em;line-height:1.06}
+  .title-sm{font-size:54px;font-weight:600;letter-spacing:-.03em;line-height:1.1}
+  .body{font-size:25px;font-weight:400;color:var(--muted);line-height:1.5;max-width:900px}
+  .body-sm{font-size:21px;font-weight:400;color:var(--muted);line-height:1.5;max-width:560px}
+  .kicker{font-size:22px;font-weight:600;color:var(--muted);letter-spacing:.02em}
+  .tiny{font-size:13px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:var(--muted)}
+  b,strong{color:var(--ink);font-weight:700}
+
+  .grad-amber{background:linear-gradient(120deg,var(--amber-a),var(--amber-b));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .grad-indigo{background:linear-gradient(120deg,var(--indigo-a),var(--indigo-b));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .grad-emerald{background:linear-gradient(120deg,var(--emerald-a),var(--emerald-b));-webkit-background-clip:text;background-clip:text;color:transparent}
+
+  .eyebrow{position:absolute;top:64px;left:120px;display:flex;align-items:center;gap:12px;z-index:3}
+  .eyebrow .dot{width:9px;height:9px;border-radius:50%;background:var(--amber-a);box-shadow:0 0 14px var(--amber-a)}
+  .eyebrow.indigo .dot{background:var(--indigo-a);box-shadow:0 0 14px var(--indigo-a)}
+  .eyebrow.emerald .dot{background:var(--emerald-a);box-shadow:0 0 14px var(--emerald-a)}
+  .foot{position:absolute;bottom:56px;left:120px;font-size:13px;letter-spacing:.2em;text-transform:uppercase;color:var(--dim)}
+
+  .bg-academy{background:radial-gradient(1100px 700px at 22% 30%,rgba(255,159,64,.10),transparent 60%)}
+  .bg-school{background:radial-gradient(1100px 700px at 22% 30%,rgba(99,102,241,.12),transparent 60%)}
+  .bg-accounting{background:radial-gradient(1100px 700px at 22% 30%,rgba(16,185,129,.10),transparent 60%)}
+
+  .pillars{display:flex;gap:40px}
+  .pillar{flex:1;border:1px solid var(--line);border-radius:24px;padding:44px;background:rgba(255,255,255,.02)}
+  .pillar .num{font-size:14px;font-weight:800;letter-spacing:.2em;color:var(--dim)}
+  .pillar .name{font-size:40px;font-weight:700;letter-spacing:-.02em;margin:18px 0 16px}
+  .pillar .desc{font-size:17px;color:var(--muted);line-height:1.55}
+
+  /* device chrome */
+  .phone{width:300px;height:620px;border-radius:52px;background:#0B0F14;padding:11px;
+    box-shadow:0 50px 120px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.06)}
+  .phone .screen{position:relative;width:100%;height:100%;border-radius:42px;overflow:hidden;background:var(--a-bg)}
+  .phone .island{position:absolute;top:14px;left:50%;transform:translateX(-50%);width:96px;height:28px;background:#000;border-radius:16px;z-index:9}
+  .phone .status{position:absolute;top:18px;left:0;right:0;display:flex;justify-content:space-between;padding:0 30px;font-size:12px;font-weight:700;color:var(--a-text);z-index:8}
+  .phone .body-area{position:absolute;inset:0;padding:100px 22px 0;overflow:hidden}
+  .phone .home{position:absolute;bottom:9px;left:50%;transform:translateX(-50%);width:120px;height:5px;border-radius:3px;background:rgba(17,24,39,.32);z-index:9}
+  .scr-title{font-size:34px;font-weight:700;color:var(--a-text);letter-spacing:-.02em}
+  .scr-sub{font-size:13px;color:var(--a-sec);margin-top:4px}
+  .acard{background:var(--a-card);border-radius:18px;box-shadow:0 4px 16px rgba(15,23,42,.06)}
+
+  .browser{border-radius:16px;overflow:hidden;background:#fff;box-shadow:0 50px 120px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.06)}
+  .browser .topbar{display:flex;align-items:center;gap:16px;padding:13px 18px;background:#E9ECF1}
+  .browser .tl{display:flex;gap:7px}
+  .browser .tl span{width:11px;height:11px;border-radius:50%;background:#C5CBD3}
+  .browser .url{flex:1;background:#fff;border-radius:8px;padding:7px 14px;font-size:12px;color:#64748B;font-weight:500}
+  /* web app uses a light gray canvas + PageLayout heading */
+  .page{background:#fff;padding:30px 38px}
+  .page h2{font-size:32px;font-weight:700;color:#0F172A;letter-spacing:-.02em}
+  .page .psub{font-size:14px;color:#64748B;margin-top:3px}
+  .wcard{background:#fff;border:1px solid #E5E9EF;border-radius:18px;box-shadow:0 4px 16px rgba(15,23,42,.05)}
+
+  .receipt{width:340px;background:#fff;color:#111827;border-radius:18px;padding:30px 32px;box-shadow:0 50px 120px rgba(0,0,0,.55)}
+  .receipt h1{font-size:22px;letter-spacing:-.02em}
+  .receipt .rcpno{font-size:12px;color:#6B7280;font-weight:700;font-family:ui-monospace,Menlo,monospace;margin-top:5px}
+  .receipt hr{border:none;height:1px;background:#EEF1F5;margin:16px 0}
+  .receipt .line{display:flex;justify-content:space-between;font-size:14px;color:#475569;padding:5px 0}
+  .receipt .line .l{color:#9CA3AF}
+  .receipt .grand{display:flex;justify-content:space-between;font-size:19px;font-weight:800;margin-top:12px}
+  .receipt .grand .v{color:#10B981}
+
+  .stat .v{font-size:54px;font-weight:800;letter-spacing:-.03em}
+  .stat .l{font-size:15px;color:var(--muted);margin-top:6px}
+
+  .anim-up,.anim-fade{opacity:0}
+  .active .anim-up{animation:up .8s cubic-bezier(.2,.7,.2,1) forwards}
+  .active .anim-fade{animation:fade 1s ease forwards}
+  .active .d-1{animation-delay:.12s}.active .d-2{animation-delay:.26s}.active .d-3{animation-delay:.4s}
+  @keyframes up{from{opacity:0;transform:translateY(26px)}to{opacity:1;transform:none}}
+  @keyframes fade{from{opacity:0}to{opacity:1}}
+
+  #morph{position:fixed;inset:0;z-index:50;pointer-events:none}
+  #morph .m{position:absolute;will-change:transform,opacity}
+  #bar{position:fixed;bottom:0;left:0;height:2px;background:linear-gradient(90deg,var(--indigo-a),var(--emerald-b));z-index:60;transition:width .5s ease}
+  #hint{position:fixed;bottom:18px;right:24px;font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--dim);z-index:60}
+</style>
+</head>
+<body>
+
+<deck-stage>
+
+<!-- 01 ─ COLD OPEN ────────────────────────────────────────────────── -->
+<section data-screen-label="01 Cold open">
+  <div class="fill center col">
+    <div class="anim-fade tiny" style="margin-bottom:40px">A keynote</div>
+    <div class="anim-up d-1 hero" data-morph="wordmark" style="font-weight:300;color:rgba(248,250,252,.62)">Scholify</div>
+  </div>
+  <div class="foot">For the schools that are ready</div>
+</section>
+
+<!-- 02 ─ THE PROBLEM ──────────────────────────────────────────────── -->
+<section data-screen-label="02 The problem">
+  <div class="fill center pad120">
+    <div class="hero-md anim-up" style="text-align:center;max-width:1500px">Every school has<br>the same goal.</div>
+  </div>
+</section>
+
+<!-- 03 ─ THE DAILY REALITY ────────────────────────────────────────── -->
+<section data-screen-label="03 The reality">
+  <div class="fill col center pad120" style="gap:28px">
+    <div class="kicker anim-fade" style="margin-bottom:16px">But ask anyone what their day looks like</div>
+    <div class="title anim-up d-1" style="text-align:center">Five WhatsApp groups<br>just to send homework.</div>
+    <div class="body anim-up d-2" style="text-align:center;margin-top:8px">
+      Parents calling the front desk to ask where the bus is. Accountants chasing
+      unpaid tuition by hand. Student records in a paper folder in a cabinet somewhere.
+    </div>
+  </div>
+</section>
+
+<!-- 04 ─ SYSTEMS PROBLEM ──────────────────────────────────────────── -->
+<section data-screen-label="04 Systems problem">
+  <div class="fill center pad120">
+    <div class="hero-md anim-up" style="text-align:center;max-width:1500px">
+      <span style="color:rgba(248,250,252,.42)">The problem isn't the people.</span><br>It's the systems.
+    </div>
+  </div>
+</section>
+
+<!-- 05 ─ THAT CHANGES TODAY ───────────────────────────────────────── -->
+<section data-screen-label="05 That changes today">
+  <div class="fill center">
+    <div class="hero anim-up" data-morph="wordmark">That changes today.</div>
+  </div>
+</section>
+
+<!-- 06 ─ INTRODUCING SCHOLIFY ─────────────────────────────────────── -->
+<section data-screen-label="06 Introducing Scholify">
+  <div class="fill center col">
+    <div class="hero" data-morph="wordmark" style="background:linear-gradient(120deg,#fff,#A5B4FC);-webkit-background-clip:text;background-clip:text;color:transparent">Scholify</div>
+    <div class="body anim-fade d-2" style="text-align:center;margin-top:40px">
+      One intelligent platform for the whole school — academic, administrative, financial.
+      No more juggling tools. No more parents in the dark.
+    </div>
+  </div>
+</section>
+
+<!-- 07 ─ THREE PILLARS ────────────────────────────────────────────── -->
+<section data-screen-label="07 Three pillars">
+  <div class="fill pad120 col" style="justify-content:center">
+    <div class="kicker anim-fade" style="margin-bottom:56px">Every school runs on three things</div>
+    <div class="pillars">
+      <div class="pillar anim-up d-1">
+        <div class="num">01</div>
+        <div class="name grad-amber" data-morph="p-academy">Academy</div>
+        <div class="desc">Homework, assignments, Learn library &amp; teacher blogs, monthly reports, end-of-year grades.</div>
+      </div>
+      <div class="pillar anim-up d-2">
+        <div class="num">02</div>
+        <div class="name grad-indigo" data-morph="p-mgmt">Management</div>
+        <div class="desc">Live bus tracking, announcements, reception &amp; appointments, student &amp; staff records.</div>
+      </div>
+      <div class="pillar anim-up d-3">
+        <div class="num">03</div>
+        <div class="name grad-emerald" data-morph="p-acct">Accounting</div>
+        <div class="desc">Tuition, receipts, staff salaries, periods, full financial oversight.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 08 ─ ACADEMY (title) ──────────────────────────────────────────── -->
+<section data-screen-label="08 Academy" class="bg-academy">
+  <div class="eyebrow"><div class="dot"></div><div class="tiny" style="color:#FFC58A">Pillar 01</div></div>
+  <div class="fill center"><div class="hero grad-amber anim-up" data-morph="p-academy">Academy.</div></div>
+</section>
+
+<!-- 09 ─ FOUNDER STORY ────────────────────────────────────────────── -->
+<section data-screen-label="09 Founder story" class="bg-academy">
+  <div class="eyebrow"><div class="dot"></div><div class="tiny" style="color:#FFC58A">A personal note</div></div>
+  <div class="fill center pad120">
+    <div style="max-width:1500px">
+      <div class="title anim-up">“Before I built Scholify,<br>I was a teacher.”</div>
+      <div class="body anim-up d-2" style="margin-top:46px">
+        My students understood a topic perfectly in class — and a week later it was gone.
+        So I wrote the lessons in my own words, online, the way I'd explain them in class.
+        Their recall improved. Their grades went up. <b>That experience is baked into every part of Scholify's academy.</b>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 10 ─ HOMEWORK & ASSIGNMENTS ───────────────────────────────────── -->
+<section data-screen-label="10 Homework and assignments">
+  <div class="eyebrow"><div class="dot"></div><div class="tiny" style="color:#FFC58A">Academy · Homework</div></div>
+  <div class="fill pad120 row" style="align-items:center;gap:110px">
+    <div class="col anim-up" style="flex:1">
+      <div class="title">Homework.<br>Assignments.<br><span class="grad-amber">In the app.</span></div>
+      <div class="body" style="margin-top:44px">
+        Due dates, images, supporting materials — posted straight to the platform.
+        No WhatsApp groups. No parent ever holding a teacher's personal number.
+        Privacy protected, on both sides.
+      </div>
+    </div>
+    <div class="anim-up d-2" style="flex:0 0 auto">
+      <!-- REAL SCREEN: mobile/src/screens/parent/HomeworkScreen.tsx -->
+      <div class="phone" data-morph="phone">
+        <div class="screen">
+          <div class="island"></div><div class="status"><span>9:41</span><span>● ● ●●</span></div>
+          <div class="body-area">
+            <div class="scr-title">Homework</div>
+            <div class="scr-sub">All homework assigned to your child</div>
+            <div class="acard" style="margin-top:18px;padding:14px;display:flex;gap:10px">
+              <div style="width:36px;height:36px;border-radius:8px;background:var(--a-priL);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+              </div>
+              <div style="flex:1">
+                <div style="display:flex;justify-content:space-between;gap:8px">
+                  <div style="font-size:15px;font-weight:600;color:var(--a-text)">Workbook pages 42–45</div>
+                  <div style="background:var(--a-priL);border-radius:999px;padding:3px 10px;font-size:11px;font-weight:700;color:var(--a-pri);height:fit-content">Mathematics</div>
+                </div>
+                <div style="font-size:11px;color:var(--a-mut);margin-top:4px">Grade 5B</div>
+                <div style="font-size:13px;color:var(--a-sec);margin-top:4px;line-height:1.4">Solve the practice set; photo of working attached.</div>
+                <div style="display:flex;align-items:center;gap:4px;margin-top:6px;font-size:11px;color:var(--a-mut)">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg> Due tomorrow
+                </div>
+              </div>
+            </div>
+            <div class="acard" style="margin-top:9px;padding:14px;display:flex;gap:10px">
+              <div style="width:36px;height:36px;border-radius:8px;background:var(--a-priL);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+              </div>
+              <div style="flex:1">
+                <div style="display:flex;justify-content:space-between;gap:8px">
+                  <div style="font-size:15px;font-weight:600;color:var(--a-text)">Read chapter four</div>
+                  <div style="background:var(--a-priL);border-radius:999px;padding:3px 10px;font-size:11px;font-weight:700;color:var(--a-pri);height:fit-content">English</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:4px;margin-top:6px;font-size:11px;color:var(--a-dng);font-weight:600">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#EF4444" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg> Yesterday
+                  <span style="background:#FEE2E2;color:#EF4444;border-radius:999px;padding:2px 7px;font-size:10px;font-weight:700;margin-left:4px">Overdue</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="home"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 11 ─ LEARN: EBOOKS & TEACHER BLOGS ────────────────────────────── -->
+<section data-screen-label="11 Learn">
+  <div class="eyebrow"><div class="dot"></div><div class="tiny" style="color:#FFC58A">Academy · Learn</div></div>
+  <div class="fill pad120 row" style="align-items:center;gap:110px">
+    <div class="anim-up" style="flex:0 0 auto">
+      <!-- REAL SCREEN: mobile/src/screens/parent/LearnScreen.tsx (E-Books | Posts | Saved) -->
+      <div class="phone" data-morph="phone">
+        <div class="screen">
+          <div class="island"></div><div class="status"><span>9:41</span><span>● ● ●●</span></div>
+          <div style="position:absolute;top:54px;left:0;right:0;background:#fff;border-bottom:1px solid var(--a-bd);display:flex;position:relative">
+          </div>
+          <div style="position:absolute;top:54px;left:0;right:0;height:42px;background:#fff;border-bottom:1px solid var(--a-bd);display:flex">
+            <div style="flex:1;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;color:var(--a-pri)">E-Books</div>
+            <div style="flex:1;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;color:var(--a-mut)">Posts</div>
+            <div style="flex:1;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;color:var(--a-mut)">Saved</div>
+            <div style="position:absolute;bottom:0;left:0;width:33.33%;height:2px;background:var(--a-pri)"></div>
+          </div>
+          <div style="position:absolute;top:96px;left:0;right:0;bottom:0;padding:14px 16px;overflow:hidden">
+            <div class="acard" style="padding:12px;display:flex;gap:12px;border:1px solid var(--a-bd)">
+              <div style="width:72px;height:96px;border-radius:12px;background:var(--a-priL);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+              </div>
+              <div style="flex:1;display:flex;flex-direction:column;justify-content:center">
+                <div style="font-size:13px;font-weight:700;color:var(--a-text)">The Solar System</div>
+                <div style="font-size:11px;color:var(--a-mut);margin-bottom:10px">Science · Unit 3</div>
+                <div style="height:6px;border-radius:3px;background:var(--a-bd);overflow:hidden"><div style="height:100%;width:62%;background:var(--a-pri)"></div></div>
+                <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:10px;font-weight:600;color:var(--a-mut)"><span>62%</span><span>p. 15 / 24</span></div>
+              </div>
+            </div>
+            <div class="acard" style="margin-top:14px;padding:14px;border:1px solid var(--a-bd)">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+                <div style="width:36px;height:36px;border-radius:18px;background:var(--a-priL);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:var(--a-pri)">K</div>
+                <div style="flex:1"><div style="font-size:13px;font-weight:600;color:var(--a-text)">Karim — Science</div><div style="font-size:11px;color:var(--a-mut)">5/12/2026</div></div>
+              </div>
+              <div style="font-size:15px;font-weight:700;color:var(--a-text);margin-bottom:4px">Fractions, the way I say it in class</div>
+              <div style="font-size:13px;color:var(--a-mut);line-height:1.4">Think of a pizza cut into equal slices. <span style="color:var(--a-pri);font-weight:600">see more</span></div>
+              <div style="display:flex;gap:18px;align-items:center;margin-top:12px;padding-top:10px;border-top:1px solid var(--a-bd);font-size:11px;color:var(--a-mut);font-weight:600">
+                <span>♡ 18</span><span>💬 4</span><span style="margin-left:auto">🔖</span>
+              </div>
+            </div>
+          </div>
+          <div class="home"></div>
+        </div>
+      </div>
+    </div>
+    <div class="col anim-up d-2" style="flex:1">
+      <div class="title">Lessons in the<br><span class="grad-amber">teacher's voice.</span></div>
+      <div class="body" style="margin-top:44px">
+        A digital library for the curriculum and any book the school adds — with reading
+        progress — and a blog where teachers post explanations in their own words.
+        Students revisit a lesson on their own time. Knowledge sticks.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 12 ─ PARENT–TEACHER COMMUNICATION ─────────────────────────────── -->
+<section data-screen-label="12 Communication">
+  <div class="eyebrow"><div class="dot"></div><div class="tiny" style="color:#FFC58A">Academy · Communication</div></div>
+  <div class="fill pad120 row" style="align-items:center;gap:110px">
+    <div class="col anim-up" style="flex:1">
+      <div class="title">A direct line —<br><span class="grad-amber">no numbers shared.</span></div>
+      <div class="body" style="margin-top:44px">
+        Teachers chat with parents about academic performance. Supervisors reach out
+        about behavior. Parents always have a clear path to the people responsible for
+        their child's day — without anyone's personal contact details being exposed.
+      </div>
+    </div>
+    <div class="anim-up d-2" style="flex:0 0 auto">
+      <!-- REAL SCREEN: mobile chat list (REST messages, socket typing) — app theme -->
+      <div class="phone" data-morph="phone">
+        <div class="screen">
+          <div class="island"></div><div class="status"><span>9:41</span><span>● ● ●●</span></div>
+          <div class="body-area">
+            <div class="scr-title">Chat</div>
+            <div class="scr-sub">Messages with your child's teachers</div>
+            <div style="margin-top:16px">
+              <div style="display:flex;gap:12px;align-items:center;padding:13px 2px;border-bottom:1px solid var(--a-bd)">
+                <div style="width:44px;height:44px;border-radius:22px;background:var(--a-priL);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--a-pri)">T</div>
+                <div style="flex:1"><div style="display:flex;justify-content:space-between"><div style="font-size:14px;font-weight:700;color:var(--a-text)">Class teacher</div><div style="font-size:11px;color:var(--a-mut)">2m</div></div><div style="font-size:13px;color:var(--a-sec);margin-top:2px">Strong week in math — let's catch up</div></div>
+                <div style="background:var(--a-pri);color:#fff;font-size:11px;font-weight:700;padding:2px 7px;border-radius:999px">2</div>
+              </div>
+              <div style="display:flex;gap:12px;align-items:center;padding:13px 2px;border-bottom:1px solid var(--a-bd)">
+                <div style="width:44px;height:44px;border-radius:22px;background:var(--a-priL);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--a-pri)">S</div>
+                <div style="flex:1"><div style="display:flex;justify-content:space-between"><div style="font-size:14px;font-weight:700;color:var(--a-text)">Supervisor</div><div style="font-size:11px;color:var(--a-mut)">1h</div></div><div style="font-size:13px;color:var(--a-sec);margin-top:2px;font-style:italic">typing…</div></div>
+              </div>
+              <div style="display:flex;gap:12px;align-items:center;padding:13px 2px;border-bottom:1px solid var(--a-bd)">
+                <div style="width:44px;height:44px;border-radius:22px;background:var(--a-priL);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--a-pri)">M</div>
+                <div style="flex:1"><div style="display:flex;justify-content:space-between"><div style="font-size:14px;font-weight:700;color:var(--a-text)">Math teacher</div><div style="font-size:11px;color:var(--a-mut)">Yest</div></div><div style="font-size:13px;color:var(--a-sec);margin-top:2px">Shared the practice sheet.</div></div>
+              </div>
+            </div>
+          </div>
+          <div class="home"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 13 ─ MONTHLY REPORTS ──────────────────────────────────────────── -->
+<section data-screen-label="13 Monthly reports">
+  <div class="eyebrow"><div class="dot"></div><div class="tiny" style="color:#FFC58A">Academy · Reports</div></div>
+  <div class="fill pad120 row" style="align-items:center;gap:110px">
+    <div class="anim-up" style="flex:0 0 auto">
+      <!-- REAL SCREEN: mobile/src/screens/parent/ReportsScreen.tsx -->
+      <div class="phone" data-morph="phone">
+        <div class="screen">
+          <div class="island"></div><div class="status"><span>9:41</span><span>● ● ●●</span></div>
+          <div class="body-area">
+            <div class="scr-title">Reports</div>
+            <div class="scr-sub">Teacher reports for your child</div>
+            <div class="acard" style="margin-top:18px;padding:14px">
+              <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:8px">
+                <div style="width:36px;height:36px;border-radius:8px;background:#FAF5FF;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9333EA" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+                </div>
+                <div style="flex:1"><div style="font-size:15px;font-weight:700;color:var(--a-text)">Mathematics</div><div style="font-size:11px;color:var(--a-mut);margin-top:2px">Maya · Grade 5B</div></div>
+                <div style="font-size:11px;color:var(--a-mut)">5/2/2026</div>
+              </div>
+              <div style="font-size:13px;color:var(--a-sec);line-height:1.5">A real turnaround in fractions this month — explained a problem to another student on Wednesday. Reading pace is the focus for next month.</div>
+              <div style="font-size:11px;color:var(--a-mut);margin-top:6px">by Mr. Karim</div>
+            </div>
+            <div class="acard" style="margin-top:9px;padding:14px">
+              <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:8px">
+                <div style="width:36px;height:36px;border-radius:8px;background:#FAF5FF;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9333EA" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+                </div>
+                <div style="flex:1"><div style="font-size:15px;font-weight:700;color:var(--a-text)">Science</div><div style="font-size:11px;color:var(--a-mut);margin-top:2px">Maya · Grade 5B</div></div>
+                <div style="font-size:11px;color:var(--a-mut)">5/2/2026</div>
+              </div>
+              <div style="font-size:13px;color:var(--a-sec);line-height:1.5">Curious and engaged in the unit experiments. Behavior in group work has improved noticeably.</div>
+              <div style="font-size:11px;color:var(--a-mut);margin-top:6px">by Ms. Lara</div>
+            </div>
+          </div>
+          <div class="home"></div>
+        </div>
+      </div>
+    </div>
+    <div class="col anim-up d-2" style="flex:1">
+      <div class="title">Every month,<br><span class="grad-amber">a real picture.</span></div>
+      <div class="body" style="margin-top:44px">
+        A structured report per subject — grades, classroom behavior, and personalized
+        notes. Parents stay informed in a meaningful way, not just at the end of the
+        year when it may be too late to act.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 14 ─ END-OF-YEAR GRADES (real Year→Term table) ────────────────── -->
+<section data-screen-label="14 End of year grades">
+  <div class="eyebrow"><div class="dot"></div><div class="tiny" style="color:#FFC58A">Academy · Grades</div></div>
+  <div class="fill pad120 row" style="align-items:center;gap:90px">
+    <div class="col anim-up" style="flex:1">
+      <div class="title">Grades the<br>school defines —<br><span class="grad-amber">not the software.</span></div>
+      <div class="body" style="margin-top:40px">
+        No printed papers, no waiting in line. Every column is a mark type the school
+        configured — daily, quiz, monthly, term, whatever fits. The platform never
+        hardcodes how a school grades; it records what they actually do.
+      </div>
+    </div>
+    <div class="anim-up d-2" style="flex:0 0 auto">
+      <!-- REAL SCREEN: mobile/src/screens/parent/GradesScreen.tsx (Year→Term table, school-defined marks) -->
+      <div class="phone" data-morph="phone">
+        <div class="screen">
+          <div class="island"></div><div class="status"><span>9:41</span><span>● ● ●●</span></div>
+          <div class="body-area">
+            <div class="scr-title">Grades</div>
+            <div class="scr-sub">Academic marks per term for your child</div>
+            <div class="acard" style="margin-top:16px;overflow:hidden">
+              <div style="background:var(--a-bg);border-bottom:1px solid var(--a-bd);padding:10px 14px;font-size:14px;font-weight:700;color:var(--a-text)">2025–2026</div>
+              <div style="background:var(--a-priL);padding:6px 14px;border-bottom:1px solid var(--a-bd);font-size:11px;font-weight:700;color:var(--a-pri);letter-spacing:.5px">TERM 2</div>
+              <div style="padding:8px">
+                <div style="display:grid;grid-template-columns:1.5fr .8fr .8fr .8fr .9fr;padding:6px 4px;font-size:10px;font-weight:600;color:var(--a-mut);text-transform:uppercase;letter-spacing:.3px">
+                  <div>Subject</div><div style="text-align:center">Daily</div><div style="text-align:center">Quiz</div><div style="text-align:center">Monthly</div><div style="text-align:center">Total</div>
+                </div>
+                <div style="display:grid;grid-template-columns:1.5fr .8fr .8fr .8fr .9fr;align-items:center;padding:8px 4px;font-size:13px;background:rgba(242,242,247,.5)">
+                  <div style="font-weight:600;color:var(--a-text)">Math</div>
+                  <div style="text-align:center"><span style="background:#F0FDF4;color:#15803D;border-radius:6px;padding:2px 6px;font-size:13px;font-weight:700">9.5</span></div>
+                  <div style="text-align:center"><span style="background:#EFF6FF;color:#1D4ED8;border-radius:6px;padding:2px 6px;font-size:13px;font-weight:700">18</span></div>
+                  <div style="text-align:center"><span style="background:#EFF6FF;color:#1D4ED8;border-radius:6px;padding:2px 6px;font-size:13px;font-weight:700">27</span></div>
+                  <div style="text-align:center"><span style="background:#F0FDF4;color:#15803D;border-radius:6px;padding:2px 6px;font-size:13px;font-weight:700">94</span></div>
+                </div>
+                <div style="display:grid;grid-template-columns:1.5fr .8fr .8fr .8fr .9fr;align-items:center;padding:8px 4px;font-size:13px">
+                  <div style="font-weight:600;color:var(--a-text)">Science</div>
+                  <div style="text-align:center"><span style="background:#FFFBEB;color:#B45309;border-radius:6px;padding:2px 6px;font-size:13px;font-weight:700">8</span></div>
+                  <div style="text-align:center"><span style="background:#EFF6FF;color:#1D4ED8;border-radius:6px;padding:2px 6px;font-size:13px;font-weight:700">15</span></div>
+                  <div style="text-align:center"><span style="background:#FFFBEB;color:#B45309;border-radius:6px;padding:2px 6px;font-size:13px;font-weight:700">24</span></div>
+                  <div style="text-align:center"><span style="background:#FFFBEB;color:#B45309;border-radius:6px;padding:2px 6px;font-size:13px;font-weight:700">82</span></div>
+                </div>
+                <div style="display:grid;grid-template-columns:1.5fr .8fr .8fr .8fr .9fr;align-items:center;padding:8px 4px;font-size:13px;background:rgba(242,242,247,.5)">
+                  <div style="font-weight:600;color:var(--a-text)">English</div>
+                  <div style="text-align:center"><span style="background:#F0FDF4;color:#15803D;border-radius:6px;padding:2px 6px;font-size:13px;font-weight:700">10</span></div>
+                  <div style="text-align:center"><span style="background:#F0FDF4;color:#15803D;border-radius:6px;padding:2px 6px;font-size:13px;font-weight:700">19</span></div>
+                  <div style="text-align:center"><span style="background:#F0FDF4;color:#15803D;border-radius:6px;padding:2px 6px;font-size:13px;font-weight:700">28</span></div>
+                  <div style="text-align:center"><span style="background:#F0FDF4;color:#15803D;border-radius:6px;padding:2px 6px;font-size:13px;font-weight:700">96</span></div>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 4px;border-top:2px solid var(--a-bd);background:var(--a-bg)">
+                  <div style="font-size:11px;font-weight:700;color:var(--a-sec);text-transform:uppercase;letter-spacing:.3px">Term Average</div>
+                  <span style="background:#F0FDF4;color:#15803D;border-radius:6px;padding:2px 7px;font-size:13px;font-weight:700">90.7</span>
+                </div>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-top:2px solid var(--a-bd);background:var(--a-bg)">
+                <div style="font-size:13px;font-weight:700;color:var(--a-sec)">Year Average</div>
+                <span style="background:#F0FDF4;color:#15803D;border-radius:6px;padding:2px 7px;font-size:13px;font-weight:700">90</span>
+              </div>
+            </div>
+          </div>
+          <div class="home"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 15 ─ SEGUE → MANAGEMENT ───────────────────────────────────────── -->
+<section data-screen-label="15 Segue management">
+  <div class="fill center pad120">
+    <div class="hero-md anim-up" style="text-align:center;max-width:1500px">
+      <span style="color:rgba(248,250,252,.42)">Learning happens inside</span><br>a school that has to run.
+    </div>
+  </div>
+</section>
+
+<!-- 16 ─ MANAGEMENT (title) ───────────────────────────────────────── -->
+<section data-screen-label="16 Management" class="bg-school">
+  <div class="eyebrow indigo"><div class="dot"></div><div class="tiny" style="color:#C7D2FE">Pillar 02</div></div>
+  <div class="fill center"><div class="hero grad-indigo anim-up" data-morph="p-mgmt">Management.</div></div>
+</section>
+
+<!-- 17 ─ LIVE BUS TRACKING (real map-first light overlay) ─────────── -->
+<section data-screen-label="17 Live bus tracking" class="bg-school">
+  <div class="eyebrow indigo"><div class="dot"></div><div class="tiny" style="color:#C7D2FE">Management · Bus</div></div>
+  <div class="fill pad120 row" style="align-items:center;gap:90px">
+    <div class="col anim-up" style="flex:1">
+      <div class="title">A parent's first<br>priority is <span class="grad-indigo">safety.</span></div>
+      <div class="body" style="margin-top:36px">
+        The bus moving in real time on a map, a live ETA, bus number, plate, driver
+        contact. The driver's phone posts GPS every 30 seconds — at
+        <b>10 · 5 · 2 minutes</b> and <b>arriving</b>, the parent gets a tap on the
+        shoulder. This isn't a feature. It's peace of mind.
+      </div>
+      <div class="row anim-up d-2" style="margin-top:54px;gap:48px;max-width:620px">
+        <div class="stat"><div class="v grad-indigo">30s</div><div class="l">GPS interval</div></div>
+        <div class="stat"><div class="v grad-indigo">4</div><div class="l">Alert thresholds</div></div>
+        <div class="stat"><div class="v grad-indigo">Live</div><div class="l">Map-first overlay</div></div>
+      </div>
+    </div>
+    <div class="anim-up d-2" style="flex:0 0 auto">
+      <!-- REAL SCREEN: mobile/src/screens/parent/BusTrackingScreen.tsx (light overlay cards) -->
+      <div class="phone" data-morph="phone">
+        <div class="screen" style="background:#E8EBF0">
+          <div class="island" style="z-index:20"></div>
+          <div class="status" style="z-index:20"><span>9:41</span><span>● ● ●●</span></div>
+          <!-- light apple-style map -->
+          <svg width="100%" height="100%" viewBox="0 0 420 880" style="position:absolute;inset:0">
+            <rect width="420" height="880" fill="#E8EBF0"/>
+            <rect x="0" y="430" width="160" height="220" fill="#D7EBD8"/>
+            <rect x="240" y="120" width="180" height="150" fill="#EDF0F4"/>
+            <line x1="0" y1="250" x2="420" y2="250" stroke="#fff" stroke-width="16"/>
+            <line x1="0" y1="430" x2="420" y2="430" stroke="#fff" stroke-width="18"/>
+            <line x1="150" y1="0" x2="150" y2="880" stroke="#fff" stroke-width="16"/>
+            <line x1="300" y1="0" x2="300" y2="880" stroke="#fff" stroke-width="14"/>
+            <path d="M 270 330 Q 200 470 150 620" fill="none" stroke="#4F46E5" stroke-width="5" stroke-linecap="round" stroke-dasharray="2 9"/>
+            <g transform="translate(150,620)"><circle r="13" fill="#fff" stroke="#EF4444" stroke-width="3"/><circle r="5" fill="#EF4444"/></g>
+            <g transform="translate(270,330)"><circle r="22" fill="#4F46E5" stroke="#fff" stroke-width="3"/><path d="M-7 -6 H7 V4 H-7 Z M-5 4 V7 M5 4 V7" stroke="#fff" stroke-width="1.6" fill="none"/></g>
+          </svg>
+          <!-- TOP card (white, real component) -->
+          <div style="position:absolute;top:60px;left:12px;right:12px;background:#fff;border-radius:18px;padding:8px 18px 16px;box-shadow:0 6px 24px rgba(0,0,0,.12)">
+            <div style="display:flex;align-items:center;gap:6px;padding-top:6px">
+              <div style="width:8px;height:8px;border-radius:4px;background:var(--a-pri)"></div>
+              <div style="font-size:11px;font-weight:700;color:var(--a-pri);text-transform:uppercase;letter-spacing:.6px">Live</div>
+              <div style="margin-left:auto;font-size:11px;font-weight:600;color:var(--a-sec)">Updated 12s ago</div>
+            </div>
+            <div style="display:flex;align-items:flex-end;gap:14px;margin-top:6px">
+              <div style="flex:1">
+                <div style="font-size:11px;font-weight:600;color:var(--a-sec);text-transform:uppercase;letter-spacing:.4px">Arrives</div>
+                <div style="display:flex;align-items:baseline;gap:6px;margin-top:1px">
+                  <div style="font-size:32px;font-weight:800;letter-spacing:-1px;color:var(--a-text)">08:14</div>
+                  <div style="background:var(--a-priL);border-radius:8px;padding:3px 8px;font-size:12px;font-weight:700;color:var(--a-pri)">in 4 min</div>
+                </div>
+                <div style="font-size:12px;font-weight:500;color:var(--a-sec);margin-top:4px">0.8 km away</div>
+              </div>
+              <div style="text-align:right">
+                <div style="display:flex;justify-content:flex-end">
+                  <div style="width:28px;height:28px;border-radius:14px;background:#F472B6;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;border:2.5px solid #fff">M</div>
+                  <div style="width:28px;height:28px;border-radius:14px;background:#60A5FA;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;border:2.5px solid #fff;margin-left:-10px">L</div>
+                </div>
+                <div style="font-size:11px;font-weight:600;color:var(--a-sec);margin-top:4px">2 onboard</div>
+              </div>
+            </div>
+          </div>
+          <!-- BOTTOM card (driver + actions) -->
+          <div style="position:absolute;bottom:24px;left:12px;right:12px;background:#fff;border-radius:18px;padding:14px 18px;box-shadow:0 6px 24px rgba(0,0,0,.12)">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+              <div style="width:40px;height:40px;border-radius:20px;background:var(--a-pri);color:#fff;font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center">SC</div>
+              <div style="flex:1"><div style="font-size:14px;font-weight:700;color:var(--a-text)">Sarah Chen</div><div style="font-size:11px;color:var(--a-sec)">Driver · License DLR-4421</div></div>
+              <div style="display:flex;align-items:center;gap:4px;background:#F1F5F9;border-radius:8px;padding:5px 9px;font-size:11px;font-weight:700;color:var(--a-text)">🚌 #B-204</div>
+            </div>
+            <div style="display:flex;gap:8px">
+              <div style="flex:1;height:44px;border-radius:12px;background:#F1F5F9;border:1px solid #E5E9EF;display:flex;align-items:center;justify-content:center;gap:6px;font-size:13px;font-weight:700;color:var(--a-text)">📞 Call</div>
+              <div style="flex:1;height:44px;border-radius:12px;background:#F1F5F9;border:1px solid #E5E9EF;display:flex;align-items:center;justify-content:center;gap:6px;font-size:13px;font-weight:700;color:var(--a-text)">💬 Text</div>
+              <div style="flex:1;height:44px;border-radius:12px;background:#F1F5F9;border:1px solid #E5E9EF;display:flex;align-items:center;justify-content:center;gap:6px;font-size:13px;font-weight:700;color:var(--a-dng)">🛡 Report</div>
+            </div>
+          </div>
+          <div class="home" style="z-index:20"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 18 ─ SCHOOL ANNOUNCEMENTS ─────────────────────────────────────── -->
+<section data-screen-label="18 Announcements">
+  <div class="eyebrow indigo"><div class="dot"></div><div class="tiny" style="color:#C7D2FE">Management · Announcements</div></div>
+  <div class="fill pad120 row" style="align-items:center;gap:110px">
+    <div class="anim-up" style="flex:0 0 auto">
+      <!-- REAL SCREEN: mobile/src/screens/parent/AnnouncementsScreen.tsx + AnnouncementCard.tsx -->
+      <div class="phone" data-morph="phone">
+        <div class="screen">
+          <div class="island"></div><div class="status"><span>9:41</span><span>● ● ●●</span></div>
+          <div class="body-area">
+            <div class="scr-title">Announcements</div>
+            <div class="scr-sub">School announcements</div>
+            <div class="acard" style="margin-top:16px;overflow:hidden">
+              <div style="padding:14px 14px 8px">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+                  <div style="width:36px;height:36px;border-radius:18px;background:var(--a-priL);display:flex;align-items:center;justify-content:center">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" stroke-width="2"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>
+                  </div>
+                  <div style="flex:1"><div style="font-size:13px;font-weight:700;color:var(--a-text)">Lincoln Elementary</div><div style="font-size:11px;color:var(--a-mut)">May 16, 2026</div></div>
+                  <div style="background:#F3E8FF;border-radius:999px;padding:3px 8px;font-size:11px;font-weight:700;color:#7C3AED">Announcement</div>
+                </div>
+                <div style="font-size:15px;font-weight:700;color:var(--a-text);margin-bottom:6px">Science fair — next Friday</div>
+                <div style="font-size:13px;color:var(--a-sec);line-height:1.4">Projects due to homeroom teachers by Wednesday. Setup begins at 8am in the main hall. <span style="color:var(--a-pri);font-weight:700">see more</span></div>
+              </div>
+              <div style="display:flex;gap:18px;align-items:center;padding:10px 14px;border-top:1px solid var(--a-bd);font-size:13px;font-weight:600;color:var(--a-mut)">
+                <span>♡ 24</span><span>💬 6</span>
+              </div>
+            </div>
+            <div class="acard" style="margin-top:14px;padding:14px 14px 8px">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+                <div style="width:36px;height:36px;border-radius:18px;background:var(--a-priL);display:flex;align-items:center;justify-content:center">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" stroke-width="2"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>
+                </div>
+                <div style="flex:1"><div style="font-size:13px;font-weight:700;color:var(--a-text)">Lincoln Elementary</div><div style="font-size:11px;color:var(--a-mut)">May 14, 2026</div></div>
+                <div style="background:#F3E8FF;border-radius:999px;padding:3px 8px;font-size:11px;font-weight:700;color:#7C3AED">Announcement</div>
+              </div>
+              <div style="font-size:15px;font-weight:700;color:var(--a-text)">Parent evening — book a slot</div>
+            </div>
+          </div>
+          <div class="home"></div>
+        </div>
+      </div>
+    </div>
+    <div class="col anim-up d-2" style="flex:1">
+      <div class="title">The community,<br><span class="grad-indigo">connected.</span></div>
+      <div class="body" style="margin-top:44px">
+        Holidays, sports days, parent evenings — announcements go out instantly.
+        Parents are notified, and they can view, like, and comment. No broadcast list
+        for anyone to manage.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 19 ─ RECEPTION & APPOINTMENTS (real request list + FAB) ───────── -->
+<section data-screen-label="19 Reception and appointments">
+  <div class="eyebrow indigo"><div class="dot"></div><div class="tiny" style="color:#C7D2FE">Management · Reception</div></div>
+  <div class="fill pad120 row" style="align-items:center;gap:110px">
+    <div class="col anim-up" style="flex:1">
+      <div class="title">Book a meeting<br>with the school.<br><span class="grad-indigo">No phone tag.</span></div>
+      <div class="body" style="margin-top:44px">
+        Parents request an appointment through the app; reception confirms and manages
+        it without the back-and-forth. The common questions — balances, events,
+        documents — answered on the platform, saving time on both sides.
+      </div>
+    </div>
+    <div class="anim-up d-2" style="flex:0 0 auto">
+      <!-- REAL SCREEN: mobile/src/screens/parent/AppointmentsScreen.tsx (list + status + FAB) -->
+      <div class="phone" data-morph="phone">
+        <div class="screen">
+          <div class="island"></div><div class="status"><span>9:41</span><span>● ● ●●</span></div>
+          <div class="body-area">
+            <div class="scr-title">Appointments</div>
+            <div class="scr-sub">Book a meeting with the school</div>
+            <div class="acard" style="margin-top:18px;padding:14px">
+              <div style="display:flex;align-items:flex-start;gap:8px">
+                <div style="flex:1"><div style="font-size:15px;font-weight:700;color:var(--a-text)">Discuss reading progress</div><div style="font-size:11px;color:var(--a-mut);margin-top:2px">Requested: 5/21/2026</div></div>
+                <div style="display:flex;align-items:center;gap:4px;background:rgba(16,185,129,.12);border-radius:999px;padding:4px 9px"><span style="color:var(--a-ok);font-size:11px">✓</span><span style="color:var(--a-ok);font-size:11px;font-weight:700">Approved</span></div>
+              </div>
+            </div>
+            <div class="acard" style="margin-top:9px;padding:14px">
+              <div style="display:flex;align-items:flex-start;gap:8px">
+                <div style="flex:1"><div style="font-size:15px;font-weight:700;color:var(--a-text)">Question about transport fee</div><div style="font-size:11px;color:var(--a-mut);margin-top:2px">Requested: 5/19/2026</div></div>
+                <div style="display:flex;align-items:center;gap:4px;background:rgba(245,158,11,.14);border-radius:999px;padding:4px 9px"><span style="color:var(--a-warn);font-size:11px">◴</span><span style="color:var(--a-warn);font-size:11px;font-weight:700">Pending</span></div>
+              </div>
+            </div>
+            <!-- FAB -->
+            <div style="position:absolute;right:20px;bottom:30px;width:56px;height:56px;border-radius:28px;background:var(--a-pri);display:flex;align-items:center;justify-content:center;box-shadow:0 8px 20px rgba(79,70,229,.4)">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+            </div>
+          </div>
+          <div class="home"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 20 ─ STUDENT & STAFF RECORDS (real web AdminStudentsListPage) ──── -->
+<section data-screen-label="20 Records">
+  <div class="eyebrow indigo"><div class="dot"></div><div class="tiny" style="color:#C7D2FE">Management · Records</div></div>
+  <div class="fill pad120 col" style="justify-content:center">
+    <div class="row anim-up" style="align-items:flex-start;gap:90px">
+      <div class="col" style="flex:0 0 540px">
+        <div class="title-sm">No paper folders.<br>No filing cabinet.<br><span class="grad-indigo">Digital. Secure.</span></div>
+        <div class="body-sm" style="margin-top:36px">
+          Every student and staff record — name, date of birth, contacts, address,
+          academic history, grades — organized, accessible, protected. When someone
+          leaves, the record is archived, not lost.
+        </div>
+      </div>
+      <div class="anim-up d-2" style="flex:1;max-width:1000px">
+        <!-- REAL SCREEN: frontend/src/pages/admin/AdminStudentsListPage.tsx -->
+        <div class="browser">
+          <div class="topbar"><div class="tl"><span></span><span></span><span></span></div><div class="url">app.scholify.com/admin/all-students</div></div>
+          <div class="page">
+            <h2>All Students</h2>
+            <div class="psub">428 students total</div>
+            <div style="display:flex;gap:12px;margin:18px 0">
+              <div style="flex:1;background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:9px 14px;font-size:13px;color:#9CA3AF">🔍 Search by name…</div>
+              <div style="width:200px;background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:9px 14px;font-size:13px;color:#6B7280">All Classes ▾</div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">
+              <!-- card -->
+              <div class="wcard" style="padding:16px;display:flex;align-items:center;gap:12px">
+                <div style="width:40px;height:40px;border-radius:20px;background:#E0E7FF;color:#3730A3;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center">A</div>
+                <div><div style="font-size:14px;font-weight:600;color:#111827">Ahmed Karim</div><div style="font-size:12px;color:#6B7280">Grade 5B</div><div style="font-size:12px;color:#9CA3AF">Guardian: Karim Ali</div></div>
+              </div>
+              <div class="wcard" style="padding:16px;display:flex;align-items:center;gap:12px">
+                <div style="width:40px;height:40px;border-radius:20px;background:#E0E7FF;color:#3730A3;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center">M</div>
+                <div><div style="font-size:14px;font-weight:600;color:#111827">Maya Park</div><div style="font-size:12px;color:#6B7280">Grade 5B</div><div style="font-size:12px;color:#9CA3AF">Guardian: S. Park</div></div>
+              </div>
+              <div class="wcard" style="padding:16px;display:flex;align-items:center;gap:12px">
+                <div style="width:40px;height:40px;border-radius:20px;background:#E0E7FF;color:#3730A3;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center">L</div>
+                <div><div style="font-size:14px;font-weight:600;color:#111827">Lara Hamadi</div><div style="font-size:12px;color:#6B7280">Grade 6A</div><div style="font-size:12px;color:#9CA3AF">Guardian: N. Hamadi</div></div>
+              </div>
+              <div class="wcard" style="padding:16px;display:flex;align-items:center;gap:12px">
+                <div style="width:40px;height:40px;border-radius:20px;background:#E0E7FF;color:#3730A3;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center">S</div>
+                <div><div style="font-size:14px;font-weight:600;color:#111827">Sami Noor</div><div style="font-size:12px;color:#6B7280">Grade 4C</div><div style="font-size:12px;color:#9CA3AF">Guardian: R. Noor</div></div>
+              </div>
+              <div class="wcard" style="padding:16px;display:flex;align-items:center;gap:12px">
+                <div style="width:40px;height:40px;border-radius:20px;background:#E0E7FF;color:#3730A3;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center">D</div>
+                <div><div style="font-size:14px;font-weight:600;color:#111827">Dina Saleh</div><div style="font-size:12px;color:#6B7280">Grade 4C</div><div style="font-size:12px;color:#9CA3AF">Guardian: H. Saleh</div></div>
+              </div>
+              <div class="wcard" style="padding:16px;display:flex;align-items:center;gap:12px">
+                <div style="width:40px;height:40px;border-radius:20px;background:#E0E7FF;color:#3730A3;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center">Y</div>
+                <div><div style="font-size:14px;font-weight:600;color:#111827">Yusuf Adel</div><div style="font-size:12px;color:#6B7280">Grade 3A</div><div style="font-size:12px;color:#9CA3AF">Guardian: A. Adel</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 21 ─ SEGUE → ACCOUNTING ───────────────────────────────────────── -->
+<section data-screen-label="21 Segue accounting">
+  <div class="fill center pad120">
+    <div class="hero-md anim-up" style="text-align:center;max-width:1500px">
+      <span style="color:rgba(248,250,252,.42)">A school can't fulfill its mission</span><br>if it isn't financially healthy.
+    </div>
+  </div>
+</section>
+
+<!-- 22 ─ ACCOUNTING (title) ───────────────────────────────────────── -->
+<section data-screen-label="22 Accounting" class="bg-accounting">
+  <div class="eyebrow emerald"><div class="dot"></div><div class="tiny" style="color:#BFEFD9">Pillar 03</div></div>
+  <div class="fill center"><div class="hero grad-emerald anim-up" data-morph="p-acct">Accounting.</div></div>
+</section>
+
+<!-- 23 ─ TUITION (real web detail: per-plan tabs + locks) + RECEIPT ── -->
+<section data-screen-label="23 Tuition" class="bg-accounting">
+  <div class="eyebrow emerald"><div class="dot"></div><div class="tiny" style="color:#BFEFD9">Accounting · Tuition</div></div>
+  <div class="fill pad120 row" style="align-items:center;gap:60px">
+    <div class="col anim-up" style="flex:1;max-width:900px">
+      <!-- REAL SCREEN: frontend/src/pages/admin/AdminTuitionStudentDetailPage.tsx -->
+      <div class="browser">
+        <div class="topbar"><div class="tl"><span></span><span></span><span></span></div><div class="url">app.scholify.com/accounting/tuition/students/…</div></div>
+        <div class="page">
+          <h2>Maya Park</h2><div class="psub">Sarah Park · Grade 5B</div>
+          <!-- per-plan tabs -->
+          <div style="display:inline-flex;gap:4px;background:#fff;border:1px solid #E5E7EB;border-radius:16px;padding:6px;margin:16px 0">
+            <div style="background:#4F46E5;color:#fff;border-radius:12px;padding:8px 14px;font-size:13px;font-weight:700;display:flex;gap:8px;align-items:center">Tuition <span style="opacity:.9;font-weight:500">$0</span></div>
+            <div style="color:#6B7280;border-radius:12px;padding:8px 14px;font-size:13px;font-weight:700;display:flex;gap:8px;align-items:center">Transport <span style="color:#9CA3AF;font-weight:500">$0</span></div>
+            <div style="color:#6B7280;border-radius:12px;padding:8px 14px;font-size:13px;font-weight:700;display:flex;gap:8px;align-items:center">Lunch <span style="color:#9CA3AF;font-weight:500">$0</span></div>
+          </div>
+          <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px">
+            <div class="wcard" style="padding:18px">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
+                <div><div style="font-size:15px;font-weight:600;color:#111827">Annual Tuition 2025–26</div><div style="font-size:13px;color:#6B7280">2025–2026 · Grade 5B</div></div>
+                <div style="background:#ECFDF5;color:#047857;border:1px solid #A7F3D0;font-size:11px;font-weight:700;padding:4px 10px;border-radius:999px">Paid up</div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:16px">
+                <div><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#6B7280">Plan total</div><div style="font-size:17px;font-weight:700;color:#111827">$4,800</div></div>
+                <div><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#6B7280">Paid</div><div style="font-size:17px;font-weight:700;color:#111827">$4,800</div></div>
+                <div><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#6B7280">Balance</div><div style="font-size:17px;font-weight:700;color:#111827">$0</div></div>
+                <div><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#6B7280">Late fees</div><div style="font-size:17px;font-weight:700;color:#111827">$0</div></div>
+              </div>
+              <div style="height:8px;border-radius:999px;background:#F3F4F6;overflow:hidden;margin-bottom:6px"><div style="height:100%;width:100%;background:#6366F1"></div></div>
+              <div style="font-size:12px;color:#6B7280;margin-bottom:14px">$4,800 of $4,800</div>
+              <div style="border-top:1px solid #F3F4F6;padding-top:12px">
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px">
+                  <span style="font-weight:700;color:#111827">$1,500.00</span>
+                  <span style="color:#6B7280">· 2026-05-17</span>
+                  <span style="font-family:ui-monospace,Menlo,monospace;font-size:11px;background:#F3F4F6;color:#4B5563;padding:1px 6px;border-radius:4px">RCP-2026-00284</span>
+                  <span style="color:#6B7280">· cash</span>
+                </div>
+                <div style="font-size:12px;color:#6B7280;margin-top:3px">Recorded by <b style="color:#111827">Reception · Sara A.</b></div>
+              </div>
+            </div>
+            <!-- Feature locks (script: restrict grades/reports until paid) -->
+            <div class="wcard" style="padding:18px">
+              <div style="font-size:14px;font-weight:600;color:#111827;margin-bottom:4px">Feature locks</div>
+              <div style="font-size:11px;color:#6B7280;margin-bottom:12px;line-height:1.4">Locks apply across all plans. Attendance, bus &amp; chat stay available.</div>
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #F3F4F6">
+                <span style="font-size:13px;font-weight:500;color:#1F2937">Grades</span>
+                <span style="background:#F9FAFB;color:#374151;border:1px solid #E5E7EB;font-size:11px;font-weight:700;padding:5px 11px;border-radius:999px">🔓 Unlocked</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0">
+                <span style="font-size:13px;font-weight:500;color:#1F2937">Reports</span>
+                <span style="background:#FFF1F2;color:#BE123C;border:1px solid #FECDD3;font-size:11px;font-weight:700;padding:5px 11px;border-radius:999px">🔒 Locked</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="anim-up d-2" style="flex:0 0 auto">
+      <!-- server-generated receipt: RCP-{year}-{number padded to 5} -->
+      <div class="receipt" data-morph="receipt">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div><h1>Receipt</h1><div class="rcpno">RCP-2026-00284</div></div>
+          <div style="width:40px;height:40px;border-radius:10px;background:#10B981;color:#fff;font-size:18px;font-weight:800;display:flex;align-items:center;justify-content:center">✓</div>
+        </div>
+        <hr>
+        <div class="line"><span class="l">Student</span><span>Maya Park · 5B</span></div>
+        <div class="line"><span class="l">Paid on</span><span>2026-05-17</span></div>
+        <div class="line"><span class="l">Method</span><span>Cash</span></div>
+        <hr>
+        <div class="line"><span class="l">Tuition · Inst. 4</span><span>$1,200.00</span></div>
+        <div class="line"><span class="l">Transport · May</span><span>$300.00</span></div>
+        <div class="line"><span class="l">Tax</span><span>$0.00</span></div>
+        <div class="grand"><span>Total</span><span class="v">$1,500.00</span></div>
+        <div style="margin-top:14px;display:flex;font-size:11px;color:#9CA3AF;font-weight:700;font-family:ui-monospace,Menlo,monospace">
+          <span>RECORDED · SARA A.</span><span style="margin-left:auto;color:#10B981">VERIFIED</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 24 ─ STAFF SALARIES (real shared mobile SalaryScreen) ─────────── -->
+<section data-screen-label="24 Staff salaries" class="bg-accounting">
+  <div class="eyebrow emerald"><div class="dot"></div><div class="tiny" style="color:#BFEFD9">Accounting · Salaries</div></div>
+  <div class="fill pad120 row" style="align-items:center;gap:100px">
+    <div class="col anim-up" style="flex:1">
+      <div class="title">Every salary,<br><span class="grad-emerald">tracked &amp; notified.</span></div>
+      <div class="body" style="margin-top:44px">
+        Teachers and staff: schedules, amounts, taxes, insurance — managed in one
+        place. Staff are notified in the app the moment a payment is processed.
+        Nothing needs a separate spreadsheet.
+      </div>
+    </div>
+    <div class="anim-up d-2" style="flex:0 0 auto">
+      <!-- REAL SCREEN: mobile/src/screens/shared/SalaryScreen.tsx (teacher + supervisor) -->
+      <div class="phone" data-morph="phone">
+        <div class="screen">
+          <div class="island"></div><div class="status"><span>9:41</span><span>● ● ●●</span></div>
+          <div class="body-area">
+            <div class="scr-title">My Salary</div>
+            <div class="scr-sub">View your salary and payment history.</div>
+            <div style="margin-top:16px;background:var(--a-pri);border-radius:20px;padding:22px;color:#fff;box-shadow:0 12px 26px rgba(79,70,229,.3)">
+              <div style="width:40px;height:40px;border-radius:20px;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;margin-bottom:10px">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+              </div>
+              <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,.85);text-transform:uppercase;letter-spacing:.5px">Monthly amount</div>
+              <div style="font-size:30px;font-weight:800;margin-top:4px">$1,800.00</div>
+              <div style="font-size:13px;color:rgba(255,255,255,.9);margin-top:4px">Teacher</div>
+            </div>
+            <div class="acard" style="margin-top:14px;padding:14px;display:flex;align-items:center;gap:12px">
+              <div style="width:32px;height:32px;border-radius:8px;background:var(--a-priL);display:flex;align-items:center;justify-content:center">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+              </div>
+              <div><div style="font-size:11px;font-weight:600;color:var(--a-mut);text-transform:uppercase;letter-spacing:.5px">Next payment</div><div style="font-size:15px;font-weight:600;color:var(--a-text);margin-top:2px">2026-06-01 · in 15 days</div></div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;margin-top:14px;margin-bottom:8px">
+              <span style="font-size:11px;font-weight:700;color:var(--a-mut);text-transform:uppercase;letter-spacing:.5px">Payment history</span>
+            </div>
+            <div class="acard" style="padding:14px">
+              <div style="display:flex;justify-content:space-between;font-size:14px"><div style="font-weight:700;color:var(--a-text)">$1,800.00</div></div>
+              <div style="font-size:11px;color:var(--a-mut);margin-top:2px">2026-05-01 · May</div>
+              <div style="font-size:11px;color:#4F46E5;margin-top:3px">Insurance: $90.00 · Net: $1,710.00</div>
+            </div>
+          </div>
+          <div class="home"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 25 ─ FULL FINANCIAL OVERSIGHT (real web reports/periods) ──────── -->
+<section data-screen-label="25 Financial oversight" class="bg-accounting">
+  <div class="eyebrow emerald"><div class="dot"></div><div class="tiny" style="color:#BFEFD9">Accounting · Oversight</div></div>
+  <div class="fill pad120 col" style="justify-content:center">
+    <div class="title-sm anim-up">One place where<br><span class="grad-emerald">everything is accounted for.</span></div>
+    <div class="body anim-up d-2" style="margin-top:22px">
+      Ledgers, accounts receivable, P&amp;L, cash flow, period controls. Cash drawers,
+      bank accounts, and wallets in-system. Multi-currency with dated FX — consolidated
+      reporting stays clean.
+    </div>
+    <!-- REAL SCREENS: frontend/src/pages/admin/{ProfitLossPage,ArAgingPage,AccountingPeriodsPage}.tsx -->
+    <div class="row anim-up d-3" style="margin-top:50px;gap:20px">
+      <div class="wcard" style="flex:1;padding:26px">
+        <div style="font-size:11px;font-weight:800;letter-spacing:.5px;color:#047857">PROFIT &amp; LOSS · MAY</div>
+        <div style="font-size:46px;font-weight:800;color:#111827;letter-spacing:-.03em;margin-top:12px">+$48.2K</div>
+        <div style="font-size:13px;color:#6B7280;margin-top:8px">$214K revenue · $166K expenses</div>
+        <div style="margin-top:18px;height:54px;display:flex;align-items:flex-end;gap:5px">
+          <div style="flex:1;height:48%;background:#A7F3D0;border-radius:3px"></div>
+          <div style="flex:1;height:62%;background:#A7F3D0;border-radius:3px"></div>
+          <div style="flex:1;height:55%;background:#A7F3D0;border-radius:3px"></div>
+          <div style="flex:1;height:74%;background:#6EE7B7;border-radius:3px"></div>
+          <div style="flex:1;height:68%;background:#6EE7B7;border-radius:3px"></div>
+          <div style="flex:1;height:82%;background:#10B981;border-radius:3px"></div>
+        </div>
+      </div>
+      <div class="wcard" style="flex:1;padding:26px">
+        <div style="font-size:11px;font-weight:800;letter-spacing:.5px;color:#6B7280">A / R AGING</div>
+        <div style="margin-top:12px">
+          <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #F3F4F6;font-size:13px;color:#6B7280">Current<span style="color:#111827;font-weight:700;font-size:18px">$12,400</span></div>
+          <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #F3F4F6;font-size:13px;color:#6B7280">1–30 days<span style="color:#111827;font-weight:700;font-size:18px">$8,150</span></div>
+          <div style="display:flex;justify-content:space-between;padding:8px 0;font-size:13px;color:#6B7280">60+ days<span style="color:#E11D48;font-weight:700;font-size:18px">$640</span></div>
+        </div>
+      </div>
+      <div class="wcard" style="flex:1;padding:26px">
+        <div style="font-size:11px;font-weight:800;letter-spacing:.5px;color:#6B7280">PERIOD · APRIL 2026</div>
+        <div style="margin-top:12px;display:flex;align-items:center;gap:10px">
+          <div style="width:38px;height:38px;border-radius:10px;background:#ECFDF5;color:#047857;display:flex;align-items:center;justify-content:center">🔒</div>
+          <div><div style="font-size:15px;color:#111827;font-weight:700">Closed</div><div style="font-size:12px;color:#6B7280">482 entries locked</div></div>
+        </div>
+        <div style="margin-top:14px;padding:12px 14px;background:#F9FAFB;border:1px solid #F3F4F6;border-radius:12px;font-size:13px;color:#4B5563;line-height:1.5">
+          Edits to a closed period return <b style="color:#111827">HTTP 423</b>. Reopens are stamped — who &amp; when.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 26 ─ THE THESIS ───────────────────────────────────────────────── -->
+<section data-screen-label="26 One platform">
+  <div class="fill pad120 col" style="justify-content:center;align-items:center">
+    <div class="kicker anim-fade" style="margin-bottom:44px">It's not three apps</div>
+    <div class="hero-md anim-up" style="text-align:center">
+      Academy. Management.<br>Accounting.<br><span style="color:rgba(248,250,252,.42)">One platform.</span>
+    </div>
+    <div class="row anim-up d-2" style="margin-top:78px;gap:60px;align-items:center">
+      <div style="text-align:center"><div style="font-size:46px;font-weight:700;letter-spacing:-.03em" class="grad-amber">Teachers</div><div style="font-size:15px;color:var(--muted);margin-top:6px">can teach</div></div>
+      <div style="font-size:46px;color:var(--dim)">·</div>
+      <div style="text-align:center"><div style="font-size:46px;font-weight:700;letter-spacing:-.03em" class="grad-indigo">Parents</div><div style="font-size:15px;color:var(--muted);margin-top:6px">stay connected</div></div>
+      <div style="font-size:46px;color:var(--dim)">·</div>
+      <div style="text-align:center"><div style="font-size:46px;font-weight:700;letter-spacing:-.03em" class="grad-emerald">Admin</div><div style="font-size:15px;color:var(--muted);margin-top:6px">can breathe</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 27 ─ CLOSE ────────────────────────────────────────────────────── -->
+<section data-screen-label="27 Close">
+  <div class="fill center col">
+    <div class="hero anim-up" data-morph="wordmark" style="background:linear-gradient(120deg,#fff,#A5B4FC);-webkit-background-clip:text;background-clip:text;color:transparent">Scholify</div>
+    <div class="body anim-fade d-2" style="text-align:center;margin-top:48px;max-width:1000px">
+      The foundation your school deserves — so the energy your staff pours in every
+      day actually reaches the people it's meant for. Your students.
+    </div>
+    <div class="anim-fade d-3 tiny" data-morph="ready-line" style="margin-top:56px">Built for the schools that are ready to move forward</div>
+  </div>
+</section>
+
+<!-- 28 ─ READY (footnote becomes the headline) ─────────────────── -->
+<section data-screen-label="28 Ready">
+  <div class="fill center col">
+    <div class="hero anim-up" data-morph="wordmark" style="background:linear-gradient(120deg,#fff,#A5B4FC);-webkit-background-clip:text;background-clip:text;color:transparent">Scholify</div>
+    <div data-morph="ready-line" style="margin-top:48px;text-align:center;max-width:1200px;font-size:42px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;line-height:1.3;color:var(--ink)">Built for the schools that are ready to move forward</div>
+  </div>
+</section>
+
+</deck-stage>
+
+<div id="morph"></div>
+<div id="bar"></div>
+<div id="hint">← → space · F fullscreen</div>
+
+<script>
+/* Self-contained deck engine: nav + Apple "Magic Move" morph on data-morph keys. */
+const stage  = document.querySelector('deck-stage');
+const slides = [...stage.querySelectorAll('section')];
+const morphL = document.getElementById('morph');
+const bar    = document.getElementById('bar');
+const KEY    = 'scholify.keynote.pos';
+let   idx    = Math.min(slides.length-1, Math.max(0, parseInt(localStorage.getItem(KEY)||'0',10)));
+let   busy   = false;
+
+slides.forEach((s,i)=>{ if(i===idx) s.classList.add('active'); });
+setWindow();
+paintBar();
+function paintBar(){ bar.style.width=((idx+1)/slides.length*100)+'%'; }
+
+/* Only keep prev / current / next mounted — the other ~24 heavy device
+   mockups stay display:none so the browser never renders them. */
+function setWindow(){
+  slides.forEach((s,i)=>{ s.style.display = (i>=idx-1 && i<=idx+1) ? '' : 'none'; });
+}
+
+function snap(slide){
+  const m={};
+  slide.querySelectorAll('[data-morph]').forEach(el=>{
+    const r=el.getBoundingClientRect();
+    if(r.width===0&&r.height===0) return;
+    const cs=getComputedStyle(el);
+    m[el.dataset.morph]={el,r,color:cs.color,fs:parseFloat(cs.fontSize)||0};
+  });
+  return m;
+}
+function go(next){
+  if(busy||next===idx||next<0||next>=slides.length) return;
+  busy=true;
+  const cur=slides[idx], nxt=slides[next];
+  const from=snap(cur);
+  nxt.style.display='';                                 // mount target before measuring (Home/End jumps)
+  nxt.style.transition='none'; nxt.style.visibility='visible'; nxt.style.opacity='0';
+  const to=snap(nxt);
+  nxt.style.opacity=''; nxt.style.transition='';
+  const ghosts=[];
+  Object.keys(from).forEach(k=>{
+    if(!to[k]) return;
+    const a=from[k], b=to[k];
+    const dx=b.r.left-a.r.left, dy=b.r.top-a.r.top;
+    const sx=b.r.width/a.r.width||1, sy=b.r.height/a.r.height||1;
+    const fsR = (a.fs&&b.fs) ? b.fs/a.fs : 0;
+    // Crossfade when the text changes OR the size changes (font / wrap).
+    // A pure box-stretch on a size change squashes the glyphs — avoid it.
+    const changed = a.el.textContent.trim() !== b.el.textContent.trim()
+                 || (fsR && Math.abs(1-fsR) > 0.08);
+
+    const gA=a.el.cloneNode(true);
+    gA.classList.add('m'); gA.classList.remove('anim-up','anim-fade');   // stop .anim-*{opacity:0} hiding the ghost
+    let gB=null, aT, bT;
+
+    if(changed){
+      // CROSSFADE — uniform scale about the centre, so glyphs never distort.
+      const s   = fsR || (b.r.height/a.r.height) || 1;
+      const aCx = a.r.left+a.r.width/2,  aCy = a.r.top+a.r.height/2;
+      const bCx = b.r.left+b.r.width/2,  bCy = b.r.top+b.r.height/2;
+
+      Object.assign(gA.style,{left:a.r.left+'px',top:a.r.top+'px',width:a.r.width+'px',height:a.r.height+'px',
+        margin:0,opacity:1,transformOrigin:'center',
+        transition:'transform .85s cubic-bezier(.6,.02,.1,1),opacity .8s ease'});
+      morphL.appendChild(gA);
+      aT=`translate(${bCx-aCx}px,${bCy-aCy}px) scale(${s})`;          // grow toward B, fade out
+
+      gB=b.el.cloneNode(true);
+      gB.classList.add('m'); gB.classList.remove('anim-up','anim-fade');
+      Object.assign(gB.style,{left:b.r.left+'px',top:b.r.top+'px',width:b.r.width+'px',height:b.r.height+'px',
+        margin:0,opacity:0,transformOrigin:'center',
+        transform:`translate(${aCx-bCx}px,${aCy-bCy}px) scale(${1/s||1})`,
+        transition:'transform .85s cubic-bezier(.6,.02,.1,1),opacity .8s ease'});
+      morphL.appendChild(gB);
+      bT='none';                                                      // settle to B, fade in
+    } else {
+      // MAGIC MOVE — identical text & size: morph the box, optional colour shift.
+      Object.assign(gA.style,{left:a.r.left+'px',top:a.r.top+'px',width:a.r.width+'px',height:a.r.height+'px',
+        margin:0,opacity:1,transformOrigin:'top left',transition:'transform .85s cubic-bezier(.6,.02,.1,1),opacity .85s ease'});
+      morphL.appendChild(gA);
+      aT=`translate(${dx}px,${dy}px) scale(${sx},${sy})`;
+    }
+    a.el.style.visibility='hidden'; b.el.style.visibility='hidden';
+    ghosts.push({gA,gB,a,b,aT,bT,changed});
+  });
+  cur.classList.add('leaving'); cur.classList.remove('active');
+  nxt.querySelectorAll('.anim-up,.anim-fade').forEach(e=>{e.style.animation='none';e.offsetHeight;e.style.animation='';});
+  nxt.classList.add('active');
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    ghosts.forEach(({gA,gB,a,b,aT,bT,changed})=>{
+      gA.style.transform=aT;
+      if(changed) gA.style.opacity=0;
+      else if(b.color&&b.color!==a.color) gA.style.color=b.color;
+      if(gB){ gB.style.transform=bT; gB.style.opacity=1; }
+    });
+  }));
+  setTimeout(()=>{
+    ghosts.forEach(({gA,gB,a,b})=>{ gA.remove(); if(gB)gB.remove(); a.el.style.visibility=''; b.el.style.visibility=''; });
+    cur.classList.remove('leaving');
+    idx=next; busy=false;
+    try{ localStorage.setItem(KEY,idx); }catch{}
+    paintBar();
+    setWindow();                                        // prune back to prev/current/next
+  },880);
+}
+const next=()=>go(idx+1), prev=()=>go(idx-1);
+addEventListener('keydown',e=>{
+  if(['ArrowRight','ArrowDown',' ','PageDown','Enter'].includes(e.key)){e.preventDefault();next();}
+  else if(['ArrowLeft','ArrowUp','PageUp','Backspace'].includes(e.key)){e.preventDefault();prev();}
+  else if(e.key==='Home') go(0);
+  else if(e.key==='End') go(slides.length-1);
+  else if(e.key==='f'||e.key==='F'){ document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen(); }
+});
+addEventListener('click',e=>{ if(e.clientX<innerWidth*0.18) prev(); else next(); });
+let tX=0;
+addEventListener('touchstart',e=>tX=e.changedTouches[0].clientX,{passive:true});
+addEventListener('touchend',e=>{const d=e.changedTouches[0].clientX-tX; if(Math.abs(d)>50)(d<0?next():prev());},{passive:true});
+setTimeout(()=>{const h=document.getElementById('hint');if(h)h.style.transition='opacity 1s';},4000);
+setTimeout(()=>{const h=document.getElementById('hint');if(h)h.style.opacity='0';},6000);
+</script>
+</body>
+</html>

@@ -1,0 +1,1035 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>School platform — Keynote</title>
+<link rel="stylesheet" href="keynote.css">
+<script src="deck-stage.js"></script>
+<script type="application/json" id="speaker-notes">
+[
+"Lights down. Black screen. Hold for two beats so the room settles. Don't speak yet. Then start, quietly: every parent in this room knows the feeling of trying to keep up with a school. The group chats. The paper notes that never make it home. The text from the bus driver. The bill at the end of the month. What if all of that ran on one platform.",
+
+"Big landing. Take a breath. Say it slowly: It. Runs. A. School. One sentence. Just sit with it for a moment before you click forward.",
+
+"Click. Same sentence, but the punctuation changes. All of it. From the first homework assignment in September, to the last tuition payment in June. From the bus pulling up at six AM, to the report card uploaded at midnight. All of it.",
+
+"This is the framework. Three pillars. Read them slowly, one at a time. Academy — what kids learn. School management — how the school runs. Accounting — how the books balance. Three departments most schools run on three different tools. We run them on one.",
+
+"Pause. New section. Say one word: Academy. Then let the silence do the work. Click forward.",
+
+"What kids learn, captured live. This is the line we keep coming back to. Most school software treats grades as a thing you enter on Friday. We treat them as a thing that's being filled in all week — by every teacher, every subject, every test.",
+
+"Grades. Look at the screen. Notice there's no fixed columns — no 'Quiz, Midterm, Final.' Each school defines its own mark types: daily participation, surprise quiz, monthly exam, term exam — whatever the school does. The platform doesn't make assumptions about how a school grades. It just records what they actually do.",
+
+"And the moment a teacher posts something — a grade, a homework, a class post — the parent sees it. Not 'check back Friday.' Same minute. Same row. The Learn tab is a feed of every post, every announcement, every ebook the school has uploaded — right in the parent's pocket.",
+
+"Homework. Assignments. The two are not the same. Homework is daily — read these pages, do these problems. Assignments are heavier — projects with rubrics, deliverables, sometimes group work. Both flow through the same surface for parents, but teachers grade them differently, and track them differently.",
+
+"Every Friday, teachers fill out a weekly summary for every student — a short script about how the week went. The supervisor opens and closes the submission window, so it can't go in late, and it can't be edited after close. Over a year, that becomes the parent's clearest picture of who their kid is at school.",
+
+"And here's where it gets interesting. Because learning doesn't happen in a vacuum. It happens inside a school — a real, physical place, with schedules, buses, hallways, classrooms. So we built the second pillar to hold that whole world.",
+
+"Pause. New section. School management. One word. Let it land.",
+
+"Every day. In motion. That's how it actually feels to run a school. The day isn't a static schedule — it's a living thing. Buses arriving. Students absent. A snowstorm pushes everything back fifteen minutes. We built the second pillar to track all of that, in real time.",
+
+"Classes. Subjects. Teachers. The relationship between them is the most-edited table in a school's database. We made it the source of truth. Touch the curriculum here — 'Mrs. Park now teaches Math to 5B' — and every screen that depends on it updates: her profile, her schedule, the subject's teacher list, the class's curriculum, and the parent's home page.",
+
+"Now from the admin's desk to the parent's pocket. Same data. Same school. Different window. Announcements show up the moment they're posted. Appointments with teachers can be booked — and the front desk sees them before the parent has put their phone away. Chat is one tap from any classroom screen.",
+
+"And the bus. Probably the single most-watched screen in a school's app. The driver's phone posts a GPS location every thirty seconds. The backend computes the distance to each child's pickup point, and at ten minutes, five minutes, two minutes, and arriving — a notification fires. The parent gets four polite taps on the shoulder. By the time the bus pulls up, the kid is already at the gate.",
+
+"Three languages: English, Arabic, Kurdish. The platform doesn't translate after the fact — it ships every string in every language, persistently, per device. A parent who speaks Kurdish sees Kurdish. A teacher who's more comfortable in Arabic sees Arabic. The school doesn't pick. The person does.",
+
+"And running quietly behind all of it, beneath the bus tracking and the chat and the announcements, is the third pillar. The one most software companies forget to build, because it's not glamorous. But it's the part the school actually lives or dies on.",
+
+"Pause. New section. Accounting. Say it slowly. This is the part most school software doesn't get right.",
+
+"Built like a ledger. Not like a spreadsheet. There's a difference. A spreadsheet lets you change yesterday's number. A ledger doesn't. Every payment, every expense, every salary check has a receipt number that increments in sequence, scoped to the school, scoped to the calendar year. R C P — 2026 — zero zero two eight four. That number means something. It means someone, somewhere, can audit this.",
+
+"Tuition is a lot more than a number. It's a fee plan — tuition, transport, lunch, uniform, exam fees, registration. Each kind has its own due dates, its own late-fee rules, its own currency. The system applies late fees automatically, every night, through a scheduled job. Reception sees the family's balance the moment they walk in.",
+
+"Multi-currency, multi-rate. Some families pay in dollars. Some in dinars. Some in euros. The platform records the payment in the currency it was made in — that's the truth, the original record. Then for reporting, it converts using a dated FX rate table the school maintains. The most recent rate before the report's as-of date is what's used. Consistent. Auditable. Boring, in the best way.",
+
+"And when a month closes — the accountant says, 'February is closed' — the system locks every payment, every expense, every salary in that range. Try to edit one and you get a four-twenty-three response with the closed range printed in the message. You can reopen the period, but the system records who reopened it and when. That's the audit trail. That's the difference between accounting and bookkeeping.",
+
+"Profit and loss. Accounts receivable aging. Cash flow forecast. The same numbers that the receipt printed are the same numbers that the report aggregates. There's no second source of truth, no data export, no overnight job to rebuild a warehouse. The receipt is the ledger entry is the report. One database. Every screen.",
+
+"Which brings us back to the framing. Three systems. One database. Zero duplication. The grade Mrs. Park entered this morning, the bus that just turned onto Maple Avenue, the tuition payment processed at reception five minutes ago — all of those touched the same Supabase. All of those are filtered by the same school underscore I D. All of those are one row, in one table, used by every surface, in three languages, on web and mobile.",
+
+"The whole school. On one platform. Thank you."
+]
+</script>
+</head>
+<body style="background:#0E0F12;">
+
+<deck-stage>
+
+<!-- ════ 1 · COLD OPEN ════ -->
+<section data-screen-label="01 Cold open">
+  <div class="fill center col">
+    <div class="anim-fade tiny" style="margin-bottom:36px;">LINCOLN ELEMENTARY · SCHOOL PLATFORM</div>
+    <div class="anim-up d-1" style="font-size: 96px; font-weight: 300; letter-spacing: -0.02em; color: rgba(255,255,255,0.65);">A keynote.</div>
+  </div>
+  <div class="foot">May 17, 2026</div>
+</section>
+
+<!-- ════ 2 · It runs a school. ════ -->
+<section data-screen-label="02 It runs a school">
+  <div class="fill center">
+    <div class="hero anim-up" id="line-1">It runs a school.</div>
+  </div>
+</section>
+
+<!-- ════ 3 · All of it. (morph) ════ -->
+<section data-screen-label="03 All of it">
+  <div class="fill center">
+    <div class="hero anim-up" id="line-2">All of it.</div>
+  </div>
+</section>
+
+<!-- ════ 4 · Three pillars (reveal) ════ -->
+<section data-screen-label="04 Three pillars">
+  <div class="fill pad120 col" style="justify-content: center;">
+    <div class="kicker anim-fade" style="margin-bottom: 64px;">Three pillars</div>
+    <div class="pillars">
+      <div class="pillar anim-up d-1">
+        <div class="num">01</div>
+        <div class="name grad-amber">Academy</div>
+        <div class="desc">What kids learn. Grades, posts, books, homework, weekly summaries.</div>
+      </div>
+      <div class="pillar anim-up d-2">
+        <div class="num">02</div>
+        <div class="name grad-indigo">School management</div>
+        <div class="desc">How the school runs. Schedules, classes, buses, chat, appointments.</div>
+      </div>
+      <div class="pillar anim-up d-3">
+        <div class="num">03</div>
+        <div class="name grad-emerald">Accounting</div>
+        <div class="desc">How the books balance. Fees, receipts, salaries, periods, reports.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════ 5 · ACADEMY (section title) ════ -->
+<section data-screen-label="05 Academy" class="bg-academy">
+  <div class="eyebrow"><div class="dot"></div><div class="tiny" style="color:#FFC58A;">Pillar 01</div></div>
+  <div class="fill center">
+    <div class="hero grad-amber anim-up">Academy.</div>
+  </div>
+</section>
+
+<!-- ════ 6 · What kids learn ════ -->
+<section data-screen-label="06 What kids learn" class="bg-academy">
+  <div class="eyebrow"><div class="dot"></div><div class="tiny" style="color:#FFC58A;">Academy</div></div>
+  <div class="fill pad120 col" style="justify-content: center;">
+    <div class="hero-md anim-up">
+      What kids learn,<br>
+      <span class="grad-amber">captured live.</span>
+    </div>
+    <div class="body anim-up d-2" style="margin-top: 56px;">
+      Grades, homework, posts, books, weekly summaries — all in one feed, in real time.
+    </div>
+  </div>
+</section>
+
+<!-- ════ 7 · Grades — phone hero ════ -->
+<section data-screen-label="07 Grades">
+  <div class="eyebrow"><div class="dot"></div><div class="tiny" style="color:#FFC58A;">Academy · Grades</div></div>
+  <div class="fill pad120 row" style="align-items: center; gap: 120px;">
+    <div class="col anim-up" style="flex: 1;">
+      <div class="title">Grades the school<br>defines, not the<br>software.</div>
+      <div class="body" style="margin-top: 48px;">
+        Schools choose their own mark types — daily, quiz, monthly, term, whatever fits. Every column on this screen is a row in the school's settings, not a hardcoded field.
+      </div>
+    </div>
+    <div class="anim-up d-2" style="flex: 0 0 auto;">
+      <div class="phone">
+        <div class="screen">
+          <div class="island"></div>
+          <div class="status"><span>9:41</span><span>● ● ●●</span></div>
+          <div style="padding: 100px 24px 0;">
+            <div style="font-size:14px;color:#6B7280;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;">Maya · Grade 5</div>
+            <div style="font-size:36px;font-weight:700;color:#0F172A;letter-spacing:-0.02em;margin-top:6px;">Grades</div>
+            <div style="display:flex;gap:8px;margin-top:16px;">
+              <div style="background:#EEF2FF;color:#4F46E5;border-radius:999px;padding:6px 12px;font-size:12px;font-weight:700;">Term 2</div>
+              <div style="background:#F4F6F9;color:#64748B;border-radius:999px;padding:6px 12px;font-size:12px;font-weight:600;">All subjects</div>
+            </div>
+            <!-- Grades table -->
+            <div style="margin-top:24px;background:#fff;border-radius:18px;padding:18px;box-shadow:0 4px 16px rgba(15,23,42,0.06);">
+              <div style="display:grid;grid-template-columns: 1.6fr 0.7fr 0.7fr 0.7fr 0.9fr;gap:10px;font-size:10px;color:#94A3B8;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;padding-bottom:10px;border-bottom:1px solid #F1F5F9;">
+                <div>Subject</div><div>Daily</div><div>Quiz</div><div>Month</div><div>Term</div>
+              </div>
+              <!-- rows -->
+              <div style="display:grid;grid-template-columns: 1.6fr 0.7fr 0.7fr 0.7fr 0.9fr;gap:10px;padding:11px 0;font-size:13px;color:#0F172A;border-bottom:1px solid #F4F6F9;">
+                <div style="font-weight:600;">Math</div><div>9.5</div><div>18</div><div>27</div><div style="font-weight:700;color:#10B981;">94%</div>
+              </div>
+              <div style="display:grid;grid-template-columns: 1.6fr 0.7fr 0.7fr 0.7fr 0.9fr;gap:10px;padding:11px 0;font-size:13px;color:#0F172A;border-bottom:1px solid #F4F6F9;">
+                <div style="font-weight:600;">English</div><div>10</div><div>19</div><div>28</div><div style="font-weight:700;color:#10B981;">96%</div>
+              </div>
+              <div style="display:grid;grid-template-columns: 1.6fr 0.7fr 0.7fr 0.7fr 0.9fr;gap:10px;padding:11px 0;font-size:13px;color:#0F172A;border-bottom:1px solid #F4F6F9;">
+                <div style="font-weight:600;">Science</div><div>8</div><div>15</div><div>24</div><div style="font-weight:700;color:#F59E0B;">82%</div>
+              </div>
+              <div style="display:grid;grid-template-columns: 1.6fr 0.7fr 0.7fr 0.7fr 0.9fr;gap:10px;padding:11px 0;font-size:13px;color:#0F172A;border-bottom:1px solid #F4F6F9;">
+                <div style="font-weight:600;">Arabic</div><div>9</div><div>17</div><div>26</div><div style="font-weight:700;color:#10B981;">90%</div>
+              </div>
+              <div style="display:grid;grid-template-columns: 1.6fr 0.7fr 0.7fr 0.7fr 0.9fr;gap:10px;padding:11px 0;font-size:13px;color:#0F172A;">
+                <div style="font-weight:600;">Art</div><div>10</div><div>20</div><div>—</div><div style="font-weight:700;color:#10B981;">A</div>
+              </div>
+            </div>
+            <div style="margin-top:18px;padding:14px 16px;background:#FFF7ED;border-radius:14px;display:flex;align-items:center;gap:10px;">
+              <div style="width:8px;height:8px;border-radius:50%;background:#F59E0B;flex-shrink:0;"></div>
+              <div style="font-size:12px;color:#92400E;font-weight:500;">Posted 2 min ago by Mr. Karim · Science quiz</div>
+            </div>
+          </div>
+          <div class="home"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════ 8 · Posts — phone hero ════ -->
+<section data-screen-label="08 Posts">
+  <div class="eyebrow"><div class="dot"></div><div class="tiny" style="color:#FFC58A;">Academy · Learn</div></div>
+  <div class="fill pad120 row" style="align-items: center; gap: 120px;">
+    <div class="anim-up" style="flex: 0 0 auto;">
+      <div class="phone">
+        <div class="screen">
+          <div class="island"></div>
+          <div class="status"><span>9:41</span><span>● ● ●●</span></div>
+          <div style="padding: 100px 24px 0;">
+            <div style="font-size:14px;color:#6B7280;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;">Learn</div>
+            <div style="font-size:36px;font-weight:700;color:#0F172A;letter-spacing:-0.02em;margin-top:6px;">Posts &amp; books</div>
+            <!-- Post card 1 -->
+            <div style="margin-top:22px;background:#fff;border-radius:20px;overflow:hidden;box-shadow:0 4px 16px rgba(15,23,42,0.06);">
+              <div style="height:140px;background: linear-gradient(135deg, #FF9F40 0%, #F472B6 100%); position:relative;">
+                <div style="position:absolute;bottom:14px;left:16px;color:#fff;font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">Field trip · Friday</div>
+              </div>
+              <div style="padding:16px;">
+                <div style="font-size:16px;font-weight:700;color:#0F172A;letter-spacing:-0.01em;">The botanical gardens</div>
+                <div style="font-size:13px;color:#64748B;margin-top:6px;line-height:1.4;">Bring a hat, a water bottle, and a notebook for sketching. We meet at the front gate at 8:15…</div>
+                <div style="margin-top:12px;display:flex;align-items:center;gap:10px;">
+                  <div style="width:24px;height:24px;border-radius:50%;background:#4F46E5;color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;">SC</div>
+                  <div style="font-size:12px;color:#64748B;font-weight:500;">Mrs. Chen · 2h ago</div>
+                </div>
+              </div>
+            </div>
+            <!-- Post card 2 (ebook) -->
+            <div style="margin-top:14px;background:#fff;border-radius:20px;padding:16px;display:flex;gap:14px;align-items:center;box-shadow:0 4px 16px rgba(15,23,42,0.06);">
+              <div style="width:60px;height:80px;border-radius:6px;background:linear-gradient(160deg, #4F46E5, #818CF8);box-shadow:0 6px 16px rgba(79,70,229,0.3);position:relative;flex-shrink:0;">
+                <div style="position:absolute;top:8px;left:6px;right:6px;height:2px;background:rgba(255,255,255,0.3);border-radius:1px;"></div>
+                <div style="position:absolute;top:14px;left:6px;right:6px;height:1px;background:rgba(255,255,255,0.2);border-radius:1px;"></div>
+              </div>
+              <div style="flex:1;">
+                <div style="font-size:10px;color:#4F46E5;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">eBook · 24 pages</div>
+                <div style="font-size:15px;font-weight:700;color:#0F172A;margin-top:4px;letter-spacing:-0.01em;">The Solar System</div>
+                <div style="font-size:12px;color:#64748B;margin-top:4px;">Science · Unit 3</div>
+              </div>
+            </div>
+            <!-- Post card 3 -->
+            <div style="margin-top:14px;background:#fff;border-radius:20px;padding:16px;box-shadow:0 4px 16px rgba(15,23,42,0.06);">
+              <div style="font-size:10px;color:#10B981;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">Class post</div>
+              <div style="font-size:15px;font-weight:700;color:#0F172A;margin-top:4px;letter-spacing:-0.01em;">Reading log — week 6</div>
+              <div style="font-size:12px;color:#64748B;margin-top:4px;line-height:1.4;">Tap to open. Includes link to the printable log…</div>
+            </div>
+          </div>
+          <div class="home"></div>
+        </div>
+      </div>
+    </div>
+    <div class="col anim-up d-2" style="flex: 1;">
+      <div class="title">Posts that read<br>like a magazine.</div>
+      <div class="body" style="margin-top: 48px;">
+        Rich text. Images. Attachments. Ebooks the school uploads, read inline. Everything teachers post lands in one feed — parent, teacher, supervisor, admin.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════ 9 · Homework & Assignments ════ -->
+<section data-screen-label="09 Homework and Assignments">
+  <div class="eyebrow"><div class="dot"></div><div class="tiny" style="color:#FFC58A;">Academy · Homework</div></div>
+  <div class="fill pad120 row" style="align-items: center; gap: 100px;">
+    <div class="col anim-up" style="flex: 1;">
+      <div class="title">Homework.<br>Assignments.<br><span class="grad-amber">Different things.</span></div>
+      <div class="body" style="margin-top: 48px;">
+        Homework is the daily — read these pages, do these problems. Assignments are heavier — rubrics, deliverables, group work. Teachers track them differently.
+      </div>
+    </div>
+    <div class="anim-up d-2" style="flex: 0 0 auto;">
+      <div class="phone">
+        <div class="screen">
+          <div class="island"></div>
+          <div class="status"><span>9:41</span><span>● ● ●●</span></div>
+          <div style="padding: 100px 24px 0;">
+            <div style="font-size:36px;font-weight:700;color:#0F172A;letter-spacing:-0.02em;">Homework</div>
+            <div style="font-size:14px;color:#64748B;font-weight:500;margin-top:6px;">3 due this week</div>
+            <!-- HW card 1 -->
+            <div style="margin-top:22px;background:#fff;border-radius:18px;padding:16px;box-shadow:0 4px 16px rgba(15,23,42,0.06);">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                <div>
+                  <div style="font-size:10px;color:#92400E;background:#FEF3C7;display:inline-block;padding:3px 8px;border-radius:6px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;">Math</div>
+                  <div style="font-size:16px;font-weight:700;color:#0F172A;margin-top:8px;letter-spacing:-0.01em;">Workbook pp. 42–45</div>
+                  <div style="font-size:12px;color:#64748B;margin-top:4px;">Mr. Reza · Due tomorrow</div>
+                </div>
+                <div style="width:28px;height:28px;border-radius:50%;border:2px solid #E5E9EF;"></div>
+              </div>
+            </div>
+            <div style="margin-top:14px;background:#fff;border-radius:18px;padding:16px;box-shadow:0 4px 16px rgba(15,23,42,0.06);">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                <div>
+                  <div style="font-size:10px;color:#1D4ED8;background:#DBEAFE;display:inline-block;padding:3px 8px;border-radius:6px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;">English</div>
+                  <div style="font-size:16px;font-weight:700;color:#0F172A;margin-top:8px;letter-spacing:-0.01em;">Read chapter 4 — Charlotte</div>
+                  <div style="font-size:12px;color:#64748B;margin-top:4px;">Mrs. Chen · Due Thursday</div>
+                </div>
+                <div style="width:28px;height:28px;border-radius:50%;background:#10B981;display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;">✓</div>
+              </div>
+            </div>
+            <!-- Assignment card -->
+            <div style="margin-top:18px;font-size:12px;color:#94A3B8;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">Assignments</div>
+            <div style="margin-top:10px;background:#0F172A;border-radius:18px;padding:18px;color:#fff;box-shadow:0 8px 24px rgba(15,23,42,0.2);">
+              <div style="font-size:10px;color:#FF9F40;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;">Group project</div>
+              <div style="font-size:18px;font-weight:700;margin-top:8px;letter-spacing:-0.01em;">Solar system poster</div>
+              <div style="font-size:12px;color:rgba(255,255,255,0.6);margin-top:6px;">Due in 9 days · Rubric attached</div>
+              <div style="margin-top:14px;display:flex;gap:6px;">
+                <div style="width:22px;height:22px;border-radius:50%;background:#F472B6;border:2px solid #0F172A;"></div>
+                <div style="width:22px;height:22px;border-radius:50%;background:#60A5FA;border:2px solid #0F172A;margin-left:-8px;"></div>
+                <div style="width:22px;height:22px;border-radius:50%;background:#34D399;border:2px solid #0F172A;margin-left:-8px;"></div>
+                <div style="width:22px;height:22px;border-radius:50%;background:#FBBF24;border:2px solid #0F172A;margin-left:-8px;"></div>
+              </div>
+            </div>
+          </div>
+          <div class="home"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════ 10 · Weekly summary ════ -->
+<section data-screen-label="10 Weekly summary">
+  <div class="eyebrow"><div class="dot"></div><div class="tiny" style="color:#FFC58A;">Academy · Weekly summary</div></div>
+  <div class="fill pad120 col" style="justify-content: center; align-items: center;">
+    <div class="kicker anim-fade" style="text-align: center; margin-bottom: 32px;">Every Friday</div>
+    <div class="hero-md anim-up" style="text-align: center;">
+      A short script,<br>
+      <span class="grad-amber">for every student.</span>
+    </div>
+    <div class="anim-up d-2" style="margin-top: 80px; background:#fff; border-radius: 22px; padding: 36px 44px; max-width: 900px; color: #0F172A; box-shadow: 0 40px 100px rgba(0,0,0,0.5);">
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom: 18px;">
+        <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#FF9F40,#F472B6);color:#fff;font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center;">MP</div>
+        <div>
+          <div style="font-size:18px;font-weight:700;letter-spacing:-0.01em;">Maya Park · Grade 5B</div>
+          <div style="font-size:13px;color:#64748B;font-weight:500;">Week 12 · Apr 28 – May 2</div>
+        </div>
+        <div style="margin-left:auto;background:#D1FAE5;color:#065F46;font-size:12px;font-weight:700;padding:6px 12px;border-radius:999px;">Submitted</div>
+      </div>
+      <hr style="border:none;height:1px;background:#F1F5F9;margin:0 0 18px;">
+      <div style="font-size:17px; line-height: 1.55; color: #334155;">
+        Maya had her best week in math this term — she finally clicked with the fractions unit and walked another student through a problem on Wednesday. Reading is still slower than I'd like, and we should talk about whether to switch her book level. Social: she's becoming the unofficial scorekeeper at recess, which is adorable.
+      </div>
+      <div style="margin-top:20px;display:flex;gap:16px;align-items:center;font-size:13px;color:#94A3B8;">
+        <div>Window: <span style="color:#10B981;font-weight:700;">OPEN</span> · closes Sat 9 PM</div>
+        <div style="margin-left:auto;">Locked after close · audit-stamped</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════ 11 · Segue → School ════ -->
+<section data-screen-label="11 Segue · learning needs a school">
+  <div class="fill center pad120">
+    <div class="hero-md anim-up" style="text-align: center; max-width: 1500px;">
+      <span style="color: rgba(255,255,255,0.45);">But learning needs</span><br>
+      a school around it.
+    </div>
+  </div>
+</section>
+
+<!-- ════ 12 · SCHOOL MANAGEMENT (section title) ════ -->
+<section data-screen-label="12 School management" class="bg-school">
+  <div class="eyebrow indigo"><div class="dot"></div><div class="tiny" style="color:#C8C4FF;">Pillar 02</div></div>
+  <div class="fill center">
+    <div class="hero grad-indigo anim-up">School<br>management.</div>
+  </div>
+</section>
+
+<!-- ════ 13 · The day. In motion. ════ -->
+<section data-screen-label="13 The day in motion" class="bg-school">
+  <div class="eyebrow indigo"><div class="dot"></div><div class="tiny" style="color:#C8C4FF;">School management</div></div>
+  <div class="fill pad120 col" style="justify-content: center;">
+    <div class="hero-md anim-up">
+      The day.<br>
+      <span class="grad-indigo">In motion.</span>
+    </div>
+    <div class="body anim-up d-2" style="margin-top: 56px;">
+      Classes, schedules, attendance, announcements, chat, appointments, buses — every piece of the day a school has to coordinate, in one place, in real time.
+    </div>
+  </div>
+</section>
+
+<!-- ════ 14 · Classes / Curriculum (web) ════ -->
+<section data-screen-label="14 Curriculum">
+  <div class="eyebrow indigo"><div class="dot"></div><div class="tiny" style="color:#C8C4FF;">School management · Curriculum</div></div>
+  <div class="fill pad120 col" style="justify-content: center;">
+    <div class="row anim-up" style="align-items: flex-start; gap: 100px;">
+      <div class="col" style="flex: 0 0 600px;">
+        <div class="title-sm">Class.<br>Subject.<br>Teacher.<br><span class="grad-indigo">One row.</span></div>
+        <div class="body-sm" style="margin-top: 40px;">
+          Curriculum lives in one table. Touch it once — every screen that derives from it updates automatically. Teacher profile, class detail, parent home, schedule.
+        </div>
+      </div>
+      <div class="anim-up d-2" style="flex: 1; max-width: 1100px;">
+        <div class="browser">
+          <div class="topbar">
+            <div class="tl"><span></span><span></span><span></span></div>
+            <div class="url">lincoln.school/admin/classes/5B/curriculum</div>
+          </div>
+          <div style="padding: 32px 40px; background: #fff;">
+            <div style="display:flex;align-items:baseline;gap:14px;">
+              <div style="font-size:32px;font-weight:700;color:#0F172A;letter-spacing:-0.02em;">5B</div>
+              <div style="font-size:14px;color:#64748B;font-weight:500;">Grade 5 · 28 students · Mrs. Chen (homeroom)</div>
+            </div>
+            <div style="margin-top:24px;font-size:11px;color:#94A3B8;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">Curriculum</div>
+            <div style="margin-top:14px;border:1px solid #E5E9EF;border-radius:14px;overflow:hidden;">
+              <div style="display:grid;grid-template-columns: 2fr 2.5fr 1fr;padding:14px 20px;background:#F8FAFC;font-size:11px;color:#64748B;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid #E5E9EF;">
+                <div>Subject</div><div>Teacher</div><div>Hours / wk</div>
+              </div>
+              <div style="display:grid;grid-template-columns: 2fr 2.5fr 1fr;padding:16px 20px;font-size:15px;color:#0F172A;border-bottom:1px solid #F1F5F9;align-items:center;">
+                <div style="font-weight:600;">Mathematics</div>
+                <div style="display:flex;align-items:center;gap:10px;"><div style="width:28px;height:28px;border-radius:50%;background:#4F46E5;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;">RK</div>Reza Karzanahmed</div>
+                <div style="color:#64748B;">6</div>
+              </div>
+              <div style="display:grid;grid-template-columns: 2fr 2.5fr 1fr;padding:16px 20px;font-size:15px;color:#0F172A;border-bottom:1px solid #F1F5F9;align-items:center;">
+                <div style="font-weight:600;">English</div>
+                <div style="display:flex;align-items:center;gap:10px;"><div style="width:28px;height:28px;border-radius:50%;background:#F472B6;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;">SC</div>Sarah Chen</div>
+                <div style="color:#64748B;">5</div>
+              </div>
+              <div style="display:grid;grid-template-columns: 2fr 2.5fr 1fr;padding:16px 20px;font-size:15px;color:#0F172A;border-bottom:1px solid #F1F5F9;align-items:center;background:linear-gradient(90deg,#EEF2FF,transparent);">
+                <div style="font-weight:600;">Science</div>
+                <div style="display:flex;align-items:center;gap:10px;"><div style="width:28px;height:28px;border-radius:50%;background:#10B981;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;">KP</div>Karim Park <span style="font-size:11px;color:#10B981;font-weight:700;background:#D1FAE5;padding:2px 8px;border-radius:999px;margin-left:6px;">Updated 2s ago</span></div>
+                <div style="color:#64748B;">4</div>
+              </div>
+              <div style="display:grid;grid-template-columns: 2fr 2.5fr 1fr;padding:16px 20px;font-size:15px;color:#0F172A;border-bottom:1px solid #F1F5F9;align-items:center;">
+                <div style="font-weight:600;">Arabic</div>
+                <div style="display:flex;align-items:center;gap:10px;"><div style="width:28px;height:28px;border-radius:50%;background:#FB923C;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;">NM</div>Nada Mansour</div>
+                <div style="color:#64748B;">4</div>
+              </div>
+              <div style="display:grid;grid-template-columns: 2fr 2.5fr 1fr;padding:16px 20px;font-size:15px;color:#0F172A;align-items:center;">
+                <div style="font-weight:600;">Art</div>
+                <div style="display:flex;align-items:center;gap:10px;"><div style="width:28px;height:28px;border-radius:50%;background:#A78BFA;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;">LH</div>Lara Hamadi</div>
+                <div style="color:#64748B;">2</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════ 15 · Three phones — feed / chat / appointments ════ -->
+<section data-screen-label="15 Pocket">
+  <div class="eyebrow indigo"><div class="dot"></div><div class="tiny" style="color:#C8C4FF;">School management · Parent app</div></div>
+  <div style="position: absolute; top: 160px; left: 120px;">
+    <div class="title-sm anim-up">
+      Admin's desk.<br>
+      <span class="grad-indigo">Parent's pocket.</span>
+    </div>
+  </div>
+  <div class="row anim-up d-2" style="position: absolute; bottom: -80px; left: 0; right: 0; gap: 56px; justify-content: center; transform: scale(0.72); transform-origin: bottom center;">
+      <!-- Phone 1: Announcements feed -->
+      <div class="phone">
+        <div class="screen">
+          <div class="island"></div>
+          <div class="status"><span>9:41</span><span>● ● ●●</span></div>
+          <div style="padding: 100px 22px 0;">
+            <div style="font-size:30px;font-weight:700;color:#0F172A;letter-spacing:-0.02em;">Announcements</div>
+            <div style="margin-top:16px;background:#fff;border-radius:18px;padding:16px;box-shadow:0 4px 16px rgba(15,23,42,0.06);">
+              <div style="font-size:10px;color:#1D4ED8;background:#DBEAFE;display:inline-block;padding:3px 8px;border-radius:6px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;">Whole school</div>
+              <div style="font-size:15px;font-weight:700;color:#0F172A;margin-top:8px;letter-spacing:-0.01em;">Snow day — Friday closed</div>
+              <div style="font-size:12px;color:#64748B;margin-top:6px;line-height:1.4;">Buses will not run. Online lessons resume Mon.</div>
+              <div style="font-size:11px;color:#94A3B8;margin-top:8px;">Posted just now · Principal</div>
+            </div>
+            <div style="margin-top:14px;background:#fff;border-radius:18px;padding:16px;box-shadow:0 4px 16px rgba(15,23,42,0.06);">
+              <div style="font-size:10px;color:#92400E;background:#FEF3C7;display:inline-block;padding:3px 8px;border-radius:6px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;">Grade 5</div>
+              <div style="font-size:15px;font-weight:700;color:#0F172A;margin-top:8px;letter-spacing:-0.01em;">Parent–teacher week</div>
+              <div style="font-size:12px;color:#64748B;margin-top:6px;line-height:1.4;">Book a 10-min slot before Wednesday.</div>
+              <div style="font-size:11px;color:#94A3B8;margin-top:8px;">2h ago · Mrs. Chen</div>
+            </div>
+            <div style="margin-top:14px;background:#fff;border-radius:18px;padding:16px;box-shadow:0 4px 16px rgba(15,23,42,0.06);">
+              <div style="font-size:10px;color:#065F46;background:#D1FAE5;display:inline-block;padding:3px 8px;border-radius:6px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;">School-wide</div>
+              <div style="font-size:15px;font-weight:700;color:#0F172A;margin-top:8px;letter-spacing:-0.01em;">Spring concert tickets</div>
+              <div style="font-size:11px;color:#94A3B8;margin-top:8px;">Yesterday</div>
+            </div>
+          </div>
+          <div class="home"></div>
+        </div>
+      </div>
+      <!-- Phone 2: Chat -->
+      <div class="phone">
+        <div class="screen">
+          <div class="island"></div>
+          <div class="status"><span>9:41</span><span>● ● ●●</span></div>
+          <div style="padding: 100px 22px 0;">
+            <div style="font-size:30px;font-weight:700;color:#0F172A;letter-spacing:-0.02em;">Chat</div>
+            <div style="margin-top:16px;">
+              <div style="display:flex;gap:12px;align-items:center;padding:12px 4px;border-bottom:1px solid #F1F5F9;">
+                <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#F472B6,#FB923C);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;">SC</div>
+                <div style="flex:1;">
+                  <div style="display:flex;justify-content:space-between;"><div style="font-size:14px;font-weight:700;color:#0F172A;">Mrs. Chen</div><div style="font-size:11px;color:#94A3B8;">2m</div></div>
+                  <div style="font-size:13px;color:#64748B;margin-top:2px;">Maya did great today — let's catch up Fri…</div>
+                </div>
+                <div style="background:#4F46E5;color:#fff;font-size:11px;font-weight:700;padding:3px 8px;border-radius:999px;">2</div>
+              </div>
+              <div style="display:flex;gap:12px;align-items:center;padding:12px 4px;border-bottom:1px solid #F1F5F9;">
+                <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#4F46E5,#818CF8);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;">RK</div>
+                <div style="flex:1;">
+                  <div style="display:flex;justify-content:space-between;"><div style="font-size:14px;font-weight:700;color:#0F172A;">Mr. Reza · Math</div><div style="font-size:11px;color:#94A3B8;">1h</div></div>
+                  <div style="font-size:13px;color:#64748B;margin-top:2px;font-style: italic;">typing…</div>
+                </div>
+              </div>
+              <div style="display:flex;gap:12px;align-items:center;padding:12px 4px;border-bottom:1px solid #F1F5F9;">
+                <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#10B981,#34D399);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;">LH</div>
+                <div style="flex:1;">
+                  <div style="display:flex;justify-content:space-between;"><div style="font-size:14px;font-weight:700;color:#0F172A;">Ms. Lara · Art</div><div style="font-size:11px;color:#94A3B8;">Yest</div></div>
+                  <div style="font-size:13px;color:#64748B;margin-top:2px;">Sent the project rubric.</div>
+                </div>
+              </div>
+              <div style="display:flex;gap:12px;align-items:center;padding:12px 4px;">
+                <div style="width:44px;height:44px;border-radius:50%;background:#0F172A;color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;">PR</div>
+                <div style="flex:1;">
+                  <div style="display:flex;justify-content:space-between;"><div style="font-size:14px;font-weight:700;color:#0F172A;">Principal Rahimi</div><div style="font-size:11px;color:#94A3B8;">Tue</div></div>
+                  <div style="font-size:13px;color:#64748B;margin-top:2px;">Thanks for joining the meeting.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="home"></div>
+        </div>
+      </div>
+      <!-- Phone 3: Appointments -->
+      <div class="phone">
+        <div class="screen">
+          <div class="island"></div>
+          <div class="status"><span>9:41</span><span>● ● ●●</span></div>
+          <div style="padding: 100px 22px 0;">
+            <div style="font-size:30px;font-weight:700;color:#0F172A;letter-spacing:-0.02em;">Appointments</div>
+            <div style="font-size:13px;color:#64748B;margin-top:6px;">Pick a 10-minute slot</div>
+            <div style="margin-top:18px;background:#fff;border-radius:18px;padding:16px;box-shadow:0 4px 16px rgba(15,23,42,0.06);">
+              <div style="font-size:11px;color:#64748B;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;">Wed, May 21 · Mrs. Chen</div>
+              <div style="margin-top:12px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+                <div style="text-align:center;padding:10px;border-radius:10px;background:#F4F6F9;font-size:13px;font-weight:600;color:#94A3B8;text-decoration:line-through;">3:00</div>
+                <div style="text-align:center;padding:10px;border-radius:10px;background:#4F46E5;color:#fff;font-size:13px;font-weight:700;">3:10</div>
+                <div style="text-align:center;padding:10px;border-radius:10px;background:#F4F6F9;color:#0F172A;font-size:13px;font-weight:600;">3:20</div>
+                <div style="text-align:center;padding:10px;border-radius:10px;background:#F4F6F9;font-size:13px;font-weight:600;color:#94A3B8;text-decoration:line-through;">3:30</div>
+                <div style="text-align:center;padding:10px;border-radius:10px;background:#F4F6F9;color:#0F172A;font-size:13px;font-weight:600;">3:40</div>
+                <div style="text-align:center;padding:10px;border-radius:10px;background:#F4F6F9;color:#0F172A;font-size:13px;font-weight:600;">3:50</div>
+              </div>
+            </div>
+            <div style="margin-top:14px;background:#0F172A;color:#fff;border-radius:18px;padding:16px;">
+              <div style="font-size:11px;color:#FF9F40;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">Booked</div>
+              <div style="font-size:15px;font-weight:700;margin-top:8px;">Wed May 21 · 3:10 PM</div>
+              <div style="font-size:12px;color:rgba(255,255,255,0.6);margin-top:4px;">with Mrs. Chen · Room 204</div>
+              <div style="margin-top:10px;font-size:11px;color:#5BD3AC;">✓ Confirmed · Reception notified</div>
+            </div>
+          </div>
+          <div class="home"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════ 16 · Bus tracking (our redesign!) ════ -->
+<section data-screen-label="16 Bus tracking">
+  <div class="eyebrow indigo"><div class="dot"></div><div class="tiny" style="color:#C8C4FF;">School management · Bus</div></div>
+  <div class="fill pad120 row" style="align-items: center; gap: 100px;">
+    <div class="col anim-up" style="flex: 1;">
+      <div class="title">From your stop.<br><span class="grad-indigo">To theirs.</span></div>
+      <div class="body" style="margin-top: 48px;">
+        The driver's phone posts GPS every 30 seconds. The backend computes distance to each child's pickup. At <strong>10 · 5 · 2 minutes</strong> and <strong>arriving</strong> — the parent gets a tap on the shoulder.
+      </div>
+      <div class="stat-row anim-up d-2" style="margin-top: 72px; grid-template-columns: repeat(3, 1fr); gap: 56px;">
+        <div class="stat">
+          <div class="v grad-indigo">30s</div>
+          <div class="l">GPS interval</div>
+        </div>
+        <div class="stat">
+          <div class="v grad-indigo">4</div>
+          <div class="l">Proximity tiers</div>
+        </div>
+        <div class="stat">
+          <div class="v grad-indigo">±5m</div>
+          <div class="l">Haversine accuracy</div>
+        </div>
+      </div>
+    </div>
+    <div class="anim-up d-2" style="flex: 0 0 auto;">
+      <div class="phone dark">
+        <div class="screen" style="background:#1B232E;">
+          <div class="island"></div>
+          <div class="status"><span>9:41</span><span style="color:#fff;">● ● ●●</span></div>
+          <!-- Map background -->
+          <div style="position:absolute;inset:0;background:linear-gradient(180deg, #1B232E 0%, #0F141C 100%);">
+            <!-- street grid -->
+            <svg width="100%" height="100%" viewBox="0 0 420 880" style="position:absolute;inset:0;">
+              <rect x="0" y="0" width="420" height="880" fill="#1B232E"/>
+              <rect x="20" y="80" width="80" height="100" rx="3" fill="#252F3D"/>
+              <rect x="115" y="80" width="60" height="100" rx="3" fill="#2A3547"/>
+              <rect x="195" y="80" width="80" height="100" rx="3" fill="#252F3D"/>
+              <rect x="290" y="80" width="100" height="100" rx="3" fill="#2A3547"/>
+              <rect x="20" y="210" width="100" height="120" rx="3" fill="#2A3547"/>
+              <rect x="135" y="210" width="80" height="120" rx="3" fill="#252F3D"/>
+              <rect x="230" y="210" width="160" height="120" rx="3" fill="#252F3D"/>
+              <rect x="-10" y="500" width="150" height="180" fill="#1F3328"/>
+              <rect x="160" y="360" width="240" height="280" rx="3" fill="#252F3D"/>
+              <line x1="0" y1="190" x2="420" y2="190" stroke="#0F141C" stroke-width="12"/>
+              <line x1="0" y1="190" x2="420" y2="190" stroke="#fff" stroke-width="2" opacity="0.08"/>
+              <line x1="0" y1="345" x2="420" y2="345" stroke="#0F141C" stroke-width="14"/>
+              <line x1="0" y1="345" x2="420" y2="345" stroke="#fff" stroke-width="2" opacity="0.08"/>
+              <line x1="0" y1="490" x2="420" y2="490" stroke="#0F141C" stroke-width="14"/>
+              <line x1="0" y1="690" x2="420" y2="690" stroke="#0F141C" stroke-width="12"/>
+              <line x1="125" y1="0" x2="125" y2="880" stroke="#0F141C" stroke-width="12"/>
+              <line x1="220" y1="0" x2="220" y2="880" stroke="#0F141C" stroke-width="12"/>
+              <line x1="320" y1="0" x2="320" y2="880" stroke="#0F141C" stroke-width="12"/>
+              <!-- route -->
+              <path d="M 260 300 Q 200 460 130 620" fill="none" stroke="#818CF8" stroke-width="5" stroke-linecap="round" stroke-dasharray="3 10" opacity="0.9"/>
+              <!-- parent pin -->
+              <g transform="translate(130, 620)">
+                <circle r="14" fill="#1B232E" stroke="#818CF8" stroke-width="3"/>
+                <circle r="6" fill="#818CF8"/>
+              </g>
+              <!-- bus marker pulse -->
+              <g transform="translate(260, 300)">
+                <circle r="26" fill="#818CF8" opacity="0.2"/>
+                <circle r="20" fill="#818CF8" stroke="#0B0F14" stroke-width="3"/>
+                <rect x="-7" y="-7" width="14" height="11" rx="2" fill="none" stroke="#fff" stroke-width="1.8"/>
+                <line x1="-7" y1="-1" x2="7" y2="-1" stroke="#fff" stroke-width="1.6"/>
+              </g>
+            </svg>
+            <!-- Top banner -->
+            <div style="position:absolute;top:122px;left:14px;right:14px;background:#161D27;border-radius:18px;padding:6px 18px 16px;box-shadow:0 6px 24px rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.06);">
+              <div style="display:flex;align-items:center;gap:6px;padding-top:8px;">
+                <div style="width:8px;height:8px;border-radius:50%;background:#818CF8;"></div>
+                <div style="font-size:10px;color:#818CF8;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;">En route</div>
+                <div style="margin-left:auto;font-size:10px;color:#94A3B8;font-weight:600;">Updated 12s</div>
+              </div>
+              <div style="margin-top:6px;display:flex;align-items:flex-end;gap:12px;">
+                <div>
+                  <div style="font-size:10px;color:#94A3B8;font-weight:600;">ARRIVES</div>
+                  <div style="display:flex;align-items:baseline;gap:6px;margin-top:2px;">
+                    <div style="font-size:30px;font-weight:800;color:#F8FAFC;letter-spacing:-0.02em;">8:14 AM</div>
+                    <div style="background:rgba(129,140,248,0.22);color:#818CF8;border-radius:7px;padding:3px 7px;font-size:11px;font-weight:700;">in 4 min</div>
+                  </div>
+                  <div style="font-size:11px;color:#94A3B8;margin-top:4px;">0.8 mi · 3 stops ahead</div>
+                </div>
+                <div style="margin-left:auto;text-align:right;">
+                  <div style="display:flex;justify-content:flex-end;">
+                    <div style="width:26px;height:26px;border-radius:50%;background:#F472B6;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;border:2.5px solid #1B232E;">M</div>
+                    <div style="width:26px;height:26px;border-radius:50%;background:#60A5FA;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;border:2.5px solid #1B232E;margin-left:-10px;">L</div>
+                  </div>
+                  <div style="font-size:10px;color:#94A3B8;font-weight:600;margin-top:4px;">2 onboard</div>
+                </div>
+              </div>
+            </div>
+            <!-- Bottom action bar -->
+            <div style="position:absolute;bottom:100px;left:14px;right:14px;background:#161D27;border-radius:18px;padding:14px 16px;border:1px solid rgba(255,255,255,0.06);">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+                <div style="width:34px;height:34px;border-radius:50%;background:#818CF8;color:#0B0F14;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;">SC</div>
+                <div style="flex:1;">
+                  <div style="font-size:13px;font-weight:700;color:#F8FAFC;">Sarah Chen</div>
+                  <div style="font-size:10px;color:#94A3B8;margin-top:1px;">Driver · License DLR-4421</div>
+                </div>
+                <div style="background:rgba(255,255,255,0.06);border-radius:7px;padding:4px 7px;font-size:10px;font-weight:700;color:#F8FAFC;">#B-204</div>
+              </div>
+              <div style="display:flex;gap:6px;">
+                <div style="flex:1;height:36px;border-radius:10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;gap:5px;font-size:11px;font-weight:700;color:#F8FAFC;">📞 Call</div>
+                <div style="flex:1;height:36px;border-radius:10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;gap:5px;font-size:11px;font-weight:700;color:#F8FAFC;">💬 Text</div>
+                <div style="flex:1;height:36px;border-radius:10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;gap:5px;font-size:11px;font-weight:700;color:#F87171;">🛡 Report</div>
+              </div>
+            </div>
+          </div>
+          <div class="home"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════ 17 · i18n trilingual ════ -->
+<section data-screen-label="17 Three languages">
+  <div class="eyebrow indigo"><div class="dot"></div><div class="tiny" style="color:#C8C4FF;">School management · Languages</div></div>
+  <div class="fill pad120 col" style="justify-content: center; align-items: center;">
+    <div class="title-sm anim-up" style="text-align: center;">
+      English. Arabic. Kurdish.<br>
+      <span class="grad-indigo">Per device.</span>
+    </div>
+    <div class="row anim-up d-2" style="margin-top: 64px; gap: 100px; align-items: flex-start;">
+      <!-- en -->
+      <div style="text-align:center;">
+        <div class="tiny" style="margin-bottom: 18px; color: var(--muted);">English</div>
+        <div style="background:#fff;border-radius:18px;padding:24px 26px;width:340px;color:#0F172A;box-shadow:0 30px 80px rgba(0,0,0,0.4);">
+          <div style="font-size:11px;color:#4F46E5;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">Today's grade</div>
+          <div style="font-size:22px;font-weight:700;margin-top:6px;letter-spacing:-0.01em;">Maya — Science quiz</div>
+          <div style="font-size:36px;font-weight:800;color:#10B981;margin-top:12px;letter-spacing:-0.02em;">18 / 20</div>
+          <div style="font-size:13px;color:#64748B;margin-top:6px;">Posted by Mr. Karim · 2 min ago</div>
+        </div>
+      </div>
+      <!-- ar -->
+      <div style="text-align:center;">
+        <div class="tiny" style="margin-bottom: 18px; color: var(--muted);">العربية</div>
+        <div style="background:#fff;border-radius:18px;padding:24px 26px;width:340px;color:#0F172A;direction:rtl;box-shadow:0 30px 80px rgba(0,0,0,0.4);">
+          <div style="font-size:11px;color:#4F46E5;font-weight:700;letter-spacing:0.04em;">درجة اليوم</div>
+          <div style="font-size:22px;font-weight:700;margin-top:6px;letter-spacing:-0.01em;">مايا — اختبار علوم</div>
+          <div style="font-size:36px;font-weight:800;color:#10B981;margin-top:12px;letter-spacing:-0.02em;">٢٠ / ١٨</div>
+          <div style="font-size:13px;color:#64748B;margin-top:6px;">نُشر بواسطة الأستاذ كريم · قبل دقيقتين</div>
+        </div>
+      </div>
+      <!-- ku -->
+      <div style="text-align:center;">
+        <div class="tiny" style="margin-bottom: 18px; color: var(--muted);">کوردی</div>
+        <div style="background:#fff;border-radius:18px;padding:24px 26px;width:340px;color:#0F172A;direction:rtl;box-shadow:0 30px 80px rgba(0,0,0,0.4);">
+          <div style="font-size:11px;color:#4F46E5;font-weight:700;letter-spacing:0.04em;">نمرەی ئەمڕۆ</div>
+          <div style="font-size:22px;font-weight:700;margin-top:6px;letter-spacing:-0.01em;">مایا — تاقیکردنەوەی زانست</div>
+          <div style="font-size:36px;font-weight:800;color:#10B981;margin-top:12px;letter-spacing:-0.02em;">٢٠ / ١٨</div>
+          <div style="font-size:13px;color:#64748B;margin-top:6px;">لەلایەن مامۆستا کەریم · ٢ خولەک پێش ئێستا</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════ 18 · Segue → Accounting ════ -->
+<section data-screen-label="18 Segue · running quietly behind">
+  <div class="fill center pad120">
+    <div class="hero-md anim-up" style="text-align: center; max-width: 1500px;">
+      <span style="color: rgba(255,255,255,0.45);">And running quietly</span><br>
+      behind all of it…
+    </div>
+  </div>
+</section>
+
+<!-- ════ 19 · ACCOUNTING (section title) ════ -->
+<section data-screen-label="19 Accounting" class="bg-accounting">
+  <div class="eyebrow emerald"><div class="dot"></div><div class="tiny" style="color:#BFEFD9;">Pillar 03</div></div>
+  <div class="fill center">
+    <div class="hero grad-emerald anim-up">Accounting.</div>
+  </div>
+</section>
+
+<!-- ════ 20 · Built like a ledger ════ -->
+<section data-screen-label="20 Built like a ledger" class="bg-accounting">
+  <div class="eyebrow emerald"><div class="dot"></div><div class="tiny" style="color:#BFEFD9;">Accounting</div></div>
+  <div class="fill pad120 col" style="justify-content: center;">
+    <div class="hero-md anim-up">
+      Built like<br>
+      <span class="grad-emerald">a ledger.</span>
+    </div>
+    <div class="body anim-up d-2" style="margin-top: 56px;">
+      Not a spreadsheet. Every payment, expense, and salary gets a sequential receipt number — scoped to the school, scoped to the year. Closed periods lock. Reopens are logged. The books balance.
+    </div>
+  </div>
+</section>
+
+<!-- ════ 21 · Tuition + receipt ════ -->
+<section data-screen-label="21 Receipt">
+  <div class="eyebrow emerald"><div class="dot"></div><div class="tiny" style="color:#BFEFD9;">Accounting · Tuition</div></div>
+  <div class="fill pad120 row" style="align-items: center; gap: 80px;">
+    <div class="col anim-up" style="flex: 1; max-width: 900px;">
+      <div class="browser">
+        <div class="topbar">
+          <div class="tl"><span></span><span></span><span></span></div>
+          <div class="url">lincoln.school/accounting/tuition/students/maya-park</div>
+        </div>
+        <div style="padding: 28px 36px; background: #fff;">
+          <div style="display:flex;align-items:center;gap:14px;">
+            <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#FF9F40,#F472B6);color:#fff;font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center;">MP</div>
+            <div>
+              <div style="font-size:22px;font-weight:700;color:#0F172A;letter-spacing:-0.02em;">Maya Park</div>
+              <div style="font-size:13px;color:#64748B;">Grade 5 · Family ID FAM-2024-118</div>
+            </div>
+            <div style="margin-left:auto;font-size:36px;font-weight:800;color:#10B981;letter-spacing:-0.02em;">$0 due</div>
+          </div>
+          <div style="margin-top:22px;font-size:11px;color:#94A3B8;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">Fee plan</div>
+          <div style="margin-top:10px;display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:0;border:1px solid #E5E9EF;border-radius:12px;overflow:hidden;">
+            <div style="padding:10px 14px;background:#F8FAFC;font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.06em;">Kind</div>
+            <div style="padding:10px 14px;background:#F8FAFC;font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.06em;">Total</div>
+            <div style="padding:10px 14px;background:#F8FAFC;font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.06em;">Paid</div>
+            <div style="padding:10px 14px;background:#F8FAFC;font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.06em;">Status</div>
+            <div style="padding:12px 14px;font-size:13px;color:#0F172A;border-top:1px solid #F1F5F9;font-weight:600;">Tuition</div>
+            <div style="padding:12px 14px;font-size:13px;color:#0F172A;border-top:1px solid #F1F5F9;">$4,800</div>
+            <div style="padding:12px 14px;font-size:13px;color:#0F172A;border-top:1px solid #F1F5F9;">$4,800</div>
+            <div style="padding:12px 14px;border-top:1px solid #F1F5F9;"><span style="background:#D1FAE5;color:#065F46;font-size:11px;font-weight:700;padding:3px 8px;border-radius:6px;">PAID</span></div>
+            <div style="padding:12px 14px;font-size:13px;color:#0F172A;border-top:1px solid #F1F5F9;font-weight:600;">Transport</div>
+            <div style="padding:12px 14px;font-size:13px;color:#0F172A;border-top:1px solid #F1F5F9;">$1,200</div>
+            <div style="padding:12px 14px;font-size:13px;color:#0F172A;border-top:1px solid #F1F5F9;">$1,200</div>
+            <div style="padding:12px 14px;border-top:1px solid #F1F5F9;"><span style="background:#D1FAE5;color:#065F46;font-size:11px;font-weight:700;padding:3px 8px;border-radius:6px;">PAID</span></div>
+            <div style="padding:12px 14px;font-size:13px;color:#0F172A;border-top:1px solid #F1F5F9;font-weight:600;">Lunch</div>
+            <div style="padding:12px 14px;font-size:13px;color:#0F172A;border-top:1px solid #F1F5F9;">$600</div>
+            <div style="padding:12px 14px;font-size:13px;color:#0F172A;border-top:1px solid #F1F5F9;">$600</div>
+            <div style="padding:12px 14px;border-top:1px solid #F1F5F9;"><span style="background:#D1FAE5;color:#065F46;font-size:11px;font-weight:700;padding:3px 8px;border-radius:6px;">PAID</span></div>
+            <div style="padding:12px 14px;font-size:13px;color:#0F172A;border-top:1px solid #F1F5F9;font-weight:600;">Exam fee</div>
+            <div style="padding:12px 14px;font-size:13px;color:#0F172A;border-top:1px solid #F1F5F9;">$120</div>
+            <div style="padding:12px 14px;font-size:13px;color:#0F172A;border-top:1px solid #F1F5F9;">$120</div>
+            <div style="padding:12px 14px;border-top:1px solid #F1F5F9;"><span style="background:#D1FAE5;color:#065F46;font-size:11px;font-weight:700;padding:3px 8px;border-radius:6px;">PAID</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="anim-up d-2" style="flex: 0 0 auto;">
+      <div class="receipt">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+          <div>
+            <h1>Receipt</h1>
+            <div class="rcpno">RCP‑2026‑00284</div>
+          </div>
+          <div style="width:44px;height:44px;border-radius:10px;background:#10B981;color:#fff;font-size:18px;font-weight:800;display:flex;align-items:center;justify-content:center;">✓</div>
+        </div>
+        <hr>
+        <div class="line"><span class="l">Family</span><span>Park · FAM‑2024‑118</span></div>
+        <div class="line"><span class="l">Student</span><span>Maya Park · Grade 5</span></div>
+        <div class="line"><span class="l">Date</span><span>May 17, 2026 · 10:42 AM</span></div>
+        <div class="line"><span class="l">Account</span><span>Cash · Reception drawer</span></div>
+        <hr>
+        <div class="line"><span class="l">Tuition · Q4</span><span>$1,200.00</span></div>
+        <div class="line"><span class="l">Transport · May</span><span>$300.00</span></div>
+        <div class="line"><span class="l">Tax (0%)</span><span>$0.00</span></div>
+        <div class="grand"><span>Total</span><span class="v">$1,500.00</span></div>
+        <div style="margin-top:18px;display:flex;gap:8px;font-size:11px;color:#94A3B8;letter-spacing:0.06em;text-transform:uppercase;font-weight:600;">
+          <span>Issued · Reception 2</span><span style="margin-left:auto;color:#10B981;">VERIFIED</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════ 22 · Multi-currency + FX ════ -->
+<section data-screen-label="22 Multi-currency">
+  <div class="eyebrow emerald"><div class="dot"></div><div class="tiny" style="color:#BFEFD9;">Accounting · Currency</div></div>
+  <div class="fill pad120 row" style="align-items: center; gap: 100px;">
+    <div class="col anim-up" style="flex: 1;">
+      <div class="title">Paid in dinars.<br>Reported in<br><span class="grad-emerald">whatever you want.</span></div>
+      <div class="body" style="margin-top: 40px;">
+        Every payment is stored in the currency it was made in — that's the truth, the original record. Reports convert using a dated FX rate table the school maintains.
+      </div>
+    </div>
+    <div class="anim-up d-2" style="flex: 0 0 auto;">
+      <div class="browser dark" style="width: 720px;">
+        <div class="topbar">
+          <div class="tl"><span></span><span></span><span></span></div>
+          <div class="url">lincoln.school/accounting/fx-rates</div>
+        </div>
+        <div style="padding: 28px 32px; background: #0F141C;">
+          <div style="font-size:22px;font-weight:700;color:#F8FAFC;letter-spacing:-0.02em;">FX rates · base USD</div>
+          <div style="font-size:12px;color:#94A3B8;font-weight:500;margin-top:4px;">As of May 17, 2026</div>
+          <div style="margin-top:22px;">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1.2fr;font-size:10px;color:#94A3B8;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;padding-bottom:10px;border-bottom:1px solid rgba(255,255,255,0.08);">
+              <div>Currency</div><div>Rate / USD</div><div>Effective</div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1.2fr;padding:14px 0;font-size:15px;color:#F8FAFC;border-bottom:1px solid rgba(255,255,255,0.04);align-items:center;">
+              <div style="display:flex;align-items:center;gap:10px;"><div style="width:24px;height:24px;border-radius:50%;background:#FF9F40;color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;">د</div>IQD</div>
+              <div style="font-variant-numeric: tabular-nums; color: #5BD3AC; font-weight: 700;">1,310.00</div>
+              <div style="color:#94A3B8;font-size:13px;">May 16, 2026</div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1.2fr;padding:14px 0;font-size:15px;color:#F8FAFC;border-bottom:1px solid rgba(255,255,255,0.04);align-items:center;">
+              <div style="display:flex;align-items:center;gap:10px;"><div style="width:24px;height:24px;border-radius:50%;background:#4F46E5;color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;">€</div>EUR</div>
+              <div style="font-variant-numeric: tabular-nums;">0.928</div>
+              <div style="color:#94A3B8;font-size:13px;">May 17, 2026</div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1.2fr;padding:14px 0;font-size:15px;color:#F8FAFC;border-bottom:1px solid rgba(255,255,255,0.04);align-items:center;">
+              <div style="display:flex;align-items:center;gap:10px;"><div style="width:24px;height:24px;border-radius:50%;background:#10B981;color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;">£</div>GBP</div>
+              <div style="font-variant-numeric: tabular-nums;">0.799</div>
+              <div style="color:#94A3B8;font-size:13px;">May 17, 2026</div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1.2fr;padding:14px 0;font-size:15px;color:#F8FAFC;border-bottom:1px solid rgba(255,255,255,0.04);align-items:center;">
+              <div style="display:flex;align-items:center;gap:10px;"><div style="width:24px;height:24px;border-radius:50%;background:#F472B6;color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;">د.إ</div>AED</div>
+              <div style="font-variant-numeric: tabular-nums;">3.673</div>
+              <div style="color:#94A3B8;font-size:13px;">May 12, 2026</div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1.2fr;padding:14px 0;font-size:15px;color:#F8FAFC;align-items:center;">
+              <div style="display:flex;align-items:center;gap:10px;"><div style="width:24px;height:24px;border-radius:50%;background:#FB923C;color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;">₺</div>TRY</div>
+              <div style="font-variant-numeric: tabular-nums;">32.41</div>
+              <div style="color:#94A3B8;font-size:13px;">May 17, 2026</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════ 23 · Period close + audit log ════ -->
+<section data-screen-label="23 Period close">
+  <div class="eyebrow emerald"><div class="dot"></div><div class="tiny" style="color:#BFEFD9;">Accounting · Periods</div></div>
+  <div class="fill pad120 row" style="align-items: center; gap: 100px;">
+    <div class="anim-up" style="flex: 0 0 auto;">
+      <div class="browser" style="width: 760px;">
+        <div class="topbar">
+          <div class="tl"><span></span><span></span><span></span></div>
+          <div class="url">lincoln.school/accounting/periods</div>
+        </div>
+        <div style="padding: 28px 36px; background: #fff;">
+          <div style="display:flex;align-items:center;gap:12px;">
+            <div style="font-size:22px;font-weight:700;color:#0F172A;letter-spacing:-0.02em;">Periods</div>
+            <div style="margin-left:auto;background:#0F172A;color:#fff;border-radius:10px;padding:8px 14px;font-size:13px;font-weight:700;">Close month</div>
+          </div>
+          <div style="margin-top:22px;">
+            <div style="padding:18px 20px;border:1px solid #E5E9EF;border-radius:14px;margin-bottom:10px;display:flex;align-items:center;gap:14px;">
+              <div style="width:44px;height:44px;border-radius:12px;background:#D1FAE5;color:#065F46;font-size:18px;font-weight:700;display:flex;align-items:center;justify-content:center;">🔒</div>
+              <div style="flex:1;">
+                <div style="font-size:16px;font-weight:700;color:#0F172A;">February 2026</div>
+                <div style="font-size:12px;color:#64748B;margin-top:2px;">Closed by Sara A. · Mar 3 · 482 payments locked</div>
+              </div>
+              <div style="background:#D1FAE5;color:#065F46;font-size:11px;font-weight:700;padding:5px 10px;border-radius:6px;">CLOSED</div>
+            </div>
+            <div style="padding:18px 20px;border:1px solid #E5E9EF;border-radius:14px;margin-bottom:10px;display:flex;align-items:center;gap:14px;">
+              <div style="width:44px;height:44px;border-radius:12px;background:#D1FAE5;color:#065F46;font-size:18px;font-weight:700;display:flex;align-items:center;justify-content:center;">🔒</div>
+              <div style="flex:1;">
+                <div style="font-size:16px;font-weight:700;color:#0F172A;">March 2026</div>
+                <div style="font-size:12px;color:#64748B;margin-top:2px;">Closed by Sara A. · Apr 4 · 506 payments locked</div>
+              </div>
+              <div style="background:#D1FAE5;color:#065F46;font-size:11px;font-weight:700;padding:5px 10px;border-radius:6px;">CLOSED</div>
+            </div>
+            <div style="padding:18px 20px;border:1.5px solid #FEF3C7;background:#FFFBEB;border-radius:14px;display:flex;align-items:center;gap:14px;">
+              <div style="width:44px;height:44px;border-radius:12px;background:#FEF3C7;color:#92400E;font-size:18px;font-weight:700;display:flex;align-items:center;justify-content:center;">↺</div>
+              <div style="flex:1;">
+                <div style="font-size:16px;font-weight:700;color:#0F172A;">April 2026 — REOPENED</div>
+                <div style="font-size:12px;color:#92400E;margin-top:2px;">Reopened by Sara A. · May 15 · Adjustments in progress</div>
+              </div>
+              <div style="background:#FDE68A;color:#92400E;font-size:11px;font-weight:700;padding:5px 10px;border-radius:6px;">OPEN</div>
+            </div>
+            <div style="padding:18px 20px;border:1px solid #E5E9EF;border-radius:14px;margin-top:10px;display:flex;align-items:center;gap:14px;">
+              <div style="width:44px;height:44px;border-radius:12px;background:#EEF2FF;color:#4F46E5;font-size:18px;font-weight:700;display:flex;align-items:center;justify-content:center;">·</div>
+              <div style="flex:1;">
+                <div style="font-size:16px;font-weight:700;color:#0F172A;">May 2026</div>
+                <div style="font-size:12px;color:#64748B;margin-top:2px;">Live · 314 payments · close on June 3</div>
+              </div>
+              <div style="background:#EEF2FF;color:#4F46E5;font-size:11px;font-weight:700;padding:5px 10px;border-radius:6px;">LIVE</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col anim-up d-2" style="flex: 1;">
+      <div class="title-sm">Close the month.<br><span class="grad-emerald">Numbers stop moving.</span></div>
+      <div class="body-sm" style="margin-top: 32px;">
+        Edits to a closed period return a 423. Reopens are stamped — who, when, why. The audit log is the receipt for the receipts.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════ 24 · Reports — P&L / AR / Cash flow ════ -->
+<section data-screen-label="24 Reports">
+  <div class="eyebrow emerald"><div class="dot"></div><div class="tiny" style="color:#BFEFD9;">Accounting · Reports</div></div>
+  <div class="fill pad120 col" style="justify-content: center;">
+    <div class="title-sm anim-up">
+      One database.<br>
+      <span class="grad-emerald">Every report.</span>
+    </div>
+    <div class="row anim-up d-2" style="margin-top: 64px; gap: 28px;">
+      <!-- P&L card -->
+      <div style="flex:1; background: linear-gradient(160deg, #0F2A22 0%, #0B1916 100%); border-radius: 22px; padding: 36px; border: 1px solid rgba(91,211,172,0.18);">
+        <div class="tiny" style="color:#5BD3AC;">PROFIT &amp; LOSS · MAY</div>
+        <div style="font-size: 88px; font-weight: 800; color:#fff; letter-spacing: -0.04em; margin-top: 16px; line-height:0.95;">+$48.2K</div>
+        <div style="font-size: 16px; color: rgba(255,255,255,0.6); margin-top: 12px;">$214K revenue · $166K expenses</div>
+        <div style="margin-top: 28px; height: 80px; display: flex; align-items: flex-end; gap: 6px;">
+          <div style="flex:1; height:40%; background:#10B981; border-radius: 3px;"></div>
+          <div style="flex:1; height:55%; background:#10B981; border-radius: 3px;"></div>
+          <div style="flex:1; height:48%; background:#10B981; border-radius: 3px;"></div>
+          <div style="flex:1; height:62%; background:#10B981; border-radius: 3px;"></div>
+          <div style="flex:1; height:58%; background:#10B981; border-radius: 3px;"></div>
+          <div style="flex:1; height:74%; background:#10B981; border-radius: 3px;"></div>
+          <div style="flex:1; height:68%; background:#10B981; border-radius: 3px;"></div>
+          <div style="flex:1; height:80%; background:#5BD3AC; border-radius: 3px;"></div>
+        </div>
+      </div>
+      <!-- AR Aging card -->
+      <div style="flex:1; background: #0F141C; border-radius: 22px; padding: 36px; border: 1px solid rgba(255,255,255,0.08);">
+        <div class="tiny" style="color: var(--muted);">A / R AGING</div>
+        <div style="margin-top: 18px;">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;padding:14px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
+            <div style="font-size:14px;color:#94A3B8;">Current</div>
+            <div style="font-size:28px;font-weight:700;color:#fff;font-variant-numeric:tabular-nums;">$12,400</div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:baseline;padding:14px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
+            <div style="font-size:14px;color:#94A3B8;">1–30 days</div>
+            <div style="font-size:28px;font-weight:700;color:#fff;font-variant-numeric:tabular-nums;">$8,150</div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:baseline;padding:14px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
+            <div style="font-size:14px;color:#94A3B8;">31–60 days</div>
+            <div style="font-size:28px;font-weight:700;color:#F59E0B;font-variant-numeric:tabular-nums;">$3,200</div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:baseline;padding:14px 0;">
+            <div style="font-size:14px;color:#94A3B8;">60+ days</div>
+            <div style="font-size:28px;font-weight:700;color:#F87171;font-variant-numeric:tabular-nums;">$640</div>
+          </div>
+        </div>
+      </div>
+      <!-- Cash flow card -->
+      <div style="flex:1; background: #0F141C; border-radius: 22px; padding: 36px; border: 1px solid rgba(255,255,255,0.08);">
+        <div class="tiny" style="color: var(--muted);">CASH FLOW · 30 DAYS</div>
+        <div style="font-size: 88px; font-weight: 800; color:#fff; letter-spacing: -0.04em; margin-top: 16px; line-height: 0.95;">$96K</div>
+        <div style="font-size: 16px; color: rgba(255,255,255,0.6); margin-top: 12px;">Projected closing balance</div>
+        <div style="margin-top: 28px; padding: 14px 16px; background: rgba(255,255,255,0.04); border-radius: 12px; font-size: 13px; color: rgba(255,255,255,0.7);">
+          Salaries clear Jun 1 · $52K · accounted for.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════ 25 · Three systems. One database. ════ -->
+<section data-screen-label="25 Three systems one database">
+  <div class="fill pad120 col" style="justify-content: center; align-items: center;">
+    <div class="kicker anim-fade" style="margin-bottom: 48px;">The thesis</div>
+    <div class="hero-md anim-up" style="text-align: center;">
+      Three systems.<br>
+      One database.<br>
+      <span style="color: rgba(255,255,255,0.45);">Zero duplication.</span>
+    </div>
+    <div class="row anim-up d-2" style="margin-top: 100px; gap: 80px;">
+      <div style="text-align: center;">
+        <div style="font-size: 64px; font-weight: 700; letter-spacing: -0.03em;" class="grad-amber">Academy</div>
+        <div style="font-size: 16px; color: var(--muted); margin-top: 6px;">grades · posts · books</div>
+      </div>
+      <div style="font-size: 64px; color: var(--dim); font-weight: 200;">·</div>
+      <div style="text-align: center;">
+        <div style="font-size: 64px; font-weight: 700; letter-spacing: -0.03em;" class="grad-indigo">School</div>
+        <div style="font-size: 16px; color: var(--muted); margin-top: 6px;">classes · buses · chat</div>
+      </div>
+      <div style="font-size: 64px; color: var(--dim); font-weight: 200;">·</div>
+      <div style="text-align: center;">
+        <div style="font-size: 64px; font-weight: 700; letter-spacing: -0.03em;" class="grad-emerald">Accounting</div>
+        <div style="font-size: 16px; color: var(--muted); margin-top: 6px;">fees · ledger · reports</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════ 26 · One platform. ════ -->
+<section data-screen-label="26 One platform">
+  <div class="fill center col">
+    <div class="hero anim-up">One platform.</div>
+    <div class="anim-fade d-2 tiny" style="margin-top: 96px;">Thank you.</div>
+  </div>
+</section>
+
+</deck-stage>
+
+<script>
+const stage = document.querySelector('deck-stage');
+const KEY = 'keynote.position';
+stage.addEventListener('slidechange', e => {
+  try { localStorage.setItem(KEY, e.detail.index); } catch {}
+});
+window.addEventListener('load', () => {
+  const i = parseInt(localStorage.getItem(KEY) || '0', 10);
+  if (i > 0) setTimeout(() => stage.goTo(i), 50);
+});
+</script>
+</body>
+</html>

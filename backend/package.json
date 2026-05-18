@@ -9,7 +9,8 @@
     "start": "node dist/server.js",
     "test": "echo \"Error: no test specified\" && exit 1",
     "typecheck": "tsc --noEmit",
-    "check:tenant-scoping": "node scripts/check-tenant-scoping.cjs"
+    "check:tenant-scoping": "node scripts/check-tenant-scoping.cjs",
+    "audit:ci": "npm audit --omit=dev --audit-level=high"
   },
   "keywords": [],
   "author": "",
@@ -32,7 +33,12 @@
     "resend": "^6.12.0",
     "socket.io": "^4.8.3",
     "winston": "^3.19.0",
-    "xlsx": "^0.18.5"
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+  },
+  "overrides": {
+    "socket.io-parser": "4.2.6",
+    "path-to-regexp": "8.4.2",
+    "ip-address": "10.2.0"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",

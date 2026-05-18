@@ -13,6 +13,30 @@ import { logger } from './utils/logger';
 
 dotenv.config();
 
+// Fail fast on a missing/weak signing secret. Every JWT in the system is
+// only as strong as this value; `config/supabase.ts` already throws on its
+// own missing vars, but JWT_SECRET was only ever asserted with `!` — an
+// unset or trivially short secret would let the server boot and mint
+// forgeable tokens. 32 chars ≈ 192 bits of entropy at minimum.
+const jwtSecret = process.env.JWT_SECRET;
+if (!jwtSecret || jwtSecret.length < 32) {
+  throw new Error(
+    'JWT_SECRET is missing or too short (need at least 32 characters). ' +
+    'Set a long, random value in the environment before starting the server.',
+  );
+}
+
+// A stray rejected promise or uncaught throw must be logged, not silently
+// swallowed (or worse, crash the process with no trace). We log and, for a
+// truly uncaught exception, exit so the platform restarts a clean process.
+process.on('unhandledRejection', (reason) => {
+  logger.error('Unhandled promise rejection', { reason });
+});
+process.on('uncaughtException', (err) => {
+  logger.error('Uncaught exception — exiting for a clean restart', { err });
+  process.exit(1);
+});
+
 const app = express();
 app.set('trust proxy', 1); // Trust Railway's reverse proxy for accurate IP in rate limiting
 const httpServer = http.createServer(app);
