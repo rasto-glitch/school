@@ -118,6 +118,8 @@ export const bugReportApi = {
 // ---- PARENT ----
 export const parentApi = {
   getChildren: () => api.get('/parent/children'),
+  getArchivedChildren: () => api.get('/parent/archived-children'),
+  getArchivedChild: (id: string) => api.get(`/parent/archived-children/${id}`),
   getHomework: (params?: Record<string, string>) => api.get('/parent/homework', { params }),
   getAssignments: (params?: Record<string, string>) => api.get('/parent/assignments', { params }),
   getGrades: (studentId?: string) => api.get('/parent/grades', { params: studentId ? { studentId } : {} }),

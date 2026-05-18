@@ -1,4 +1,18 @@
 {
+  "past_records": {
+    "title": "Past Records",
+    "subtitle": "Graduated or departed children",
+    "empty_title": "No past records",
+    "empty_sub": "When a child graduates or leaves, their final record appears here.",
+    "back": "All records",
+    "classes": "Classes attended",
+    "grades": "Grades",
+    "no_grades": "No grades recorded.",
+    "subject": "Subject",
+    "total": "Total",
+    "tuition": "Tuition history",
+    "no_tuition": "No tuition records."
+  },
   "auth": {
     "subtitle": "Sign in to your account",
     "username": "Username",
