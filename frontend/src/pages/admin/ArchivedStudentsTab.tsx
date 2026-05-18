@@ -196,6 +196,7 @@ export default function ArchivedStudentsTab() {
                   <InfoRow label="Left School"      value={fmt(detail.departureDate)} />
                   <InfoRow label="Parent / Guardian" value={detail.parentFullName || '—'} />
                   <InfoRow label="Parent Phone"     value={detail.parentPhone || '—'} />
+                  <InfoRow label="Archived by"      value={detail.archivedByName ? `${detail.archivedByName}${detail.archivedByRole ? ` (${detail.archivedByRole})` : ''}` : '—'} />
                 </dl>
               </div>
 

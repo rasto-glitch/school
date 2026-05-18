@@ -593,6 +593,7 @@ CREATE TABLE IF NOT EXISTS archived_students (
   archived_by_name TEXT,
   archived_by_role TEXT,
   original_parent_id UUID REFERENCES parents(id) ON DELETE SET NULL,  -- links the snapshot back to the parent account (F6 parent read-only access)
+  snapshot_version INTEGER NOT NULL DEFAULT 1,  -- F10: snapshot JSONB shape version
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_archived_students_school ON archived_students(school_id, created_at DESC);
@@ -678,6 +679,7 @@ CREATE TABLE IF NOT EXISTS archived_employees (
   archived_by UUID REFERENCES users(id) ON DELETE SET NULL,  -- actor; text copies below survive the actor's own deletion
   archived_by_name TEXT,
   archived_by_role TEXT,
+  snapshot_version INTEGER NOT NULL DEFAULT 1,  -- F10: snapshot JSONB shape version
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_archived_employees_school ON archived_employees(school_id, created_at DESC);

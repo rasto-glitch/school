@@ -184,6 +184,7 @@ export default function ArchivedEmployeesTab() {
                   <InfoRow label="Departed" value={fmt(detail.departureDate)} />
                   <InfoRow label="Login" value={(detail.account as any)?.username || '—'} />
                   <InfoRow label="Archived" value={fmt(detail.createdAt)} />
+                  <InfoRow label="Archived by" value={detail.archivedByName ? `${detail.archivedByName}${detail.archivedByRole ? ` (${detail.archivedByRole})` : ''}` : '—'} />
                 </dl>
               </div>
             </div>
@@ -274,6 +275,26 @@ export default function ArchivedEmployeesTab() {
                     </table>
                   </div>
                 )}
+                <p className="text-xs text-gray-500 mt-3 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                  Note: staff archive is additive — the soft-voided staff record and its
+                  payment history are also preserved in the accounting portal. This snapshot
+                  is the self-contained HR copy.
+                </p>
+              </div>
+            )}
+
+            {(detail.role === 'supervisor' || detail.role === 'admin') && (
+              <div>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Account</p>
+                <dl className="space-y-2">
+                  <InfoRow label="Username" value={(detail.account as any)?.username || '—'} />
+                  <InfoRow label="Role" value={ROLE_LABEL[detail.role] || detail.role} />
+                  <InfoRow label="Was active" value={(detail.account as any)?.is_active === false ? 'No' : 'Yes'} />
+                </dl>
+                <p className="text-xs text-gray-400 mt-3">
+                  {ROLE_LABEL[detail.role] || detail.role} is an account-only role — there is no
+                  separate profile record, so the user account snapshot above is the full record.
+                </p>
               </div>
             )}
           </div>

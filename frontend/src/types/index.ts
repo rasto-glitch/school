@@ -466,7 +466,7 @@ export interface StaffSetupAdmin {
 
 // Unified employee archive (teacher / driver / supervisor / staff).
 // Mirrors the archived_employees table after toCC() camelCasing.
-export type ArchivedEmployeeRole = 'teacher' | 'driver' | 'supervisor' | 'staff';
+export type ArchivedEmployeeRole = 'teacher' | 'driver' | 'supervisor' | 'staff' | 'admin';
 export type ArchivedEmployeeReason =
   | 'resigned' | 'terminated' | 'contract_ended' | 'retired' | 'transferred' | 'other';
 
@@ -502,4 +502,8 @@ export interface ArchivedEmployee extends ArchivedEmployeeListItem {
     periodLabel: string | null; notes: string | null;
     insuranceAmount: number; insurancePercentage: number | null;
   }[];
+  archivedBy: string | null;
+  archivedByName: string | null;
+  archivedByRole: string | null;
+  snapshotVersion: number | null;
 }
