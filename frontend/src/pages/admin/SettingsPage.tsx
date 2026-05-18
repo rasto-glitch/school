@@ -28,7 +28,7 @@ function appliesBadgeColor(v: string) {
 }
 
 export default function SettingsPage() {
-  const { school, setAuth, token, user, rememberMe } = useAuthStore() as any;
+  const { school, setAuth, token, refreshToken, user, rememberMe } = useAuthStore() as any;
   const feat = (key: string) => school?.features?.[key] !== false;
 
   const [academicYear, setAcademicYear] = useState('');
@@ -49,7 +49,7 @@ export default function SettingsPage() {
       const r = await adminApi.uploadSchoolLogo(file);
       const newLogoUrl = r.data?.logoUrl;
       if (newLogoUrl && school && token && user) {
-        setAuth(token, user, { ...school, logoUrl: newLogoUrl }, rememberMe);
+        setAuth(token, refreshToken, user, { ...school, logoUrl: newLogoUrl }, rememberMe);
       }
       toast.success('Logo updated');
     } catch (err: any) {

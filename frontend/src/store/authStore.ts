@@ -4,10 +4,12 @@ import type { AuthUser, School } from '../types';
 
 interface AuthState {
   token: string | null;
+  refreshToken: string | null;
   user: AuthUser | null;
   school: School | null;
   rememberMe: boolean;
-  setAuth: (token: string, user: AuthUser, school: School, rememberMe: boolean) => void;
+  setAuth: (token: string, refreshToken: string, user: AuthUser, school: School, rememberMe: boolean) => void;
+  setTokens: (token: string, refreshToken: string) => void;
   setProfilePicture: (url: string) => void;
   logout: () => void;
   isAuthenticated: () => boolean;
@@ -43,12 +45,31 @@ export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
       token: null,
+      refreshToken: null,
       user: null,
       school: null,
       rememberMe: false,
-      setAuth: (token, user, school, rememberMe) => set({ token, user, school, rememberMe }),
+      setAuth: (token, refreshToken, user, school, rememberMe) => set({ token, refreshToken, user, school, rememberMe }),
+      setTokens: (token, refreshToken) => set({ token, refreshToken }),
       setProfilePicture: (url) => set(s => s.user ? { user: { ...s.user, profilePicture: url } } : {}),
-      logout: () => set({ token: null, user: null, school: null, rememberMe: false }),
+      logout: () => {
+        // Best-effort server-side revocation of the rotation family before
+        // we drop local state. Plain fetch (not the api client) to avoid a
+        // circular import; keepalive so it still flushes during unload.
+        const rt = get().refreshToken;
+        if (rt) {
+          const base = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+          try {
+            fetch(`${base}/auth/logout`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ refreshToken: rt }),
+              keepalive: true,
+            }).catch(() => {});
+          } catch { /* ignore */ }
+        }
+        set({ token: null, refreshToken: null, user: null, school: null, rememberMe: false });
+      },
       isAuthenticated: () => !!get().token && !!get().user,
     }),
     {

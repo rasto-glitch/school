@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import multer from 'multer';
-import { login, changePassword, getSchools, forgotPassword, registerDeviceToken, removeDeviceToken, updateDeviceLanguage, uploadProfilePicture, updateMyEmail, getMe, forgotPasswordEmail, resetWithToken, confirmEmail } from '../controllers/auth.controller';
+import { login, changePassword, getSchools, forgotPassword, registerDeviceToken, removeDeviceToken, updateDeviceLanguage, uploadProfilePicture, updateMyEmail, getMe, forgotPasswordEmail, resetWithToken, confirmEmail, refreshToken, logout, logoutAll } from '../controllers/auth.controller';
 import { submitBugReport } from '../controllers/bugReport.controller';
 import * as admin from '../controllers/admin.controller';
 import * as teacher from '../controllers/teacher.controller';
@@ -44,6 +44,12 @@ export function createRouter(io: SocketServer) {
 
   // ---- AUTH ----
   router.post('/auth/login', login);
+  // Rotating-refresh session endpoints. /refresh and /logout are public
+  // (the refresh token itself is the credential); /logout-all needs a valid
+  // access token. /refresh is rate-limited in server.ts.
+  router.post('/auth/refresh', (req, res) => refreshToken(req, res));
+  router.post('/auth/logout', (req, res) => logout(req, res));
+  router.post('/auth/logout-all', authenticate, (req, res) => logoutAll(req as AuthRequest, res));
   router.post('/auth/change-password', authenticate, (req, res) => changePassword(req, res));
   router.get('/auth/me', authenticate, (req, res) => getMe(req, res));
   router.patch('/auth/me/email', authenticate, (req, res) => updateMyEmail(req, res));

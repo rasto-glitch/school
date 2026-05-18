@@ -13,14 +13,48 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Handle 401 - auto logout (but not on the login request itself)
+// On a 401 we try ONCE to silently rotate the access token using the
+// refresh token, then replay the original request. Concurrent 401s share a
+// single in-flight refresh (single-flight) so we don't rotate N times and
+// trip the reuse-detector. If refresh fails, the session is truly dead:
+// revoke server-side, clear local state, bounce to /login.
+let refreshInFlight: Promise<string | null> | null = null;
+
+async function rotate(): Promise<string | null> {
+  const rt = useAuthStore.getState().refreshToken;
+  if (!rt) return null;
+  try {
+    const res = await axios.post(`${api.defaults.baseURL}/auth/refresh`, { refreshToken: rt });
+    const { token, refreshToken } = res.data as { token: string; refreshToken: string };
+    useAuthStore.getState().setTokens(token, refreshToken);
+    return token;
+  } catch {
+    return null;
+  }
+}
+
+function hardLogout(): void {
+  useAuthStore.getState().logout(); // also revokes the family server-side
+  if (!window.location.pathname.startsWith('/login')) window.location.href = '/login';
+}
+
 api.interceptors.response.use(
   (res) => res,
-  (error) => {
-    const isLoginRequest = error.config?.url?.includes('/auth/login');
-    if (error.response?.status === 401 && !isLoginRequest) {
-      useAuthStore.getState().logout();
-      window.location.href = '/login';
+  async (error) => {
+    const cfg = error.config;
+    const url: string = cfg?.url || '';
+    const isAuthFlow = url.includes('/auth/login') || url.includes('/auth/refresh') || url.includes('/auth/logout');
+
+    if (error.response?.status === 401 && !isAuthFlow && cfg && !cfg._retry) {
+      cfg._retry = true;
+      if (!refreshInFlight) refreshInFlight = rotate().finally(() => { refreshInFlight = null; });
+      const newToken = await refreshInFlight;
+      if (newToken) {
+        cfg.headers = cfg.headers || {};
+        cfg.headers.Authorization = `Bearer ${newToken}`;
+        return api(cfg); // replay with the rotated token
+      }
+      hardLogout();
     }
     return Promise.reject(error);
   }
@@ -33,6 +67,8 @@ export const authApi = {
   getSchools: () => api.get('/schools'),
   login: (username: string, password: string) =>
     api.post('/auth/login', { username, password }),
+  logout: (refreshToken: string) => api.post('/auth/logout', { refreshToken }),
+  logoutAll: () => api.post('/auth/logout-all'),
   changePassword: (currentPassword: string, newPassword: string) =>
     api.post('/auth/change-password', { currentPassword, newPassword }),
   forgotPassword: (username: string) =>

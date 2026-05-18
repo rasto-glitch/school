@@ -51,8 +51,8 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const res = await authApi.login(data.username, data.password);
-      const { token, user, school } = res.data;
-      setAuth(token, user, school, data.rememberMe);
+      const { token, refreshToken, user, school } = res.data;
+      setAuth(token, refreshToken, user, school, data.rememberMe);
       navigate(ROLE_DASHBOARDS[user.role] || '/');
     } catch (err: any) {
       toast.error(err.response?.data?.error || t('auth.login_failed'));

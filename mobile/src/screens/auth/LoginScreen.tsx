@@ -29,7 +29,7 @@ export default function LoginScreen() {
         Alert.alert(t('auth.role_blocked_title'), t('auth.role_blocked_body'));
         return;
       }
-      setAuth(res.data.token, res.data.user, res.data.school);
+      setAuth(res.data.token, res.data.refreshToken, res.data.user, res.data.school);
     } catch (err: any) {
       const serverMsg = err.response?.data?.error;
       const msg = serverMsg

@@ -14,19 +14,51 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// Single-flight refresh: concurrent 401s share one rotation so we don't
+// rotate N times and trip the server's reuse-detector. Returns the new
+// access token, or null if the session is truly dead.
+let refreshInFlight: Promise<string | null> | null = null;
+
+export async function rotateSession(): Promise<string | null> {
+  const rt = useAuthStore.getState().refreshToken;
+  if (!rt) return null;
+  if (!refreshInFlight) {
+    refreshInFlight = axios
+      .post(`${API_URL}/auth/refresh`, { refreshToken: rt })
+      .then((res) => {
+        const { token, refreshToken } = res.data as { token: string; refreshToken: string };
+        useAuthStore.getState().setTokens(token, refreshToken);
+        return token as string | null;
+      })
+      .catch(() => null)
+      .finally(() => { refreshInFlight = null; });
+  }
+  return refreshInFlight;
+}
+
 api.interceptors.response.use(
   (res) => res,
-  (error) => {
-    const isLoginRequest = error.config?.url?.includes('/auth/login');
-    if (error.response?.status === 401 && !isLoginRequest) {
-      // Only logout if the failing request used the *current* session's token.
-      // A 401 against a stale token (e.g. an in-flight request from a previous
-      // session that resolved after a fresh login) must not bounce the new
-      // session back to the login screen.
-      const usedAuth = error.config?.headers?.Authorization as string | undefined;
+  async (error) => {
+    const cfg = error.config;
+    const url: string = cfg?.url || '';
+    const isAuthFlow =
+      url.includes('/auth/login') || url.includes('/auth/refresh') || url.includes('/auth/logout');
+
+    if (error.response?.status === 401 && !isAuthFlow && cfg && !cfg._retry) {
+      // Only act if the failing request used the *current* session's token.
+      // A 401 against a stale token (an in-flight request from a previous
+      // session resolving after a fresh login) must not disturb the new one.
+      const usedAuth = cfg.headers?.Authorization as string | undefined;
       const usedToken = usedAuth?.startsWith('Bearer ') ? usedAuth.slice(7) : undefined;
       const currentToken = useAuthStore.getState().token;
       if (usedToken && currentToken && usedToken === currentToken) {
+        cfg._retry = true;
+        const newToken = await rotateSession();
+        if (newToken) {
+          cfg.headers = cfg.headers || {};
+          cfg.headers.Authorization = `Bearer ${newToken}`;
+          return api(cfg); // replay with the rotated token
+        }
         useAuthStore.getState().logout();
       }
     }
@@ -45,6 +77,7 @@ async function multipartRequest<T>(
   path: string,
   form: FormData,
   method: 'POST' | 'PATCH' = 'POST',
+  _retried = false,
 ): Promise<T> {
   const token = useAuthStore.getState().token;
   const res = await fetch(`${API_URL}${path}`, {
@@ -53,11 +86,15 @@ async function multipartRequest<T>(
     body: form,
   });
   if (!res.ok) {
-    let payload: { error?: string } = {};
-    try { payload = await res.json(); } catch { /* non-JSON error body */ }
-    if (res.status === 401 && token && useAuthStore.getState().token === token) {
+    // Mirror the axios interceptor: on a 401 against the current session
+    // token, try ONE silent rotation and replay before giving up.
+    if (res.status === 401 && token && useAuthStore.getState().token === token && !_retried) {
+      const newToken = await rotateSession();
+      if (newToken) return multipartRequest<T>(path, form, method, true);
       useAuthStore.getState().logout();
     }
+    let payload: { error?: string } = {};
+    try { payload = await res.json(); } catch { /* non-JSON error body */ }
     const err = new Error(payload.error || 'upload_failed') as Error & { code?: string };
     err.code = payload.error;
     throw err;
@@ -71,6 +108,8 @@ export const authApi = {
   getSchools: () => api.get('/schools'),
   login: (username: string, password: string) =>
     api.post('/auth/login', { username, password }),
+  logout: (refreshToken: string) => api.post('/auth/logout', { refreshToken }),
+  logoutAll: () => api.post('/auth/logout-all'),
   registerDeviceToken: (token: string, language: string) =>
     api.post('/auth/device-token', { token, language }),
   removeDeviceToken: (token: string) =>

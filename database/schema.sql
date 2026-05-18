@@ -521,6 +521,32 @@ CREATE TABLE IF NOT EXISTS password_reset_requests (
 );
 
 -- ============================================================
+-- REFRESH TOKENS (rotating; one row per issued refresh token)
+-- ============================================================
+-- Short-lived access JWTs (~15 min) are paired with a long-lived (7-day)
+-- refresh token stored here, hashed. Every refresh ROTATES: the presented
+-- token is burned and a new one is issued in the same `family_id`. If a
+-- burned/revoked token is ever presented again, the whole family is
+-- revoked (theft/replay detection). `school_id` is kept for cascade +
+-- tenant hygiene even though lookups are by `token_hash`.
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash TEXT NOT NULL UNIQUE,
+  family_id UUID NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  rotated_at TIMESTAMPTZ,
+  revoked_at TIMESTAMPTZ,
+  user_agent TEXT,
+  ip TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user ON refresh_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_family ON refresh_tokens(family_id);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_expires ON refresh_tokens(expires_at);
+
+-- ============================================================
 -- INDEXES
 -- ============================================================
 CREATE INDEX IF NOT EXISTS idx_users_school ON users(school_id);

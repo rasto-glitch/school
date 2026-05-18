@@ -111,6 +111,18 @@ const tokenRedeemLimiter = rateLimit({
 app.use('/api/auth/reset-with-token', tokenRedeemLimiter);
 app.use('/api/auth/confirm-email', tokenRedeemLimiter);
 
+// Refresh-token rotation. A legit client refreshes ~once per access-token
+// lifetime (~15 min); 120 / 15 min / IP is generous for NAT'd schools yet
+// caps abuse. (Brute-forcing a 256-bit opaque token is infeasible anyway.)
+const refreshLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many session refreshes. Please log in again.' },
+});
+app.use('/api/auth/refresh', refreshLimiter);
+
 // Strict limiter for landing-page submissions — 5 per 15 minutes per IP
 const publicFormLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { io as socketIO, Socket } from 'socket.io-client';
+import { useAuthStore } from './authStore';
 
 interface SocketState {
   socket: Socket | null;
@@ -13,7 +14,13 @@ export const useSocketStore = create<SocketState>((set, get) => ({
     if (get().socket?.connected) return;
     const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
     const socketUrl = apiBase.replace(/\/api$/, '');
-    const socket = socketIO(socketUrl, { auth: { token }, transports: ['websocket'] });
+    // `auth` as a callback is re-invoked on every (re)connect, so a socket
+    // that drops and reconnects after the short-lived access token has
+    // rotated picks up the current token instead of the stale one.
+    const socket = socketIO(socketUrl, {
+      auth: (cb) => cb({ token: useAuthStore.getState().token || token }),
+      transports: ['websocket'],
+    });
     set({ socket });
   },
   disconnect: () => {
