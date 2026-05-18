@@ -2830,17 +2830,74 @@ export async function reactivateUser(req: AuthRequest, res: Response): Promise<v
 // ---- SCHOOL SETTINGS ----
 export async function getSettings(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
-  const { data, error } = await supabase.from('schools').select('current_academic_year').eq('id', schoolId).single();
+  const { data, error } = await supabase.from('schools')
+    .select('current_academic_year, timezone, chat_restrictions')
+    .eq('id', schoolId).single();
   if (error) { res.status(500).json({ error: error.message }); return; }
   res.json(toCC(data));
 }
 
+const DAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+const HHMM = /^([01]?\d|2[0-3]):[0-5]\d$/;
+
+function isValidTimezone(tz: string): boolean {
+  try { new Intl.DateTimeFormat('en-US', { timeZone: tz }); return true; }
+  catch { return false; }
+}
+
+// Normalize/validate the chat_restrictions payload. Returns null if malformed
+// so we never persist garbage that the enforcement helper would choke on.
+function sanitizeChatRestrictions(raw: any): { enabled: boolean; days?: Record<string, any> } | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const out: { enabled: boolean; days: Record<string, any> } = { enabled: raw.enabled === true, days: {} };
+  const days = raw.days && typeof raw.days === 'object' ? raw.days : {};
+  for (const key of DAY_KEYS) {
+    const d = days[key];
+    if (!d || typeof d !== 'object') { out.days[key] = { enabled: false }; continue; }
+    if (d.enabled !== true) { out.days[key] = { enabled: false }; continue; }
+    const open = String(d.open ?? '');
+    const close = String(d.close ?? '');
+    if (!HHMM.test(open) || !HHMM.test(close)) return null;
+    const [oh, om] = open.split(':').map(Number);
+    const [ch, cm] = close.split(':').map(Number);
+    if (ch * 60 + cm <= oh * 60 + om) return null; // close must be after open
+    out.days[key] = { enabled: true, open, close };
+  }
+  return out;
+}
+
 export async function updateSettings(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
-  const { currentAcademicYear } = req.body;
+  const { currentAcademicYear, timezone, chatRestrictions } = req.body;
+
+  const patch: Record<string, unknown> = {};
+
+  if (currentAcademicYear !== undefined) patch.current_academic_year = currentAcademicYear;
+
+  if (timezone !== undefined) {
+    if (typeof timezone !== 'string' || !isValidTimezone(timezone)) {
+      res.status(400).json({ error: 'Invalid timezone' }); return;
+    }
+    patch.timezone = timezone;
+  }
+
+  if (chatRestrictions !== undefined) {
+    const clean = sanitizeChatRestrictions(chatRestrictions);
+    if (!clean) {
+      res.status(400).json({ error: 'Invalid chat schedule: each enabled day needs valid open/close times (close after open).' });
+      return;
+    }
+    patch.chat_restrictions = clean;
+  }
+
+  if (Object.keys(patch).length === 0) {
+    res.status(400).json({ error: 'Nothing to update' }); return;
+  }
+
   const { data, error } = await supabase.from('schools')
-    .update({ current_academic_year: currentAcademicYear })
-    .eq('id', schoolId).select('current_academic_year').single();
+    .update(patch)
+    .eq('id', schoolId)
+    .select('current_academic_year, timezone, chat_restrictions').single();
   if (error) { res.status(500).json({ error: error.message }); return; }
   res.json(toCC(data));
 }

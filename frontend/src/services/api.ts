@@ -680,6 +680,7 @@ export const chatApi = {
   deleteMessage: (msgId: string) => api.delete(`/chat/messages/${msgId}`),
   markRead: (conversationId: string) => api.post(`/chat/conversations/${conversationId}/read`),
   getUnreadCount: () => api.get('/chat/unread-count'),
+  getChatWindow: () => api.get('/chat/window'),
   uploadAttachment: (file: File) => {
     const fd = new FormData();
     fd.append('file', file);

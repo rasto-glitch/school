@@ -44,6 +44,7 @@ export default function ChatWindow({ conversationId, otherUser, onMessageSent }:
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [otherTyping, setOtherTyping] = useState(false);
+  const [closedMsg, setClosedMsg] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -67,6 +68,17 @@ export default function ChatWindow({ conversationId, otherUser, onMessageSent }:
 
     // Mark read
     chatApi.markRead(conversationId).catch(() => {});
+  }, [conversationId]);
+
+  // Chat schedule: probe the server (single source of truth) on open + poll.
+  useEffect(() => {
+    let alive = true;
+    const check = () => chatApi.getChatWindow()
+      .then(r => { if (alive) setClosedMsg(r.data?.open ? null : (r.data?.message || 'Chat is currently closed by the school.')); })
+      .catch(() => {});
+    check();
+    const t = setInterval(check, 60_000);
+    return () => { alive = false; clearInterval(t); };
   }, [conversationId]);
 
   // Scroll to bottom on first load
@@ -170,7 +182,12 @@ export default function ChatWindow({ conversationId, otherUser, onMessageSent }:
       setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
       const preview = data.type === 'text' ? (data.content || '') : data.type === 'image' ? '📷 Photo' : `📎 ${data.attachmentName || 'File'}`;
       onMessageSent(preview, data.type);
-    } catch {}
+      setClosedMsg(null);
+    } catch (e: any) {
+      if (e?.response?.status === 423) {
+        setClosedMsg(e.response.data?.error || 'Chat is currently closed by the school.');
+      }
+    }
   };
 
   const handleEdit = async (msg: Message) => {
@@ -268,10 +285,17 @@ export default function ChatWindow({ conversationId, otherUser, onMessageSent }:
         <div ref={bottomRef} />
       </div>
 
+      {closedMsg && (
+        <div className="px-4 py-2.5 bg-amber-50 border-t border-amber-200 text-center text-sm text-amber-800 font-medium">
+          🔒 {closedMsg}
+        </div>
+      )}
+
       <MessageInput
         conversationId={conversationId}
         onSend={handleSend}
         onTyping={handleTyping}
+        disabled={!!closedMsg}
       />
     </div>
   );

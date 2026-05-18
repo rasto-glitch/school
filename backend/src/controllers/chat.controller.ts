@@ -4,11 +4,22 @@ import { safeExt } from '../utils/upload';
 import { toCC } from '../utils/transform';
 import type { AuthRequest } from '../middleware/auth';
 import { getIo, chatPush } from '../utils/notify';
+import { isChatOpen, type ChatWindowState } from '../utils/chatWindow';
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
 function emitToUser(schoolId: string, userId: string, event: string, data: unknown) {
   getIo()?.to(`school:${schoolId}:user:${userId}`).emit(event, data);
+}
+
+/** Resolve the school's current chat-window state (single source of truth). */
+async function schoolChatWindow(schoolId: string): Promise<ChatWindowState> {
+  const { data } = await supabase
+    .from('schools')
+    .select('timezone, chat_restrictions')
+    .eq('id', schoolId)
+    .single();
+  return isChatOpen(data?.chat_restrictions, data?.timezone);
 }
 
 async function buildConvWithUser(conv: any, userId: string, schoolId: string) {
@@ -353,6 +364,18 @@ export async function sendMessage(req: AuthRequest, res: Response): Promise<void
     res.status(403).json({ error: 'Forbidden' }); return;
   }
 
+  // Chat schedule: freeze sends (both sides) outside the school's window.
+  const win = await schoolChatWindow(schoolId);
+  if (!win.open) {
+    res.status(423).json({
+      error: win.message || 'Chat is closed by the school.',
+      chatClosed: true,
+      opensDay: win.opensDay,
+      opensTime: win.opensTime,
+    });
+    return;
+  }
+
   const { data: msg, error } = await supabase
     .from('messages')
     .insert({
@@ -532,6 +555,15 @@ export async function getUnreadCount(req: AuthRequest, res: Response): Promise<v
   }).length;
 
   res.json({ count });
+}
+
+// ── GET /chat/window ───────────────────────────────────────────────────────
+// Lets web/mobile proactively disable the composer. The send endpoint still
+// enforces (423) — this is UX, not the gate.
+export async function getChatWindow(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const win = await schoolChatWindow(schoolId);
+  res.json(win);
 }
 
 // ── POST /chat/upload ──────────────────────────────────────────────────────

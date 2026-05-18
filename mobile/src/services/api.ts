@@ -261,6 +261,7 @@ export const chatApi = {
   deleteMessage: (msgId: string) => api.delete(`/chat/messages/${msgId}`),
   markRead: (conversationId: string) => api.post(`/chat/conversations/${conversationId}/read`),
   getUnreadCount: () => api.get('/chat/unread-count'),
+  getChatWindow: () => api.get('/chat/window'),
   uploadAttachment: (file: { uri: string; name: string; mimeType: string }): Promise<{ url: string; name: string; size: number; type: 'image' | 'file' }> => {
     const form = new FormData();
     form.append('file', { uri: file.uri, name: file.name, type: file.mimeType } as any);

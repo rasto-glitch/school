@@ -461,6 +461,7 @@ export function createRouter(io: SocketServer) {
   router.patch('/chat/messages/:msgId', authenticate, authorize(...chatRoles), (req, res) => chat.editMessage(req as AuthRequest, res));
   router.delete('/chat/messages/:msgId', authenticate, authorize(...chatRoles), (req, res) => chat.deleteMessage(req as AuthRequest, res));
   router.get('/chat/unread-count', authenticate, authorize(...chatRoles), (req, res) => chat.getUnreadCount(req as AuthRequest, res));
+  router.get('/chat/window', authenticate, authorize(...chatRoles), (req, res) => chat.getChatWindow(req as AuthRequest, res));
   router.post('/chat/upload', authenticate, authorize(...chatRoles), upload.single('file'), (req, res) => chat.uploadAttachment(req as AuthRequest, res));
 
   return router;

@@ -24,11 +24,15 @@ CREATE TABLE IF NOT EXISTS schools (
   features JSONB DEFAULT '{"homework":true,"assignments":true,"announcements":true,"grades":true,"reports":true,"bus_tracking":true,"appointments":true,"attendance":true,"weekly_summary":true,"chat":true}',
   features_version INTEGER NOT NULL DEFAULT 1,
   tuition_config JSONB DEFAULT '{"currency":"USD","siblingDiscount":{"enabled":false,"type":"percent","tiers":[]}}'::jsonb,
+  timezone TEXT NOT NULL DEFAULT 'Asia/Baghdad',
+  chat_restrictions JSONB NOT NULL DEFAULT '{"enabled":false}'::jsonb,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 -- Run this if the table already exists:
 -- ALTER TABLE schools ADD COLUMN IF NOT EXISTS features JSONB DEFAULT '{"homework":true,"assignments":true,"announcements":true,"grades":true,"reports":true,"bus_tracking":true,"appointments":true,"attendance":true,"weekly_summary":true,"chat":true}';
 -- ALTER TABLE schools ADD COLUMN IF NOT EXISTS features_version INTEGER NOT NULL DEFAULT 1;
+-- ALTER TABLE schools ADD COLUMN IF NOT EXISTS timezone TEXT NOT NULL DEFAULT 'Asia/Baghdad';
+-- ALTER TABLE schools ADD COLUMN IF NOT EXISTS chat_restrictions JSONB NOT NULL DEFAULT '{"enabled":false}'::jsonb;
 
 -- Trigger: auto-increment features_version whenever the features JSONB column changes
 CREATE OR REPLACE FUNCTION increment_features_version()

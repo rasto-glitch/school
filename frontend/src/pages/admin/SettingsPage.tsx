@@ -8,6 +8,7 @@ import Card from '../../components/common/Card';
 import Input from '../../components/common/Input';
 import Button from '../../components/common/Button';
 import YearTransitionModal from './YearTransitionModal';
+import ChatScheduleCard from './ChatScheduleCard';
 import type { MarkType, Term } from '../../types';
 
 const APPLIES_OPTIONS = [
@@ -240,6 +241,9 @@ export default function SettingsPage() {
             Begin Year Transition
           </Button>
         </Card>
+
+        {/* Chat schedule */}
+        {feat('chat') && <ChatScheduleCard />}
 
         {/* Terms */}
         {showTerms && (

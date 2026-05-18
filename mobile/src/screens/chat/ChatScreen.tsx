@@ -170,6 +170,7 @@ export default function ChatScreen() {
   const [editingMsg, setEditingMsg] = useState<ChatMessage | null>(null);
   const [editText, setEditText] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [closedMsg, setClosedMsg] = useState<string | null>(null);
   const flatRef = useRef<FlatList>(null);
   const ownTypingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const otherTypingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -204,6 +205,17 @@ export default function ChatScreen() {
       .catch(() => {})
       .finally(() => setLoading(false));
     chatApi.markRead(conversation.id).catch(() => {});
+  }, [conversation.id]);
+
+  // Chat schedule: server is the single source of truth. Probe + poll.
+  useEffect(() => {
+    let alive = true;
+    const check = () => chatApi.getChatWindow()
+      .then(r => { if (alive) setClosedMsg(r.data?.open ? null : (r.data?.message || 'Chat is currently closed by the school.')); })
+      .catch(() => {});
+    check();
+    const t = setInterval(check, 60_000);
+    return () => { alive = false; clearInterval(t); };
   }, [conversation.id]);
 
   // Attach/detach socket listeners for this conversation
@@ -282,8 +294,13 @@ export default function ChatScreen() {
         return without.find(m => m.id === res.data.id) ? without : [...without, res.data];
       });
       setTimeout(() => flatRef.current?.scrollToEnd({ animated: true }), 100);
-    } catch {
+      setClosedMsg(null);
+    } catch (e: any) {
       setMessages(prev => prev.filter(m => m.id !== tempId));
+      if (e?.response?.status === 423) {
+        setText(trimmed); // restore the unsent text
+        setClosedMsg(e.response.data?.error || 'Chat is currently closed by the school.');
+      }
     } finally { setSending(false); }
   };
 
@@ -453,31 +470,41 @@ export default function ChatScreen() {
           </View>
         )}
 
+        {/* Chat-closed banner */}
+        {!editingMsg && closedMsg && (
+          <View style={{ paddingHorizontal: 16, paddingVertical: 10, backgroundColor: '#FEF3C7', borderTopWidth: 1, borderTopColor: '#FCD34D' }}>
+            <Text style={{ fontSize: 13, color: '#92400E', fontWeight: '600', textAlign: 'center' }}>
+              🔒 {closedMsg}
+            </Text>
+          </View>
+        )}
+
         {/* Input bar */}
         {!editingMsg && (
           <View style={[s.inputBar, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
             <TouchableOpacity
               onPress={handleAttach}
-              disabled={uploading}
-              style={[s.attachBtn, { backgroundColor: colors.bg, borderColor: colors.border }]}
+              disabled={uploading || !!closedMsg}
+              style={[s.attachBtn, { backgroundColor: colors.bg, borderColor: colors.border, opacity: closedMsg ? 0.4 : 1 }]}
             >
               {uploading
                 ? <ActivityIndicator size="small" color={primaryColor} />
                 : <Paperclip size={18} color={colors.textMuted} />}
             </TouchableOpacity>
             <TextInput
-              style={[s.input, { color: colors.text, backgroundColor: colors.bg, borderColor: colors.border }]}
-              placeholder="Type a message…"
+              style={[s.input, { color: colors.text, backgroundColor: colors.bg, borderColor: colors.border, opacity: closedMsg ? 0.5 : 1 }]}
+              placeholder={closedMsg ? 'Chat is closed' : 'Type a message…'}
               placeholderTextColor={colors.textMuted}
               value={text}
               onChangeText={emitTyping}
+              editable={!closedMsg}
               multiline
               maxLength={2000}
             />
             <TouchableOpacity
               onPress={handleSend}
-              disabled={!text.trim() || sending}
-              style={[s.sendBtn, { backgroundColor: (!text.trim() || sending) ? colors.borderLight : primaryColor }]}
+              disabled={!text.trim() || sending || !!closedMsg}
+              style={[s.sendBtn, { backgroundColor: (!text.trim() || sending || closedMsg) ? colors.borderLight : primaryColor }]}
             >
               {sending ? <ActivityIndicator size="small" color="#fff" /> : <Send size={18} color="#fff" />}
             </TouchableOpacity>
