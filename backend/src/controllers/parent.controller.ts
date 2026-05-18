@@ -31,6 +31,41 @@ export async function getChildren(req: AuthRequest, res: Response): Promise<void
   res.json(toCC(decorated));
 }
 
+// Read-only access to a departed/graduated child's frozen snapshot
+// (finding F6). Only snapshots captured with original_parent_id (migration
+// 017 onward) are linkable — older archives stay admin/accountant-only.
+export async function getArchivedChildren(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId, userId } = req.user!;
+  const { data: parent } = await supabase.from('parents').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
+  if (!parent) { res.json([]); return; }
+
+  const { data, error } = await supabase
+    .from('archived_students')
+    .select('id, full_name, reason, departure_date, classes_attended, created_at')
+    .eq('school_id', schoolId)
+    .eq('original_parent_id', parent.id)
+    .order('created_at', { ascending: false });
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json(toCC(data ?? []));
+}
+
+export async function getArchivedChild(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId, userId } = req.user!;
+  const { id } = req.params;
+  const { data: parent } = await supabase.from('parents').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
+  if (!parent) { res.status(404).json({ error: 'Record not found' }); return; }
+
+  const { data, error } = await supabase
+    .from('archived_students')
+    .select('id, full_name, date_of_birth, enrollment_date, departure_date, reason, classes_attended, grades, payment_history, created_at')
+    .eq('id', id)
+    .eq('school_id', schoolId)
+    .eq('original_parent_id', parent.id)  // ownership: parent can only read their own child
+    .single();
+  if (error || !data) { res.status(404).json({ error: 'Record not found' }); return; }
+  res.json(toCC(data));
+}
+
 export async function getHomework(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId, userId } = req.user!;
   const { studentId, subject } = req.query as Record<string, string>;

@@ -935,6 +935,7 @@ async function snapshotGraduatedStudent(
       archived_by: actor.id,
       archived_by_name: actor.name,
       archived_by_role: actor.role,
+      original_parent_id: (student as any).parent_id ?? null,
     });
     if (error) console.error(`[graduated snapshot] student ${studentId}: ${error.message}`);
   } catch (e) {
@@ -978,6 +979,7 @@ export async function archiveStudent(req: AuthRequest, res: Response): Promise<v
     p_archived_by: req.user!.userId,
     p_archived_by_name: req.user!.username,
     p_archived_by_role: req.user!.role,
+    p_original_parent_id: (student as any).parent_id ?? null,
   });
 
   if (rpcErr) {

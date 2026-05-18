@@ -26,6 +26,7 @@ const navItems: Record<Role, NavItem[]> = {
     { to: '/parent/announcements', icon: Megaphone, label: 'Announcements', feature: 'announcements' },
     { to: '/parent/grades', icon: Star, label: 'Grades', feature: 'grades' },
     { to: '/parent/reports', icon: BarChart2, label: 'Reports', feature: 'reports' },
+    { to: '/parent/archive', icon: Archive, label: 'Past Records', feature: 'archive' },
     { to: '/parent/bus', icon: MapPin, label: 'Track Bus', feature: 'bus_tracking' },
     { to: '/parent/appointments', icon: Calendar, label: 'Appointments', feature: 'appointments' },
     { to: '/parent/tuition', icon: CreditCard, label: 'Tuition', feature: 'tuition_fees' },
@@ -215,7 +216,7 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
   // Premium-only features default to OFF when the key is missing — so a school
   // without a premium plan never sees the tab even if their features JSONB
   // pre-dates the feature flag being added.
-  const PREMIUM_FEATURES = ['tuition_fees'];
+  const PREMIUM_FEATURES = ['tuition_fees', 'archive'];
   const isFeatureEnabled = (feature?: string) => {
     if (!feature) return true;
     if (PREMIUM_FEATURES.includes(feature)) return school?.features?.[feature] === true;

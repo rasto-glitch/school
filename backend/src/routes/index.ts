@@ -216,6 +216,8 @@ export function createRouter(io: SocketServer) {
 
   // ---- PARENT ----
   router.get('/parent/children', authenticate, authorize('parent'), (req, res) => parent.getChildren(req as AuthRequest, res));
+  router.get('/parent/archived-children', authenticate, authorize('parent'), (req, res) => parent.getArchivedChildren(req as AuthRequest, res));
+  router.get('/parent/archived-children/:id', authenticate, authorize('parent'), (req, res) => parent.getArchivedChild(req as AuthRequest, res));
   router.get('/parent/homework', authenticate, authorize('parent'), (req, res) => parent.getHomework(req as AuthRequest, res));
   router.get('/parent/homework/:id', authenticate, authorize('parent'), (req, res) => parent.getHomeworkById(req as AuthRequest, res));
   router.get('/parent/assignments', authenticate, authorize('parent'), (req, res) => parent.getAssignments(req as AuthRequest, res));

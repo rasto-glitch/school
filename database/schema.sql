@@ -592,9 +592,11 @@ CREATE TABLE IF NOT EXISTS archived_students (
   archived_by UUID REFERENCES users(id) ON DELETE SET NULL,  -- actor; text copies below survive the actor's own deletion
   archived_by_name TEXT,
   archived_by_role TEXT,
+  original_parent_id UUID REFERENCES parents(id) ON DELETE SET NULL,  -- links the snapshot back to the parent account (F6 parent read-only access)
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_archived_students_school ON archived_students(school_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_archived_students_parent ON archived_students(school_id, original_parent_id) WHERE original_parent_id IS NOT NULL;
 
 -- Atomic snapshot-insert + students-row delete (see migration 010 / 015).
 -- The controller builds the JSONB; this function just commits the pair.
@@ -613,7 +615,8 @@ CREATE OR REPLACE FUNCTION archive_student_atomic(
   p_payment_history JSONB,
   p_archived_by UUID,
   p_archived_by_name TEXT,
-  p_archived_by_role TEXT
+  p_archived_by_role TEXT,
+  p_original_parent_id UUID
 ) RETURNS UUID
 LANGUAGE plpgsql
 AS $$
@@ -624,14 +627,14 @@ BEGIN
     school_id, original_student_id, full_name, date_of_birth, enrollment_date,
     departure_date, reason, parent_full_name, parent_phone,
     classes_attended, grades, payment_history,
-    archived_by, archived_by_name, archived_by_role
+    archived_by, archived_by_name, archived_by_role, original_parent_id
   ) VALUES (
     p_school_id, p_student_id, p_full_name, p_date_of_birth, p_enrollment_date,
     p_departure_date, p_reason, p_parent_full_name, p_parent_phone,
     COALESCE(p_classes_attended, '[]'::jsonb),
     COALESCE(p_grades, '[]'::jsonb),
     COALESCE(p_payment_history, '[]'::jsonb),
-    p_archived_by, p_archived_by_name, p_archived_by_role
+    p_archived_by, p_archived_by_name, p_archived_by_role, p_original_parent_id
   )
   RETURNING id INTO v_archive_id;
 

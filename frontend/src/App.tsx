@@ -92,6 +92,7 @@ import SupervisorNotificationsPage from './pages/supervisor/SupervisorNotificati
 
 // Parent Grades
 import GradesPage from './pages/parent/GradesPage';
+import ParentArchivePage from './pages/parent/ParentArchivePage';
 
 // Teacher Attendance
 import AttendancePage from './pages/teacher/AttendancePage';
@@ -163,6 +164,7 @@ export default function App() {
         <Route path="/parent/appointments" element={<ProtectedRoute allowedRoles={['parent']}><ParentAppointmentsPage /></ProtectedRoute>} />
         <Route path="/parent/tuition" element={<ProtectedRoute allowedRoles={['parent']}><ParentTuitionPage /></ProtectedRoute>} />
         <Route path="/parent/grades" element={<ProtectedRoute allowedRoles={['parent']}><GradesPage /></ProtectedRoute>} />
+        <Route path="/parent/archive" element={<ProtectedRoute allowedRoles={['parent']}><ParentArchivePage /></ProtectedRoute>} />
         <Route path="/parent/schedule" element={<ProtectedRoute allowedRoles={['parent']}><ParentSchedulePage /></ProtectedRoute>} />
         <Route path="/parent/profile" element={<ProtectedRoute allowedRoles={['parent']}><ProfilePage /></ProtectedRoute>} />
 
