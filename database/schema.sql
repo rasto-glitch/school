@@ -1072,41 +1072,45 @@ CREATE TRIGGER trg_audit_logs_hash BEFORE INSERT ON audit_logs
 CREATE OR REPLACE FUNCTION verify_school_integrity(p_school_id UUID)
 RETURNS TABLE(kind TEXT, table_name TEXT, row_id UUID, detail TEXT)
 LANGUAGE plpgsql AS $$
-DECLARE r RECORD; v_prev TEXT := 'GENESIS'; v_expect BIGINT := 0;
+DECLARE
+  rs archived_students%ROWTYPE;
+  re archived_employees%ROWTYPE;
+  ra audit_logs%ROWTYPE;
+  v_prev TEXT := 'GENESIS'; v_expect BIGINT := 0;
 BEGIN
-  FOR r IN SELECT * FROM archived_students WHERE school_id = p_school_id LOOP
-    IF r.content_hash IS NULL THEN
-      RETURN QUERY SELECT 'unhashed','archived_students',r.id,'no content_hash (pre-019)';
-    ELSIF r.content_hash <> _sha(_canon_archived_student(r)) THEN
-      RETURN QUERY SELECT 'content_altered','archived_students',r.id,r.full_name;
+  FOR rs IN SELECT * FROM archived_students WHERE school_id = p_school_id LOOP
+    IF rs.content_hash IS NULL THEN
+      RETURN QUERY SELECT 'unhashed','archived_students',rs.id,'no content_hash (pre-019)';
+    ELSIF rs.content_hash <> _sha(_canon_archived_student(rs)) THEN
+      RETURN QUERY SELECT 'content_altered','archived_students',rs.id,rs.full_name;
     END IF;
   END LOOP;
-  FOR r IN SELECT * FROM archived_employees WHERE school_id = p_school_id LOOP
-    IF r.content_hash IS NULL THEN
-      RETURN QUERY SELECT 'unhashed','archived_employees',r.id,'no content_hash (pre-019)';
-    ELSIF r.content_hash <> _sha(_canon_archived_employee(r)) THEN
-      RETURN QUERY SELECT 'content_altered','archived_employees',r.id,r.full_name;
+  FOR re IN SELECT * FROM archived_employees WHERE school_id = p_school_id LOOP
+    IF re.content_hash IS NULL THEN
+      RETURN QUERY SELECT 'unhashed','archived_employees',re.id,'no content_hash (pre-019)';
+    ELSIF re.content_hash <> _sha(_canon_archived_employee(re)) THEN
+      RETURN QUERY SELECT 'content_altered','archived_employees',re.id,re.full_name;
     END IF;
   END LOOP;
-  FOR r IN SELECT * FROM audit_logs WHERE school_id = p_school_id ORDER BY chain_seq LOOP
+  FOR ra IN SELECT * FROM audit_logs WHERE school_id = p_school_id ORDER BY chain_seq LOOP
     v_expect := v_expect + 1;
-    IF r.chain_seq IS NULL OR r.row_hash IS NULL THEN
-      RETURN QUERY SELECT 'unhashed','audit_logs',r.id,'no chain (pre-019)'; CONTINUE;
+    IF ra.chain_seq IS NULL OR ra.row_hash IS NULL THEN
+      RETURN QUERY SELECT 'unhashed','audit_logs',ra.id,'no chain (pre-019)'; CONTINUE;
     END IF;
-    IF r.chain_seq <> v_expect THEN
-      RETURN QUERY SELECT 'sequence_gap','audit_logs',r.id,
-        format('expected seq %s, got %s', v_expect, r.chain_seq);
-      v_expect := r.chain_seq;
+    IF ra.chain_seq <> v_expect THEN
+      RETURN QUERY SELECT 'sequence_gap','audit_logs',ra.id,
+        format('expected seq %s, got %s', v_expect, ra.chain_seq);
+      v_expect := ra.chain_seq;
     END IF;
-    IF r.prev_hash <> v_prev THEN
-      RETURN QUERY SELECT 'chain_broken','audit_logs',r.id,
-        format('prev_hash mismatch at seq %s', r.chain_seq);
+    IF ra.prev_hash <> v_prev THEN
+      RETURN QUERY SELECT 'chain_broken','audit_logs',ra.id,
+        format('prev_hash mismatch at seq %s', ra.chain_seq);
     END IF;
-    IF r.row_hash <> _sha(r.prev_hash || '|' || _canon_audit(r)) THEN
-      RETURN QUERY SELECT 'content_altered','audit_logs',r.id,
-        format('row_hash mismatch at seq %s', r.chain_seq);
+    IF ra.row_hash <> _sha(ra.prev_hash || '|' || _canon_audit(ra)) THEN
+      RETURN QUERY SELECT 'content_altered','audit_logs',ra.id,
+        format('row_hash mismatch at seq %s', ra.chain_seq);
     END IF;
-    v_prev := r.row_hash;
+    v_prev := ra.row_hash;
   END LOOP;
 END $$;
 
