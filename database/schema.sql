@@ -583,7 +583,7 @@ CREATE TABLE IF NOT EXISTS archived_students (
   date_of_birth DATE,
   enrollment_date DATE,
   departure_date DATE NOT NULL,
-  reason TEXT NOT NULL CHECK (reason IN ('transferred', 'withdrew')),
+  reason TEXT NOT NULL CHECK (reason IN ('transferred', 'withdrew', 'graduated')),
   parent_full_name TEXT,
   parent_phone TEXT,
   classes_attended JSONB DEFAULT '[]',
@@ -679,6 +679,84 @@ CREATE TABLE IF NOT EXISTS archived_employees (
 );
 CREATE INDEX IF NOT EXISTS idx_archived_employees_school ON archived_employees(school_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_archived_employees_role ON archived_employees(school_id, role);
+
+-- ============================================================
+-- ARCHIVE BACKUPS (migration 016 / finding F4)
+-- One row per backup file taken before a feature-off purge (or manual,
+-- admin self-serve). The file itself lives in object storage; this is
+-- the index. Retained even when the archive itself is purged.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS archive_backups (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL CHECK (kind IN ('pre_purge', 'manual')),
+  storage_bucket TEXT NOT NULL,
+  storage_path TEXT NOT NULL,
+  byte_size INTEGER,
+  student_count INTEGER,
+  employee_count INTEGER,
+  reason TEXT,
+  created_by_name TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_archive_backups_school ON archive_backups(school_id, created_at DESC);
+
+-- ============================================================
+-- APPEND-ONLY ENFORCEMENT (migration 016 / finding F3)
+-- archived_students / archived_employees / audit_logs are immutable.
+-- The only sanctioned delete is the feature-off purge, via the
+-- SECURITY DEFINER purge_school_archive() which sets a tx-local GUC the
+-- trigger honors. Also run before a full school delete so the schools-FK
+-- cascade doesn't trip the triggers.
+-- ============================================================
+CREATE OR REPLACE FUNCTION prevent_archive_mutation() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  IF current_setting('app.allow_archive_purge', true) = 'on' THEN
+    IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
+  END IF;
+  RAISE EXCEPTION '% is append-only — % is not permitted', TG_TABLE_NAME, TG_OP
+    USING HINT = 'Archive/audit rows are immutable; deletion is only via the feature-off purge.';
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_archived_students_append_only ON archived_students;
+CREATE TRIGGER trg_archived_students_append_only
+  BEFORE UPDATE OR DELETE ON archived_students
+  FOR EACH ROW EXECUTE FUNCTION prevent_archive_mutation();
+
+DROP TRIGGER IF EXISTS trg_archived_employees_append_only ON archived_employees;
+CREATE TRIGGER trg_archived_employees_append_only
+  BEFORE UPDATE OR DELETE ON archived_employees
+  FOR EACH ROW EXECUTE FUNCTION prevent_archive_mutation();
+
+DROP TRIGGER IF EXISTS trg_audit_logs_append_only ON audit_logs;
+CREATE TRIGGER trg_audit_logs_append_only
+  BEFORE UPDATE OR DELETE ON audit_logs
+  FOR EACH ROW EXECUTE FUNCTION prevent_archive_mutation();
+
+CREATE OR REPLACE FUNCTION purge_school_archive(p_school_id UUID) RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  PERFORM set_config('app.allow_archive_purge', 'on', true);
+  DELETE FROM archived_students  WHERE school_id = p_school_id;
+  DELETE FROM archived_employees WHERE school_id = p_school_id;
+  DELETE FROM students WHERE school_id = p_school_id AND is_graduated = true;
+  -- audit_logs is intentionally retained on feature-off (compliance log,
+  -- not "historical records"). It is only removed on full school delete.
+END;
+$$;
+
+-- Full school deletion. The schools-FK cascade would otherwise hit the
+-- append-only triggers on audit_logs / archived_* and fail. Setting the
+-- tx-local GUC before the cascade lets those cascade-deletes through.
+CREATE OR REPLACE FUNCTION delete_school_cascade(p_school_id UUID) RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+  PERFORM set_config('app.allow_archive_purge', 'on', true);
+  DELETE FROM schools WHERE id = p_school_id;
+END;
+$$;
 
 -- Rehire links (Phase 3 UI; inert until used).
 ALTER TABLE teachers       ADD COLUMN IF NOT EXISTS previous_archive_id UUID REFERENCES archived_employees(id) ON DELETE SET NULL;

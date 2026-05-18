@@ -346,6 +346,11 @@ export async function assignStudent(req: AuthRequest, res: Response): Promise<vo
 
   if (error) { res.status(500).json({ error: error.message }); return; }
   await logAudit({ req, entityType: 'student', entityId: studentId, action: 'update', before: before || undefined, after: data, label: data.full_name, reason: graduated ? 'Graduated' : null });
+  // Freeze a graduated snapshot (archive on — the no-archive branch above
+  // already returned). Best-effort; never blocks the response.
+  if (graduated) {
+    await snapshotGraduatedStudent(schoolId, studentId, { id: req.user!.userId, name: req.user!.username, role: req.user!.role });
+  }
   res.json(toCC(data));
 }
 
@@ -768,50 +773,41 @@ function toAcademicYear(dateStr: string): string {
   return d.getMonth() >= 8 ? `${y}-${y + 1}` : `${y - 1}-${y}`;
 }
 
-export async function archiveStudent(req: AuthRequest, res: Response): Promise<void> {
-  const { schoolId } = req.user!;
-  const { id } = req.params;
-  const { reason, departureDate } = req.body;
-
-  if (!(await hasArchiveFeature(schoolId))) {
-    res.status(403).json({ error: 'Archive feature is not enabled for this school' });
-    return;
-  }
-
-  if (!reason || !['transferred', 'withdrew'].includes(reason)) {
-    res.status(400).json({ error: 'reason must be "transferred" or "withdrew"' });
-    return;
-  }
-
-  // Fetch student + parent in one query
+// Build the frozen snapshot payload for a student: classes attended per
+// academic year, grades (marks[] + legacy columns), and full tuition
+// payment history (per-payment fields mirror fee_payments so receipts /
+// refund chains / tax records survive). Shared by archiveStudent
+// (transferred/withdrew — deletes the row) and snapshotGraduatedStudent
+// (graduated — keeps the row). Returns null if the student isn't in this
+// school. Currency on each payment is the source of truth — never falls
+// back to the plan currency (accounting invariant).
+async function buildStudentArchiveSnapshot(schoolId: string, studentId: string): Promise<{
+  student: any;
+  classesAttended: { year: string; classId: string; className: string }[];
+  gradesSnapshot: any[];
+  paymentHistory: any[];
+} | null> {
   const { data: student, error: studentErr } = await supabase
     .from('students')
     .select('*, parents(full_name, phone_number)')
-    .eq('id', id)
+    .eq('id', studentId)
     .eq('school_id', schoolId)
     .single();
+  if (studentErr || !student) return null;
 
-  if (studentErr || !student) {
-    res.status(404).json({ error: 'Student not found' });
-    return;
-  }
-
-  // Fetch grades + class name (include marks[] — the current source of truth)
   const { data: grades } = await supabase
     .from('grades')
     .select('academic_year, grading_period, subject, marks, daily_grade, quiz_grade, monthly_exam_grade, term_exam_grade, class_id, classes(name)')
-    .eq('student_id', id)
+    .eq('student_id', studentId)
     .eq('school_id', schoolId)
     .order('academic_year');
 
-  // Fetch attendance records with class id+name (to build classes-attended-per-year)
   const { data: attendanceRows } = await supabase
     .from('attendance')
     .select('date, class_id, classes(name)')
-    .eq('student_id', id)
+    .eq('student_id', studentId)
     .eq('school_id', schoolId);
 
-  // Build classes attended: { academicYear → Map<classId, className> }
   const classYearMap = new Map<string, Map<string, string>>();
   for (const row of (attendanceRows || [])) {
     const classId = (row as any).class_id;
@@ -826,7 +822,6 @@ export async function archiveStudent(req: AuthRequest, res: Response): Promise<v
     .flatMap(([year, idToName]) =>
       Array.from(idToName.entries()).map(([classId, className]) => ({ year, classId, className })));
 
-  // Build grades snapshot — preserve marks[] (current schema) + legacy columns for old records
   const gradesSnapshot = (grades || []).map((g) => ({
     academicYear: g.academic_year,
     gradingPeriod: g.grading_period,
@@ -840,20 +835,10 @@ export async function archiveStudent(req: AuthRequest, res: Response): Promise<v
     termExamGrade: g.term_exam_grade,
   }));
 
-  // Snapshot tuition payment history before students.delete() cascades it away.
-  // Each entry = one student_fee row (a plan applied to this student) with its
-  // own payment list. This is the source of truth for the accountant archive
-  // tab once the student is gone.
-  //
-  // Per-payment fields mirror fee_payments columns so a returning parent's
-  // receipt lookup (RCP-YYYY-NNNNN), refund chain, tax records, and
-  // payment-account reconciliation all survive archive. Currency on the
-  // payment row is the source of truth — must NOT fall back to the plan's
-  // currency (per the accounting invariant in CLAUDE.md).
   const { data: studentFeeRows } = await supabase
     .from('student_fees')
     .select('id, total_amount, adjustment, sibling_discount, late_fees, notes, created_at, fee_plans(name, currency, academic_year)')
-    .eq('student_id', id)
+    .eq('student_id', studentId)
     .eq('school_id', schoolId);
 
   const sfIds = (studentFeeRows || []).map((s: any) => s.id);
@@ -878,8 +863,6 @@ export async function archiveStudent(req: AuthRequest, res: Response): Promise<v
       reference: (p as any).reference ?? null,
       notes: (p as any).notes ?? null,
       createdAt: (p as any).created_at,
-      // accounting fields — preserved verbatim so receipts, refunds, and
-      // tax reports remain reconstructable after archive
       currency: (p as any).currency ?? null,
       receiptYear: (p as any).receipt_year ?? null,
       receiptNumber: (p as any).receipt_number ?? null,
@@ -894,9 +877,6 @@ export async function archiveStudent(req: AuthRequest, res: Response): Promise<v
 
   const paymentHistory = (studentFeeRows || []).map((sf: any) => {
     const payments = paymentsBySf.get(sf.id) ?? [];
-    // Plan-level currency is the fallback only — individual payments may
-    // have been recorded in a different currency, which the per-payment
-    // record above preserves.
     return {
       studentFeeId: sf.id,
       planName: sf.fee_plans?.name ?? 'Plan',
@@ -912,10 +892,76 @@ export async function archiveStudent(req: AuthRequest, res: Response): Promise<v
     };
   });
 
+  return { student, classesAttended, gradesSnapshot, paymentHistory };
+}
+
+// Freeze a graduated student into archived_students (reason='graduated')
+// WITHOUT deleting the live row — so the parent's read-only report can't
+// drift or vanish (finding F5). Best-effort + idempotent: skips if a
+// graduated snapshot already exists. Never throws; a snapshot failure
+// must not abort graduation.
+async function snapshotGraduatedStudent(
+  schoolId: string,
+  studentId: string,
+  actor: { id: string; name: string; role: string },
+): Promise<void> {
+  try {
+    const { data: existing } = await supabase
+      .from('archived_students')
+      .select('id')
+      .eq('school_id', schoolId)
+      .eq('original_student_id', studentId)
+      .eq('reason', 'graduated')
+      .limit(1)
+      .maybeSingle();
+    if (existing) return;
+
+    const snap = await buildStudentArchiveSnapshot(schoolId, studentId);
+    if (!snap) return;
+    const { student } = snap;
+    const { error } = await supabase.from('archived_students').insert({
+      school_id: schoolId,
+      original_student_id: studentId,
+      full_name: student.full_name,
+      date_of_birth: student.date_of_birth ?? null,
+      enrollment_date: student.created_at ? String(student.created_at).split('T')[0] : null,
+      departure_date: new Date().toISOString().split('T')[0],
+      reason: 'graduated',
+      parent_full_name: (student as any).parents?.full_name ?? null,
+      parent_phone: (student as any).parents?.phone_number ?? null,
+      classes_attended: snap.classesAttended,
+      grades: snap.gradesSnapshot,
+      payment_history: snap.paymentHistory,
+      archived_by: actor.id,
+      archived_by_name: actor.name,
+      archived_by_role: actor.role,
+    });
+    if (error) console.error(`[graduated snapshot] student ${studentId}: ${error.message}`);
+  } catch (e) {
+    console.error(`[graduated snapshot] student ${studentId} threw: ${(e as Error).message}`);
+  }
+}
+
+export async function archiveStudent(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { id } = req.params;
+  const { reason, departureDate } = req.body;
+
+  if (!(await hasArchiveFeature(schoolId))) {
+    res.status(403).json({ error: 'Archive feature is not enabled for this school' });
+    return;
+  }
+  if (!reason || !['transferred', 'withdrew'].includes(reason)) {
+    res.status(400).json({ error: 'reason must be "transferred" or "withdrew"' });
+    return;
+  }
+
+  const snap = await buildStudentArchiveSnapshot(schoolId, String(id));
+  if (!snap) { res.status(404).json({ error: 'Student not found' }); return; }
+  const { student } = snap;
+
   // Atomic archive: insert into archived_students + delete from students
-  // in one transaction (PL/pgSQL function from migration 010). Previously
-  // these were two REST calls and a partial failure could leave a duplicate
-  // archive row alongside the live student.
+  // in one transaction (PL/pgSQL function from migration 010).
   const { error: rpcErr } = await supabase.rpc('archive_student_atomic', {
     p_school_id: schoolId,
     p_student_id: id,
@@ -926,9 +972,9 @@ export async function archiveStudent(req: AuthRequest, res: Response): Promise<v
     p_reason: reason,
     p_parent_full_name: (student as any).parents?.full_name ?? null,
     p_parent_phone: (student as any).parents?.phone_number ?? null,
-    p_classes_attended: classesAttended,
-    p_grades: gradesSnapshot,
-    p_payment_history: paymentHistory,
+    p_classes_attended: snap.classesAttended,
+    p_grades: snap.gradesSnapshot,
+    p_payment_history: snap.paymentHistory,
     p_archived_by: req.user!.userId,
     p_archived_by_name: req.user!.username,
     p_archived_by_role: req.user!.role,
@@ -2401,6 +2447,40 @@ export async function exportArchiveXlsx(req: AuthRequest, res: Response): Promis
   res.send(buf);
 }
 
+// Full machine-readable archive backup (finding F4). One JSON file with
+// every archived student (incl. graduated snapshots) and archived
+// employee, raw. The school can take this any time so they always hold
+// their own copy — independent of the provider-side pre-purge backup the
+// master portal retains on cancellation. Archive-feature gated.
+export async function exportFullArchiveBackup(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  if (!(await hasArchiveFeature(schoolId))) {
+    res.status(403).json({ error: 'Archive feature is not enabled for this school' });
+    return;
+  }
+
+  const [{ data: school }, { data: students }, { data: employees }] = await Promise.all([
+    supabase.from('schools').select('name').eq('id', schoolId).single(),
+    supabase.from('archived_students').select('*').eq('school_id', schoolId).order('created_at', { ascending: false }),
+    supabase.from('archived_employees').select('*').eq('school_id', schoolId).order('created_at', { ascending: false }),
+  ]);
+
+  const backup = {
+    schemaVersion: 1,
+    kind: 'full_archive_backup',
+    schoolName: (school as { name?: string } | null)?.name ?? 'School',
+    generatedAt: new Date().toISOString(),
+    counts: { students: (students ?? []).length, employees: (employees ?? []).length },
+    archivedStudents: toCC(students ?? []),
+    archivedEmployees: toCC(employees ?? []),
+  };
+
+  const safe = ((school as { name?: string } | null)?.name ?? 'school').replace(/[^a-z0-9-_]+/gi, '_');
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Content-Disposition', `attachment; filename="archive-backup-${safe}-${new Date().toISOString().split('T')[0]}.json"`);
+  res.send(JSON.stringify(backup, null, 2));
+}
+
 // ---- YEAR TRANSITION ----
 export async function yearTransition(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
@@ -2437,6 +2517,11 @@ export async function yearTransition(req: AuthRequest, res: Response): Promise<v
         .update({ is_graduated: true })
         .in('id', studentIdsToGraduate).eq('school_id', schoolId);
       if (gradErr) { res.status(500).json({ error: gradErr.message }); return; }
+      // Freeze a snapshot per graduated student (best-effort, idempotent).
+      const actor = { id: req.user!.userId, name: req.user!.username, role: req.user!.role };
+      for (const sid of studentIdsToGraduate) {
+        await snapshotGraduatedStudent(schoolId, sid, actor);
+      }
     } else {
       const { error: delErr } = await supabase.from('students')
         .delete().in('id', studentIdsToGraduate).eq('school_id', schoolId);

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { toast } from 'react-toastify';
-import { FileText, FileSpreadsheet } from 'lucide-react';
+import { FileText, FileSpreadsheet, DatabaseBackup } from 'lucide-react';
 import { adminApi } from '../../services/api';
 import PageLayout from '../../components/layout/PageLayout';
 import ArchivedStudentsTab from './ArchivedStudentsTab';
@@ -50,6 +50,19 @@ export default function ArchiveManagement() {
     }
   };
 
+  const [backupBusy, setBackupBusy] = useState(false);
+  const downloadFullBackup = async () => {
+    setBackupBusy(true);
+    try {
+      const res = await adminApi.exportFullArchiveBackup();
+      triggerDownload(res.data, `archive-backup-${stamp()}.json`);
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to download backup');
+    } finally {
+      setBackupBusy(false);
+    }
+  };
+
   return (
     <PageLayout title="Archive">
       <div className="flex items-center justify-between flex-wrap gap-3 mb-6">
@@ -89,6 +102,15 @@ export default function ArchiveManagement() {
           >
             <FileSpreadsheet className="w-4 h-4" />
             {xlsxBusy ? 'Preparing…' : 'Download Excel'}
+          </button>
+          <button
+            onClick={downloadFullBackup}
+            disabled={backupBusy}
+            title="Full machine-readable backup of every archived student & employee — keep your own copy"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+          >
+            <DatabaseBackup className="w-4 h-4" />
+            {backupBusy ? 'Preparing…' : 'Full backup (JSON)'}
           </button>
         </div>
       </div>

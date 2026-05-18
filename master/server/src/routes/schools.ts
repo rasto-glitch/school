@@ -11,17 +11,70 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// Hard-delete every historical student record for a school. Triggered when an
-// operator turns the archive feature OFF — schools without the feature must
-// not retain any archived or graduated students. Irreversible.
+// Provider-side backup is retained even after the archive is purged
+// (policy: a cancelling school AND we must keep a backup). Lives in the
+// operator-only storage bucket; indexed by the archive_backups table.
+const BACKUP_BUCKET = 'operator-mail';
+
+// Build + persist a full JSON backup of a school's archive, then record
+// it in archive_backups. Returns the stored object's metadata. Throws on
+// failure so the caller can refuse to purge without a saved backup.
+async function buildAndStoreBackup(
+  schoolId: string,
+  kind: 'pre_purge' | 'manual',
+  reason: string,
+  createdByName: string,
+): Promise<{ path: string; bytes: number; students: number; employees: number }> {
+  const [{ data: school }, { data: students }, { data: employees }] = await Promise.all([
+    supabase.from('schools').select('name').eq('id', schoolId).single(),
+    supabase.from('archived_students').select('*').eq('school_id', schoolId),
+    supabase.from('archived_employees').select('*').eq('school_id', schoolId),
+  ]);
+
+  const payload = Buffer.from(JSON.stringify({
+    schemaVersion: 1,
+    kind: 'full_archive_backup',
+    schoolId,
+    schoolName: (school as { name?: string } | null)?.name ?? 'School',
+    generatedAt: new Date().toISOString(),
+    reason,
+    counts: { students: (students ?? []).length, employees: (employees ?? []).length },
+    archivedStudents: students ?? [],
+    archivedEmployees: employees ?? [],
+  }, null, 2), 'utf8');
+
+  const path = `archive-backups/${schoolId}/${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+  const up = await supabase.storage.from(BACKUP_BUCKET).upload(path, payload, {
+    contentType: 'application/json',
+    upsert: false,
+  });
+  if (up.error) throw new Error(`backup upload failed: ${up.error.message}`);
+
+  const ins = await supabase.from('archive_backups').insert({
+    school_id: schoolId,
+    kind,
+    storage_bucket: BACKUP_BUCKET,
+    storage_path: path,
+    byte_size: payload.byteLength,
+    student_count: (students ?? []).length,
+    employee_count: (employees ?? []).length,
+    reason,
+    created_by_name: createdByName,
+  });
+  if (ins.error) throw new Error(`backup record failed: ${ins.error.message}`);
+
+  return { path, bytes: payload.byteLength, students: (students ?? []).length, employees: (employees ?? []).length };
+}
+
+// Triggered when an operator turns the archive feature OFF. Policy: the
+// data does not survive, but a backup must — for both the school and us.
+// So we ALWAYS take + retain a provider-side backup first, then purge via
+// the SECURITY DEFINER RPC (the append-only triggers block plain deletes).
+// Irreversible (except from the retained backup).
 async function purgeArchive(schoolId: string): Promise<void> {
-  await supabase.from('archived_students').delete().eq('school_id', schoolId);
-  await supabase.from('students').delete()
-    .eq('school_id', schoolId).eq('is_graduated', true);
-  // The archive feature is shared by students AND employees — turning it off
-  // must purge employee history too, or the feature-off invariant ("schools
-  // without the feature retain no historical records") would be violated.
-  await supabase.from('archived_employees').delete().eq('school_id', schoolId);
+  await buildAndStoreBackup(schoolId, 'pre_purge', 'Archive feature disabled', 'operator');
+  const { error } = await supabase.rpc('purge_school_archive', { p_school_id: schoolId });
+  if (error) throw new Error(`purge failed: ${error.message}`);
 }
 
 function safeFilename(s: string): string {
@@ -146,7 +199,14 @@ router.put('/:id', async (req: Request, res: Response) => {
   // archive feature is still off, the rows are just retained until confirmed.
   if (features && archiveWasOn && features.archive !== true) {
     if (confirmPurge === true) {
-      await purgeArchive(id);
+      try {
+        await purgeArchive(id);
+      } catch (e) {
+        // Backup failed ⇒ purge never ran ⇒ data is intact. Refuse rather
+        // than wipe without a retained copy.
+        res.status(500).json({ error: `Archive purge aborted — backup failed, archive kept: ${(e as Error).message}` });
+        return;
+      }
     } else {
       res.json({ ...data, pendingPurge: true });
       return;
@@ -247,10 +307,14 @@ router.patch('/:id/admin-password', async (req: Request, res: Response) => {
   res.json({ message: 'Admin password updated.' });
 });
 
-// DELETE /api/schools/:id — permanently delete (cascades via FK)
+// DELETE /api/schools/:id — permanently delete (cascades via FK).
+// Routed through delete_school_cascade(): the append-only triggers on
+// audit_logs / archived_* would otherwise block the schools-FK cascade.
+// The SECURITY DEFINER function sets the tx-local purge GUC so the
+// cascade deletes are allowed.
 router.delete('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { error } = await supabase.from('schools').delete().eq('id', id);
+  const { error } = await supabase.rpc('delete_school_cascade', { p_school_id: id });
   if (error) { res.status(400).json({ error: error.message }); return; }
   res.json({ message: 'School deleted' });
 });
