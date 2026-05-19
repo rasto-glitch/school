@@ -1,0 +1,76 @@
+import { Request, Response, NextFunction } from 'express';
+import { ZodError, ZodType } from 'zod';
+
+// Route-level input validation.
+//
+// Usage (in routes/index.ts), AFTER authenticate/authorize so unauthenticated
+// callers never get schema feedback (anti-enumeration), BEFORE the handler:
+//
+//   router.post('/accounting/expenses',
+//     authenticate, authorize('accountant'),
+//     validate({ body: createExpenseSchema }),
+//     (req, res) => expenses.createExpense(req as AuthRequest, res));
+//
+// Contract notes:
+//  - Error shape stays the project-wide `{ error: string }` (one readable
+//    message, no structured codes — matches every other controller).
+//  - `body` is REPLACED with the parsed result. zod object schemas strip
+//    unknown keys by default, so this also kills mass-assignment: a client
+//    can no longer smuggle `is_active`, `role`, `school_id`, etc. into a
+//    create/update payload and have it reach the DB layer.
+//  - `params` is validated and merged in place (the object is mutable even
+//    though, in Express 5, `req.params`/`req.query` are getter-backed).
+//  - `query` is validated for rejection only and the coerced result is
+//    exposed on `req.validatedQuery`. We do NOT reassign `req.query`:
+//    Express 5 makes it a read-only getter, and existing controllers already
+//    coerce query strings themselves, so reassigning would be both unsafe
+//    and unnecessary.
+
+export interface ValidationSchemas {
+  body?: ZodType;
+  query?: ZodType;
+  params?: ZodType;
+}
+
+declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
+  namespace Express {
+    interface Request {
+      /** Parsed + coerced query, when a `query` schema was supplied. */
+      validatedQuery?: unknown;
+    }
+  }
+}
+
+function firstIssueMessage(err: ZodError): string {
+  const issue = err.issues[0];
+  if (!issue) return 'Invalid request';
+  const path = issue.path.join('.');
+  return path ? `${path}: ${issue.message}` : issue.message;
+}
+
+export function validate(schemas: ValidationSchemas) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    try {
+      if (schemas.params) {
+        const parsed = schemas.params.parse(req.params) as Record<string, string>;
+        Object.assign(req.params, parsed);
+      }
+      if (schemas.query) {
+        req.validatedQuery = schemas.query.parse(req.query);
+      }
+      if (schemas.body) {
+        req.body = schemas.body.parse(req.body);
+      }
+      next();
+    } catch (e) {
+      if (e instanceof ZodError) {
+        res.status(400).json({ error: firstIssueMessage(e) });
+        return;
+      }
+      // Non-zod failure here is unexpected — treat as a bad request rather
+      // than a 500 so a malformed payload can't crash the route.
+      res.status(400).json({ error: 'Invalid request body' });
+    }
+  };
+}
