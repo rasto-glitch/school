@@ -35,6 +35,21 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 
 export function createRouter(io: SocketServer) {
   const router = Router();
 
+  // ┌─────────────────────────────────────────────────────────────────────┐
+  // │ TEMPORARY — ops-alert fire drill. DELETE THIS ROUTE (and the          │
+  // │ ALERT_TEST_TOKEN env var) once you've confirmed the alert email       │
+  // │ arrives. 404s unless ?token= matches ALERT_TEST_TOKEN, so it can't    │
+  // │ be abused while it's live. The throw hits the global error handler,   │
+  // │ which calls reportError → email (exercises the real wiring).          │
+  // └─────────────────────────────────────────────────────────────────────┘
+  router.get('/_debug/boom', (req, res) => {
+    if (!process.env.ALERT_TEST_TOKEN || req.query.token !== process.env.ALERT_TEST_TOKEN) {
+      res.status(404).json({ error: 'Not found' });
+      return;
+    }
+    throw new Error(`Ops alert test ${new Date().toISOString()}`);
+  });
+
   // ---- PUBLIC ----
   router.get('/schools', getSchools);
   router.post('/auth/forgot-password', validate({ body: v.forgotPasswordSchema }), (req, res) => forgotPassword(req, res));
