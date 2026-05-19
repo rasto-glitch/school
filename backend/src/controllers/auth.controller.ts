@@ -2,16 +2,13 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
-import { Resend } from 'resend';
 import { supabase } from '../config/supabase';
 import { safeExt } from '../utils/upload';
 import { toCC } from '../utils/transform';
 import { emitToAdmins, notify } from '../utils/notify';
 import { logger } from '../utils/logger';
+import { sendMail } from '../utils/mailer';
 import type { AuthRequest } from '../middleware/auth';
-
-const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
-const FROM_EMAIL = process.env.LANDING_FROM || 'Scholify <no-reply@scholify.krd>';
 // Public landing host where /reset-password and /confirm-email live.
 // First value is treated as canonical; the rest are accepted at runtime
 // (kept consistent with server.ts's allowedOrigins parsing).
@@ -184,19 +181,6 @@ const escapeHtml = (s: string): string =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] || c),
   );
 
-const sendMail = async (to: string, subject: string, html: string, text: string): Promise<void> => {
-  if (!resend) {
-    logger.warn('Resend not configured; skipping send', { subject, to });
-    return;
-  }
-  const { error } = await resend.emails.send({
-    from: FROM_EMAIL, to, subject, html, text,
-  });
-  if (error) {
-    logger.error('Resend send failed', { subject, to, errorMessage: error.message, errorName: error.name });
-    throw new Error(error.message || 'send_failed');
-  }
-};
 
 export async function getSchools(_req: Request, res: Response): Promise<void> {
   const { data, error } = await supabase

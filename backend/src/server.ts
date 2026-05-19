@@ -10,6 +10,8 @@ import { createRouter } from './routes/index';
 import { setIo } from './utils/notify';
 import { startBackupVerifySchedule } from './utils/backupVerify';
 import { logger } from './utils/logger';
+import { reportError } from './utils/alerting';
+import { supabase } from './config/supabase';
 
 dotenv.config();
 
@@ -31,10 +33,14 @@ if (!jwtSecret || jwtSecret.length < 32) {
 // truly uncaught exception, exit so the platform restarts a clean process.
 process.on('unhandledRejection', (reason) => {
   logger.error('Unhandled promise rejection', { reason });
+  void reportError('Unhandled promise rejection', reason);
 });
 process.on('uncaughtException', (err) => {
   logger.error('Uncaught exception — exiting for a clean restart', { err });
-  process.exit(1);
+  // Best-effort: give the alert email a brief window to flush before the
+  // process exits for a clean restart. Bounded so we never hang a crash.
+  reportError('uncaughtException', err).finally(() => process.exit(1));
+  setTimeout(() => process.exit(1), 2000).unref();
 });
 
 const app = express();
@@ -157,14 +163,34 @@ app.use('/api/', apiLimiter);
 app.use('/api', createRouter(io));
 
 // Health check
-app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+// Health check — shallow liveness PLUS a cheap, bounded DB-connectivity
+// probe so an external uptime monitor / Railway healthcheck can detect a
+// dead database, not just a live process. The query is a single-row id
+// read with a 3s ceiling; on failure we return 503 (degraded) rather than
+// throwing, and we never leak the underlying error to the caller.
+app.get('/health', async (_req, res) => {
+  let db: 'ok' | 'down' = 'ok';
+  try {
+    const probe = supabase
+      // tenant-check-allow: liveness probe, not a tenant-scoped data read
+      .from('schools').select('id').limit(1);
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('db_probe_timeout')), 3000));
+    const { error } = (await Promise.race([probe, timeout])) as { error: unknown };
+    if (error) db = 'down';
+  } catch {
+    db = 'down';
+  }
+  res
+    .status(db === 'ok' ? 200 : 503)
+    .json({ status: db === 'ok' ? 'ok' : 'degraded', db, timestamp: new Date().toISOString() });
 });
 
 // Global error handler — catches any unhandled errors from route handlers
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
   logger.error('Unhandled error', { err, path: req.path, method: req.method });
+  void reportError('Unhandled HTTP error', err, { path: req.path, method: req.method });
   res.status(500).json({ error: 'An unexpected error occurred. Please try again.' });
 });
 
