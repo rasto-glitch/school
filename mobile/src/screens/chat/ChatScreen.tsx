@@ -33,6 +33,22 @@ function humanSize(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+// Defense-in-depth (H-1): backend now restricts attachmentUrl to Supabase
+// storage URLs, but we double-check on the client. Linking.openURL on a
+// `javascript:` URL is a no-op on mobile, but `https://attacker.example/`
+// would open the device browser — a phishing surface. Refuse anything
+// outside Supabase storage hosts.
+function isSafeAttachmentUrl(u: string | undefined): u is string {
+  if (!u) return false;
+  try {
+    const parsed = new URL(u);
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return false;
+    return /\.supabase\.co$/i.test(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
+
 function DateSeparator({ date, colors }: { date: Date; colors: any }) {
   const label = isToday(date) ? 'Today' : isYesterday(date) ? 'Yesterday' : format(date, 'MMMM d, yyyy');
   return (
@@ -91,7 +107,7 @@ function Bubble({ msg, isMine, showAvatar, initials, primaryColor, colors, onLon
             </Text>
           )}
 
-          {msg.type === 'image' && msg.attachmentUrl && (
+          {msg.type === 'image' && isSafeAttachmentUrl(msg.attachmentUrl) && (
             <TouchableOpacity onPress={() => Linking.openURL(msg.attachmentUrl!)}>
               <Image
                 source={{ uri: msg.attachmentUrl }}
@@ -101,7 +117,7 @@ function Bubble({ msg, isMine, showAvatar, initials, primaryColor, colors, onLon
             </TouchableOpacity>
           )}
 
-          {msg.type === 'file' && msg.attachmentUrl && (
+          {msg.type === 'file' && isSafeAttachmentUrl(msg.attachmentUrl) && (
             <TouchableOpacity
               onPress={() => Linking.openURL(msg.attachmentUrl!)}
               style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}

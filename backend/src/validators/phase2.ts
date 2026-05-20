@@ -229,10 +229,37 @@ export const upsertEbookProgressSchema = z.object({
 
 // ── Chat ────────────────────────────────────────────────────────────────
 export const getOrCreateConversationSchema = z.object({ otherUserId: uuid });
+
+// SECURITY (H-1): attachmentUrl is rendered as <a href={...}> in the chat
+// UI. Allowing a free-form string lets a chat-eligible user drop
+// `javascript:...` or `https://attacker.example/phish.html` onto another
+// user's message bubble. We restrict to https URLs whose host ends in
+// `.supabase.co` AND whose path is under one of the storage buckets the
+// chat-upload endpoint actually writes to. This shape is what
+// /chat/upload returns:
+//   https://<project>.supabase.co/storage/v1/object/public/chat-files/<key>
+// Both web and mobile render the same field, so a server-side check is
+// the right enforcement point.
+const supabaseAttachmentUrl = z.string()
+  .max(2000)
+  .refine(
+    (u) => {
+      let parsed: URL;
+      try { parsed = new URL(u); } catch { return false; }
+      if (parsed.protocol !== 'https:') return false;
+      if (!/\.supabase\.co$/i.test(parsed.hostname)) return false;
+      // Allow chat-files (primary) and homework-attachments (used for
+      // some shared upload UIs and avatar-derived links).
+      if (!/^\/storage\/v1\/object\/(public|sign)\/(chat-files|homework-attachments)\//.test(parsed.pathname)) return false;
+      return true;
+    },
+    { message: 'attachmentUrl must be a Supabase storage URL from the chat-upload endpoint' },
+  );
+
 export const sendMessageSchema = z.object({
   content: z.string().max(8000).optional(),
   type: z.string().max(20).optional(),
-  attachmentUrl: z.string().max(2000).nullable().optional(),
+  attachmentUrl: supabaseAttachmentUrl.nullable().optional(),
   attachmentName: z.string().max(255).nullable().optional(),
   attachmentSize: z.number().int().nonnegative().nullable().optional(),
 });

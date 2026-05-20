@@ -38,6 +38,21 @@ function humanSize(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+// Defense-in-depth: even though the backend validates attachmentUrl to
+// only allow Supabase storage URLs, the frontend should refuse to render
+// anything that isn't http(s) under *.supabase.co. Blocks javascript:,
+// data:, vbscript:, and any other scheme that could fire on click.
+function isSafeAttachmentUrl(u: string | undefined): u is string {
+  if (!u) return false;
+  try {
+    const parsed = new URL(u);
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return false;
+    return /\.supabase\.co$/i.test(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
+
 export default function MessageBubble({ msg, isMine, showAvatar, avatarInitials, primaryColor, onEdit, onDelete }: Props) {
   const [hovered, setHovered] = useState(false);
   const [editMode, setEditMode] = useState(false);
@@ -116,7 +131,7 @@ export default function MessageBubble({ msg, isMine, showAvatar, avatarInitials,
                 <span className="whitespace-pre-wrap break-words">{msg.content}</span>
               )}
 
-              {msg.type === 'image' && msg.attachmentUrl && (
+              {msg.type === 'image' && isSafeAttachmentUrl(msg.attachmentUrl) && (
                 <a href={msg.attachmentUrl} target="_blank" rel="noopener noreferrer">
                   <img
                     src={msg.attachmentUrl}
@@ -126,7 +141,7 @@ export default function MessageBubble({ msg, isMine, showAvatar, avatarInitials,
                 </a>
               )}
 
-              {msg.type === 'file' && msg.attachmentUrl && (
+              {msg.type === 'file' && isSafeAttachmentUrl(msg.attachmentUrl) && (
                 <a
                   href={msg.attachmentUrl}
                   download={msg.attachmentName}
