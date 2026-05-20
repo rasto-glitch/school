@@ -1946,9 +1946,22 @@ export async function sendNotification(req: AuthRequest, res: Response): Promise
   const { schoolId } = req.user!;
   const { userIds, title, message, type, targetRole } = req.body;
 
-  let targetUserIds: string[] = userIds || [];
+  let targetUserIds: string[] = [];
 
-  if (targetRole && targetUserIds.length === 0) {
+  if (Array.isArray(userIds) && userIds.length > 0) {
+    // SECURITY (H-4): the supplied userIds MUST belong to the caller's
+    // school. Previously this path skipped the membership check, so an
+    // admin who learned a UUID from any other school could deliver Expo
+    // push to a user in that other school (the device_tokens lookup is
+    // keyed by user_id only).
+    const { data: validRows } = await supabase
+      .from('users')
+      .select('id')
+      .eq('school_id', schoolId)
+      .eq('is_active', true)
+      .in('id', userIds);
+    targetUserIds = (validRows || []).map(u => u.id);
+  } else if (targetRole) {
     const roleFilter = targetRole === 'all'
       ? supabase.from('users').select('id').eq('school_id', schoolId).eq('is_active', true)
       : supabase.from('users').select('id').eq('school_id', schoolId).eq('role', targetRole).eq('is_active', true);

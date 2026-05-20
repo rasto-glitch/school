@@ -95,14 +95,22 @@ export async function notifyMany(payloads: NotifyPayload[]): Promise<void> {
   );
   if (insertError) console.error('[notifyMany] notifications insert failed', { count: payloads.length, type: payloads[0]?.type, error: insertError.message });
 
-  // Batched device_tokens lookup — one query for all recipients instead of N
+  // Batched device_tokens lookup — one query for all recipients instead of N.
+  // SECURITY (H-4 defense-in-depth): also scope by school_id so this can
+  // never deliver a push to a same-userId row stored under a different
+  // school. In practice every payload arrives from a single-tenant caller,
+  // so it's safe to use the first payload's schoolId as the filter.
   const userIds = Array.from(new Set(payloads.map(p => p.userId)));
+  const senderSchoolIds = Array.from(new Set(payloads.map(p => p.schoolId)));
   const tokensByUser = new Map<string, { token: string; language: string | null }[]>();
   if (userIds.length > 0) {
-    const { data: tokenRows } = await supabase
+    let q = supabase
       .from('device_tokens')
       .select('user_id, token, language')
       .in('user_id', userIds);
+    if (senderSchoolIds.length === 1) q = q.eq('school_id', senderSchoolIds[0]);
+    else q = q.in('school_id', senderSchoolIds);
+    const { data: tokenRows } = await q;
     for (const t of (tokenRows ?? []) as { user_id: string; token: string; language: string | null }[]) {
       const arr = tokensByUser.get(t.user_id) ?? [];
       arr.push({ token: t.token, language: t.language });
