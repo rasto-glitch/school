@@ -51,8 +51,10 @@ export const createTeacherSchema = z.object({
   emergencyContact: contactStr(120),
   classIds: z.array(uuid).optional(),
   classId: optionalId,
-  username,
-  password,
+  // username/password optional — the controller derives a username from
+  // fullName and falls back to a default password when omitted.
+  username: username.optional(),
+  password: password.optional(),
   previousArchiveId: optionalId,
 });
 export const updateTeacherSchema = z.object({
@@ -70,8 +72,9 @@ export const createDriverSchema = z.object({
   licenseNumber: contactStr(80),
   busNumber: contactStr(40),
   age: z.number().int().min(0).max(120).optional(),
-  username,
-  password,
+  // username/password optional — same controller-side defaulting as teachers.
+  username: username.optional(),
+  password: password.optional(),
   studentIds: z.array(uuid).optional(),
   vehicleType: vehicleType.optional(),
   previousArchiveId: optionalId,
