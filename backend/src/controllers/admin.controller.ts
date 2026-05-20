@@ -17,6 +17,8 @@ import { loadEmployeeArchiveSnapshot, streamPdf as streamEmployeePdf, buildXlsx 
 import { streamCredentialsPdf, type CredentialEntry } from '../utils/credentialsPdf';
 import { logAudit } from '../utils/audit';
 import { hasArchiveFeature, normalizeArchiveReason, resolveEmployeeArchiveId } from '../utils/employeeArchive';
+import { isUrlSafeToFetch } from '../utils/urlSafety';
+import { logger } from '../utils/logger';
 
 // ---- EMPLOYEE ARCHIVE (teacher / driver / supervisor; staff in staff.controller) ----
 // Mirrors the student archive: the controller assembles the role-specific
@@ -2339,11 +2341,38 @@ export async function getLinkPreview(req: AuthRequest, res: Response): Promise<v
     return;
   }
 
+  // SSRF guard: refuse anything that resolves to private/loopback/cloud-
+  // metadata before we ever open a socket. The follow-up fetch MUST also
+  // set `redirect: 'manual'` so a 3xx Location can't bypass this check.
+  const safety = await isUrlSafeToFetch(url);
+  if (!safety.ok) {
+    // Don't leak the specific reason to the caller (an attacker could use
+    // pass/fail timings to map internal hosts). Log it for the operator.
+    logger.warn('link-preview rejected unsafe URL', { url, reason: safety.reason });
+    res.json({ type: 'link', url, title: '', description: '', image: '', siteName: '' });
+    return;
+  }
+
   try {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 5000);
-    const response = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SchoolApp/1.0)' }, signal: ctrl.signal });
+    const response = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SchoolApp/1.0)' },
+      signal: ctrl.signal,
+      // No auto-follow: a 302 to http://169.254.169.254/ would otherwise
+      // re-introduce the SSRF after our pre-fetch check.
+      redirect: 'manual',
+    });
     clearTimeout(timer);
+
+    // Refuse to follow server-side redirects. If the user pasted a shortened
+    // URL, they'll see the empty-preview fallback — small UX cost, big
+    // security win. The bracketed range (>=300, <400) covers all 3xx forms.
+    if (response.status >= 300 && response.status < 400) {
+      res.json({ type: 'link', url, title: '', description: '', image: '', siteName: safety.hostname.replace(/^www\./, '') });
+      return;
+    }
+
     const html = await response.text();
 
     const getMeta = (attr: string, val: string) => {
@@ -2355,14 +2384,11 @@ export async function getLinkPreview(req: AuthRequest, res: Response): Promise<v
     const title = getMeta('property', 'og:title') || getMeta('name', 'twitter:title') || html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1]?.trim() || '';
     const description = getMeta('property', 'og:description') || getMeta('name', 'twitter:description') || getMeta('name', 'description') || '';
     const image = getMeta('property', 'og:image') || getMeta('name', 'twitter:image') || '';
-    let siteName = getMeta('property', 'og:site_name') || '';
-    if (!siteName) { try { siteName = new URL(url).hostname.replace(/^www\./, ''); } catch {} }
+    let siteName = getMeta('property', 'og:site_name') || safety.hostname.replace(/^www\./, '');
 
     res.json({ type: 'link', url, title, description: description.substring(0, 200), image, siteName });
   } catch {
-    let siteName = '';
-    try { siteName = new URL(url).hostname.replace(/^www\./, ''); } catch {}
-    res.json({ type: 'link', url, title: '', description: '', image: '', siteName });
+    res.json({ type: 'link', url, title: '', description: '', image: '', siteName: safety.hostname.replace(/^www\./, '') });
   }
 }
 

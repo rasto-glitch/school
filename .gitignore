@@ -14,3 +14,6 @@ Thumbs.db
 # Mobile signing credentials — managed remotely by EAS, never commit
 mobile/credentials.json
 mobile/credentials/
+
+# Pen-test report — contains live exploitation details, not for source control
+PENTEST_FINDINGS.md
