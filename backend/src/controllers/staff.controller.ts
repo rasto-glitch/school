@@ -1,5 +1,6 @@
 import { Response } from 'express';
-import { supabase } from '../config/supabase';
+// Elevated controller — see Phase 0 inventory.
+import { adminDb as supabase } from '../utils/db';
 import type { AuthRequest } from '../middleware/auth';
 import { toCC } from '../utils/transform';
 import { notify, notifyMany } from '../utils/notify';

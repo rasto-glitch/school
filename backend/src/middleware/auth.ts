@@ -1,6 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from '../config/supabase';
+import { tenantDb } from '../utils/db';
 
 export interface AuthPayload {
   userId: string;
@@ -12,6 +14,11 @@ export interface AuthPayload {
 
 export interface AuthRequest extends Request {
   user?: AuthPayload;
+  // RLS Phase 1: an authenticated-role, school-scoped Supabase client
+  // attached on every successful authenticate(). Controllers will migrate
+  // from the shared service-role `supabase` import to `req.db` in Phase 3;
+  // until then this property is set but unused.
+  db?: SupabaseClient;
 }
 
 export async function authenticate(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
@@ -74,6 +81,10 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
   }
 
   req.user = decoded;
+  // Attach a per-request, RLS-bound client. Phase 1 is inert (no policies
+  // enforced yet, or envs not set → falls back to adminDb). Controllers
+  // start using req.db in Phase 3.
+  req.db = tenantDb(decoded);
   next();
 }
 

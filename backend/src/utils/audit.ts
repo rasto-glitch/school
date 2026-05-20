@@ -1,4 +1,7 @@
-import { supabase } from '../config/supabase';
+// Audit writes are server-side, tamper-protected (hash-chained at the DB
+// level) and called from many surfaces including non-request contexts.
+// Elevated client by design.
+import { adminDb as supabase } from './db';
 import type { AuthRequest } from '../middleware/auth';
 
 export type AuditAction = 'create' | 'update' | 'delete';

@@ -1,28 +1,28 @@
 import { Response } from 'express';
-import { supabase } from '../config/supabase';
 import { safeExt } from '../utils/upload';
 import type { AuthRequest } from '../middleware/auth';
 import { notifyMany } from '../utils/notify';
 import { subjectAllowedForClass } from '../utils/curriculum';
 import { parseCursorParams, buildPage } from '../utils/pagination';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-async function getTeacherId(userId: string): Promise<string | null> {
-  const { data } = await supabase.from('teachers').select('id').eq('user_id', userId).single();
+async function getTeacherId(db: SupabaseClient, userId: string): Promise<string | null> {
+  const { data } = await db.from('teachers').select('id').eq('user_id', userId).single();
   return data?.id ?? null;
 }
 
-async function getTeacherInfo(userId: string): Promise<{ id: string; fullName: string; subject: string | null } | null> {
-  const { data } = await supabase.from('teachers').select('id, full_name, subject').eq('user_id', userId).single();
+async function getTeacherInfo(db: SupabaseClient, userId: string): Promise<{ id: string; fullName: string; subject: string | null } | null> {
+  const { data } = await db.from('teachers').select('id, full_name, subject').eq('user_id', userId).single();
   if (!data) return null;
   return { id: data.id, fullName: data.full_name, subject: data.subject ?? null };
 }
 
-async function getParentClassIds(userId: string): Promise<string[]> {
-  const { data: parent } = await supabase.from('parents').select('id').eq('user_id', userId).single();
+async function getParentClassIds(db: SupabaseClient, userId: string): Promise<string[]> {
+  const { data: parent } = await db.from('parents').select('id').eq('user_id', userId).single();
   if (!parent) return [];
-  const { data: students } = await supabase.from('students').select('class_id').eq('parent_id', parent.id);
+  const { data: students } = await db.from('students').select('class_id').eq('parent_id', parent.id);
   return (students ?? []).map((s: any) => s.class_id).filter(Boolean);
 }
 
@@ -30,6 +30,7 @@ async function getParentClassIds(userId: string): Promise<string[]> {
 // reach only parents of students in that class; supervisor posts reach every
 // parent in the school.
 async function notifyPostAudience(
+  db: SupabaseClient,
   schoolId: string,
   post: { id: string; author_role: string | null; class_id: string | null; author_user_id: string | null },
   title: string,
@@ -41,20 +42,20 @@ async function notifyPostAudience(
     // Two-step lookup so the FK auto-detection between students and parents
     // doesn't matter: collect parent_ids from students in the class, then
     // resolve their user_ids.
-    const { data: students } = await supabase
+    const { data: students } = await db
       .from('students')
       .select('parent_id')
       .eq('class_id', post.class_id)
       .eq('school_id', schoolId);
     const parentIds = Array.from(new Set(((students ?? []) as any[]).map(s => s.parent_id).filter(Boolean)));
     if (parentIds.length === 0) return;
-    const { data: parents } = await supabase
+    const { data: parents } = await db
       .from('parents')
       .select('user_id')
       .in('id', parentIds);
     userIds = Array.from(new Set(((parents ?? []) as any[]).map(p => p.user_id).filter(Boolean)));
   } else if (post.author_role === 'supervisor') {
-    const { data: parentUsers } = await supabase
+    const { data: parentUsers } = await db
       .from('users')
       .select('id')
       .eq('school_id', schoolId)
@@ -82,17 +83,17 @@ async function notifyPostAudience(
   notifyMany(payloads).catch(() => {});
 }
 
-async function decoratePosts(posts: any[], viewerUserId: string): Promise<any[]> {
+async function decoratePosts(db: SupabaseClient, posts: any[], viewerUserId: string): Promise<any[]> {
   if (posts.length === 0) return [];
 
   const postIds = posts.map((p) => p.id);
 
   const [likesRes, savesRes, commentsRes, myLikesRes, mySavesRes] = await Promise.all([
-    supabase.from('post_likes').select('post_id').in('post_id', postIds),
-    supabase.from('post_saves').select('post_id').in('post_id', postIds),
-    supabase.from('post_comments').select('post_id').in('post_id', postIds).eq('is_deleted', false),
-    supabase.from('post_likes').select('post_id').in('post_id', postIds).eq('user_id', viewerUserId),
-    supabase.from('post_saves').select('post_id').in('post_id', postIds).eq('user_id', viewerUserId),
+    db.from('post_likes').select('post_id').in('post_id', postIds),
+    db.from('post_saves').select('post_id').in('post_id', postIds),
+    db.from('post_comments').select('post_id').in('post_id', postIds).eq('is_deleted', false),
+    db.from('post_likes').select('post_id').in('post_id', postIds).eq('user_id', viewerUserId),
+    db.from('post_saves').select('post_id').in('post_id', postIds).eq('user_id', viewerUserId),
   ]);
 
   const likesCount: Record<string, number> = {};
@@ -112,7 +113,7 @@ async function decoratePosts(posts: any[], viewerUserId: string): Promise<any[]>
   const authorNames: Record<string, string> = {};
   const authorAvatars: Record<string, string | null> = {};
   if (authorUserIds.length > 0) {
-    const { data: users } = await supabase
+    const { data: users } = await db
       .from('users')
       .select('id, first_name, last_name, profile_picture')
       .in('id', authorUserIds);
@@ -168,7 +169,7 @@ export async function getPosts(req: AuthRequest, res: Response): Promise<void> {
   try {
     const baseSelect = 'id, title, subject, body, content_type, content, attachment_url, attachment_name, image_url, is_published, created_at, updated_at, class_id, teacher_id, author_user_id, author_role, classes(name), teachers(full_name, subject, user_id)';
 
-    let query = supabase
+    let query = req.db!
       .from('academic_posts')
       .select(baseSelect)
       .eq('school_id', schoolId);
@@ -182,7 +183,7 @@ export async function getPosts(req: AuthRequest, res: Response): Promise<void> {
       // Collapsed union: published supervisor posts (school-wide) OR
       // published teacher posts for the child's classes — one keyset query
       // instead of two merged in memory.
-      const classIds = await getParentClassIds(userId);
+      const classIds = await getParentClassIds(req.db!, userId);
       query = query.eq('is_published', true);
       query = classIds.length > 0
         ? query.or(`author_role.eq.supervisor,and(author_role.eq.teacher,class_id.in.(${classIds.join(',')}))`)
@@ -190,7 +191,7 @@ export async function getPosts(req: AuthRequest, res: Response): Promise<void> {
     } else {
       if (classId) query = query.eq('class_id', classId);
       if (role === 'teacher') {
-        const teacherId = await getTeacherId(userId);
+        const teacherId = await getTeacherId(req.db!, userId);
         if (!teacherId) { res.json({ data: [], limit, nextCursor: null }); return; }
         query = query.or(`is_published.eq.true,and(author_user_id.eq.${userId},author_role.eq.teacher)`);
       } else if (role === 'supervisor') {
@@ -213,7 +214,7 @@ export async function getPosts(req: AuthRequest, res: Response): Promise<void> {
     if (error) { res.status(500).json({ error: error.message }); return; }
 
     const page = buildPage((data ?? []) as { id: string; created_at: string }[], limit);
-    const decorated = await decoratePosts(page.data, userId);
+    const decorated = await decoratePosts(req.db!,page.data, userId);
     res.json({ data: decorated, limit: page.limit, nextCursor: page.nextCursor });
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch posts' });
@@ -225,7 +226,7 @@ export async function getPost(req: AuthRequest, res: Response): Promise<void> {
   const { id } = req.params;
 
   try {
-    const { data: post, error } = await supabase
+    const { data: post, error } = await req.db!
       .from('academic_posts')
       .select('*, classes(name), teachers(full_name, subject, user_id)')
       .eq('id', id)
@@ -237,7 +238,7 @@ export async function getPost(req: AuthRequest, res: Response): Promise<void> {
     if (role === 'parent') {
       if (!post.is_published) { res.status(403).json({ error: 'Forbidden' }); return; }
       if (post.author_role === 'teacher') {
-        const classIds = await getParentClassIds(userId);
+        const classIds = await getParentClassIds(req.db!, userId);
         if (!classIds.includes(post.class_id)) { res.status(403).json({ error: 'Forbidden' }); return; }
       }
     }
@@ -247,7 +248,7 @@ export async function getPost(req: AuthRequest, res: Response): Promise<void> {
       return;
     }
 
-    const decorated = await decoratePosts([post], userId);
+    const decorated = await decoratePosts(req.db!,[post], userId);
     res.json(decorated[0]);
   } catch {
     res.status(500).json({ error: 'Failed to fetch post' });
@@ -265,14 +266,14 @@ export async function createPost(req: AuthRequest, res: Response): Promise<void>
 
   try {
     if (role === 'teacher') {
-      const info = await getTeacherInfo(userId);
+      const info = await getTeacherInfo(req.db!, userId);
       if (!info) { res.status(403).json({ error: 'Teacher record not found' }); return; }
       if (!classId) { res.status(400).json({ error: 'classId required for teacher posts' }); return; }
       if (subject && !(await subjectAllowedForClass(schoolId, info.id, classId, subject))) {
         res.status(403).json({ error: `You aren't assigned to teach ${subject} for this class.` }); return;
       }
 
-      const { data, error } = await supabase
+      const { data, error } = await req.db!
         .from('academic_posts')
         .insert({
           school_id: schoolId,
@@ -295,16 +296,16 @@ export async function createPost(req: AuthRequest, res: Response): Promise<void>
       if (error) { res.status(400).json({ error: error.message }); return; }
 
       if (data.is_published) {
-        notifyPostAudience(schoolId, data, title);
+        notifyPostAudience(req.db!, schoolId,data, title);
       }
 
-      const decorated = await decoratePosts([data], userId);
+      const decorated = await decoratePosts(req.db!,[data], userId);
       res.status(201).json(decorated[0]);
       return;
     }
 
     if (role === 'supervisor') {
-      const { data, error } = await supabase
+      const { data, error } = await req.db!
         .from('academic_posts')
         .insert({
           school_id: schoolId,
@@ -327,10 +328,10 @@ export async function createPost(req: AuthRequest, res: Response): Promise<void>
       if (error) { res.status(400).json({ error: error.message }); return; }
 
       if (data.is_published) {
-        notifyPostAudience(schoolId, data, title);
+        notifyPostAudience(req.db!, schoolId,data, title);
       }
 
-      const decorated = await decoratePosts([data], userId);
+      const decorated = await decoratePosts(req.db!,[data], userId);
       res.status(201).json(decorated[0]);
       return;
     }
@@ -347,7 +348,7 @@ export async function updatePost(req: AuthRequest, res: Response): Promise<void>
   const { title, subject, classId, content, body, contentType, isPublished, imageUrl } = req.body;
 
   try {
-    const { data: existing } = await supabase
+    const { data: existing } = await req.db!
       .from('academic_posts')
       .select('author_user_id, author_role, is_published')
       .eq('id', id)
@@ -369,7 +370,7 @@ export async function updatePost(req: AuthRequest, res: Response): Promise<void>
     if (isPublished !== undefined) updates.is_published = isPublished;
     if (imageUrl !== undefined) updates.image_url = imageUrl;
 
-    const { data, error } = await supabase
+    const { data, error } = await req.db!
       .from('academic_posts')
       .update(updates)
       .eq('id', id)
@@ -380,10 +381,10 @@ export async function updatePost(req: AuthRequest, res: Response): Promise<void>
 
     // Notify when a draft becomes visible for the first time.
     if (!existing.is_published && data.is_published) {
-      notifyPostAudience(schoolId, data, data.title);
+      notifyPostAudience(req.db!, schoolId,data, data.title);
     }
 
-    const decorated = await decoratePosts([data], userId);
+    const decorated = await decoratePosts(req.db!,[data], userId);
     res.json(decorated[0]);
   } catch {
     res.status(500).json({ error: 'Failed to update post' });
@@ -396,7 +397,7 @@ export async function deletePost(req: AuthRequest, res: Response): Promise<void>
 
   try {
     if (role !== 'admin') {
-      const { data: existing } = await supabase
+      const { data: existing } = await req.db!
         .from('academic_posts')
         .select('author_user_id')
         .eq('id', id)
@@ -408,7 +409,7 @@ export async function deletePost(req: AuthRequest, res: Response): Promise<void>
       }
     }
 
-    const { error } = await supabase
+    const { error } = await req.db!
       .from('academic_posts')
       .delete()
       .eq('id', id)
@@ -428,13 +429,13 @@ export async function uploadPostFile(req: AuthRequest, res: Response): Promise<v
   const ext = safeExt(file.originalname, '.bin');
   const path = `posts/${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`;
 
-  const { error } = await supabase.storage
+  const { error } = await req.db!.storage
     .from(process.env.SUPABASE_STORAGE_BUCKET || 'homework-attachments')
     .upload(path, file.buffer, { contentType: file.mimetype, upsert: false });
 
   if (error) { res.status(500).json({ error: error.message }); return; }
 
-  const { data: { publicUrl } } = supabase.storage.from(process.env.SUPABASE_STORAGE_BUCKET || 'homework-attachments').getPublicUrl(path);
+  const { data: { publicUrl } } = req.db!.storage.from(process.env.SUPABASE_STORAGE_BUCKET || 'homework-attachments').getPublicUrl(path);
   res.json({ url: publicUrl, name: file.originalname });
 }
 
@@ -443,23 +444,23 @@ export async function getClasses(req: AuthRequest, res: Response): Promise<void>
 
   try {
     if (role === 'teacher') {
-      const teacherId = await getTeacherId(userId);
-      const { data } = await supabase
+      const teacherId = await getTeacherId(req.db!, userId);
+      const { data } = await req.db!
         .from('teacher_classes')
         .select('class_id, classes(id, name, grade_level)')
         .eq('teacher_id', teacherId!);
       res.json((data ?? []).map((r: any) => r.classes).filter(Boolean));
     } else if (role === 'parent') {
-      const classIds = await getParentClassIds(userId);
+      const classIds = await getParentClassIds(req.db!, userId);
       if (classIds.length === 0) { res.json([]); return; }
-      const { data } = await supabase
+      const { data } = await req.db!
         .from('classes')
         .select('id, name, grade_level')
         .in('id', classIds)
         .order('name');
       res.json(data ?? []);
     } else {
-      const { data } = await supabase
+      const { data } = await req.db!
         .from('classes')
         .select('id, name, grade_level')
         .eq('school_id', schoolId)
@@ -480,7 +481,7 @@ export async function getMe(req: AuthRequest, res: Response): Promise<void> {
       res.json({ role, subject: null, subjects: [], teaching: [] });
       return;
     }
-    const { data: teacher } = await supabase
+    const { data: teacher } = await req.db!
       .from('teachers')
       .select('id, subject, class_subject_teachers(class_id, subject_id, subjects(id, name))')
       .eq('user_id', userId)
@@ -518,7 +519,7 @@ export async function toggleLike(req: AuthRequest, res: Response): Promise<void>
   const { id: postId } = req.params;
 
   try {
-    const { data: existing } = await supabase
+    const { data: existing } = await req.db!
       .from('post_likes')
       .select('id')
       .eq('post_id', postId)
@@ -526,18 +527,18 @@ export async function toggleLike(req: AuthRequest, res: Response): Promise<void>
       .maybeSingle();
 
     if (existing) {
-      await supabase.from('post_likes').delete().eq('id', existing.id);
-      const { count } = await supabase.from('post_likes').select('*', { count: 'exact', head: true }).eq('post_id', postId);
+      await req.db!.from('post_likes').delete().eq('id', existing.id);
+      const { count } = await req.db!.from('post_likes').select('*', { count: 'exact', head: true }).eq('post_id', postId);
       res.json({ liked: false, likesCount: count ?? 0 });
       return;
     }
 
-    const { error } = await supabase
+    const { error } = await req.db!
       .from('post_likes')
       .insert({ school_id: schoolId, post_id: postId, user_id: userId });
     if (error) { res.status(400).json({ error: error.message }); return; }
 
-    const { count } = await supabase.from('post_likes').select('*', { count: 'exact', head: true }).eq('post_id', postId);
+    const { count } = await req.db!.from('post_likes').select('*', { count: 'exact', head: true }).eq('post_id', postId);
     res.json({ liked: true, likesCount: count ?? 0 });
   } catch {
     res.status(500).json({ error: 'Failed to toggle like' });
@@ -551,7 +552,7 @@ export async function toggleSave(req: AuthRequest, res: Response): Promise<void>
   const { id: postId } = req.params;
 
   try {
-    const { data: existing } = await supabase
+    const { data: existing } = await req.db!
       .from('post_saves')
       .select('id')
       .eq('post_id', postId)
@@ -559,12 +560,12 @@ export async function toggleSave(req: AuthRequest, res: Response): Promise<void>
       .maybeSingle();
 
     if (existing) {
-      await supabase.from('post_saves').delete().eq('id', existing.id);
+      await req.db!.from('post_saves').delete().eq('id', existing.id);
       res.json({ saved: false });
       return;
     }
 
-    const { error } = await supabase
+    const { error } = await req.db!
       .from('post_saves')
       .insert({ school_id: schoolId, post_id: postId, user_id: userId });
     if (error) { res.status(400).json({ error: error.message }); return; }
@@ -579,7 +580,7 @@ export async function getSavedPosts(req: AuthRequest, res: Response): Promise<vo
   const { userId, schoolId } = req.user!;
 
   try {
-    const { data: saves } = await supabase
+    const { data: saves } = await req.db!
       .from('post_saves')
       .select('post_id, created_at')
       .eq('user_id', userId)
@@ -588,7 +589,7 @@ export async function getSavedPosts(req: AuthRequest, res: Response): Promise<vo
     const postIds = (saves ?? []).map((s: any) => s.post_id);
     if (postIds.length === 0) { res.json([]); return; }
 
-    const { data: posts } = await supabase
+    const { data: posts } = await req.db!
       .from('academic_posts')
       .select('id, title, subject, body, content_type, content, attachment_url, attachment_name, image_url, is_published, created_at, updated_at, class_id, teacher_id, author_user_id, author_role, classes(name), teachers(full_name, subject, user_id)')
       .in('id', postIds)
@@ -597,7 +598,7 @@ export async function getSavedPosts(req: AuthRequest, res: Response): Promise<vo
     // Preserve save order
     const byId = new Map((posts ?? []).map((p: any) => [p.id, p]));
     const ordered = postIds.map((id) => byId.get(id)).filter(Boolean) as any[];
-    const decorated = await decoratePosts(ordered, userId);
+    const decorated = await decoratePosts(req.db!,ordered, userId);
     res.json(decorated);
   } catch {
     res.status(500).json({ error: 'Failed to fetch saved posts' });
@@ -611,7 +612,7 @@ export async function getComments(req: AuthRequest, res: Response): Promise<void
   const { id: postId } = req.params;
 
   try {
-    const { data, error } = await supabase
+    const { data, error } = await req.db!
       .from('post_comments')
       .select('id, post_id, user_id, parent_id, body, created_at, users(first_name, last_name, role, profile_picture)')
       .eq('post_id', postId)
@@ -629,10 +630,10 @@ export async function getComments(req: AuthRequest, res: Response): Promise<void
       comments.filter((c: any) => c.users?.role === 'teacher').map((c: any) => c.user_id)
     ));
     const [likesRes, myLikesRes, subjectsRes] = await Promise.all([
-      supabase.from('post_comment_likes').select('comment_id').in('comment_id', ids),
-      supabase.from('post_comment_likes').select('comment_id').in('comment_id', ids).eq('user_id', userId),
+      req.db!.from('post_comment_likes').select('comment_id').in('comment_id', ids),
+      req.db!.from('post_comment_likes').select('comment_id').in('comment_id', ids).eq('user_id', userId),
       teacherUserIds.length > 0
-        ? supabase.from('teachers').select('user_id, subject').in('user_id', teacherUserIds)
+        ? req.db!.from('teachers').select('user_id, subject').in('user_id', teacherUserIds)
         : Promise.resolve({ data: [] as any[] }),
     ]);
     const counts: Record<string, number> = {};
@@ -666,7 +667,7 @@ export async function createComment(req: AuthRequest, res: Response): Promise<vo
     let resolvedParentId: string | null = null;
     let directParentUserId: string | null = null;
     if (parentId && typeof parentId === 'string') {
-      const { data: parent } = await supabase
+      const { data: parent } = await req.db!
         .from('post_comments')
         .select('id, post_id, parent_id, user_id')
         .eq('id', parentId)
@@ -681,7 +682,7 @@ export async function createComment(req: AuthRequest, res: Response): Promise<vo
       directParentUserId = parent.user_id;
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await req.db!
       .from('post_comments')
       .insert({
         school_id: schoolId,
@@ -697,13 +698,13 @@ export async function createComment(req: AuthRequest, res: Response): Promise<vo
 
     // Notify the post author + (if reply) the user being replied to.
     // Skip self-notification and de-duplicate when the same user is both targets.
-    const { data: post } = await supabase
+    const { data: post } = await req.db!
       .from('academic_posts')
       .select('title, author_user_id')
       .eq('id', postId)
       .eq('school_id', schoolId)
       .maybeSingle();
-    const { data: commenter } = await supabase
+    const { data: commenter } = await req.db!
       .from('users')
       .select('first_name, last_name')
       .eq('id', userId)
@@ -730,7 +731,7 @@ export async function createComment(req: AuthRequest, res: Response): Promise<vo
 
     let authorSubject: string | null = null;
     if ((data as any)?.users?.role === 'teacher') {
-      const { data: teacher } = await supabase
+      const { data: teacher } = await req.db!
         .from('teachers')
         .select('subject')
         .eq('user_id', userId)
@@ -749,7 +750,7 @@ export async function toggleCommentLike(req: AuthRequest, res: Response): Promis
   const { commentId } = req.params;
 
   try {
-    const { data: existing } = await supabase
+    const { data: existing } = await req.db!
       .from('post_comment_likes')
       .select('id')
       .eq('comment_id', commentId)
@@ -757,18 +758,18 @@ export async function toggleCommentLike(req: AuthRequest, res: Response): Promis
       .maybeSingle();
 
     if (existing) {
-      await supabase.from('post_comment_likes').delete().eq('id', existing.id);
-      const { count } = await supabase.from('post_comment_likes').select('*', { count: 'exact', head: true }).eq('comment_id', commentId);
+      await req.db!.from('post_comment_likes').delete().eq('id', existing.id);
+      const { count } = await req.db!.from('post_comment_likes').select('*', { count: 'exact', head: true }).eq('comment_id', commentId);
       res.json({ liked: false, likesCount: count ?? 0 });
       return;
     }
 
-    const { error } = await supabase
+    const { error } = await req.db!
       .from('post_comment_likes')
       .insert({ school_id: schoolId, comment_id: commentId, user_id: userId });
     if (error) { res.status(400).json({ error: error.message }); return; }
 
-    const { count } = await supabase.from('post_comment_likes').select('*', { count: 'exact', head: true }).eq('comment_id', commentId);
+    const { count } = await req.db!.from('post_comment_likes').select('*', { count: 'exact', head: true }).eq('comment_id', commentId);
     res.json({ liked: true, likesCount: count ?? 0 });
   } catch {
     res.status(500).json({ error: 'Failed to toggle comment like' });
@@ -780,7 +781,7 @@ export async function deleteComment(req: AuthRequest, res: Response): Promise<vo
   const { commentId } = req.params;
 
   try {
-    const { data: existing } = await supabase
+    const { data: existing } = await req.db!
       .from('post_comments')
       .select('user_id')
       .eq('id', commentId)
@@ -793,7 +794,7 @@ export async function deleteComment(req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    const { error } = await supabase
+    const { error } = await req.db!
       .from('post_comments')
       .update({ is_deleted: true })
       .eq('id', commentId);
@@ -811,14 +812,14 @@ export async function getEbooks(req: AuthRequest, res: Response): Promise<void> 
   const { userId, role, schoolId } = req.user!;
 
   try {
-    let query = supabase
+    let query = req.db!
       .from('ebooks')
       .select('*, classes(name)')
       .eq('school_id', schoolId)
       .order('created_at', { ascending: false });
 
     if (role === 'parent') {
-      const classIds = await getParentClassIds(userId);
+      const classIds = await getParentClassIds(req.db!, userId);
       if (classIds.length > 0) {
         query = query.or(`class_id.in.(${classIds.join(',')}),class_id.is.null`);
       } else {
@@ -847,15 +848,15 @@ export async function uploadEbook(req: AuthRequest, res: Response): Promise<void
 
     const bucket = process.env.SUPABASE_STORAGE_BUCKET || 'homework-attachments';
 
-    const { error: uploadErr } = await supabase.storage
+    const { error: uploadErr } = await req.db!.storage
       .from(bucket)
       .upload(path, file.buffer, { contentType: file.mimetype, upsert: false });
 
     if (uploadErr) { res.status(500).json({ error: uploadErr.message }); return; }
 
-    const { data: { publicUrl } } = supabase.storage.from(bucket).getPublicUrl(path);
+    const { data: { publicUrl } } = req.db!.storage.from(bucket).getPublicUrl(path);
 
-    const { data, error } = await supabase
+    const { data, error } = await req.db!
       .from('ebooks')
       .insert({
         school_id: schoolId,
@@ -881,7 +882,7 @@ export async function deleteEbook(req: AuthRequest, res: Response): Promise<void
   const { schoolId } = req.user!;
   const { id } = req.params;
 
-  const { error } = await supabase.from('ebooks').delete().eq('id', id).eq('school_id', schoolId);
+  const { error } = await req.db!.from('ebooks').delete().eq('id', id).eq('school_id', schoolId);
   if (error) { res.status(400).json({ error: error.message }); return; }
   res.json({ success: true });
 }
@@ -893,7 +894,7 @@ export async function getEbookProgress(req: AuthRequest, res: Response): Promise
   const { ebookId, studentId } = req.query as { ebookId?: string; studentId?: string };
 
   try {
-    let query = supabase
+    let query = req.db!
       .from('ebook_progress')
       .select('id, ebook_id, student_id, current_page, total_pages, percent, updated_at, students(full_name)')
       .eq('school_id', schoolId);
@@ -901,9 +902,9 @@ export async function getEbookProgress(req: AuthRequest, res: Response): Promise
     if (ebookId) query = query.eq('ebook_id', ebookId);
 
     if (role === 'parent') {
-      const { data: parent } = await supabase.from('parents').select('id').eq('user_id', userId).single();
+      const { data: parent } = await req.db!.from('parents').select('id').eq('user_id', userId).single();
       if (!parent) { res.json([]); return; }
-      const { data: students } = await supabase.from('students').select('id').eq('parent_id', parent.id);
+      const { data: students } = await req.db!.from('students').select('id').eq('parent_id', parent.id);
       const ids = (students ?? []).map((s: any) => s.id);
       if (ids.length === 0) { res.json([]); return; }
       query = query.in('student_id', ids);
@@ -931,9 +932,9 @@ export async function upsertEbookProgress(req: AuthRequest, res: Response): Prom
   try {
     // Parents can only update their own children's progress
     if (role === 'parent') {
-      const { data: parent } = await supabase.from('parents').select('id').eq('user_id', userId).single();
+      const { data: parent } = await req.db!.from('parents').select('id').eq('user_id', userId).single();
       if (!parent) { res.status(403).json({ error: 'Forbidden' }); return; }
-      const { data: student } = await supabase.from('students').select('id').eq('id', studentId).eq('parent_id', parent.id).maybeSingle();
+      const { data: student } = await req.db!.from('students').select('id').eq('id', studentId).eq('parent_id', parent.id).maybeSingle();
       if (!student) { res.status(403).json({ error: 'Forbidden' }); return; }
     }
 
@@ -941,7 +942,7 @@ export async function upsertEbookProgress(req: AuthRequest, res: Response): Prom
       ? Math.min(100, Math.max(0, Math.round((currentPage / totalPages) * 10000) / 100))
       : 0;
 
-    const { data, error } = await supabase
+    const { data, error } = await req.db!
       .from('ebook_progress')
       .upsert({
         school_id: schoolId,

@@ -1,5 +1,4 @@
 import { Response } from 'express';
-import { supabase } from '../config/supabase';
 import type { AuthRequest } from '../middleware/auth';
 import { Server as SocketServer } from 'socket.io';
 import { toCC } from '../utils/transform';
@@ -30,7 +29,7 @@ function distanceMiles(lat1: number, lon1: number, lat2: number, lon2: number): 
 
 export async function getMyProfile(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId, userId } = req.user!;
-  const { data, error } = await supabase
+  const { data, error } = await req.db!
     .from('drivers')
     .select('full_name, phone_number, license_number, buses(bus_number)')
     .eq('user_id', userId)
@@ -44,10 +43,10 @@ export async function getMyStudents(req: AuthRequest, res: Response): Promise<vo
   const { schoolId, userId } = req.user!;
   const { search } = req.query as Record<string, string>;
 
-  const { data: driver } = await supabase.from('drivers').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
+  const { data: driver } = await req.db!.from('drivers').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
   if (!driver) { res.status(404).json({ error: 'Driver not found' }); return; }
 
-  let query = supabase.from('students')
+  let query = req.db!.from('students')
     .select('id, full_name, home_address, home_latitude, home_longitude, phone_number, parents(full_name, phone_number, residence_type, block_number)')
     .eq('driver_id', driver.id)
     .eq('school_id', schoolId)
@@ -64,11 +63,11 @@ export async function updateLocation(req: AuthRequest, res: Response, io?: Socke
   const { schoolId, userId } = req.user!;
   const { latitude, longitude, speed, heading, isDriving } = req.body;
 
-  const { data: driver } = await supabase.from('drivers').select('id, bus_id, excluded_student_ids').eq('user_id', userId).eq('school_id', schoolId).single();
+  const { data: driver } = await req.db!.from('drivers').select('id, bus_id, excluded_student_ids').eq('user_id', userId).eq('school_id', schoolId).single();
   if (!driver) { res.status(404).json({ error: 'Driver not found' }); return; }
 
   // Save location (non-fatal — a write failure must not block proximity notifications)
-  await supabase.from('bus_locations').insert({
+  await req.db!.from('bus_locations').insert({
     school_id: schoolId,
     driver_id: driver.id,
     bus_id: driver.bus_id,
@@ -82,7 +81,7 @@ export async function updateLocation(req: AuthRequest, res: Response, io?: Socke
   // Check proximity and send notifications
   if (isDriving) {
     const excluded: string[] = (driver as any).excluded_student_ids || [];
-    let studentsQuery = supabase
+    let studentsQuery = req.db!
       .from('students')
       .select('id, parents(id, user_id, latitude, longitude)')
       .eq('driver_id', driver.id)
@@ -169,17 +168,17 @@ export async function getTodayAttendance(req: AuthRequest, res: Response): Promi
   const { schoolId, userId } = req.user!;
   const today = new Date().toISOString().split('T')[0];
 
-  const { data: driver } = await supabase.from('drivers').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
+  const { data: driver } = await req.db!.from('drivers').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
   if (!driver) { res.status(404).json({ error: 'Driver not found' }); return; }
 
-  const { data: students } = await supabase
+  const { data: students } = await req.db!
     .from('students').select('id')
     .eq('driver_id', driver.id).eq('school_id', schoolId).eq('is_graduated', false);
 
   const studentIds = (students || []).map((s: any) => s.id);
   if (studentIds.length === 0) { res.json([]); return; }
 
-  const { data, error } = await supabase
+  const { data, error } = await req.db!
     .from('attendance')
     .select('student_id, status, notes')
     .eq('school_id', schoolId)
@@ -204,14 +203,14 @@ export async function startDrive(req: AuthRequest, res: Response): Promise<void>
     }[];
   };
 
-  const { data: driver } = await supabase.from('drivers').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
+  const { data: driver } = await req.db!.from('drivers').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
   if (!driver) { res.status(404).json({ error: 'Driver not found' }); return; }
 
   const today = new Date().toISOString().split('T')[0];
 
   // Save per-student bus ride records (upsert — safe to re-start a drive)
   if (studentRides.length > 0) {
-    await supabase.from('bus_ride_records').upsert(
+    await req.db!.from('bus_ride_records').upsert(
       studentRides.map(r => ({
         school_id: schoolId,
         driver_id: driver.id,
@@ -229,14 +228,14 @@ export async function startDrive(req: AuthRequest, res: Response): Promise<void>
   const excludedStudentIds = studentRides.filter(r => !r.rodeBus).map(r => r.studentId);
 
   // Persist excluded students so the backend can filter them throughout the drive
-  const { error } = await supabase.from('drivers').update({ excluded_student_ids: excludedStudentIds }).eq('id', driver.id);
+  const { error } = await req.db!.from('drivers').update({ excluded_student_ids: excludedStudentIds }).eq('id', driver.id);
   if (error) { res.status(500).json({ error: error.message }); return; }
 
   // Reset proximity dedup for this drive session
   proximityState.set(driver.id, new Map());
 
   // Notify all parents of students on this driver's route
-  let studentsQuery = supabase
+  let studentsQuery = req.db!
     .from('students')
     .select('parents(user_id, latitude, longitude)')
     .eq('driver_id', driver.id)
@@ -285,19 +284,19 @@ export async function startDrive(req: AuthRequest, res: Response): Promise<void>
 
 export async function stopDrive(req: AuthRequest, res: Response, io?: SocketServer): Promise<void> {
   const { schoolId, userId } = req.user!;
-  const { data: driver } = await supabase.from('drivers').select('id, bus_id').eq('user_id', userId).eq('school_id', schoolId).single();
+  const { data: driver } = await req.db!.from('drivers').select('id, bus_id').eq('user_id', userId).eq('school_id', schoolId).single();
   if (!driver) { res.status(404).json({ error: 'Driver not found' }); return; }
 
   // Clear excluded students list and proximity state when drive ends
-  await supabase.from('drivers').update({ excluded_student_ids: [] }).eq('id', driver.id);
+  await req.db!.from('drivers').update({ excluded_student_ids: [] }).eq('id', driver.id);
   proximityState.delete(driver.id);
 
   // Insert a "stopped" location record
-  const { data: lastLoc } = await supabase.from('bus_locations')
+  const { data: lastLoc } = await req.db!.from('bus_locations')
     .select('latitude, longitude').eq('driver_id', driver.id).order('recorded_at', { ascending: false }).limit(1).single();
 
   if (lastLoc) {
-    await supabase.from('bus_locations').insert({
+    await req.db!.from('bus_locations').insert({
       school_id: schoolId,
       driver_id: driver.id,
       bus_id: driver.bus_id,

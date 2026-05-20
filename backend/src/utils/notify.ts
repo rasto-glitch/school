@@ -1,5 +1,7 @@
 import { Server as SocketServer } from 'socket.io';
-import { supabase } from '../config/supabase';
+// Notifications are server-initiated (system events, cron) — no request
+// context to attach. Elevated client by design.
+import { adminDb as supabase } from './db';
 import { translatePush } from './notifyI18n';
 
 let _io: SocketServer | null = null;

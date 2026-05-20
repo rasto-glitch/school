@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { supabase } from '../config/supabase';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AuthRequest } from '../middleware/auth';
 import { toCC } from '../utils/transform';
 import { parseCursorParams, buildPage } from '../utils/pagination';
@@ -7,19 +7,21 @@ import { emitToAdmins } from '../utils/notify';
 import { decorateAnnouncements } from './admin.controller';
 import { getLocksForStudents, isFeatureLocked } from '../utils/locks';
 
-async function getParentAndChildren(userId: string, schoolId: string) {
-  const { data: parent } = await supabase.from('parents').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
+// Module-level helper — receives the per-request db client from the caller
+// so it runs under the same RLS context as the rest of the route.
+async function getParentAndChildren(db: SupabaseClient, userId: string, schoolId: string) {
+  const { data: parent } = await db.from('parents').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
   if (!parent) return { parent: null, studentIds: [] };
-  const { data: students } = await supabase.from('students').select('id').eq('parent_id', parent.id).eq('school_id', schoolId);
-  return { parent, studentIds: students?.map(s => s.id) ?? [] };
+  const { data: students } = await db.from('students').select('id').eq('parent_id', parent.id).eq('school_id', schoolId);
+  return { parent, studentIds: students?.map((s: { id: string }) => s.id) ?? [] };
 }
 
 export async function getChildren(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId, userId } = req.user!;
-  const { data: parent } = await supabase.from('parents').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
+  const { data: parent } = await req.db!.from('parents').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
   if (!parent) { res.status(404).json({ error: 'Parent not found' }); return; }
 
-  const { data, error } = await supabase.from('students').select('id, full_name, profile_picture, class_id, classes(name), drivers(full_name, phone_number, license_number, buses(bus_number))').eq('parent_id', parent.id).eq('school_id', schoolId);
+  const { data, error } = await req.db!.from('students').select('id, full_name, profile_picture, class_id, classes(name), drivers(full_name, phone_number, license_number, buses(bus_number))').eq('parent_id', parent.id).eq('school_id', schoolId);
   if (error) { res.status(500).json({ error: error.message }); return; }
 
   // Attach per-child locked feature list so the UI can render a "Contact school" state
@@ -37,10 +39,10 @@ export async function getChildren(req: AuthRequest, res: Response): Promise<void
 // 017 onward) are linkable — older archives stay admin/accountant-only.
 export async function getArchivedChildren(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId, userId } = req.user!;
-  const { data: parent } = await supabase.from('parents').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
+  const { data: parent } = await req.db!.from('parents').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
   if (!parent) { res.json([]); return; }
 
-  const { data, error } = await supabase
+  const { data, error } = await req.db!
     .from('archived_students')
     .select('id, full_name, reason, departure_date, classes_attended, created_at')
     .eq('school_id', schoolId)
@@ -53,10 +55,10 @@ export async function getArchivedChildren(req: AuthRequest, res: Response): Prom
 export async function getArchivedChild(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId, userId } = req.user!;
   const { id } = req.params;
-  const { data: parent } = await supabase.from('parents').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
+  const { data: parent } = await req.db!.from('parents').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
   if (!parent) { res.status(404).json({ error: 'Record not found' }); return; }
 
-  const { data, error } = await supabase
+  const { data, error } = await req.db!
     .from('archived_students')
     .select('id, full_name, date_of_birth, enrollment_date, departure_date, reason, classes_attended, grades, payment_history, created_at')
     .eq('id', id)
@@ -71,14 +73,14 @@ export async function getHomework(req: AuthRequest, res: Response): Promise<void
   const { schoolId, userId } = req.user!;
   const { studentId, subject } = req.query as Record<string, string>;
 
-  const { studentIds } = await getParentAndChildren(userId, schoolId);
+  const { studentIds } = await getParentAndChildren(req.db!, userId, schoolId);
   if (studentIds.length === 0) { res.json([]); return; }
 
   // Get class IDs for the children
-  const { data: students } = await supabase.from('students').select('class_id').in('id', studentId ? [studentId] : studentIds);
+  const { data: students } = await req.db!.from('students').select('class_id').in('id', studentId ? [studentId] : studentIds);
   const classIds = students?.map(s => s.class_id).filter(Boolean) ?? [];
 
-  let query = supabase.from('homework').select('*, classes(name)').eq('school_id', schoolId).in('class_id', classIds).order('created_at', { ascending: false });
+  let query = req.db!.from('homework').select('*, classes(name)').eq('school_id', schoolId).in('class_id', classIds).order('created_at', { ascending: false });
   if (subject) query = query.eq('subject', subject);
 
   const { data, error } = await query;
@@ -90,13 +92,13 @@ export async function getAssignments(req: AuthRequest, res: Response): Promise<v
   const { schoolId, userId } = req.user!;
   const { studentId, subject } = req.query as Record<string, string>;
 
-  const { studentIds } = await getParentAndChildren(userId, schoolId);
+  const { studentIds } = await getParentAndChildren(req.db!, userId, schoolId);
   if (studentIds.length === 0) { res.json([]); return; }
 
   const targetStudentIds = studentId ? [studentId] : studentIds;
 
   // Also get the class IDs of the children so we can fetch class-wide assignments
-  const { data: studentRecords } = await supabase
+  const { data: studentRecords } = await req.db!
     .from('students')
     .select('id, class_id')
     .in('id', targetStudentIds)
@@ -104,14 +106,14 @@ export async function getAssignments(req: AuthRequest, res: Response): Promise<v
   const classIds = (studentRecords || []).map(s => s.class_id).filter(Boolean) as string[];
 
   // Fetch assignments assigned to specific student OR class-wide (student_id IS NULL) for their class
-  let q1 = supabase
+  let q1 = req.db!
     .from('assignments')
     .select('*, students(full_name), classes(name)')
     .eq('school_id', schoolId)
     .in('student_id', targetStudentIds)
     .order('created_at', { ascending: false });
 
-  let q2 = supabase
+  let q2 = req.db!
     .from('assignments')
     .select('*, students(full_name), classes(name)')
     .eq('school_id', schoolId)
@@ -143,7 +145,7 @@ export async function getAnnouncements(req: AuthRequest, res: Response): Promise
   const { limit, cursor } = parseCursorParams(req.query as Record<string, unknown>);
   const cutoff = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
 
-  let query = supabase.from('announcements')
+  let query = req.db!.from('announcements')
     .select('*, users:created_by(id, first_name, last_name, role, profile_picture)')
     .eq('school_id', schoolId)
     .in('target_audience', ['all', 'parents'])
@@ -168,7 +170,7 @@ export async function getAnnouncements(req: AuthRequest, res: Response): Promise
 export async function getHomeworkById(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
   const { id } = req.params;
-  const { data, error } = await supabase.from('homework').select('*, classes(name)').eq('id', id).eq('school_id', schoolId).single();
+  const { data, error } = await req.db!.from('homework').select('*, classes(name)').eq('id', id).eq('school_id', schoolId).single();
   if (error || !data) { res.status(404).json({ error: 'Not found' }); return; }
   res.json(toCC(data));
 }
@@ -176,7 +178,7 @@ export async function getHomeworkById(req: AuthRequest, res: Response): Promise<
 export async function getAssignmentById(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
   const { id } = req.params;
-  const { data, error } = await supabase.from('assignments').select('*, students(full_name), classes(name)').eq('id', id).eq('school_id', schoolId).single();
+  const { data, error } = await req.db!.from('assignments').select('*, students(full_name), classes(name)').eq('id', id).eq('school_id', schoolId).single();
   if (error || !data) { res.status(404).json({ error: 'Not found' }); return; }
   res.json(toCC(data));
 }
@@ -184,7 +186,7 @@ export async function getAssignmentById(req: AuthRequest, res: Response): Promis
 export async function getAnnouncementById(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId, userId } = req.user!;
   const { id } = req.params;
-  const { data, error } = await supabase.from('announcements')
+  const { data, error } = await req.db!.from('announcements')
     .select('*, users:created_by(id, first_name, last_name, role, profile_picture)')
     .eq('id', id)
     .eq('school_id', schoolId)
@@ -197,7 +199,7 @@ export async function getAnnouncementById(req: AuthRequest, res: Response): Prom
 export async function getReportById(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
   const { id } = req.params;
-  const { data, error } = await supabase.from('reports').select('*, students(id, full_name), teachers(full_name)').eq('id', id).eq('school_id', schoolId).single();
+  const { data, error } = await req.db!.from('reports').select('*, students(id, full_name), teachers(full_name)').eq('id', id).eq('school_id', schoolId).single();
   if (error || !data) { res.status(404).json({ error: 'Not found' }); return; }
   const studentId = (data as any).students?.id ?? (data as any).student_id;
   if (studentId) {
@@ -211,7 +213,7 @@ export async function getReport(req: AuthRequest, res: Response): Promise<void> 
   const { schoolId, userId } = req.user!;
   const { studentId, subject } = req.query as Record<string, string>;
 
-  const { studentIds } = await getParentAndChildren(userId, schoolId);
+  const { studentIds } = await getParentAndChildren(req.db!, userId, schoolId);
   if (studentIds.length === 0) { res.json([]); return; }
 
   const targetIds = studentId ? [studentId] : studentIds;
@@ -229,7 +231,7 @@ export async function getReport(req: AuthRequest, res: Response): Promise<void> 
   const allowed = targetIds.filter(id => !(locks.get(id)?.has('reports') ?? false));
   if (allowed.length === 0) { res.json([]); return; }
 
-  let query = supabase.from('reports').select('*, students(full_name), teachers(full_name)').eq('school_id', schoolId).in('student_id', allowed).order('created_at', { ascending: false });
+  let query = req.db!.from('reports').select('*, students(full_name), teachers(full_name)').eq('school_id', schoolId).in('student_id', allowed).order('created_at', { ascending: false });
   if (subject) query = query.eq('subject', subject);
 
   const { data, error } = await query;
@@ -241,7 +243,7 @@ export async function getGrades(req: AuthRequest, res: Response): Promise<void> 
   const { schoolId, userId } = req.user!;
   const { studentId } = req.query as Record<string, string>;
 
-  const { studentIds } = await getParentAndChildren(userId, schoolId);
+  const { studentIds } = await getParentAndChildren(req.db!, userId, schoolId);
   if (studentIds.length === 0) { res.json([]); return; }
 
   // If a specific child is requested it must belong to this parent — don't
@@ -255,7 +257,7 @@ export async function getGrades(req: AuthRequest, res: Response): Promise<void> 
   const lock = await isFeatureLocked(targetId, 'grades');
   if (lock.locked) { res.status(403).json({ error: 'feature_locked', feature: 'grades', reason: lock.reason }); return; }
 
-  const { data, error } = await supabase
+  const { data, error } = await req.db!
     .from('grades')
     .select('id, subject, marks, daily_grade, quiz_grade, monthly_exam_grade, term_exam_grade, grading_period, academic_year, created_at')
     .eq('school_id', schoolId)
@@ -270,30 +272,30 @@ export async function getBusLocation(req: AuthRequest, res: Response): Promise<v
   const { schoolId, userId } = req.user!;
   const { studentId } = req.query as Record<string, string>;
 
-  const { studentIds } = await getParentAndChildren(userId, schoolId);
+  const { studentIds } = await getParentAndChildren(req.db!, userId, schoolId);
   if (studentIds.length === 0) { res.status(404).json({ error: 'No students found' }); return; }
 
   // If a specific student was requested, use that; otherwise find the first child with a driver
   let student: { id: string; driver_id: string | null; home_latitude: number | null; home_longitude: number | null } | null = null;
   if (studentId) {
-    const { data } = await supabase.from('students').select('id, driver_id, home_latitude, home_longitude').eq('id', studentId).eq('school_id', schoolId).single();
+    const { data } = await req.db!.from('students').select('id, driver_id, home_latitude, home_longitude').eq('id', studentId).eq('school_id', schoolId).single();
     student = data;
   } else {
     // Try each child until we find one with a driver
-    const { data: allChildren } = await supabase.from('students').select('id, driver_id, home_latitude, home_longitude').in('id', studentIds).eq('school_id', schoolId);
+    const { data: allChildren } = await req.db!.from('students').select('id, driver_id, home_latitude, home_longitude').in('id', studentIds).eq('school_id', schoolId);
     student = allChildren?.find(s => s.driver_id) || allChildren?.[0] || null;
   }
   if (!student?.driver_id) { res.status(404).json({ error: 'No driver assigned' }); return; }
 
   // Check if student was marked absent for today's drive
-  const { data: driverRecord } = await supabase.from('drivers').select('excluded_student_ids').eq('id', student.driver_id).single();
+  const { data: driverRecord } = await req.db!.from('drivers').select('excluded_student_ids').eq('id', student.driver_id).single();
   const excludedIds: string[] = (driverRecord as any)?.excluded_student_ids || [];
   if (excludedIds.includes(student.id)) {
     res.status(404).json({ error: 'Your child is marked absent today and is not on the bus.' });
     return;
   }
 
-  const { data: location } = await supabase.from('bus_locations')
+  const { data: location } = await req.db!.from('bus_locations')
     .select('*, drivers(full_name, phone_number, license_number, vehicle_type, buses(bus_number))')
     .eq('driver_id', student.driver_id)
     .eq('school_id', schoolId)
@@ -316,20 +318,20 @@ export async function getBusLocation(req: AuthRequest, res: Response): Promise<v
 export async function getDriverInfo(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId, userId } = req.user!;
   const { studentId } = req.query as Record<string, string>;
-  const { studentIds } = await getParentAndChildren(userId, schoolId);
+  const { studentIds } = await getParentAndChildren(req.db!, userId, schoolId);
   if (studentIds.length === 0) { res.status(404).json({ error: 'No students found' }); return; }
 
   let driverId: string | null = null;
   if (studentId) {
-    const { data } = await supabase.from('students').select('driver_id').eq('id', studentId).eq('school_id', schoolId).single();
+    const { data } = await req.db!.from('students').select('driver_id').eq('id', studentId).eq('school_id', schoolId).single();
     driverId = data?.driver_id ?? null;
   } else {
-    const { data: allChildren } = await supabase.from('students').select('driver_id').in('id', studentIds).eq('school_id', schoolId);
+    const { data: allChildren } = await req.db!.from('students').select('driver_id').in('id', studentIds).eq('school_id', schoolId);
     driverId = allChildren?.find(s => s.driver_id)?.driver_id ?? null;
   }
   if (!driverId) { res.status(404).json({ error: 'No driver assigned' }); return; }
 
-  const { data: driver } = await supabase.from('drivers')
+  const { data: driver } = await req.db!.from('drivers')
     .select('full_name, phone_number, license_number, vehicle_type, buses(bus_number)')
     .eq('id', driverId).single();
   if (!driver) { res.status(404).json({ error: 'Driver not found' }); return; }
@@ -340,11 +342,11 @@ export async function getNotifications(req: AuthRequest, res: Response): Promise
   const { schoolId, userId } = req.user!;
   const { limit, cursor } = parseCursorParams(req.query as Record<string, unknown>);
 
-  const { data: user } = await supabase.from('users').select('id').eq('id', userId).single();
+  const { data: user } = await req.db!.from('users').select('id').eq('id', userId).single();
   if (!user) { res.json({ data: [], limit, nextCursor: null }); return; }
 
   const cutoff = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
-  let query = supabase.from('notifications')
+  let query = req.db!.from('notifications')
     .select('*').eq('school_id', schoolId).eq('user_id', userId)
     .gte('created_at', cutoff);
 
@@ -367,28 +369,28 @@ export async function getNotifications(req: AuthRequest, res: Response): Promise
 export async function markNotificationRead(req: AuthRequest, res: Response): Promise<void> {
   const { userId } = req.user!;
   const { id } = req.params;
-  await supabase.from('notifications').update({ is_read: true }).eq('id', id).eq('user_id', userId);
+  await req.db!.from('notifications').update({ is_read: true }).eq('id', id).eq('user_id', userId);
   res.json({ success: true });
 }
 
 export async function markAllNotificationsRead(req: AuthRequest, res: Response): Promise<void> {
   const { userId, schoolId } = req.user!;
   const cutoff = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
-  await supabase.from('notifications').update({ is_read: true }).eq('user_id', userId).eq('school_id', schoolId).eq('is_read', false).gte('created_at', cutoff);
+  await req.db!.from('notifications').update({ is_read: true }).eq('user_id', userId).eq('school_id', schoolId).eq('is_read', false).gte('created_at', cutoff);
   res.json({ success: true });
 }
 
 export async function getUnreadCount(req: AuthRequest, res: Response): Promise<void> {
   const { userId, schoolId } = req.user!;
   const cutoff = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
-  const { count } = await supabase.from('notifications').select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('school_id', schoolId).eq('is_read', false).gte('created_at', cutoff);
+  const { count } = await req.db!.from('notifications').select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('school_id', schoolId).eq('is_read', false).gte('created_at', cutoff);
   res.json({ count: count ?? 0 });
 }
 
 export async function getContentUnreadCounts(req: AuthRequest, res: Response): Promise<void> {
   const { userId, schoolId } = req.user!;
   const cutoff = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
-  const q = (type: string) => supabase.from('notifications').select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('school_id', schoolId).eq('is_read', false).eq('notification_type', type).gte('created_at', cutoff);
+  const q = (type: string) => req.db!.from('notifications').select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('school_id', schoolId).eq('is_read', false).eq('notification_type', type).gte('created_at', cutoff);
   const [hw, as_, rp, bk, ps, gr] = await Promise.all([q('homework'), q('assignment'), q('report'), q('appointment'), q('post'), q('grade')]);
   res.json({ homework: hw.count ?? 0, assignment: as_.count ?? 0, report: rp.count ?? 0, booking: bk.count ?? 0, post: ps.count ?? 0, grade: gr.count ?? 0 });
 }
@@ -397,15 +399,15 @@ export async function markTypeRead(req: AuthRequest, res: Response): Promise<voi
   const { userId, schoolId } = req.user!;
   const type = req.params.type as string;
   if (!['homework', 'assignment', 'report', 'appointment', 'post', 'grade', 'announcement'].includes(type)) { res.status(400).json({ error: 'Invalid type' }); return; }
-  await supabase.from('notifications').update({ is_read: true }).eq('user_id', userId).eq('school_id', schoolId).eq('notification_type', type).eq('is_read', false);
+  await req.db!.from('notifications').update({ is_read: true }).eq('user_id', userId).eq('school_id', schoolId).eq('notification_type', type).eq('is_read', false);
   res.json({ success: true });
 }
 
 export async function getAppointments(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId, userId } = req.user!;
-  const { data: parent } = await supabase.from('parents').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
+  const { data: parent } = await req.db!.from('parents').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
   if (!parent) { res.json([]); return; }
-  const { data, error } = await supabase.from('appointments')
+  const { data, error } = await req.db!.from('appointments')
     .select('*').eq('school_id', schoolId).eq('parent_id', parent.id)
     .order('created_at', { ascending: false });
   if (error) { res.status(500).json({ error: error.message }); return; }
@@ -421,14 +423,14 @@ export async function updatePickupLocation(req: AuthRequest, res: Response): Pro
   const update: Record<string, any> = { latitude, longitude };
   if (residenceType !== undefined) update.residence_type = residenceType;
   if (blockNumber !== undefined) update.block_number = blockNumber;
-  const { error } = await supabase.from('parents').update(update).eq('user_id', userId).eq('school_id', schoolId);
+  const { error } = await req.db!.from('parents').update(update).eq('user_id', userId).eq('school_id', schoolId);
   if (error) { res.status(500).json({ error: error.message }); return; }
   res.json({ success: true });
 }
 
 export async function getPickupLocation(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId, userId } = req.user!;
-  const { data, error } = await supabase.from('parents')
+  const { data, error } = await req.db!.from('parents')
     .select('latitude, longitude, residence_type, block_number')
     .eq('user_id', userId).eq('school_id', schoolId).single();
   if (error) { res.status(500).json({ error: error.message }); return; }
@@ -444,10 +446,10 @@ export async function createAppointment(req: AuthRequest, res: Response): Promis
   const { schoolId, userId } = req.user!;
   const { reason, message, requestedDate, studentIds } = req.body;
 
-  const { data: parent } = await supabase.from('parents').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
+  const { data: parent } = await req.db!.from('parents').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
   if (!parent) { res.status(404).json({ error: 'Parent not found' }); return; }
 
-  const { data, error } = await supabase.from('appointments').insert({
+  const { data, error } = await req.db!.from('appointments').insert({
     school_id: schoolId,
     parent_id: parent.id,
     reason,

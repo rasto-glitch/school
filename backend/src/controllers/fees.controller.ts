@@ -1,5 +1,9 @@
 import { Response } from 'express';
-import { supabase } from '../config/supabase';
+// Accountant-role financial controller — elevated by design (period close,
+// receipt issuance, cross-table aggregations). adminDb keeps service-role
+// semantics; explicit `.eq('school_id', schoolId)` filters provide tenant
+// scoping (Phase 0 elevated-path inventory).
+import { adminDb as supabase } from '../utils/db';
 import type { AuthRequest } from '../middleware/auth';
 import { toCC } from '../utils/transform';
 import { notify, notifyMany } from '../utils/notify';

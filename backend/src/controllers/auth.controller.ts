@@ -2,7 +2,11 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
-import { supabase } from '../config/supabase';
+// Auth flows are intentionally elevated: login/refresh look up users
+// pre-tenant, and password/email/device-token operations are server-
+// orchestrated. adminDb keeps service-role semantics here (Phase 0
+// elevated-path inventory).
+import { adminDb as supabase } from '../utils/db';
 import { safeExt } from '../utils/upload';
 import { toCC } from '../utils/transform';
 import { emitToAdmins, notify } from '../utils/notify';

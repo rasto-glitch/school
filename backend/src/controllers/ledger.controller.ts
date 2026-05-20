@@ -1,5 +1,7 @@
 import { Response } from 'express';
-import { supabase } from '../config/supabase';
+// Elevated controller (cross-source aggregation across fee_payments,
+// staff_salary_payments, expenses) — see Phase 0 inventory.
+import { adminDb as supabase } from '../utils/db';
 import type { AuthRequest } from '../middleware/auth';
 import { streamLedgerPdf, buildLedgerXlsx } from '../utils/ledgerExport';
 

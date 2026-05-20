@@ -1,5 +1,4 @@
 import { Response } from 'express';
-import { supabase } from '../config/supabase';
 import { safeExt } from '../utils/upload';
 import type { AuthRequest } from '../middleware/auth';
 import { toCC } from '../utils/transform';
@@ -9,7 +8,7 @@ import { subjectAllowedForClass } from '../utils/curriculum';
 // ---- TEACHER PROFILE ----
 export async function getProfileData(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId, userId } = req.user!;
-  const { data, error } = await supabase
+  const { data, error } = await req.db!
     .from('teachers')
     .select('id, full_name, subject, teacher_classes(class_id, classes(name)), class_subject_teachers(class_id, subject_id, subjects(id, name))')
     .eq('user_id', userId)
@@ -49,10 +48,10 @@ export async function getHomework(req: AuthRequest, res: Response): Promise<void
   const { classId } = req.query as Record<string, string>;
 
   // Get teacher record
-  const { data: teacher } = await supabase.from('teachers').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
+  const { data: teacher } = await req.db!.from('teachers').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
   if (!teacher) { res.status(404).json({ error: 'Teacher not found' }); return; }
 
-  let query = supabase.from('homework').select('*, classes(name)').eq('school_id', schoolId).eq('teacher_id', teacher.id).order('created_at', { ascending: false });
+  let query = req.db!.from('homework').select('*, classes(name)').eq('school_id', schoolId).eq('teacher_id', teacher.id).order('created_at', { ascending: false });
   if (classId) query = query.eq('class_id', classId);
 
   const { data, error } = await query;
@@ -70,22 +69,22 @@ export async function createHomework(req: AuthRequest, res: Response): Promise<v
     const ext = safeExt(file.originalname, '');
     const storagePath = `${schoolId}/${Date.now()}${ext}`;
     const bucket = process.env.SUPABASE_STORAGE_BUCKET || 'homework-attachments';
-    const { data: uploadData, error: uploadErr } = await supabase.storage
+    const { data: uploadData, error: uploadErr } = await req.db!.storage
       .from(bucket)
       .upload(storagePath, file.buffer, { contentType: file.mimetype, upsert: false });
     if (!uploadErr && uploadData) {
-      const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(uploadData.path);
+      const { data: urlData } = req.db!.storage.from(bucket).getPublicUrl(uploadData.path);
       attachmentUrl = urlData.publicUrl;
     }
   }
 
-  const { data: teacher } = await supabase.from('teachers').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
+  const { data: teacher } = await req.db!.from('teachers').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
   if (!teacher) { res.status(404).json({ error: 'Teacher not found' }); return; }
   if (!(await subjectAllowedForClass(schoolId, teacher.id, classId, subject))) {
     res.status(403).json({ error: `You aren't assigned to teach ${subject} for this class.` }); return;
   }
 
-  const { data, error } = await supabase.from('homework').insert({
+  const { data, error } = await req.db!.from('homework').insert({
     school_id: schoolId,
     teacher_id: teacher.id,
     class_id: classId,
@@ -100,7 +99,7 @@ export async function createHomework(req: AuthRequest, res: Response): Promise<v
 
   // Notify all parents of students in this class (dedupe: one notification per parent, even with multiple children in the class)
   if (classId) {
-    const { data: students } = await supabase
+    const { data: students } = await req.db!
       .from('students')
       .select('parents(user_id)')
       .eq('class_id', classId)
@@ -125,9 +124,9 @@ export async function createHomework(req: AuthRequest, res: Response): Promise<v
 export async function deleteHomework(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId, userId } = req.user!;
   const { id } = req.params;
-  const { data: teacher } = await supabase.from('teachers').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
+  const { data: teacher } = await req.db!.from('teachers').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
   if (!teacher) { res.status(404).json({ error: 'Teacher not found' }); return; }
-  const { error } = await supabase.from('homework').delete().eq('id', id).eq('teacher_id', teacher.id).eq('school_id', schoolId);
+  const { error } = await req.db!.from('homework').delete().eq('id', id).eq('teacher_id', teacher.id).eq('school_id', schoolId);
   if (error) { res.status(500).json({ error: error.message }); return; }
   res.json({ message: 'Homework deleted' });
 }
@@ -137,10 +136,10 @@ export async function getAssignments(req: AuthRequest, res: Response): Promise<v
   const { schoolId, userId } = req.user!;
   const { classId, studentId } = req.query as Record<string, string>;
 
-  const { data: teacher } = await supabase.from('teachers').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
+  const { data: teacher } = await req.db!.from('teachers').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
   if (!teacher) { res.status(404).json({ error: 'Teacher not found' }); return; }
 
-  let query = supabase.from('assignments').select('*, students(full_name), classes(name)').eq('school_id', schoolId).eq('teacher_id', teacher.id).order('created_at', { ascending: false });
+  let query = req.db!.from('assignments').select('*, students(full_name), classes(name)').eq('school_id', schoolId).eq('teacher_id', teacher.id).order('created_at', { ascending: false });
   if (classId) query = query.eq('class_id', classId);
   if (studentId) query = query.eq('student_id', studentId);
 
@@ -159,22 +158,22 @@ export async function createAssignment(req: AuthRequest, res: Response): Promise
     const ext = safeExt(file.originalname, '');
     const storagePath = `${schoolId}/assignments/${Date.now()}${ext}`;
     const bucket = process.env.SUPABASE_STORAGE_BUCKET || 'homework-attachments';
-    const { data: uploadData, error: uploadErr } = await supabase.storage
+    const { data: uploadData, error: uploadErr } = await req.db!.storage
       .from(bucket)
       .upload(storagePath, file.buffer, { contentType: file.mimetype, upsert: false });
     if (!uploadErr && uploadData) {
-      const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(uploadData.path);
+      const { data: urlData } = req.db!.storage.from(bucket).getPublicUrl(uploadData.path);
       attachmentUrl = urlData.publicUrl;
     }
   }
 
-  const { data: teacher } = await supabase.from('teachers').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
+  const { data: teacher } = await req.db!.from('teachers').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
   if (!teacher) { res.status(404).json({ error: 'Teacher not found' }); return; }
   if (!(await subjectAllowedForClass(schoolId, teacher.id, classId, subject))) {
     res.status(403).json({ error: `You aren't assigned to teach ${subject} for this class.` }); return;
   }
 
-  const { data, error } = await supabase.from('assignments').insert({
+  const { data, error } = await req.db!.from('assignments').insert({
     school_id: schoolId,
     teacher_id: teacher.id,
     class_id: classId,
@@ -191,8 +190,8 @@ export async function createAssignment(req: AuthRequest, res: Response): Promise
   // Notify parent(s) — dedupe so a parent with multiple children in the class only gets one push
   const targetId = studentId || null;
   const studentsQuery = targetId
-    ? supabase.from('students').select('parents(user_id)').eq('id', targetId)
-    : supabase.from('students').select('parents(user_id)').eq('class_id', classId).eq('school_id', schoolId);
+    ? req.db!.from('students').select('parents(user_id)').eq('id', targetId)
+    : req.db!.from('students').select('parents(user_id)').eq('class_id', classId).eq('school_id', schoolId);
   const { data: assignedStudents } = await studentsQuery;
   if (assignedStudents) {
     const uniqueParentIds = new Set<string>();
@@ -211,9 +210,9 @@ export async function createAssignment(req: AuthRequest, res: Response): Promise
 export async function deleteAssignment(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId, userId } = req.user!;
   const { id } = req.params;
-  const { data: teacher } = await supabase.from('teachers').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
+  const { data: teacher } = await req.db!.from('teachers').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
   if (!teacher) { res.status(404).json({ error: 'Teacher not found' }); return; }
-  const { error } = await supabase.from('assignments').delete().eq('id', id).eq('teacher_id', teacher.id).eq('school_id', schoolId);
+  const { error } = await req.db!.from('assignments').delete().eq('id', id).eq('teacher_id', teacher.id).eq('school_id', schoolId);
   if (error) { res.status(500).json({ error: error.message }); return; }
   res.json({ message: 'Assignment deleted' });
 }
@@ -224,16 +223,16 @@ export async function createReport(req: AuthRequest, res: Response): Promise<voi
   const { studentId, subject, attendanceNotes, behaviorNotes, marks, teacherNotes } = req.body;
 
   const [{ data: teacher }, { data: school }, { data: studentRow }] = await Promise.all([
-    supabase.from('teachers').select('id').eq('user_id', userId).eq('school_id', schoolId).single(),
-    supabase.from('schools').select('current_academic_year').eq('id', schoolId).single(),
-    supabase.from('students').select('class_id').eq('id', studentId).eq('school_id', schoolId).maybeSingle(),
+    req.db!.from('teachers').select('id').eq('user_id', userId).eq('school_id', schoolId).single(),
+    req.db!.from('schools').select('current_academic_year').eq('id', schoolId).single(),
+    req.db!.from('students').select('class_id').eq('id', studentId).eq('school_id', schoolId).maybeSingle(),
   ]);
   if (!teacher) { res.status(404).json({ error: 'Teacher not found' }); return; }
   if (!(await subjectAllowedForClass(schoolId, teacher.id, (studentRow as any)?.class_id, subject))) {
     res.status(403).json({ error: `You aren't assigned to teach ${subject} for this student's class.` }); return;
   }
 
-  const { data, error } = await supabase.from('reports').insert({
+  const { data, error } = await req.db!.from('reports').insert({
     school_id: schoolId,
     teacher_id: teacher.id,
     student_id: studentId,
@@ -248,7 +247,7 @@ export async function createReport(req: AuthRequest, res: Response): Promise<voi
   if (error) { res.status(500).json({ error: error.message }); return; }
 
   // Notify parent of this student
-  const { data: student } = await supabase
+  const { data: student } = await req.db!
     .from('students').select('full_name, parents(user_id)').eq('id', studentId).single();
   if (student) {
     const uids: string[] = Array.isArray((student as any).parents)
@@ -266,8 +265,8 @@ export async function upsertGrade(req: AuthRequest, res: Response): Promise<void
   const { studentId, classId, subject, marks, gradingPeriod } = req.body;
 
   const [teacherRes, schoolRes] = await Promise.all([
-    supabase.from('teachers').select('id').eq('user_id', userId).eq('school_id', schoolId).single(),
-    supabase.from('schools').select('current_academic_year').eq('id', schoolId).single(),
+    req.db!.from('teachers').select('id').eq('user_id', userId).eq('school_id', schoolId).single(),
+    req.db!.from('schools').select('current_academic_year').eq('id', schoolId).single(),
   ]);
   if (!teacherRes.data) { res.status(404).json({ error: 'Teacher not found' }); return; }
   if (!(await subjectAllowedForClass(schoolId, teacherRes.data.id, classId, subject))) {
@@ -275,7 +274,7 @@ export async function upsertGrade(req: AuthRequest, res: Response): Promise<void
   }
   const academicYear = schoolRes.data?.current_academic_year || null;
 
-  const { data, error } = await supabase.from('grades').upsert({
+  const { data, error } = await req.db!.from('grades').upsert({
     school_id: schoolId,
     teacher_id: teacherRes.data.id,
     student_id: studentId,
@@ -289,7 +288,7 @@ export async function upsertGrade(req: AuthRequest, res: Response): Promise<void
   if (error) { res.status(500).json({ error: error.message }); return; }
 
   // Notify parent of this student
-  const { data: gradedStudent } = await supabase
+  const { data: gradedStudent } = await req.db!
     .from('students').select('full_name, parents(user_id)').eq('id', studentId).single();
   if (gradedStudent) {
     const uids: string[] = Array.isArray((gradedStudent as any).parents)
@@ -306,11 +305,11 @@ export async function getGrades(req: AuthRequest, res: Response): Promise<void> 
   const { studentId } = req.query as Record<string, string>;
   if (!studentId) { res.status(400).json({ error: 'studentId required' }); return; }
 
-  const { data: teacher } = await supabase.from('teachers').select('id, subject').eq('user_id', userId).eq('school_id', schoolId).single();
+  const { data: teacher } = await req.db!.from('teachers').select('id, subject').eq('user_id', userId).eq('school_id', schoolId).single();
   if (!teacher) { res.status(404).json({ error: 'Teacher not found' }); return; }
 
   // All grades this teacher recorded for the student (across whichever subjects they teach).
-  const { data, error } = await supabase.from('grades')
+  const { data, error } = await req.db!.from('grades')
     .select('id, subject, marks, grading_period, academic_year, created_at')
     .eq('school_id', schoolId)
     .eq('student_id', studentId)
@@ -327,7 +326,7 @@ export async function upsertWeeklySummary(req: AuthRequest, res: Response): Prom
   const { classId, subject, unit, lesson, pages, homeworkReminder } = req.body;
 
   // Require an active period opened by supervisor
-  const { data: period } = await supabase
+  const { data: period } = await req.db!
     .from('weekly_summary_periods')
     .select('week_start_date')
     .eq('school_id', schoolId)
@@ -338,18 +337,18 @@ export async function upsertWeeklySummary(req: AuthRequest, res: Response): Prom
   if (!period) { res.status(403).json({ error: 'No active summary period. Supervisor must open one first.' }); return; }
 
   const weekStartDate = period.week_start_date;
-  const { data: teacher } = await supabase.from('teachers').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
+  const { data: teacher } = await req.db!.from('teachers').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
   if (!teacher) { res.status(404).json({ error: 'Teacher not found' }); return; }
 
   // Delete existing entry for same class+subject+week, then insert fresh
-  await supabase.from('weekly_summaries')
+  await req.db!.from('weekly_summaries')
     .delete()
     .eq('class_id', classId)
     .eq('subject', subject)
     .eq('week_start_date', weekStartDate)
     .eq('school_id', schoolId);
 
-  const { data, error } = await supabase.from('weekly_summaries').insert({
+  const { data, error } = await req.db!.from('weekly_summaries').insert({
     school_id: schoolId,
     teacher_id: teacher.id,
     class_id: classId,
@@ -369,7 +368,7 @@ export async function getWeeklySummary(req: AuthRequest, res: Response): Promise
   const { schoolId } = req.user!;
   const { classId, weekStartDate } = req.query as Record<string, string>;
 
-  let query = supabase.from('weekly_summaries').select('*').eq('school_id', schoolId);
+  let query = req.db!.from('weekly_summaries').select('*').eq('school_id', schoolId);
   if (classId) query = query.eq('class_id', classId);
   if (weekStartDate) query = query.eq('week_start_date', weekStartDate);
 
@@ -382,11 +381,11 @@ export async function getWeeklySummary(req: AuthRequest, res: Response): Promise
 export async function getMyClasses(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId, userId } = req.user!;
 
-  const { data: teacher } = await supabase
+  const { data: teacher } = await req.db!
     .from('teachers').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
   if (!teacher) { res.status(404).json({ error: 'Teacher not found' }); return; }
 
-  const { data, error } = await supabase
+  const { data, error } = await req.db!
     .from('teacher_classes')
     .select('classes(id, name, grade_level, academic_year, created_at)')
     .eq('teacher_id', teacher.id);
@@ -410,7 +409,7 @@ export async function markAttendance(req: AuthRequest, res: Response): Promise<v
     res.status(400).json({ error: 'classId, date, and records are required' }); return;
   }
 
-  const { data: teacher } = await supabase.from('teachers').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
+  const { data: teacher } = await req.db!.from('teachers').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
   if (!teacher) { res.status(404).json({ error: 'Teacher not found' }); return; }
 
   // Upsert all records for this class+date
@@ -424,7 +423,7 @@ export async function markAttendance(req: AuthRequest, res: Response): Promise<v
     notes: r.notes || null,
   }));
 
-  const { error } = await supabase.from('attendance')
+  const { error } = await req.db!.from('attendance')
     .upsert(rows, { onConflict: 'student_id,class_id,date' });
   if (error) { res.status(500).json({ error: error.message }); return; }
 
@@ -432,7 +431,7 @@ export async function markAttendance(req: AuthRequest, res: Response): Promise<v
   const absentOrLate = records.filter(r => r.status !== 'present');
   if (absentOrLate.length > 0) {
     const absentIds = absentOrLate.map(r => r.studentId);
-    const { data: students } = await supabase
+    const { data: students } = await req.db!
       .from('students')
       .select('id, full_name, parents(user_id)')
       .in('id', absentIds)
@@ -456,7 +455,7 @@ export async function markAttendance(req: AuthRequest, res: Response): Promise<v
         }));
       });
       if (notifications.length > 0) {
-        await supabase.from('notifications').insert(notifications);
+        await req.db!.from('notifications').insert(notifications);
       }
     }
   }
@@ -470,10 +469,10 @@ export async function getAttendance(req: AuthRequest, res: Response): Promise<vo
 
   if (!classId || !date) { res.status(400).json({ error: 'classId and date are required' }); return; }
 
-  const { data: teacher } = await supabase.from('teachers').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
+  const { data: teacher } = await req.db!.from('teachers').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
   if (!teacher) { res.status(404).json({ error: 'Teacher not found' }); return; }
 
-  const { data, error } = await supabase
+  const { data, error } = await req.db!
     .from('attendance')
     .select('*, students(id, full_name, profile_picture)')
     .eq('school_id', schoolId)
@@ -488,12 +487,12 @@ export async function getMyStudents(req: AuthRequest, res: Response): Promise<vo
   const { schoolId, userId } = req.user!;
   const { search, classId } = req.query as Record<string, string>;
 
-  const { data: teacher } = await supabase.from('teachers').select('id, teacher_classes(class_id)').eq('user_id', userId).eq('school_id', schoolId).single();
+  const { data: teacher } = await req.db!.from('teachers').select('id, teacher_classes(class_id)').eq('user_id', userId).eq('school_id', schoolId).single();
   if (!teacher) { res.status(404).json({ error: 'Teacher not found' }); return; }
 
   const classIds = (teacher as any).teacher_classes?.map((tc: any) => tc.class_id) ?? [];
 
-  let query = supabase.from('students').select('id, full_name, profile_picture, class_id, classes(name)').eq('school_id', schoolId).eq('is_graduated', false);
+  let query = req.db!.from('students').select('id, full_name, profile_picture, class_id, classes(name)').eq('school_id', schoolId).eq('is_graduated', false);
 
   if (classId) {
     query = query.eq('class_id', classId);
@@ -515,7 +514,7 @@ export async function getStudentBrief(req: AuthRequest, res: Response): Promise<
   const { schoolId, userId } = req.user!;
   const { id: studentId } = req.params;
 
-  const { data: teacher } = await supabase
+  const { data: teacher } = await req.db!
     .from('teachers')
     .select('id, teacher_classes(class_id)')
     .eq('user_id', userId).eq('school_id', schoolId).single();
@@ -523,7 +522,7 @@ export async function getStudentBrief(req: AuthRequest, res: Response): Promise<
   const teacherId = (teacher as any).id;
   const teacherClassIds: string[] = (teacher as any).teacher_classes?.map((tc: any) => tc.class_id) ?? [];
 
-  const { data: student, error: stuErr } = await supabase
+  const { data: student, error: stuErr } = await req.db!
     .from('students')
     .select('id, full_name, profile_picture, class_id, date_of_birth, home_address, phone_number, emergency_contact, is_graduated, classes(name)')
     .eq('id', studentId)
@@ -537,14 +536,14 @@ export async function getStudentBrief(req: AuthRequest, res: Response): Promise<
   }
 
   const [reportsRes, gradesRes] = await Promise.all([
-    supabase
+    req.db!
       .from('reports')
       .select('id, subject, attendance_notes, behavior_notes, marks, teacher_notes, report_date, created_at, quiz_marks, exam_marks')
       .eq('school_id', schoolId)
       .eq('student_id', studentId)
       .eq('teacher_id', teacherId)
       .order('created_at', { ascending: false }),
-    supabase
+    req.db!
       .from('grades')
       .select('id, subject, marks, grading_period, academic_year, daily_grade, quiz_grade, monthly_exam_grade, term_exam_grade, created_at')
       .eq('school_id', schoolId)

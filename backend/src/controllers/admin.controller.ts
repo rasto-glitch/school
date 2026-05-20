@@ -1,7 +1,12 @@
 import { Response } from 'express';
 import bcrypt from 'bcryptjs';
 import * as XLSX from 'xlsx';
-import { supabase } from '../config/supabase';
+// admin.controller is intentionally an ELEVATED controller (Phase 0 inventory):
+// it runs snapshot builds, cache recomputation, year transitions, and many
+// many-table cross-cuts within a school. Tenant scoping is still enforced
+// via explicit `.eq('school_id', schoolId)` filters everywhere. Importing
+// adminDb under the existing `supabase` name keeps the body unchanged.
+import { adminDb as supabase } from '../utils/db';
 import { safeExt } from '../utils/upload';
 import type { AuthRequest } from '../middleware/auth';
 import { toCC } from '../utils/transform';

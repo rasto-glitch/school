@@ -1,5 +1,6 @@
 import { Response } from 'express';
-import { supabase } from '../config/supabase';
+// Elevated controller (cross-table report aggregation) — see Phase 0 inventory.
+import { adminDb as supabase } from '../utils/db';
 import type { AuthRequest } from '../middleware/auth';
 
 // Report endpoints that aggregate across fee_payments, staff_salary_payments,

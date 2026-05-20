@@ -1635,3 +1635,250 @@ CREATE TABLE IF NOT EXISTS fx_rates (
 );
 CREATE INDEX IF NOT EXISTS idx_fx_rates_lookup
   ON fx_rates(school_id, from_currency, to_currency, effective_from DESC);
+
+-- ============================================================================
+-- RLS PHASE 2 — denormalize school_id onto child tables + write all tenant
+-- isolation policies. Policies are CREATED but RLS is intentionally NOT
+-- enabled here; flipping enforcement on happens table-by-table in Phase 4
+-- once the backend has been switched to req.db. Idempotent (safe to re-run).
+--
+-- If Supabase's SQL editor prompts "Enable RLS for new tables", choose NO.
+-- ============================================================================
+
+-- ── 1. Denormalize school_id onto the 5 child tables that lack it ─────────
+
+-- teacher_classes ← teachers.school_id
+ALTER TABLE teacher_classes ADD COLUMN IF NOT EXISTS school_id UUID
+  REFERENCES schools(id) ON DELETE CASCADE;
+UPDATE teacher_classes tc SET school_id = t.school_id
+  FROM teachers t WHERE tc.teacher_id = t.id AND tc.school_id IS NULL;
+ALTER TABLE teacher_classes ALTER COLUMN school_id SET NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_teacher_classes_school ON teacher_classes(school_id);
+CREATE OR REPLACE FUNCTION teacher_classes_set_school_id() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW.school_id IS NULL THEN
+    SELECT school_id INTO NEW.school_id FROM teachers WHERE id = NEW.teacher_id;
+  END IF;
+  RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS trg_teacher_classes_set_school_id ON teacher_classes;
+CREATE TRIGGER trg_teacher_classes_set_school_id
+  BEFORE INSERT ON teacher_classes
+  FOR EACH ROW EXECUTE FUNCTION teacher_classes_set_school_id();
+
+-- messages ← conversations.school_id
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS school_id UUID
+  REFERENCES schools(id) ON DELETE CASCADE;
+UPDATE messages m SET school_id = c.school_id
+  FROM conversations c WHERE m.conversation_id = c.id AND m.school_id IS NULL;
+ALTER TABLE messages ALTER COLUMN school_id SET NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_messages_school ON messages(school_id);
+CREATE OR REPLACE FUNCTION messages_set_school_id() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW.school_id IS NULL THEN
+    SELECT school_id INTO NEW.school_id FROM conversations WHERE id = NEW.conversation_id;
+  END IF;
+  RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS trg_messages_set_school_id ON messages;
+CREATE TRIGGER trg_messages_set_school_id
+  BEFORE INSERT ON messages
+  FOR EACH ROW EXECUTE FUNCTION messages_set_school_id();
+
+-- conversation_reads ← conversations.school_id
+ALTER TABLE conversation_reads ADD COLUMN IF NOT EXISTS school_id UUID
+  REFERENCES schools(id) ON DELETE CASCADE;
+UPDATE conversation_reads cr SET school_id = c.school_id
+  FROM conversations c WHERE cr.conversation_id = c.id AND cr.school_id IS NULL;
+ALTER TABLE conversation_reads ALTER COLUMN school_id SET NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_conversation_reads_school ON conversation_reads(school_id);
+CREATE OR REPLACE FUNCTION conversation_reads_set_school_id() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW.school_id IS NULL THEN
+    SELECT school_id INTO NEW.school_id FROM conversations WHERE id = NEW.conversation_id;
+  END IF;
+  RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS trg_conversation_reads_set_school_id ON conversation_reads;
+CREATE TRIGGER trg_conversation_reads_set_school_id
+  BEFORE INSERT ON conversation_reads
+  FOR EACH ROW EXECUTE FUNCTION conversation_reads_set_school_id();
+
+-- message_edits ← messages.school_id (must run AFTER messages has it)
+ALTER TABLE message_edits ADD COLUMN IF NOT EXISTS school_id UUID
+  REFERENCES schools(id) ON DELETE CASCADE;
+UPDATE message_edits me SET school_id = m.school_id
+  FROM messages m WHERE me.message_id = m.id AND me.school_id IS NULL;
+ALTER TABLE message_edits ALTER COLUMN school_id SET NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_message_edits_school ON message_edits(school_id);
+CREATE OR REPLACE FUNCTION message_edits_set_school_id() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW.school_id IS NULL THEN
+    SELECT school_id INTO NEW.school_id FROM messages WHERE id = NEW.message_id;
+  END IF;
+  RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS trg_message_edits_set_school_id ON message_edits;
+CREATE TRIGGER trg_message_edits_set_school_id
+  BEFORE INSERT ON message_edits
+  FOR EACH ROW EXECUTE FUNCTION message_edits_set_school_id();
+
+-- fee_plan_classes ← fee_plans.school_id
+ALTER TABLE fee_plan_classes ADD COLUMN IF NOT EXISTS school_id UUID
+  REFERENCES schools(id) ON DELETE CASCADE;
+UPDATE fee_plan_classes fpc SET school_id = fp.school_id
+  FROM fee_plans fp WHERE fpc.fee_plan_id = fp.id AND fpc.school_id IS NULL;
+ALTER TABLE fee_plan_classes ALTER COLUMN school_id SET NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_fee_plan_classes_school ON fee_plan_classes(school_id);
+CREATE OR REPLACE FUNCTION fee_plan_classes_set_school_id() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW.school_id IS NULL THEN
+    SELECT school_id INTO NEW.school_id FROM fee_plans WHERE id = NEW.fee_plan_id;
+  END IF;
+  RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS trg_fee_plan_classes_set_school_id ON fee_plan_classes;
+CREATE TRIGGER trg_fee_plan_classes_set_school_id
+  BEFORE INSERT ON fee_plan_classes
+  FOR EACH ROW EXECUTE FUNCTION fee_plan_classes_set_school_id();
+
+-- ── 2. Grants on the `authenticated` role ────────────────────────────────
+-- PostgREST switches into this role when a JWT signs role:'authenticated'.
+-- It does NOT have BYPASSRLS, which is the whole point. Re-applied
+-- explicitly here so the script reproduces on a restored database (see
+-- the cross-project restore notes — grants must be reattached).
+GRANT USAGE ON SCHEMA public TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO authenticated;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO authenticated;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO authenticated;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT USAGE, SELECT ON SEQUENCES TO authenticated;
+
+-- ── 3. Tenant-isolation helper + policies (created, NOT enabled) ─────────
+
+-- Read the school_id claim out of the JWT PostgREST forwards. STABLE so
+-- the planner can fold it into row filters / index lookups.
+CREATE OR REPLACE FUNCTION app_current_school_id() RETURNS uuid
+LANGUAGE sql STABLE AS $$
+  SELECT NULLIF(
+    current_setting('request.jwt.claims', true)::jsonb ->> 'school_id',
+    ''
+  )::uuid
+$$;
+
+-- Special policy for `schools` itself: the tenant *is* the row.
+DROP POLICY IF EXISTS tenant_isolation ON schools;
+CREATE POLICY tenant_isolation ON schools
+  USING      (id = app_current_school_id())
+  WITH CHECK (id = app_current_school_id());
+
+-- Standard policy on every other table: school_id must match the JWT claim.
+-- One macro applies to all 64 tables (59 originally-scoped + 5 newly
+-- denormalized). DROP-IF-EXISTS makes the whole block re-runnable.
+DO $$
+DECLARE
+  t text;
+  tables text[] := ARRAY[
+    'users','buses','classes','schedule_assignments','parents','teachers','drivers',
+    'students','homework','assignments','mark_types','terms','grades','reports',
+    'announcements','announcement_likes','announcement_comments','announcement_comment_likes',
+    'notifications','bus_locations','appointments','weekly_summaries','weekly_summary_periods',
+    'subjects','subject_teachers','class_subject_teachers','attendance',
+    'password_reset_requests','refresh_tokens','device_tokens','bus_ride_records',
+    'archived_students','archived_employees','archive_backups','academic_posts','ebooks',
+    'conversations','chat_access_log','audit_logs','post_likes','post_saves','post_comments',
+    'post_comment_likes','ebook_progress','student_access_locks','fee_plans',
+    'fee_installments','student_fees','fee_payments','fee_payment_allocations',
+    'staff_members','staff_salary_payments','expense_categories',
+    'expense_recurring_templates','expenses','student_fee_late_fees','accounting_periods',
+    'payment_accounts','fx_rates',
+    -- newly denormalized in section 1 above:
+    'teacher_classes','messages','conversation_reads','message_edits','fee_plan_classes'
+  ];
+BEGIN
+  FOREACH t IN ARRAY tables LOOP
+    EXECUTE format('DROP POLICY IF EXISTS tenant_isolation ON %I', t);
+    EXECUTE format(
+      'CREATE POLICY tenant_isolation ON %I ' ||
+      '  USING      (school_id = app_current_school_id()) ' ||
+      '  WITH CHECK (school_id = app_current_school_id())',
+      t
+    );
+  END LOOP;
+END $$;
+
+-- (No ENABLE ROW LEVEL SECURITY here — Phase 4 owns that, table by table.)
+
+-- ============================================================================
+-- RLS PHASE 4 — uniformly ENABLE + FORCE row-level security on every table.
+--
+-- Idempotent. Some tables already have RLS on (from earlier "Enable RLS &
+-- run query" clicks in the Supabase editor); this block applies ENABLE +
+-- FORCE consistently across all 65 tables.
+--
+-- After this runs, any query made under the `authenticated` Postgres role
+-- (the role PostgREST switches into when our minted JWT carries
+-- role:'authenticated') is filtered by the tenant_isolation policy created
+-- in Phase 2. The service_role client (adminDb) still BYPASSRLS by design
+-- — the elevated controllers (admin/accounting/auth/utils) continue
+-- working unchanged. FORCE ensures even the table owner obeys policies
+-- (defence in depth against direct ad-hoc table-owner connections).
+--
+-- ORDER OF OPERATIONS (must follow exactly):
+--   1. Phase 3 backend changes are deployed (req.db plumbing live).
+--   2. Run THIS block in Supabase SQL editor.
+--   3. Verify with the queries below (expect 65 / 65 / 65).
+--   4. Set SUPABASE_ANON_KEY + SUPABASE_JWT_SECRET in Railway env vars.
+--   5. Railway redeploys → tenant controllers now talk to the DB as the
+--      `authenticated` role → policies physically enforce per-school
+--      isolation.
+-- ============================================================================
+
+DO $$
+DECLARE
+  t text;
+  tables text[] := ARRAY[
+    'schools',
+    'users','buses','classes','schedule_assignments','parents','teachers','drivers',
+    'students','homework','assignments','mark_types','terms','grades','reports',
+    'announcements','announcement_likes','announcement_comments','announcement_comment_likes',
+    'notifications','bus_locations','appointments','weekly_summaries','weekly_summary_periods',
+    'subjects','subject_teachers','class_subject_teachers','attendance',
+    'password_reset_requests','refresh_tokens','device_tokens','bus_ride_records',
+    'archived_students','archived_employees','archive_backups','academic_posts','ebooks',
+    'conversations','chat_access_log','audit_logs','post_likes','post_saves','post_comments',
+    'post_comment_likes','ebook_progress','student_access_locks','fee_plans',
+    'fee_installments','student_fees','fee_payments','fee_payment_allocations',
+    'staff_members','staff_salary_payments','expense_categories',
+    'expense_recurring_templates','expenses','student_fee_late_fees','accounting_periods',
+    'payment_accounts','fx_rates',
+    'teacher_classes','messages','conversation_reads','message_edits','fee_plan_classes'
+  ];
+BEGIN
+  FOREACH t IN ARRAY tables LOOP
+    EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
+    EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY',  t);
+  END LOOP;
+END $$;
+
+-- Verification (run separately; expect 65 / 65 / 65) ─────────────────────────
+--   SELECT count(*) FROM pg_class
+--    WHERE relkind='r' AND relrowsecurity = true
+--      AND relnamespace=(SELECT oid FROM pg_namespace WHERE nspname='public');
+--
+--   SELECT count(*) FROM pg_class
+--    WHERE relkind='r' AND relforcerowsecurity = true
+--      AND relnamespace=(SELECT oid FROM pg_namespace WHERE nspname='public');
+--
+--   SELECT count(*) FROM pg_policies
+--    WHERE policyname='tenant_isolation' AND schemaname='public';
+--
+-- Rollback for a single table (if it misbehaves):
+--   ALTER TABLE <table> NO FORCE ROW LEVEL SECURITY;
+--   ALTER TABLE <table> DISABLE ROW LEVEL SECURITY;
