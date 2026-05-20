@@ -49,8 +49,12 @@ async function issueTokenPair(
   const token = signAccessToken(user, schoolId, featuresVersion);
   const raw = generateToken();
   const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_MS).toISOString();
-  const ip =
-    (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || null;
+  // SECURITY (H-3): `trust proxy: 1` is set in server.ts, so req.ip is
+  // already the real client IP from Railway's reverse proxy. Reading
+  // X-Forwarded-For directly took the LEFTMOST value, which is
+  // client-controlled — an attacker could spoof their IP into our
+  // forensics tables. Use req.ip everywhere.
+  const ip = req.ip || null;
   const userAgent = ((req.headers['user-agent'] as string) || '').slice(0, 300) || null;
   // tenant-check-allow: refresh_tokens is user-keyed (token_hash uniquely identifies the row); school_id is stored for cascade + scoping
   await supabase.from('refresh_tokens').insert({
@@ -212,11 +216,14 @@ export async function login(req: Request, res: Response): Promise<void> {
   }
   const abbreviation = username.substring(0, underscoreIdx).toLowerCase();
 
-  // Find school by abbreviation
+  // Find school by abbreviation.
+  // SECURITY (M-1): escape LIKE wildcards (% and _) so an attacker can't
+  // submit username=%_foo and have the SQL pattern match every school.
+  const safeAbbrev = abbreviation.replace(/[\\%_]/g, '\\$&');
   const { data: school, error: schoolErr } = await supabase
     .from('schools')
     .select('id, name, slug, logo_url, primary_color, secondary_color, features, features_version')
-    .ilike('abbreviation', abbreviation)
+    .ilike('abbreviation', safeAbbrev)
     .eq('is_active', true)
     .single();
 
@@ -252,9 +259,10 @@ export async function login(req: Request, res: Response): Promise<void> {
 
   // Capture device/IP and decide if this is a new sign-in BEFORE issuing
   // this login's refresh row (so the check can't match itself).
+  // SECURITY (H-3): req.ip is trustworthy under `trust proxy: 1`; the
+  // X-Forwarded-For leftmost is attacker-controlled.
   const signInUa = ((req.headers['user-agent'] as string) || '').slice(0, 300);
-  const signInIp =
-    (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || null;
+  const signInIp = req.ip || null;
   const newSignIn = await isNewSignIn(user.id, signInUa, signInIp);
 
   const featuresVersion = school.features_version ?? 1;
@@ -323,9 +331,11 @@ export async function forgotPassword(req: Request, res: Response): Promise<void>
   const underscoreIdx = username.indexOf('_');
   if (underscoreIdx === -1) { await finishOk(); return; }
   const abbreviation = username.substring(0, underscoreIdx).toLowerCase();
+  // SECURITY (M-1): escape LIKE wildcards.
+  const safeAbbrev = abbreviation.replace(/[\\%_]/g, '\\$&');
 
   const { data: school } = await supabase
-    .from('schools').select('id').ilike('abbreviation', abbreviation).eq('is_active', true).single();
+    .from('schools').select('id').ilike('abbreviation', safeAbbrev).eq('is_active', true).single();
   if (!school) { await finishOk(); return; }
 
   const { data: user } = await supabase
@@ -638,9 +648,11 @@ export async function forgotPasswordEmail(req: Request, res: Response): Promise<
   const underscoreIdx = username.indexOf('_');
   if (underscoreIdx === -1) { await finishOk(); return; }
   const abbreviation = username.substring(0, underscoreIdx).toLowerCase();
+  // SECURITY (M-1): escape LIKE wildcards.
+  const safeAbbrev = abbreviation.replace(/[\\%_]/g, '\\$&');
 
   const { data: school } = await supabase
-    .from('schools').select('id').ilike('abbreviation', abbreviation).eq('is_active', true).single();
+    .from('schools').select('id').ilike('abbreviation', safeAbbrev).eq('is_active', true).single();
   if (!school) { await finishOk(); return; }
 
   const { data: user } = await supabase
@@ -673,7 +685,7 @@ export async function forgotPasswordEmail(req: Request, res: Response): Promise<
       user_id: u.id,
       token_hash: hashToken(raw),
       expires_at: expiresAt,
-      requested_ip: (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || null,
+      requested_ip: req.ip || null,
     });
 
   const link = `${LANDING_URL}/reset-password?token=${raw}`;

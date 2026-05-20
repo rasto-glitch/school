@@ -1148,11 +1148,12 @@ export async function searchArchivedEmployees(req: AuthRequest, res: Response): 
   const role = String(req.query.role ?? '').trim();
   if (name.length < 2) { res.json([]); return; }
 
+  const safeName = name.replace(/[%_\\]/g, '\\$&');
   let query = supabase
     .from('archived_employees')
     .select('id, role, full_name, phone_number, email, position, subject, hire_date, departure_date, reason')
     .eq('school_id', schoolId)
-    .ilike('full_name', `%${name}%`)
+    .ilike('full_name', `%${safeName}%`)
     .order('departure_date', { ascending: false })
     .limit(8);
   if (role && ['teacher', 'driver', 'supervisor', 'staff', 'admin'].includes(role)) query = query.eq('role', role);
@@ -1351,11 +1352,12 @@ export async function searchArchivedStudents(req: AuthRequest, res: Response): P
   const dob = String(req.query.dob ?? '').trim();
   if (name.length < 2) { res.json([]); return; }
 
+  const safeName = name.replace(/[%_\\]/g, '\\$&');
   let query = supabase
     .from('archived_students')
     .select('id, full_name, date_of_birth, departure_date, reason, parent_full_name, parent_phone, classes_attended')
     .eq('school_id', schoolId)
-    .ilike('full_name', `%${name}%`)
+    .ilike('full_name', `%${safeName}%`)
     .order('departure_date', { ascending: false })
     .limit(8);
   if (dob) query = query.eq('date_of_birth', dob);
@@ -2877,13 +2879,21 @@ export async function searchInactiveUsers(req: AuthRequest, res: Response): Prom
     res.status(400).json({ error: 'Invalid role' }); return;
   }
 
+  // SECURITY (I-3): the `name` string is interpolated into a PostgREST
+  // `.or()` filter. Special characters (`,`, `(`, `)`, `*`) could perturb
+  // the OR-clause parse. Escape LIKE wildcards (`%`, `_`) too. The other
+  // filters (school_id, role, is_active) are AND-combined and can't be
+  // escaped from, so the worst case is a name that fails to match — not a
+  // tenant break — but we tighten this anyway.
+  if (/[,()*\\]/.test(name)) { res.json([]); return; }
+  const safeName = name.replace(/[%_]/g, '\\$&');
   const { data, error } = await supabase
     .from('users')
     .select('id, first_name, last_name, username, role, is_active')
     .eq('school_id', schoolId)
     .eq('role', role)
     .eq('is_active', false)
-    .or(`first_name.ilike.%${name}%,last_name.ilike.%${name}%,username.ilike.%${name}%`)
+    .or(`first_name.ilike.%${safeName}%,last_name.ilike.%${safeName}%,username.ilike.%${safeName}%`)
     .limit(8);
   if (error) { res.status(500).json({ error: error.message }); return; }
   res.json(toCC(data ?? []));

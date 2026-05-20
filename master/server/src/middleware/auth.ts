@@ -10,7 +10,8 @@ export function requireMasterAuth(req: Request, res: Response, next: NextFunctio
   }
   const token = auth.slice(7);
   try {
-    jwt.verify(token, masterJwtSecret());
+    // SECURITY (M-5): pin the algorithm; matches the backend's posture.
+    jwt.verify(token, masterJwtSecret(), { algorithms: ['HS256'] });
     next();
   } catch {
     res.status(401).json({ error: 'Session expired — please log in again' });

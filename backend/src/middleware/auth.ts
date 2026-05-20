@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from '../config/supabase';
 import { tenantDb } from '../utils/db';
+import { logger } from '../utils/logger';
 
 export interface AuthPayload {
   userId: string;
@@ -31,7 +32,10 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
   const token = authHeader.split(' ')[1];
   let decoded: AuthPayload & { iat?: number };
   try {
-    decoded = jwt.verify(token, process.env.JWT_SECRET!) as AuthPayload & { iat?: number };
+    // SECURITY (M-5): pin the algorithm to HS256. jsonwebtoken v9 refuses
+    // alg=none by default, but pinning here defeats any future regression
+    // and any algorithm-confusion attack (e.g. RS256 with a string key).
+    decoded = jwt.verify(token, process.env.JWT_SECRET!, { algorithms: ['HS256'] }) as AuthPayload & { iat?: number };
   } catch {
     res.status(401).json({ error: 'Invalid or expired token' });
     return;
@@ -43,30 +47,37 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
     .eq('id', decoded.userId)
     .single();
 
-  if (!user) {
-    res.status(401).json({ error: 'Account not found' });
-    return;
-  }
+  // SECURITY (M-6): collapse every post-token-validation failure to the
+  // same generic message + 401 so a holder of a stolen / old token can't
+  // probe distinct account states (active vs deactivated vs school
+  // deactivated vs password rotated vs features-version stale). The
+  // detailed reason still lands in server logs for operator triage.
+  const FORCE_RELOGIN = 'Session invalid. Please log in again.';
 
-  if (!user.is_active) {
-    res.status(401).json({ error: 'Account is deactivated' });
+  if (!user || !user.is_active) {
+    logger.info('authenticate rejected', { reason: !user ? 'no_user' : 'inactive_user', userId: decoded.userId });
+    res.status(401).json({ error: FORCE_RELOGIN });
     return;
   }
 
   const school = user.schools as unknown as { is_active: boolean; features_version: number; features: Record<string, boolean> | null } | null;
 
   if (!school?.is_active) {
-    res.status(401).json({ error: 'School is deactivated' });
+    logger.info('authenticate rejected', { reason: 'school_inactive', userId: decoded.userId });
+    res.status(401).json({ error: FORCE_RELOGIN });
     return;
   }
 
   if (school.features_version > (decoded.featuresVersion ?? 1)) {
-    res.status(401).json({ error: 'School settings updated. Please log in again.' });
+    logger.info('authenticate rejected', { reason: 'features_version_stale', userId: decoded.userId });
+    res.status(401).json({ error: FORCE_RELOGIN });
     return;
   }
 
   // Accountant role is gated by the premium tuition_fees feature.
   // If the school drops below premium, existing accountant accounts can't authenticate.
+  // Distinct 403 because this is a billing/feature state, not a stolen-token
+  // enumeration vector.
   if (decoded.role === 'accountant' && school.features?.tuition_fees !== true) {
     res.status(403).json({ error: 'Accounting module is not enabled for this school.' });
     return;
@@ -75,7 +86,8 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
   if (user.password_changed_at && decoded.iat) {
     const changedAt = new Date(user.password_changed_at).getTime();
     if (changedAt > decoded.iat * 1000) {
-      res.status(401).json({ error: 'Session invalidated. Please log in again.' });
+      logger.info('authenticate rejected', { reason: 'password_changed', userId: decoded.userId });
+      res.status(401).json({ error: FORCE_RELOGIN });
       return;
     }
   }

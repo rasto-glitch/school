@@ -61,9 +61,12 @@ const allowedOrigins = [
 const io = new SocketServer(httpServer, {
   cors: {
     // Allow the web frontend + React Native (which sends no Origin header)
+    // SECURITY (I-5): refuse silently rather than throwing — a thrown
+    // error here would propagate up as a 500 and trip our error-alert
+    // pipeline on every routine origin probe.
     origin: (origin, cb) => {
       if (!origin || allowedOrigins.includes(origin)) cb(null, true);
-      else cb(new Error('Not allowed by CORS'));
+      else cb(null, false);
     },
     methods: ['GET', 'POST'],
   },
@@ -72,9 +75,13 @@ const io = new SocketServer(httpServer, {
 // Middleware
 app.use(helmet());
 app.use(cors({
+  // SECURITY (I-5): same silent-reject as above. Without an
+  // Access-Control-Allow-Origin header, the browser blocks the response
+  // from JS — that's the security boundary. Throwing 500 here just
+  // spammed reportError() on every disallowed origin.
   origin: (origin, cb) => {
     if (!origin || allowedOrigins.includes(origin)) cb(null, true);
-    else cb(new Error('Not allowed by CORS'));
+    else cb(null, false);
   },
   credentials: true,
 }));
@@ -199,7 +206,8 @@ io.use((socket, next) => {
   const token = socket.handshake.auth?.token as string | undefined;
   if (!token) return next(new Error('Authentication required'));
   try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET!) as any;
+    // SECURITY (M-5): explicit algorithm pin — see middleware/auth.ts.
+    const payload = jwt.verify(token, process.env.JWT_SECRET!, { algorithms: ['HS256'] }) as any;
     socket.data.schoolId = payload.schoolId;
     socket.data.userId = payload.userId;
     socket.data.role = payload.role;
