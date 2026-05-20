@@ -5,6 +5,9 @@ import type { AuthRequest } from '../middleware/auth';
 import { toCC } from '../utils/transform';
 import { notify, notifyMany } from '../utils/notify';
 import { subjectAllowedForClass } from '../utils/curriculum';
+// Elevated client for STORAGE-only operations — see chat.controller.ts
+// for the rationale.
+import { adminDb } from '../utils/db';
 
 // ---- TEACHER PROFILE ----
 export async function getProfileData(req: AuthRequest, res: Response): Promise<void> {
@@ -67,14 +70,16 @@ export async function createHomework(req: AuthRequest, res: Response): Promise<v
   let attachmentUrl: string | null = null;
   const file = (req as any).file;
   if (file) {
+    // Storage write via adminDb — authz already enforced by the route
+    // (teacher only), path is server-built from JWT schoolId.
     const ext = safeExt(file.originalname, '');
     const storagePath = `${schoolId}/${Date.now()}${ext}`;
     const bucket = process.env.SUPABASE_STORAGE_BUCKET || 'homework-attachments';
-    const { data: uploadData, error: uploadErr } = await req.db!.storage
+    const { data: uploadData, error: uploadErr } = await adminDb.storage
       .from(bucket)
       .upload(storagePath, file.buffer, { contentType: file.mimetype, upsert: false });
     if (!uploadErr && uploadData) {
-      const { data: urlData } = req.db!.storage.from(bucket).getPublicUrl(uploadData.path);
+      const { data: urlData } = adminDb.storage.from(bucket).getPublicUrl(uploadData.path);
       attachmentUrl = urlData.publicUrl;
     }
   }
@@ -156,14 +161,16 @@ export async function createAssignment(req: AuthRequest, res: Response): Promise
   let attachmentUrl: string | null = null;
   const file = (req as any).file;
   if (file) {
+    // Storage write via adminDb — authz already enforced by the route
+    // (teacher only), path is server-built from JWT schoolId.
     const ext = safeExt(file.originalname, '');
     const storagePath = `${schoolId}/assignments/${Date.now()}${ext}`;
     const bucket = process.env.SUPABASE_STORAGE_BUCKET || 'homework-attachments';
-    const { data: uploadData, error: uploadErr } = await req.db!.storage
+    const { data: uploadData, error: uploadErr } = await adminDb.storage
       .from(bucket)
       .upload(storagePath, file.buffer, { contentType: file.mimetype, upsert: false });
     if (!uploadErr && uploadData) {
-      const { data: urlData } = req.db!.storage.from(bucket).getPublicUrl(uploadData.path);
+      const { data: urlData } = adminDb.storage.from(bucket).getPublicUrl(uploadData.path);
       attachmentUrl = urlData.publicUrl;
     }
   }

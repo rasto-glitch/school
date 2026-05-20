@@ -6,6 +6,9 @@ import { notifyMany } from '../utils/notify';
 import { subjectAllowedForClass } from '../utils/curriculum';
 import { parseCursorParams, buildPage } from '../utils/pagination';
 import type { SupabaseClient } from '@supabase/supabase-js';
+// Elevated client for STORAGE-only operations — see chat.controller.ts
+// for the rationale.
+import { adminDb } from '../utils/db';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -430,13 +433,16 @@ export async function uploadPostFile(req: AuthRequest, res: Response): Promise<v
   const ext = safeExt(file.originalname, '.bin');
   const path = `posts/${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`;
 
-  const { error } = await req.db!.storage
-    .from(process.env.SUPABASE_STORAGE_BUCKET || 'homework-attachments')
+  // Storage write via adminDb — authz already enforced by the route
+  // (teacher|supervisor only), path is server-built.
+  const bucket = process.env.SUPABASE_STORAGE_BUCKET || 'homework-attachments';
+  const { error } = await adminDb.storage
+    .from(bucket)
     .upload(path, file.buffer, { contentType: file.mimetype, upsert: false });
 
   if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
-  const { data: { publicUrl } } = req.db!.storage.from(process.env.SUPABASE_STORAGE_BUCKET || 'homework-attachments').getPublicUrl(path);
+  const { data: { publicUrl } } = adminDb.storage.from(bucket).getPublicUrl(path);
   res.json({ url: publicUrl, name: file.originalname });
 }
 
@@ -849,13 +855,15 @@ export async function uploadEbook(req: AuthRequest, res: Response): Promise<void
 
     const bucket = process.env.SUPABASE_STORAGE_BUCKET || 'homework-attachments';
 
-    const { error: uploadErr } = await req.db!.storage
+    // Storage write via adminDb — authz already enforced by the route
+    // (admin only), path is server-built.
+    const { error: uploadErr } = await adminDb.storage
       .from(bucket)
       .upload(path, file.buffer, { contentType: file.mimetype, upsert: false });
 
     if (uploadErr) { res.status(safeDbErrorStatus(uploadErr)).json({ error: safeDbErrorMessage(uploadErr) }); return; }
 
-    const { data: { publicUrl } } = req.db!.storage.from(bucket).getPublicUrl(path);
+    const { data: { publicUrl } } = adminDb.storage.from(bucket).getPublicUrl(path);
 
     const { data, error } = await req.db!
       .from('ebooks')

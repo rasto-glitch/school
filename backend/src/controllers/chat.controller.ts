@@ -6,6 +6,13 @@ import type { AuthRequest } from '../middleware/auth';
 import { getIo, chatPush } from '../utils/notify';
 import { isChatOpen, type ChatWindowState } from '../utils/chatWindow';
 import { safeDbErrorMessage, safeDbErrorStatus } from '../utils/dbErrors';
+// Elevated client for STORAGE-only operations. Authorization for uploads
+// is enforced at the route layer (authenticate + authorize). The path the
+// controller writes to is built from JWT claims, not the request body, so
+// the tenant scope is set in TypeScript before the storage call — no need
+// to rely on storage.objects RLS. Matches the pattern in auth.controller's
+// profile-picture upload.
+import { adminDb } from '../utils/db';
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -599,13 +606,16 @@ export async function uploadAttachment(req: AuthRequest, res: Response): Promise
   const ext = safeExt(file.originalname, '.bin');
   const path = `${schoolId}/${userId}/${Date.now()}_${Math.random().toString(36).slice(2)}${ext}`;
 
-  const { error } = await req.db!.storage
+  // Storage write goes through adminDb — see the import banner. Authz
+  // is enforced at the route layer (chatRoles) and the path is built
+  // from JWT claims above.
+  const { error } = await adminDb.storage
     .from('chat-files')
     .upload(path, file.buffer, { contentType: file.mimetype, upsert: false });
 
   if (error) { res.status(500).json({ error: 'Upload failed' }); return; }
 
-  const { data: { publicUrl } } = req.db!.storage.from('chat-files').getPublicUrl(path);
+  const { data: { publicUrl } } = adminDb.storage.from('chat-files').getPublicUrl(path);
 
   const isImage = file.mimetype.startsWith('image/');
 
