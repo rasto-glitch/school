@@ -427,8 +427,11 @@ export async function removeDeviceToken(req: AuthRequest, res: Response): Promis
 // Returns the authenticated user's current profile. Mobile Settings calls
 // this on mount so the Email row reflects DB state even when the cached
 // token predates the email-in-login change.
-export async function getMe(req: Request, res: Response): Promise<void> {
-  const userId = (req as any).user?.userId;
+export async function getMe(req: AuthRequest, res: Response): Promise<void> {
+  // Route is wrapped with authenticate, so req.user is always set. Keep
+  // the runtime guard as belt-and-suspenders in case a future routing
+  // change drops the middleware.
+  const userId = req.user?.userId;
   if (!userId) {
     res.status(401).json({ error: 'unauthorized' });
     return;
@@ -463,8 +466,8 @@ export async function getMe(req: Request, res: Response): Promise<void> {
 // confirmation step. There's no second address to send to, and refusing
 // the set would strand mobile users who can't submit bug reports. The
 // trade-off is accepted because admin-mediated reset still works.
-export async function updateMyEmail(req: Request, res: Response): Promise<void> {
-  const userId = (req as any).user?.userId;
+export async function updateMyEmail(req: AuthRequest, res: Response): Promise<void> {
+  const userId = req.user?.userId;
   const { email } = req.body as { email?: string };
 
   const cleaned = typeof email === 'string' ? email.trim().toLowerCase() : '';
@@ -781,9 +784,9 @@ export async function resetWithToken(req: Request, res: Response): Promise<void>
   res.json({ ok: true });
 }
 
-export async function changePassword(req: Request, res: Response): Promise<void> {
+export async function changePassword(req: AuthRequest, res: Response): Promise<void> {
   const { currentPassword, newPassword } = req.body;
-  const userId = (req as any).user?.userId;
+  const userId = req.user?.userId;
 
   if (!currentPassword || !newPassword) {
     res.status(400).json({ error: 'currentPassword and newPassword required' });

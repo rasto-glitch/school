@@ -57,9 +57,9 @@ export function createRouter(io: SocketServer) {
   router.post('/auth/refresh', validate({ body: v.refreshSchema }), (req, res) => refreshToken(req, res));
   router.post('/auth/logout', validate({ body: v.logoutSchema }), (req, res) => logout(req, res));
   router.post('/auth/logout-all', authenticate, (req, res) => logoutAll(req as AuthRequest, res));
-  router.post('/auth/change-password', authenticate, validate({ body: v.changePasswordSchema }), (req, res) => changePassword(req, res));
-  router.get('/auth/me', authenticate, (req, res) => getMe(req, res));
-  router.patch('/auth/me/email', authenticate, validate({ body: v.updateMyEmailSchema }), (req, res) => updateMyEmail(req, res));
+  router.post('/auth/change-password', authenticate, validate({ body: v.changePasswordSchema }), (req, res) => changePassword(req as AuthRequest, res));
+  router.get('/auth/me', authenticate, (req, res) => getMe(req as AuthRequest, res));
+  router.patch('/auth/me/email', authenticate, validate({ body: v.updateMyEmailSchema }), (req, res) => updateMyEmail(req as AuthRequest, res));
   router.post('/auth/confirm-email', validate({ body: v.confirmEmailSchema }), (req, res) => confirmEmail(req, res));
   router.post('/auth/forgot-password-email', validate({ body: v.forgotPasswordSchema }), (req, res) => forgotPasswordEmail(req, res));
   router.post('/auth/reset-with-token', validate({ body: v.resetWithTokenSchema }), (req, res) => resetWithToken(req, res));
