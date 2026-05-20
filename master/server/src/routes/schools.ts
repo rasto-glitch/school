@@ -5,6 +5,7 @@ import { createHash } from 'crypto';
 import bcrypt from 'bcryptjs';
 import { loadArchiveSnapshot, streamPdf, buildXlsx } from '../utils/archiveExport';
 import { loadEmployeeArchiveSnapshot, streamPdf as streamEmployeePdf, buildXlsx as buildEmployeeXlsx } from '../utils/employeeArchiveExport';
+import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from '../utils/passwordPolicy';
 
 const router = Router();
 
@@ -177,11 +178,12 @@ router.post('/', async (req: Request, res: Response) => {
     return;
   }
 
-  // SECURITY (M-7): the backend enforces >= 6 char passwords on every
-  // other reset/change flow. The master portal previously accepted a
-  // one-character adminPassword and bcrypt-hashed it. Match the floor.
-  if (typeof adminPassword !== 'string' || adminPassword.length < 8) {
-    res.status(400).json({ error: 'adminPassword must be at least 8 characters.' });
+  // Strong-password policy — mirrors backend/src/utils/passwordPolicy.ts.
+  // Auto-generated defaults used elsewhere (Parent@123 / Teacher@123 /
+  // Driver@123) all satisfy this; an operator setting the school's first
+  // admin password must too.
+  if (!isStrongPassword(adminPassword)) {
+    res.status(400).json({ error: PASSWORD_POLICY_MESSAGE });
     return;
   }
 
@@ -361,8 +363,8 @@ router.patch('/:id/admin-password', async (req: Request, res: Response) => {
   const { id } = req.params;
   const { password, userId } = req.body as { password?: unknown; userId?: unknown };
 
-  if (typeof password !== 'string' || password.length < 8) {
-    res.status(400).json({ error: 'Password must be at least 8 characters.' });
+  if (!isStrongPassword(password)) {
+    res.status(400).json({ error: PASSWORD_POLICY_MESSAGE });
     return;
   }
   if (typeof userId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId)) {

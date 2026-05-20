@@ -5,6 +5,7 @@ import { toast } from 'react-toastify';
 import { User, Lock, ImagePlus, Pencil } from 'lucide-react';
 import { authApi } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
+import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from '../../utils/passwordPolicy';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
 import Input from '../../components/common/Input';
@@ -22,6 +23,10 @@ export default function ProfilePage() {
   }>();
 
   const onChangePassword = async (data: any) => {
+    if (!isStrongPassword(data.newPassword)) {
+      toast.error(PASSWORD_POLICY_MESSAGE);
+      return;
+    }
     if (data.newPassword !== data.confirmPassword) {
       toast.error('Passwords do not match');
       return;
@@ -138,7 +143,7 @@ export default function ProfilePage() {
           </div>
           <form onSubmit={handleSubmit(onChangePassword)} className="space-y-4">
             <Input label="Current Password" type="password" {...register('currentPassword', { required: true })} />
-            <Input label="New Password" type="password" {...register('newPassword', { required: true, minLength: 6 })} />
+            <Input label="New Password" type="password" placeholder="Min 8 chars, 1 uppercase, 1 special character" {...register('newPassword', { required: true })} />
             <Input label="Confirm New Password" type="password" {...register('confirmPassword', { required: true })} />
             <Button type="submit" loading={changing} fullWidth>Update Password</Button>
           </form>

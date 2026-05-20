@@ -21,6 +21,7 @@ import { logAudit } from '../utils/audit';
 import { hasArchiveFeature, normalizeArchiveReason, resolveEmployeeArchiveId } from '../utils/employeeArchive';
 import { isUrlSafeToFetch } from '../utils/urlSafety';
 import { logger } from '../utils/logger';
+import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from '../utils/passwordPolicy';
 
 // ---- EMPLOYEE ARCHIVE (teacher / driver / supervisor; staff in staff.controller) ----
 // Mirrors the student archive: the controller assembles the role-specific
@@ -2858,8 +2859,8 @@ export async function resetUserPassword(req: AuthRequest, res: Response): Promis
   const { schoolId } = req.user!;
   const { userId } = req.params;
   const { newPassword } = req.body;
-  if (!newPassword || newPassword.length < 6) {
-    res.status(400).json({ error: 'Password must be at least 6 characters' }); return;
+  if (!isStrongPassword(newPassword)) {
+    res.status(400).json({ error: PASSWORD_POLICY_MESSAGE }); return;
   }
   const { data: user } = await supabase.from('users').select('id').eq('id', userId).eq('school_id', schoolId).single();
   if (!user) { res.status(404).json({ error: 'User not found' }); return; }
@@ -2926,7 +2927,7 @@ export async function reactivateUser(req: AuthRequest, res: Response): Promise<v
     password_changed_at: new Date().toISOString(),
   };
   if (newPassword) {
-    if (newPassword.length < 6) { res.status(400).json({ error: 'Password must be at least 6 characters' }); return; }
+    if (!isStrongPassword(newPassword)) { res.status(400).json({ error: PASSWORD_POLICY_MESSAGE }); return; }
     const rounds = parseInt(process.env.BCRYPT_ROUNDS || '10');
     updates.password_hash = await bcrypt.hash(newPassword, rounds);
   }

@@ -297,7 +297,7 @@
     "change_btn": "Change Password",
     "changing": "Changing…",
     "passwords_no_match": "New passwords do not match.",
-    "password_short": "Password must be at least 6 characters.",
+    "password_short": "Password must be at least 8 characters and include an uppercase letter and a special character.",
     "change_success": "Password changed successfully.",
     "forgot_title": "Forgot Password",
     "forgot_desc": "Choose how you'd like to reset your password.",

@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form';
 import { toast } from 'react-toastify';
 import { History } from 'lucide-react';
 import { adminApi } from '../../../services/api';
+import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from '../../../utils/passwordPolicy';
 import { useDebounce } from '../../../hooks/useDebounce';
 import Card from '../../../components/common/Card';
 import Input from '../../../components/common/Input';
@@ -55,11 +56,16 @@ export default function TeacherEmployeesTab() {
 
   const reactivateInactive = async (u: InactiveUser) => {
     if (!confirm(`Reactivate ${u.firstName} ${u.lastName} (${u.username})?`)) return;
-    const newPassword = prompt('Set a new password (or leave blank to keep the existing one):', '');
+    const newPassword = prompt('Set a new password (or leave blank to keep the existing one):\n\n' + PASSWORD_POLICY_MESSAGE, '');
     if (newPassword === null) return; // cancelled
+    const trimmed = newPassword.trim();
+    if (trimmed && !isStrongPassword(trimmed)) {
+      toast.error(PASSWORD_POLICY_MESSAGE);
+      return;
+    }
     setReactivatingId(u.id);
     try {
-      const r = await adminApi.reactivateUser(u.id, newPassword.trim() || undefined);
+      const r = await adminApi.reactivateUser(u.id, trimmed || undefined);
       const tail = r.data?.passwordReset ? ` New password: ${newPassword}` : '';
       toast.success(`Teacher reactivated. Login: ${u.username}.${tail}`, { autoClose: 8000 });
       addForm.reset();
@@ -85,6 +91,10 @@ export default function TeacherEmployeesTab() {
     setter(list.includes(id) ? list.filter(c => c !== id) : [...list, id]);
 
   const onAdd = async (data: any) => {
+    if (data.password && !isStrongPassword(data.password)) {
+      toast.error(PASSWORD_POLICY_MESSAGE);
+      return;
+    }
     setAddSubmitting(true);
     try {
       const res = await adminApi.createTeacher({
@@ -212,7 +222,7 @@ export default function TeacherEmployeesTab() {
                 <p className="text-xs text-gray-400 mt-1">Subjects are assigned per class in Class Management → Curriculum.</p>
               </div>
               <Input placeholder="Username (optional)" {...addForm.register('username')} />
-              <Input type="password" placeholder="Password (default: Teacher@123)" {...addForm.register('password')} />
+              <Input type="password" placeholder="Password (default: Teacher@123 — or min 8 chars, 1 uppercase, 1 special)" {...addForm.register('password')} />
               <Button type="submit" loading={addSubmitting} fullWidth>Send</Button>
             </form>
           </Card>

@@ -5,6 +5,7 @@ import { toast } from 'react-toastify';
 import { UserPlus, Search, Trash2, KeyRound, Clock, CheckCircle2, X, Pencil, Shield, ExternalLink, Printer } from 'lucide-react';
 import { adminApi } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
+import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from '../../utils/passwordPolicy';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
 import Input from '../../components/common/Input';
@@ -113,6 +114,10 @@ export default function AccountsPage() {
   };
 
   const onSubmit = async (data: any) => {
+    if (!isStrongPassword(data.password)) {
+      toast.error(PASSWORD_POLICY_MESSAGE);
+      return;
+    }
     setLoading(true);
     try {
       await adminApi.createAccount(data);
@@ -163,8 +168,8 @@ export default function AccountsPage() {
   };
 
   const onResetPassword = async () => {
-    if (!newPassword || newPassword.length < 6) {
-      toast.error('Password must be at least 6 characters');
+    if (!isStrongPassword(newPassword)) {
+      toast.error(PASSWORD_POLICY_MESSAGE);
       return;
     }
     const userId = resetModalUser?.userId ?? resetModalUser?.id;
@@ -298,7 +303,7 @@ export default function AccountsPage() {
             <Input label="Email" type="email" placeholder="email@example.com" {...register('email')} />
             <Input label="Phone" placeholder="Phone number" {...register('phone')} />
             <Input label="Username" placeholder="Login username" {...register('username', { required: true })} />
-            <Input label="Password" type="password" placeholder="Initial password" {...register('password', { required: true })} />
+            <Input label="Password" type="password" placeholder="Min 8 chars, 1 uppercase, 1 special character" {...register('password', { required: true })} />
             <Button type="submit" loading={loading} fullWidth icon={<UserPlus className="w-4 h-4" />}>Create Account</Button>
           </form>
         </Card>
@@ -506,7 +511,7 @@ export default function AccountsPage() {
                 type="password"
                 value={newPassword}
                 onChange={e => setNewPassword(e.target.value)}
-                placeholder="At least 6 characters"
+                placeholder="Min 8 chars, 1 uppercase, 1 special character"
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                 autoFocus
               />

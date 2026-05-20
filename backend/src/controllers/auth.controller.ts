@@ -13,6 +13,7 @@ import { toCC } from '../utils/transform';
 import { emitToAdmins, notify } from '../utils/notify';
 import { logger } from '../utils/logger';
 import { sendMail } from '../utils/mailer';
+import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from '../utils/passwordPolicy';
 import type { AuthRequest } from '../middleware/auth';
 // Public landing host where /reset-password and /confirm-email live.
 // First value is treated as canonical; the rest are accepted at runtime
@@ -746,8 +747,8 @@ export async function resetWithToken(req: Request, res: Response): Promise<void>
     res.status(400).json({ error: 'token is required' });
     return;
   }
-  if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 6) {
-    res.status(400).json({ error: 'New password must be at least 6 characters.' });
+  if (!isStrongPassword(newPassword)) {
+    res.status(400).json({ error: PASSWORD_POLICY_MESSAGE });
     return;
   }
 
@@ -793,8 +794,8 @@ export async function changePassword(req: AuthRequest, res: Response): Promise<v
     return;
   }
 
-  if (newPassword.length < 6) {
-    res.status(400).json({ error: 'New password must be at least 6 characters' });
+  if (!isStrongPassword(newPassword)) {
+    res.status(400).json({ error: PASSWORD_POLICY_MESSAGE });
     return;
   }
 

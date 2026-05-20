@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, User, Phone, Mail, Home, KeyRound, Pencil, CheckCircle2, X, Calendar, GraduationCap } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { adminApi } from '../../services/api';
+import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from '../../utils/passwordPolicy';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
@@ -63,8 +64,8 @@ export default function ParentProfilePage() {
   };
 
   const onResetPassword = async () => {
-    if (!newPassword || newPassword.length < 6) {
-      toast.error('Password must be at least 6 characters');
+    if (!isStrongPassword(newPassword)) {
+      toast.error(PASSWORD_POLICY_MESSAGE);
       return;
     }
     const userId = parent?.users?.id;
@@ -200,7 +201,7 @@ export default function ParentProfilePage() {
                     type="password"
                     value={newPassword}
                     onChange={e => setNewPassword(e.target.value)}
-                    placeholder="New password (min 6 chars)"
+                    placeholder="Min 8 chars, 1 uppercase, 1 special character"
                     className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                     onKeyDown={e => { if (e.key === 'Enter') onResetPassword(); }}
                   />

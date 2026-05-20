@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form';
 import { toast } from 'react-toastify';
 import { Search, History } from 'lucide-react';
 import { adminApi } from '../../services/api';
+import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from '../../utils/passwordPolicy';
 import { useDebounce } from '../../hooks/useDebounce';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
@@ -57,11 +58,16 @@ export default function DriversManagement() {
 
   const reactivateInactive = async (u: InactiveUser) => {
     if (!confirm(`Reactivate ${u.firstName} ${u.lastName} (${u.username})?`)) return;
-    const newPassword = prompt('Set a new password (or leave blank to keep the existing one):', '');
+    const newPassword = prompt('Set a new password (or leave blank to keep the existing one):\n\n' + PASSWORD_POLICY_MESSAGE, '');
     if (newPassword === null) return;
+    const trimmed = newPassword.trim();
+    if (trimmed && !isStrongPassword(trimmed)) {
+      toast.error(PASSWORD_POLICY_MESSAGE);
+      return;
+    }
     setReactivatingId(u.id);
     try {
-      const r = await adminApi.reactivateUser(u.id, newPassword.trim() || undefined);
+      const r = await adminApi.reactivateUser(u.id, trimmed || undefined);
       const tail = r.data?.passwordReset ? ` New password: ${newPassword}` : '';
       toast.success(`Driver reactivated. Login: ${u.username}.${tail}`, { autoClose: 8000 });
       addForm.reset();
@@ -87,6 +93,10 @@ export default function DriversManagement() {
   }, [selectedDriverId, drivers, students]);
 
   const onAdd = async (data: any) => {
+    if (data.password && !isStrongPassword(data.password)) {
+      toast.error(PASSWORD_POLICY_MESSAGE);
+      return;
+    }
     setAddSubmitting(true);
     try {
       const res = await adminApi.createDriver({
@@ -346,7 +356,7 @@ export default function DriversManagement() {
               </div>
             </div>
             <Input placeholder="Username (optional)" {...addForm.register('username')} />
-            <Input type="password" placeholder="Password (default: Driver@123)" {...addForm.register('password')} />
+            <Input type="password" placeholder="Password (default: Driver@123 — or min 8 chars, 1 uppercase, 1 special)" {...addForm.register('password')} />
             <Button type="submit" loading={addSubmitting} fullWidth>Send</Button>
           </form>
         </Card>

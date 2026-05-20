@@ -1,13 +1,19 @@
 import { z } from 'zod';
 import { nonEmptyStr, email } from './common';
+import { strongPasswordSchema } from '../utils/passwordPolicy';
 
 // Auth input schemas (Phase 1a). Bounds are generous on purpose — these
 // mirror what the handlers already accept; the value here is rejecting
 // missing/wrong-typed/oversized input and stripping unknown keys before
 // anything touches the auth/credential paths.
 
+// `password` is the user-presented current-password on login / change-password
+// — it must just be a non-empty string, since legacy accounts may have
+// short passwords that predate the strong-password policy. `newPassword`
+// is anything that will be hashed and stored, so it must satisfy the
+// policy (see utils/passwordPolicy.ts).
 const password = z.string().min(1).max(200);
-const newPassword = z.string().min(6, 'New password must be at least 6 characters').max(200);
+const newPassword = strongPasswordSchema;
 const username = z.string().trim().min(1).max(100);
 const opaqueToken = z.string().trim().min(1).max(512);
 

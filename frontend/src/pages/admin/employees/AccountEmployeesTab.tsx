@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form';
 import { toast } from 'react-toastify';
 import { History } from 'lucide-react';
 import { adminApi } from '../../../services/api';
+import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from '../../../utils/passwordPolicy';
 import { useDebounce } from '../../../hooks/useDebounce';
 import Card from '../../../components/common/Card';
 import Input from '../../../components/common/Input';
@@ -75,11 +76,16 @@ export default function AccountEmployeesTab({ role, singular }: Props) {
 
   const reactivateInactive = async (u: InactiveUser) => {
     if (!confirm(`Reactivate ${u.firstName} ${u.lastName} (${u.username})?`)) return;
-    const newPassword = prompt('Set a new password (or leave blank to keep the existing one):', '');
+    const newPassword = prompt('Set a new password (or leave blank to keep the existing one):\n\n' + PASSWORD_POLICY_MESSAGE, '');
     if (newPassword === null) return; // cancelled
+    const trimmed = newPassword.trim();
+    if (trimmed && !isStrongPassword(trimmed)) {
+      toast.error(PASSWORD_POLICY_MESSAGE);
+      return;
+    }
     setReactivatingId(u.id);
     try {
-      const r = await adminApi.reactivateUser(u.id, newPassword.trim() || undefined);
+      const r = await adminApi.reactivateUser(u.id, trimmed || undefined);
       const tail = r.data?.passwordReset ? ` New password: ${newPassword}` : '';
       toast.success(`${singular} reactivated. Login: ${u.username}.${tail}`, { autoClose: 8000 });
       addForm.reset();
@@ -103,6 +109,10 @@ export default function AccountEmployeesTab({ role, singular }: Props) {
   const onAdd = async (data: any) => {
     if (!data.username?.trim() || !data.password?.trim()) {
       toast.error('Username and password are required');
+      return;
+    }
+    if (!isStrongPassword(data.password)) {
+      toast.error(PASSWORD_POLICY_MESSAGE);
       return;
     }
     setAddSubmitting(true);
@@ -203,7 +213,7 @@ export default function AccountEmployeesTab({ role, singular }: Props) {
               <Input placeholder="Phone Number" {...addForm.register('phone')} />
               <Input placeholder="Email (optional)" {...addForm.register('email')} />
               <Input placeholder="Username" {...addForm.register('username', { required: true })} />
-              <Input type="password" placeholder="Password" {...addForm.register('password', { required: true })} />
+              <Input type="password" placeholder="Min 8 chars, 1 uppercase, 1 special character" {...addForm.register('password', { required: true })} />
               <Button type="submit" loading={addSubmitting} fullWidth>Send</Button>
             </form>
           </Card>

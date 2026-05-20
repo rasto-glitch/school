@@ -17,6 +17,7 @@ import { useAuthStore } from '../../store/authStore';
 import { useThemeStore, useColors } from '../../store/themeStore';
 import { getPushStatus, retryPushRegistration, type PushStatus } from '../../hooks/usePushNotifications';
 import { authApi } from '../../services/api';
+import { isStrongPassword } from '../../utils/passwordPolicy';
 import { spacing, radius, font, shadow } from '../../theme';
 
 const LANGUAGES = [
@@ -111,7 +112,7 @@ export default function SettingsScreen() {
       Alert.alert('', t('settings.passwords_no_match'));
       return;
     }
-    if (newPassword.length < 6) {
+    if (!isStrongPassword(newPassword)) {
       Alert.alert('', t('settings.password_short'));
       return;
     }

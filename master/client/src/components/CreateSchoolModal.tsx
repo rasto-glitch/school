@@ -1,6 +1,7 @@
 import { useState, FormEvent } from 'react';
 import { createSchool, School, SchoolFeatures, PREMIUM_ONLY_FEATURES } from '../api';
 import { PLANS, PLAN_IDS, PlanId, getPlan } from '../plans';
+import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from '../utils/passwordPolicy';
 
 interface Props {
   onClose: () => void;
@@ -54,6 +55,10 @@ export default function CreateSchoolModal({ onClose, onCreated }: Props) {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
+    if (!isStrongPassword(form.adminPassword)) {
+      setError(PASSWORD_POLICY_MESSAGE);
+      return;
+    }
     setLoading(true);
     try {
       const res = await createSchool({
@@ -137,7 +142,7 @@ export default function CreateSchoolModal({ onClose, onCreated }: Props) {
               <input type="text" value={form.adminUsername} onChange={set('adminUsername')} required className={inputCls} placeholder="admin" />
             </Field>
             <Field label="Password" required>
-              <input type="password" value={form.adminPassword} onChange={set('adminPassword')} required minLength={6} className={inputCls} placeholder="Min 6 characters" />
+              <input type="password" value={form.adminPassword} onChange={set('adminPassword')} required minLength={8} className={inputCls} placeholder="Min 8 chars, 1 uppercase, 1 special character" />
             </Field>
           </div>
           <Field label="Email (optional)">

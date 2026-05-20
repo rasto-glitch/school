@@ -6,6 +6,7 @@ import {
   exportSchoolEmployeeArchivePdf, exportSchoolEmployeeArchiveXlsx,
 } from '../api';
 import { PLANS, PLAN_IDS, PlanId, getPlan, formatMonthlyCost } from '../plans';
+import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from '../utils/passwordPolicy';
 
 interface Props {
   school: School;
@@ -169,7 +170,7 @@ export default function EditSchoolModal({ school, onClose, onUpdated }: Props) {
   const handleResetPassword = async () => {
     setPwError('');
     setPwSuccess('');
-    if (newPassword.length < 8) { setPwError('Password must be at least 8 characters.'); return; }
+    if (!isStrongPassword(newPassword)) { setPwError(PASSWORD_POLICY_MESSAGE); return; }
     if (!selectedAdminId) { setPwError('Pick which admin to reset.'); return; }
     setPwLoading(true);
     try {
@@ -312,7 +313,7 @@ export default function EditSchoolModal({ school, onClose, onUpdated }: Props) {
                     type="password"
                     value={newPassword}
                     onChange={(e) => { setNewPassword(e.target.value); setPwError(''); setPwSuccess(''); }}
-                    placeholder="New password (min 8 chars)"
+                    placeholder="Min 8 chars, 1 uppercase, 1 special character"
                     className={inputCls}
                   />
                   <button

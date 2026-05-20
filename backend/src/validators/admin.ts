@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { nonEmptyStr, uuid } from './common';
+import { strongPasswordSchema } from '../utils/passwordPolicy';
 
 // User / account / role write schemas (Phase 1c) — the privilege- and
 // credential-bearing admin endpoints. Same philosophy as accounting:
@@ -10,7 +11,10 @@ import { nonEmptyStr, uuid } from './common';
 // linking, school scoping) untouched.
 
 const role = z.enum(['parent', 'teacher', 'admin', 'driver', 'supervisor', 'reception', 'accountant']);
-const password = z.string().min(6, 'Password must be at least 6 characters').max(200);
+// Any password the admin types must satisfy the policy (utils/passwordPolicy.ts).
+// Auto-generated defaults (Parent@123 / Teacher@123 / Driver@123 / restore-temp)
+// are constructed in the controller and don't pass through this schema.
+const password = strongPasswordSchema;
 const username = z.string().trim().min(1).max(100);
 // Email is a CONTACT field here (families share it) — never identity.
 // Optional and lenient; '' / null tolerated.
