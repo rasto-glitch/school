@@ -71,7 +71,8 @@ export const createDriverSchema = z.object({
   emergencyContact: contactStr(120),
   licenseNumber: contactStr(80),
   busNumber: contactStr(40),
-  age: z.number().int().min(0).max(120).optional(),
+  // Coerce: HTML number inputs deliver strings through the form layer.
+  age: z.coerce.number().int().min(0).max(120).optional(),
   // username/password optional — same controller-side defaulting as teachers.
   username: username.optional(),
   password: password.optional(),
@@ -85,7 +86,8 @@ export const updateDriverSchema = z.object({
   emergencyContact: contactStr(120),
   licenseNumber: contactStr(80),
   busNumber: contactStr(40),
-  age: z.number().int().min(0).max(120).optional(),
+  // Coerce: HTML number inputs deliver strings through the form layer.
+  age: z.coerce.number().int().min(0).max(120).optional(),
   remove: z.boolean().optional(),
   studentIds: z.array(uuid).optional(),
   vehicleType: vehicleType.optional(),
