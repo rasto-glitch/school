@@ -124,6 +124,21 @@ function safeFilename(s: string): string {
   return s.replace(/[^a-z0-9-_]+/gi, '_');
 }
 
+// GET /api/schools/:id/admins — list admin accounts of one school. Used
+// by the EditSchoolModal's password-reset UI to target a specific admin
+// (rather than every admin at once — see L-4).
+router.get('/:id/admins', async (req: Request, res: Response) => {
+  const id = req.params.id as string;
+  const { data, error } = await supabase
+    .from('users')
+    .select('id, username, first_name, last_name, is_active')
+    .eq('school_id', id)
+    .eq('role', 'admin')
+    .order('username');
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+  res.json(data ?? []);
+});
+
 // GET /api/schools — list all schools with counts
 router.get('/', async (_req: Request, res: Response) => {
   const { data: schools, error } = await supabase
@@ -159,6 +174,14 @@ router.post('/', async (req: Request, res: Response) => {
 
   if (!name || !slug || !abbreviation || !adminFirstName || !adminLastName || !adminUsername || !adminPassword) {
     res.status(400).json({ error: 'name, slug, abbreviation, adminFirstName, adminLastName, adminUsername, adminPassword are required' });
+    return;
+  }
+
+  // SECURITY (M-7): the backend enforces >= 6 char passwords on every
+  // other reset/change flow. The master portal previously accepted a
+  // one-character adminPassword and bcrypt-hashed it. Match the floor.
+  if (typeof adminPassword !== 'string' || adminPassword.length < 8) {
+    res.status(400).json({ error: 'adminPassword must be at least 8 characters.' });
     return;
   }
 
@@ -329,13 +352,32 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
   res.json(data);
 });
 
-// PATCH /api/schools/:id/admin-password — reset admin account(s) password
+// PATCH /api/schools/:id/admin-password — reset ONE admin account's password.
+// SECURITY (L-4): previously this update used .eq('role', 'admin') alone,
+// which set every admin of the school to the SAME password. Multiple
+// admins now shared one credential. Take a target userId from the body
+// and scope the update to that single user.
 router.patch('/:id/admin-password', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { password } = req.body;
+  const { password, userId } = req.body as { password?: unknown; userId?: unknown };
 
-  if (!password || password.length < 6) {
-    res.status(400).json({ error: 'Password must be at least 6 characters.' });
+  if (typeof password !== 'string' || password.length < 8) {
+    res.status(400).json({ error: 'Password must be at least 8 characters.' });
+    return;
+  }
+  if (typeof userId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId)) {
+    res.status(400).json({ error: 'userId is required and must be a UUID.' });
+    return;
+  }
+
+  // Verify the target user is actually an admin of this school before
+  // resetting — refuses to silently no-op on a wrong school + userId
+  // combination, and prevents accidentally touching a non-admin via
+  // a hand-crafted body.
+  const { data: target } = await supabase
+    .from('users').select('id, role').eq('id', userId).eq('school_id', id).maybeSingle();
+  if (!target || (target as { role: string }).role !== 'admin') {
+    res.status(404).json({ error: 'Admin account not found in this school.' });
     return;
   }
 
@@ -343,8 +385,8 @@ router.patch('/:id/admin-password', async (req: Request, res: Response) => {
   const { error } = await supabase
     .from('users')
     .update({ password_hash: passwordHash, password_changed_at: new Date().toISOString() })
-    .eq('school_id', id)
-    .eq('role', 'admin');
+    .eq('id', userId)
+    .eq('school_id', id);
 
   if (error) { res.status(400).json({ error: safeDbErrorMessage(error) }); return; }
   res.json({ message: 'Admin password updated.' });

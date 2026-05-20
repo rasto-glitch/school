@@ -1,6 +1,7 @@
-import { useState, FormEvent } from 'react';
+import { useState, useEffect, FormEvent } from 'react';
 import {
-  updateSchool, resetAdminPassword, School, DEFAULT_FEATURES, SchoolFeatures,
+  updateSchool, resetAdminPassword, listSchoolAdmins, SchoolAdmin,
+  School, DEFAULT_FEATURES, SchoolFeatures,
   PREMIUM_ONLY_FEATURES, exportSchoolArchivePdf, exportSchoolArchiveXlsx,
   exportSchoolEmployeeArchivePdf, exportSchoolEmployeeArchiveXlsx,
 } from '../api';
@@ -48,6 +49,23 @@ export default function EditSchoolModal({ school, onClose, onUpdated }: Props) {
   const [pwError, setPwError] = useState('');
   const [pwSuccess, setPwSuccess] = useState('');
   const [pwLoading, setPwLoading] = useState(false);
+  // L-4: target a specific admin instead of all admins of the school
+  const [admins, setAdmins] = useState<SchoolAdmin[]>([]);
+  const [selectedAdminId, setSelectedAdminId] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    listSchoolAdmins(school.id)
+      .then(res => {
+        if (cancelled) return;
+        const active = res.data.filter(a => a.is_active);
+        setAdmins(active);
+        // Pre-select if exactly one admin (the common case).
+        if (active.length === 1) setSelectedAdminId(active[0].id);
+      })
+      .catch(() => { /* surfaced when the user actually clicks reset */ });
+    return () => { cancelled = true; };
+  }, [school.id]);
 
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -151,11 +169,13 @@ export default function EditSchoolModal({ school, onClose, onUpdated }: Props) {
   const handleResetPassword = async () => {
     setPwError('');
     setPwSuccess('');
-    if (newPassword.length < 6) { setPwError('Password must be at least 6 characters.'); return; }
+    if (newPassword.length < 8) { setPwError('Password must be at least 8 characters.'); return; }
+    if (!selectedAdminId) { setPwError('Pick which admin to reset.'); return; }
     setPwLoading(true);
     try {
-      await resetAdminPassword(school.id, newPassword);
-      setPwSuccess('Admin password updated.');
+      await resetAdminPassword(school.id, selectedAdminId, newPassword);
+      const target = admins.find(a => a.id === selectedAdminId);
+      setPwSuccess(target ? `Password updated for ${target.username}.` : 'Admin password updated.');
       setNewPassword('');
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Failed to reset password.';
@@ -266,23 +286,46 @@ export default function EditSchoolModal({ school, onClose, onUpdated }: Props) {
           {/* Reset admin password */}
           <div className="border border-slate-200 rounded-lg p-3 space-y-2">
             <p className="text-xs font-medium text-slate-700">Reset Admin Password</p>
-            <div className="flex gap-2">
-              <input
-                type="password"
-                value={newPassword}
-                onChange={(e) => { setNewPassword(e.target.value); setPwError(''); setPwSuccess(''); }}
-                placeholder="New password (min 6 chars)"
-                className={inputCls}
-              />
-              <button
-                type="button"
-                onClick={handleResetPassword}
-                disabled={pwLoading || !newPassword}
-                className="shrink-0 px-3 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:bg-amber-200 text-white text-xs font-medium transition-colors"
-              >
-                {pwLoading ? '...' : 'Reset'}
-              </button>
-            </div>
+            {admins.length === 0 ? (
+              <p className="text-xs text-slate-500">No active admins for this school.</p>
+            ) : (
+              <>
+                {admins.length > 1 && (
+                  <select
+                    value={selectedAdminId}
+                    onChange={(e) => { setSelectedAdminId(e.target.value); setPwError(''); setPwSuccess(''); }}
+                    className={inputCls}
+                  >
+                    <option value="">Select admin to reset…</option>
+                    {admins.map(a => (
+                      <option key={a.id} value={a.id}>
+                        {a.username}{a.first_name || a.last_name ? ` — ${a.first_name ?? ''} ${a.last_name ?? ''}`.trimEnd() : ''}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                {admins.length === 1 && (
+                  <p className="text-xs text-slate-500">Target: <span className="font-mono">{admins[0].username}</span></p>
+                )}
+                <div className="flex gap-2">
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => { setNewPassword(e.target.value); setPwError(''); setPwSuccess(''); }}
+                    placeholder="New password (min 8 chars)"
+                    className={inputCls}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleResetPassword}
+                    disabled={pwLoading || !newPassword || !selectedAdminId}
+                    className="shrink-0 px-3 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:bg-amber-200 text-white text-xs font-medium transition-colors"
+                  >
+                    {pwLoading ? '...' : 'Reset'}
+                  </button>
+                </div>
+              </>
+            )}
             {pwError && <p className="text-xs text-red-600">{pwError}</p>}
             {pwSuccess && <p className="text-xs text-emerald-600">{pwSuccess}</p>}
           </div>

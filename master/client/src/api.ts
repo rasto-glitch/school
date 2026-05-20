@@ -120,8 +120,21 @@ export const toggleSchoolStatus = (id: string, isActive: boolean) =>
 export const deleteSchool = (id: string) =>
   api.delete(`/schools/${id}`);
 
-export const resetAdminPassword = (id: string, password: string) =>
-  api.patch(`/schools/${id}/admin-password`, { password });
+export interface SchoolAdmin {
+  id: string;
+  username: string;
+  first_name: string | null;
+  last_name: string | null;
+  is_active: boolean;
+}
+
+export const listSchoolAdmins = (id: string) =>
+  api.get<SchoolAdmin[]>(`/schools/${id}/admins`);
+
+// Per-admin reset (L-4): server requires a target userId now, so the
+// caller must pick which admin to reset rather than nuking all admins.
+export const resetAdminPassword = (id: string, userId: string, password: string) =>
+  api.patch(`/schools/${id}/admin-password`, { userId, password });
 
 export const exportSchoolArchivePdf = (id: string) =>
   api.get(`/schools/${id}/archive-export.pdf`, { responseType: 'blob' });
