@@ -1,3 +1,4 @@
+import { safeDbErrorMessage, safeDbErrorStatus } from '../utils/dbErrors';
 import { Response } from 'express';
 // Elevated controller — see Phase 0 inventory.
 import { adminDb as supabase } from '../utils/db';
@@ -29,7 +30,7 @@ export async function listPeriods(req: AuthRequest, res: Response): Promise<void
     .select('id, period_start, period_end, closed_at, closed_by, reopened_at, reopened_by, reopen_reason, notes, created_at')
     .eq('school_id', schoolId)
     .order('period_start', { ascending: false });
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
   // Resolve actor names so the UI doesn't need to round-trip
   const ids = Array.from(new Set([
@@ -105,7 +106,7 @@ export async function closePeriod(req: AuthRequest, res: Response): Promise<void
       .eq('school_id', schoolId)
       .select()
       .single();
-    if (reErr) { res.status(500).json({ error: reErr.message }); return; }
+    if (reErr) { res.status(safeDbErrorStatus(reErr)).json({ error: safeDbErrorMessage(reErr) }); return; }
     await logAudit({ req, entityType: 'accounting_period', entityId: String((existing as any).id), action: 'update', after: reclosed, label: `${periodStart} → ${periodEnd}`, reason: 'Re-closed after reopen' });
     res.status(200).json(toCC(reclosed));
     return;
@@ -118,7 +119,7 @@ export async function closePeriod(req: AuthRequest, res: Response): Promise<void
     closed_by: userId,
     notes: notes ?? null,
   }).select().single();
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   await logAudit({ req, entityType: 'accounting_period', entityId: String(data.id), action: 'create', after: data, label: `${periodStart} → ${periodEnd}` });
   res.status(201).json(toCC(data));
 }
@@ -140,7 +141,7 @@ export async function reopenPeriod(req: AuthRequest, res: Response): Promise<voi
     .from('accounting_periods')
     .update({ reopened_at: new Date().toISOString(), reopened_by: userId, reopen_reason: reason })
     .eq('id', id).eq('school_id', schoolId).select().single();
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   await logAudit({ req, entityType: 'accounting_period', entityId: String(id), action: 'update', before, after, reason });
   res.json(toCC(after));
 }
@@ -157,7 +158,7 @@ export async function listPaymentAccounts(req: AuthRequest, res: Response): Prom
     .select('*')
     .eq('school_id', schoolId)
     .order('created_at', { ascending: true });
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
   // Compute live balance per account: opening + tuition payments (excluding
   // refunds since refunds reduce cash) − refunds − salaries − expenses.
@@ -209,7 +210,7 @@ export async function createPaymentAccount(req: AuthRequest, res: Response): Pro
     opening_balance: typeof openingBalance === 'number' ? openingBalance : 0,
     notes: notes ?? null,
   }).select().single();
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   await logAudit({ req, entityType: 'payment_account', entityId: String(data.id), action: 'create', after: data, label: data.name });
   res.status(201).json(toCC(data));
 }
@@ -237,7 +238,7 @@ export async function updatePaymentAccount(req: AuthRequest, res: Response): Pro
 
   const { data: after, error } = await supabase.from('payment_accounts').update(updates)
     .eq('id', id).eq('school_id', schoolId).select().single();
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   await logAudit({ req, entityType: 'payment_account', entityId: String(id), action: 'update', before, after, label: (after as any).name });
   res.json(toCC(after));
 }
@@ -253,7 +254,7 @@ export async function deletePaymentAccount(req: AuthRequest, res: Response): Pro
   if (!before) { res.status(404).json({ error: 'Account not found' }); return; }
   const { data: after, error } = await supabase.from('payment_accounts').update({ is_active: false })
     .eq('id', id).eq('school_id', schoolId).select().single();
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   await logAudit({ req, entityType: 'payment_account', entityId: String(id), action: 'update', before, after, label: (before as any).name, reason: 'Deactivated' });
   res.json({ success: true });
 }
@@ -270,7 +271,7 @@ export async function listFxRates(req: AuthRequest, res: Response): Promise<void
     .select('*')
     .eq('school_id', schoolId)
     .order('effective_from', { ascending: false });
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data ?? []));
 }
 
@@ -294,7 +295,7 @@ export async function setFxRate(req: AuthRequest, res: Response): Promise<void> 
     rate,
     effective_from: effective,
   }, { onConflict: 'school_id,from_currency,to_currency,effective_from' }).select().single();
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   await logAudit({ req, entityType: 'fx_rate', entityId: String(data.id), action: 'create', after: data, label: `${fromCurrency}→${toCurrency} @ ${effective}` });
   res.status(201).json(toCC(data));
 }
@@ -308,7 +309,7 @@ export async function deleteFxRate(req: AuthRequest, res: Response): Promise<voi
   const { data: before } = await supabase.from('fx_rates').select('*').eq('id', id).eq('school_id', schoolId).single();
   if (!before) { res.status(404).json({ error: 'FX rate not found' }); return; }
   const { error } = await supabase.from('fx_rates').delete().eq('id', id).eq('school_id', schoolId);
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   await logAudit({ req, entityType: 'fx_rate', entityId: String(id), action: 'delete', before });
   res.json({ success: true });
 }

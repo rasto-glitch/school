@@ -1,3 +1,4 @@
+import { safeDbErrorMessage, safeDbErrorStatus } from '../utils/dbErrors';
 import { Response } from 'express';
 import { safeExt } from '../utils/upload';
 import type { AuthRequest } from '../middleware/auth';
@@ -211,7 +212,7 @@ export async function getPosts(req: AuthRequest, res: Response): Promise<void> {
       .order('created_at', { ascending: false })
       .order('id', { ascending: false })
       .limit(limit + 1);
-    if (error) { res.status(500).json({ error: error.message }); return; }
+    if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
     const page = buildPage((data ?? []) as { id: string; created_at: string }[], limit);
     const decorated = await decoratePosts(req.db!,page.data, userId);
@@ -293,7 +294,7 @@ export async function createPost(req: AuthRequest, res: Response): Promise<void>
         .select('*, classes(name), teachers(full_name, subject, user_id)')
         .single();
 
-      if (error) { res.status(400).json({ error: error.message }); return; }
+      if (error) { res.status(400).json({ error: safeDbErrorMessage(error) }); return; }
 
       if (data.is_published) {
         notifyPostAudience(req.db!, schoolId,data, title);
@@ -325,7 +326,7 @@ export async function createPost(req: AuthRequest, res: Response): Promise<void>
         .select('*, classes(name), teachers(full_name, subject, user_id)')
         .single();
 
-      if (error) { res.status(400).json({ error: error.message }); return; }
+      if (error) { res.status(400).json({ error: safeDbErrorMessage(error) }); return; }
 
       if (data.is_published) {
         notifyPostAudience(req.db!, schoolId,data, title);
@@ -377,7 +378,7 @@ export async function updatePost(req: AuthRequest, res: Response): Promise<void>
       .select('*, classes(name), teachers(full_name, subject, user_id)')
       .single();
 
-    if (error) { res.status(400).json({ error: error.message }); return; }
+    if (error) { res.status(400).json({ error: safeDbErrorMessage(error) }); return; }
 
     // Notify when a draft becomes visible for the first time.
     if (!existing.is_published && data.is_published) {
@@ -415,7 +416,7 @@ export async function deletePost(req: AuthRequest, res: Response): Promise<void>
       .eq('id', id)
       .eq('school_id', schoolId);
 
-    if (error) { res.status(400).json({ error: error.message }); return; }
+    if (error) { res.status(400).json({ error: safeDbErrorMessage(error) }); return; }
     res.json({ success: true });
   } catch {
     res.status(500).json({ error: 'Failed to delete post' });
@@ -433,7 +434,7 @@ export async function uploadPostFile(req: AuthRequest, res: Response): Promise<v
     .from(process.env.SUPABASE_STORAGE_BUCKET || 'homework-attachments')
     .upload(path, file.buffer, { contentType: file.mimetype, upsert: false });
 
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
   const { data: { publicUrl } } = req.db!.storage.from(process.env.SUPABASE_STORAGE_BUCKET || 'homework-attachments').getPublicUrl(path);
   res.json({ url: publicUrl, name: file.originalname });
@@ -536,7 +537,7 @@ export async function toggleLike(req: AuthRequest, res: Response): Promise<void>
     const { error } = await req.db!
       .from('post_likes')
       .insert({ school_id: schoolId, post_id: postId, user_id: userId });
-    if (error) { res.status(400).json({ error: error.message }); return; }
+    if (error) { res.status(400).json({ error: safeDbErrorMessage(error) }); return; }
 
     const { count } = await req.db!.from('post_likes').select('*', { count: 'exact', head: true }).eq('post_id', postId);
     res.json({ liked: true, likesCount: count ?? 0 });
@@ -568,7 +569,7 @@ export async function toggleSave(req: AuthRequest, res: Response): Promise<void>
     const { error } = await req.db!
       .from('post_saves')
       .insert({ school_id: schoolId, post_id: postId, user_id: userId });
-    if (error) { res.status(400).json({ error: error.message }); return; }
+    if (error) { res.status(400).json({ error: safeDbErrorMessage(error) }); return; }
 
     res.json({ saved: true });
   } catch {
@@ -620,7 +621,7 @@ export async function getComments(req: AuthRequest, res: Response): Promise<void
       .eq('is_deleted', false)
       .order('created_at', { ascending: true });
 
-    if (error) { res.status(500).json({ error: error.message }); return; }
+    if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
     const comments = data ?? [];
     if (comments.length === 0) { res.json([]); return; }
@@ -694,7 +695,7 @@ export async function createComment(req: AuthRequest, res: Response): Promise<vo
       .select('id, post_id, user_id, parent_id, body, created_at, users(first_name, last_name, role, profile_picture)')
       .single();
 
-    if (error) { res.status(400).json({ error: error.message }); return; }
+    if (error) { res.status(400).json({ error: safeDbErrorMessage(error) }); return; }
 
     // Notify the post author + (if reply) the user being replied to.
     // Skip self-notification and de-duplicate when the same user is both targets.
@@ -767,7 +768,7 @@ export async function toggleCommentLike(req: AuthRequest, res: Response): Promis
     const { error } = await req.db!
       .from('post_comment_likes')
       .insert({ school_id: schoolId, comment_id: commentId, user_id: userId });
-    if (error) { res.status(400).json({ error: error.message }); return; }
+    if (error) { res.status(400).json({ error: safeDbErrorMessage(error) }); return; }
 
     const { count } = await req.db!.from('post_comment_likes').select('*', { count: 'exact', head: true }).eq('comment_id', commentId);
     res.json({ liked: true, likesCount: count ?? 0 });
@@ -799,7 +800,7 @@ export async function deleteComment(req: AuthRequest, res: Response): Promise<vo
       .update({ is_deleted: true })
       .eq('id', commentId);
 
-    if (error) { res.status(400).json({ error: error.message }); return; }
+    if (error) { res.status(400).json({ error: safeDbErrorMessage(error) }); return; }
     res.json({ success: true });
   } catch {
     res.status(500).json({ error: 'Failed to delete comment' });
@@ -828,7 +829,7 @@ export async function getEbooks(req: AuthRequest, res: Response): Promise<void> 
     }
 
     const { data, error } = await query;
-    if (error) { res.status(500).json({ error: error.message }); return; }
+    if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
     res.json(data ?? []);
   } catch {
     res.status(500).json({ error: 'Failed to fetch e-books' });
@@ -852,7 +853,7 @@ export async function uploadEbook(req: AuthRequest, res: Response): Promise<void
       .from(bucket)
       .upload(path, file.buffer, { contentType: file.mimetype, upsert: false });
 
-    if (uploadErr) { res.status(500).json({ error: uploadErr.message }); return; }
+    if (uploadErr) { res.status(safeDbErrorStatus(uploadErr)).json({ error: safeDbErrorMessage(uploadErr) }); return; }
 
     const { data: { publicUrl } } = req.db!.storage.from(bucket).getPublicUrl(path);
 
@@ -871,7 +872,7 @@ export async function uploadEbook(req: AuthRequest, res: Response): Promise<void
       .select('*, classes(name)')
       .single();
 
-    if (error) { res.status(400).json({ error: error.message }); return; }
+    if (error) { res.status(400).json({ error: safeDbErrorMessage(error) }); return; }
     res.status(201).json(data);
   } catch {
     res.status(500).json({ error: 'Failed to upload e-book' });
@@ -883,7 +884,7 @@ export async function deleteEbook(req: AuthRequest, res: Response): Promise<void
   const { id } = req.params;
 
   const { error } = await req.db!.from('ebooks').delete().eq('id', id).eq('school_id', schoolId);
-  if (error) { res.status(400).json({ error: error.message }); return; }
+  if (error) { res.status(400).json({ error: safeDbErrorMessage(error) }); return; }
   res.json({ success: true });
 }
 
@@ -913,7 +914,7 @@ export async function getEbookProgress(req: AuthRequest, res: Response): Promise
     if (studentId) query = query.eq('student_id', studentId);
 
     const { data, error } = await query;
-    if (error) { res.status(500).json({ error: error.message }); return; }
+    if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
     res.json(data ?? []);
   } catch {
     res.status(500).json({ error: 'Failed to fetch progress' });
@@ -956,7 +957,7 @@ export async function upsertEbookProgress(req: AuthRequest, res: Response): Prom
       .select()
       .single();
 
-    if (error) { res.status(400).json({ error: error.message }); return; }
+    if (error) { res.status(400).json({ error: safeDbErrorMessage(error) }); return; }
     res.json(data);
   } catch {
     res.status(500).json({ error: 'Failed to save progress' });

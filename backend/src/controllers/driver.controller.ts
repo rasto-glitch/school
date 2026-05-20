@@ -1,3 +1,4 @@
+import { safeDbErrorMessage, safeDbErrorStatus } from '../utils/dbErrors';
 import { Response } from 'express';
 import type { AuthRequest } from '../middleware/auth';
 import { Server as SocketServer } from 'socket.io';
@@ -55,7 +56,7 @@ export async function getMyStudents(req: AuthRequest, res: Response): Promise<vo
   if (search) query = query.ilike('full_name', `%${search}%`);
 
   const { data, error } = await query;
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data));
 }
 
@@ -186,7 +187,7 @@ export async function getTodayAttendance(req: AuthRequest, res: Response): Promi
     .in('student_id', studentIds)
     .in('status', ['absent', 'excused']);
 
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data || []));
 }
 
@@ -229,7 +230,7 @@ export async function startDrive(req: AuthRequest, res: Response): Promise<void>
 
   // Persist excluded students so the backend can filter them throughout the drive
   const { error } = await req.db!.from('drivers').update({ excluded_student_ids: excludedStudentIds }).eq('id', driver.id);
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
   // Reset proximity dedup for this drive session
   proximityState.set(driver.id, new Map());

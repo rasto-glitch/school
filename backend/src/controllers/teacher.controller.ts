@@ -1,3 +1,4 @@
+import { safeDbErrorMessage, safeDbErrorStatus } from '../utils/dbErrors';
 import { Response } from 'express';
 import { safeExt } from '../utils/upload';
 import type { AuthRequest } from '../middleware/auth';
@@ -55,7 +56,7 @@ export async function getHomework(req: AuthRequest, res: Response): Promise<void
   if (classId) query = query.eq('class_id', classId);
 
   const { data, error } = await query;
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data));
 }
 
@@ -95,7 +96,7 @@ export async function createHomework(req: AuthRequest, res: Response): Promise<v
     subject,
   }).select().single();
 
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
   // Notify all parents of students in this class (dedupe: one notification per parent, even with multiple children in the class)
   if (classId) {
@@ -127,7 +128,7 @@ export async function deleteHomework(req: AuthRequest, res: Response): Promise<v
   const { data: teacher } = await req.db!.from('teachers').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
   if (!teacher) { res.status(404).json({ error: 'Teacher not found' }); return; }
   const { error } = await req.db!.from('homework').delete().eq('id', id).eq('teacher_id', teacher.id).eq('school_id', schoolId);
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json({ message: 'Homework deleted' });
 }
 
@@ -144,7 +145,7 @@ export async function getAssignments(req: AuthRequest, res: Response): Promise<v
   if (studentId) query = query.eq('student_id', studentId);
 
   const { data, error } = await query;
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data));
 }
 
@@ -185,7 +186,7 @@ export async function createAssignment(req: AuthRequest, res: Response): Promise
     attachment_url: attachmentUrl,
   }).select().single();
 
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
   // Notify parent(s) — dedupe so a parent with multiple children in the class only gets one push
   const targetId = studentId || null;
@@ -213,7 +214,7 @@ export async function deleteAssignment(req: AuthRequest, res: Response): Promise
   const { data: teacher } = await req.db!.from('teachers').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
   if (!teacher) { res.status(404).json({ error: 'Teacher not found' }); return; }
   const { error } = await req.db!.from('assignments').delete().eq('id', id).eq('teacher_id', teacher.id).eq('school_id', schoolId);
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json({ message: 'Assignment deleted' });
 }
 
@@ -244,7 +245,7 @@ export async function createReport(req: AuthRequest, res: Response): Promise<voi
     academic_year: school?.current_academic_year || null,
   }).select().single();
 
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
   // Notify parent of this student
   const { data: student } = await req.db!
@@ -285,7 +286,7 @@ export async function upsertGrade(req: AuthRequest, res: Response): Promise<void
     academic_year: academicYear,
   }, { onConflict: 'student_id,subject,grading_period,academic_year' }).select().single();
 
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
   // Notify parent of this student
   const { data: gradedStudent } = await req.db!
@@ -316,7 +317,7 @@ export async function getGrades(req: AuthRequest, res: Response): Promise<void> 
     .eq('teacher_id', teacher.id)
     .order('grading_period');
 
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data));
 }
 
@@ -360,7 +361,7 @@ export async function upsertWeeklySummary(req: AuthRequest, res: Response): Prom
     week_start_date: weekStartDate,
   }).select().single();
 
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data));
 }
 
@@ -373,7 +374,7 @@ export async function getWeeklySummary(req: AuthRequest, res: Response): Promise
   if (weekStartDate) query = query.eq('week_start_date', weekStartDate);
 
   const { data, error } = await query;
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data));
 }
 
@@ -390,7 +391,7 @@ export async function getMyClasses(req: AuthRequest, res: Response): Promise<voi
     .select('classes(id, name, grade_level, academic_year, created_at)')
     .eq('teacher_id', teacher.id);
 
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
   const classes = (data || []).map((tc: any) => tc.classes).filter(Boolean);
   res.json(toCC(classes));
@@ -425,7 +426,7 @@ export async function markAttendance(req: AuthRequest, res: Response): Promise<v
 
   const { error } = await req.db!.from('attendance')
     .upsert(rows, { onConflict: 'student_id,class_id,date' });
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
   // Notify parents of absent/late students
   const absentOrLate = records.filter(r => r.status !== 'present');
@@ -478,7 +479,7 @@ export async function getAttendance(req: AuthRequest, res: Response): Promise<vo
     .eq('school_id', schoolId)
     .eq('class_id', classId)
     .eq('date', date);
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data));
 }
 
@@ -503,7 +504,7 @@ export async function getMyStudents(req: AuthRequest, res: Response): Promise<vo
   if (search) query = query.or(`full_name.ilike.%${search}%,home_address.ilike.%${search}%`);
 
   const { data, error } = await query;
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data));
 }
 

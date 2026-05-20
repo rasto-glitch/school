@@ -1,3 +1,4 @@
+import { safeDbErrorMessage, safeDbErrorStatus } from '../utils/dbErrors';
 import { Response } from 'express';
 import type { AuthRequest } from '../middleware/auth';
 import { toCC } from '../utils/transform';
@@ -17,7 +18,7 @@ export async function getPendingAppointmentCount(req: AuthRequest, res: Response
     .select('*', { count: 'exact', head: true })
     .eq('school_id', schoolId)
     .eq('status', 'pending');
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json({ count: count ?? 0 });
 }
 
@@ -28,7 +29,7 @@ export async function getAppointments(req: AuthRequest, res: Response): Promise<
     .select('*, parents(full_name, phone_number, user_id)')
     .eq('school_id', schoolId)
     .order('created_at', { ascending: false });
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data));
 }
 
@@ -43,7 +44,7 @@ export async function respondToAppointment(req: AuthRequest, res: Response): Pro
     .select('*, parents(user_id)')
     .single();
 
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
   const parentUserId = (data as any)?.parents?.user_id;
   if (parentUserId) {

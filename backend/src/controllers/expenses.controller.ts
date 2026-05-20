@@ -1,3 +1,4 @@
+import { safeDbErrorMessage, safeDbErrorStatus } from '../utils/dbErrors';
 import { Response } from 'express';
 // Elevated controller — see Phase 0 inventory.
 import { adminDb as supabase } from '../utils/db';
@@ -43,7 +44,7 @@ export async function listCategories(req: AuthRequest, res: Response): Promise<v
     .eq('school_id', schoolId)
     .order('is_active', { ascending: false })
     .order('name', { ascending: true });
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data ?? []));
 }
 
@@ -62,7 +63,7 @@ export async function createCategory(req: AuthRequest, res: Response): Promise<v
     .single();
   if (error) {
     if ((error as any).code === '23505') { res.status(409).json({ error: 'A category with that name already exists' }); return; }
-    res.status(500).json({ error: error.message }); return;
+    res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return;
   }
   await logAudit({ req, entityType: 'expense_category', entityId: String(data.id), action: 'create', after: data, label: data.name });
   res.json(toCC(data));
@@ -92,7 +93,7 @@ export async function updateCategory(req: AuthRequest, res: Response): Promise<v
     .select().single();
   if (error) {
     if ((error as any).code === '23505') { res.status(409).json({ error: 'A category with that name already exists' }); return; }
-    res.status(500).json({ error: error.message }); return;
+    res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return;
   }
   await logAudit({ req, entityType: 'expense_category', entityId: String(id), action: 'update', before, after, label: after.name });
   res.json(toCC(after));
@@ -118,7 +119,7 @@ export async function deleteCategory(req: AuthRequest, res: Response): Promise<v
   }
 
   const { error } = await supabase.from('expense_categories').delete().eq('id', id).eq('school_id', schoolId);
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   await logAudit({ req, entityType: 'expense_category', entityId: String(id), action: 'delete', before, label: before.name });
   res.json({ success: true });
 }
@@ -136,7 +137,7 @@ export async function listTemplates(req: AuthRequest, res: Response): Promise<vo
     .order('is_active', { ascending: false })
     .order('next_due_date', { ascending: true, nullsFirst: false })
     .order('name', { ascending: true });
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data ?? []));
 }
 
@@ -168,7 +169,7 @@ export async function createTemplate(req: AuthRequest, res: Response): Promise<v
     created_by: req.user!.userId,
   };
   const { data, error } = await supabase.from('expense_recurring_templates').insert(insertRow).select().single();
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   await logAudit({ req, entityType: 'expense_template', entityId: String(data.id), action: 'create', after: data, label: data.name });
   res.json(toCC(data));
 }
@@ -210,7 +211,7 @@ export async function updateTemplate(req: AuthRequest, res: Response): Promise<v
     .from('expense_recurring_templates').update(updates)
     .eq('id', id).eq('school_id', schoolId)
     .select().single();
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   await logAudit({ req, entityType: 'expense_template', entityId: String(id), action: 'update', before, after, label: after.name });
   res.json(toCC(after));
 }
@@ -224,7 +225,7 @@ export async function deleteTemplate(req: AuthRequest, res: Response): Promise<v
   const { data: before } = await supabase.from('expense_recurring_templates').select('*').eq('id', id).eq('school_id', schoolId).single();
   if (!before) { res.status(404).json({ error: 'Template not found' }); return; }
   const { error } = await supabase.from('expense_recurring_templates').delete().eq('id', id).eq('school_id', schoolId);
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   await logAudit({ req, entityType: 'expense_template', entityId: String(id), action: 'delete', before, label: before.name });
   res.json({ success: true });
 }
@@ -270,7 +271,7 @@ export async function recordTemplate(req: AuthRequest, res: Response): Promise<v
     payment_account_id: paymentAccountId ?? null,
     recorded_by: req.user!.userId,
   }).select().single();
-  if (insertErr) { res.status(500).json({ error: insertErr.message }); return; }
+  if (insertErr) { res.status(safeDbErrorStatus(insertErr)).json({ error: safeDbErrorMessage(insertErr) }); return; }
   await logAudit({ req, entityType: 'expense', entityId: String(expense.id), action: 'create', after: expense, label: expense.name });
 
   const baseDate = t.next_due_date || dateUsed;
@@ -333,8 +334,8 @@ export async function listExpenses(req: AuthRequest, res: Response): Promise<voi
   );
 
   const [{ data, error }, { data: aggData, error: aggErr }] = await Promise.all([q, aggQ]);
-  if (error) { res.status(500).json({ error: error.message }); return; }
-  if (aggErr) { res.status(500).json({ error: aggErr.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+  if (aggErr) { res.status(safeDbErrorStatus(aggErr)).json({ error: safeDbErrorMessage(aggErr) }); return; }
 
   const totalsMap = new Map<string, number>();
   for (const r of (aggData ?? []) as any[]) {
@@ -389,7 +390,7 @@ export async function createExpense(req: AuthRequest, res: Response): Promise<vo
     payment_account_id: paymentAccountId ?? null,
     recorded_by: req.user!.userId,
   }).select().single();
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   await logAudit({ req, entityType: 'expense', entityId: String(data.id), action: 'create', after: data, label: data.name });
   res.json(toCC(data));
 }
@@ -439,7 +440,7 @@ export async function updateExpense(req: AuthRequest, res: Response): Promise<vo
 
   const { data: after, error } = await supabase.from('expenses').update(updates)
     .eq('id', id).eq('school_id', schoolId).select().single();
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   await logAudit({ req, entityType: 'expense', entityId: String(id), action: 'update', before, after, label: after.name });
   res.json(toCC(after));
 }
@@ -463,7 +464,7 @@ export async function voidExpense(req: AuthRequest, res: Response): Promise<void
     voided_by: req.user!.userId,
     void_reason: reason?.trim() || null,
   }).eq('id', id).eq('school_id', schoolId).select().single();
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   await logAudit({ req, entityType: 'expense', entityId: String(id), action: 'update', before, after, label: (before as any).name, reason });
   res.json({ success: true });
 }
@@ -481,7 +482,7 @@ export async function unvoidExpense(req: AuthRequest, res: Response): Promise<vo
   const { data: after, error } = await supabase.from('expenses').update({
     voided_at: null, voided_by: null, void_reason: null,
   }).eq('id', id).eq('school_id', schoolId).select().single();
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   await logAudit({ req, entityType: 'expense', entityId: String(id), action: 'update', before, after, label: (before as any).name });
   res.json({ success: true });
 }
@@ -502,7 +503,7 @@ export async function listVoidedExpenses(req: AuthRequest, res: Response): Promi
     .limit(limit + 1);
   if (cursor) q = q.or(keysetAfter('voided_at', cursor));
   const { data, error } = await q;
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
   const page = buildPageWith(
     ((data ?? []) as any[]).map(r => ({ ...r, id: String(r.id) })),

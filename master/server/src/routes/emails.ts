@@ -1,3 +1,4 @@
+import { safeDbErrorMessage, safeDbErrorStatus } from '../utils/dbErrors';
 import { Router, Request, Response } from 'express';
 import { createClient } from '@supabase/supabase-js';
 import { Resend } from 'resend';
@@ -157,7 +158,7 @@ router.get('/', async (req: Request, res: Response) => {
   }
 
   const { data, error } = await query;
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
   type Row = NonNullable<typeof data>[number];
   const byThread = new Map<string, Row[]>();
@@ -252,7 +253,7 @@ router.patch('/:id', async (req: Request, res: Response) => {
     return;
   }
   const { error } = await supabase.from('operator_emails').update(patch).eq('id', id);
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json({ ok: true });
 });
 
@@ -267,7 +268,7 @@ router.patch('/thread/:threadId', async (req: Request, res: Response) => {
     return;
   }
   const { error } = await supabase.from('operator_emails').update(patch).eq('thread_id', threadId);
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json({ ok: true });
 });
 
@@ -499,8 +500,10 @@ router.post('/:id/reply', upload.array('attachments', MAX_ATTACHMENTS), async (r
 
     res.json({ ok: true, id: result.id, resendId: result.resendId });
   } catch (err) {
-    const e = err as Error;
-    res.status(502).json({ error: e.message || 'send failed' });
+    // SECURITY: don't echo mailer errors to the client (SMTP rejection,
+    // domain auth, rate limits) — operator triages via server logs.
+    console.error('[emails] send failed', err);
+    res.status(502).json({ error: 'send failed' });
   }
 });
 
@@ -555,8 +558,10 @@ router.post('/compose', upload.array('attachments', MAX_ATTACHMENTS), async (req
     });
     res.json({ ok: true, id: result.id, threadId: result.threadId, resendId: result.resendId });
   } catch (err) {
-    const e = err as Error;
-    res.status(502).json({ error: e.message || 'send failed' });
+    // SECURITY: don't echo mailer errors to the client (SMTP rejection,
+    // domain auth, rate limits) — operator triages via server logs.
+    console.error('[emails] send failed', err);
+    res.status(502).json({ error: 'send failed' });
   }
 });
 

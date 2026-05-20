@@ -1,3 +1,4 @@
+import { safeDbErrorMessage, safeDbErrorStatus } from '../utils/dbErrors';
 import { Response } from 'express';
 import type { AuthRequest } from '../middleware/auth';
 import { toCC } from '../utils/transform';
@@ -10,7 +11,7 @@ export async function getClasses(req: AuthRequest, res: Response): Promise<void>
     .select('id, name, grade_level, academic_year, teacher_classes(teachers(id, full_name))')
     .eq('school_id', schoolId)
     .order('name');
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data));
 }
 
@@ -25,7 +26,7 @@ export async function getStudentsByClass(req: AuthRequest, res: Response): Promi
     .eq('class_id', classId)
     .eq('is_graduated', false)
     .order('full_name');
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data));
 }
 
@@ -38,7 +39,7 @@ export async function getAllStudents(req: AuthRequest, res: Response): Promise<v
     .eq('school_id', schoolId)
     .eq('is_graduated', false)
     .order('full_name');
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data));
 }
 
@@ -54,7 +55,7 @@ export async function getAbsentToday(req: AuthRequest, res: Response): Promise<v
     .eq('date', today)
     .in('status', ['absent', 'late', 'excused'])
     .order('created_at', { ascending: false });
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data));
 }
 
@@ -72,7 +73,7 @@ export async function getAttendanceByClass(req: AuthRequest, res: Response): Pro
     .eq('class_id', classId)
     .eq('date', date)
     .order('created_at');
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data));
 }
 
@@ -126,7 +127,7 @@ export async function getBusRideRecords(req: AuthRequest, res: Response): Promis
     .eq('date', targetDate)
     .order('created_at');
 
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data || []));
 }
 
@@ -138,7 +139,7 @@ export async function getHomework(req: AuthRequest, res: Response): Promise<void
     .select('id, title, description, subject, due_date, created_at, teachers(full_name), classes(name)')
     .eq('school_id', schoolId)
     .order('created_at', { ascending: false });
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data));
 }
 
@@ -146,7 +147,7 @@ export async function deleteHomework(req: AuthRequest, res: Response): Promise<v
   const { schoolId } = req.user!;
   const { id } = req.params;
   const { error } = await req.db!.from('homework').delete().eq('id', id).eq('school_id', schoolId);
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json({ success: true });
 }
 
@@ -158,7 +159,7 @@ export async function getAssignments(req: AuthRequest, res: Response): Promise<v
     .select('id, title, description, subject, due_date, created_at, teachers(full_name), classes(name)')
     .eq('school_id', schoolId)
     .order('created_at', { ascending: false });
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data));
 }
 
@@ -166,7 +167,7 @@ export async function deleteAssignment(req: AuthRequest, res: Response): Promise
   const { schoolId } = req.user!;
   const { id } = req.params;
   const { error } = await req.db!.from('assignments').delete().eq('id', id).eq('school_id', schoolId);
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json({ success: true });
 }
 
@@ -195,7 +196,7 @@ export async function createAttendanceRecord(req: AuthRequest, res: Response): P
     })
     .select()
     .single();
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data));
 }
 
@@ -227,7 +228,7 @@ export async function openPeriod(req: AuthRequest, res: Response): Promise<void>
     .insert({ school_id: schoolId, week_start_date: weekStartDate, week_end_date: weekEndDate, is_open: true, created_by_user_id: userId })
     .select()
     .single();
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.status(201).json(toCC(data));
 }
 
@@ -254,6 +255,6 @@ export async function updateAttendanceRecord(req: AuthRequest, res: Response): P
     .eq('school_id', schoolId)
     .select()
     .single();
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data));
 }

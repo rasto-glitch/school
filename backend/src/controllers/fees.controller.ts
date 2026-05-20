@@ -1,3 +1,4 @@
+import { safeDbErrorMessage, safeDbErrorStatus } from '../utils/dbErrors';
 import { Response } from 'express';
 // Accountant-role financial controller — elevated by design (period close,
 // receipt issuance, cross-table aggregations). adminDb keeps service-role
@@ -136,7 +137,7 @@ export async function listPlans(req: AuthRequest, res: Response): Promise<void> 
     .eq('school_id', schoolId)
     .is('voided_at', null)
     .order('created_at', { ascending: false });
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
   const planIds = (plans ?? []).map(p => p.id);
   const [{ data: insts }, { data: classes }] = await Promise.all([
@@ -259,12 +260,12 @@ export async function createPlan(req: AuthRequest, res: Response): Promise<void>
       due_date: i.dueDate,
     }));
     const { error: iErr } = await supabase.from('fee_installments').insert(rows);
-    if (iErr) { await supabase.from('fee_plans').delete().eq('id', plan.id); res.status(500).json({ error: iErr.message }); return; }
+    if (iErr) { await supabase.from('fee_plans').delete().eq('id', plan.id); res.status(safeDbErrorStatus(iErr)).json({ error: safeDbErrorMessage(iErr) }); return; }
   }
   if (body.appliesTo === 'classes' && body.classIds?.length) {
     const cRows = body.classIds.map(id => ({ fee_plan_id: plan.id, class_id: id }));
     const { error: cErr } = await supabase.from('fee_plan_classes').insert(cRows);
-    if (cErr) { await supabase.from('fee_plans').delete().eq('id', plan.id); res.status(500).json({ error: cErr.message }); return; }
+    if (cErr) { await supabase.from('fee_plans').delete().eq('id', plan.id); res.status(safeDbErrorStatus(cErr)).json({ error: safeDbErrorMessage(cErr) }); return; }
   }
 
   await logAudit({ req, entityType: 'fee_plan', entityId: plan.id, action: 'create', after: plan, label: plan.name });
@@ -297,7 +298,7 @@ export async function updatePlan(req: AuthRequest, res: Response): Promise<void>
     late_fee_amount: body.lateFeeEnabled ? body.lateFeeAmount ?? 0 : 0,
     late_fee_grace_days: body.lateFeeEnabled ? body.lateFeeGraceDays ?? 0 : 0,
   }).eq('id', id).eq('school_id', schoolId);
-  if (pErr) { res.status(500).json({ error: pErr.message }); return; }
+  if (pErr) { res.status(safeDbErrorStatus(pErr)).json({ error: safeDbErrorMessage(pErr) }); return; }
 
   const { data: after } = await supabase.from('fee_plans').select('*').eq('id', id).eq('school_id', schoolId).single();
   await logAudit({ req, entityType: 'fee_plan', entityId: String(id), action: 'update', before: before || undefined, after: after || undefined, label: (after as { name?: string } | null)?.name ?? body.name });
@@ -340,7 +341,7 @@ export async function deletePlan(req: AuthRequest, res: Response): Promise<void>
     .from('fee_plans')
     .update({ voided_at: new Date().toISOString(), voided_by: userId, void_reason: reason })
     .eq('id', id).eq('school_id', schoolId).select().single();
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   await logAudit({ req, entityType: 'fee_plan', entityId: String(id), action: 'update', before, after, label: (before as { name?: string }).name, reason: reason ?? undefined });
   res.json({ success: true });
 }
@@ -357,7 +358,7 @@ export async function unvoidPlan(req: AuthRequest, res: Response): Promise<void>
     .from('fee_plans')
     .update({ voided_at: null, voided_by: null, void_reason: null })
     .eq('id', id).eq('school_id', schoolId).select().single();
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   await logAudit({ req, entityType: 'fee_plan', entityId: String(id), action: 'update', before, after, label: (before as { name?: string }).name });
   res.json({ success: true });
 }
@@ -378,7 +379,7 @@ export async function listVoidedPlans(req: AuthRequest, res: Response): Promise<
     .limit(limit + 1);
   if (cursor) q = q.or(keysetAfter('voided_at', cursor));
   const { data, error } = await q;
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
   const page = buildPageWith(
     ((data ?? []) as any[]).map(r => ({ ...r, id: String(r.id) })),
@@ -450,7 +451,7 @@ export async function assignPlan(req: AuthRequest, res: Response): Promise<void>
     total_amount: plan.total_amount,
   }));
   const { data: inserted, error } = await supabase.from('student_fees').insert(rows).select();
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   for (const row of (inserted || [])) {
     await logAudit({ req, entityType: 'student_fee', entityId: (row as { id: string }).id, action: 'create', after: row as Record<string, unknown>, reason: 'Plan assigned' });
   }
@@ -1022,7 +1023,7 @@ export async function recordPayment(req: AuthRequest, res: Response): Promise<vo
     receipt_number: receiptNumber,
     recorded_by: userId,
   }).select().single();
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
   if (allocations && allocations.length > 0) {
     const { error: aErr } = await supabase.from('fee_payment_allocations').insert(
@@ -1036,7 +1037,7 @@ export async function recordPayment(req: AuthRequest, res: Response): Promise<vo
     if (aErr) {
       // Roll back the parent payment so the ledger doesn't drift
       await supabase.from('fee_payments').delete().eq('id', data.id);
-      res.status(500).json({ error: aErr.message }); return;
+      res.status(safeDbErrorStatus(aErr)).json({ error: safeDbErrorMessage(aErr) }); return;
     }
   }
 
@@ -1078,7 +1079,7 @@ export async function deletePayment(req: AuthRequest, res: Response): Promise<vo
     .from('fee_payments')
     .update({ voided_at: new Date().toISOString(), voided_by: userId, void_reason: reason })
     .eq('id', id).eq('school_id', schoolId).select().single();
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   const studentName = (before as { student_fees?: { students?: { full_name?: string } } }).student_fees?.students?.full_name;
   const beforeRow: Record<string, unknown> = { ...(before as Record<string, unknown>) };
   delete beforeRow.student_fees;
@@ -1103,7 +1104,7 @@ export async function unvoidPayment(req: AuthRequest, res: Response): Promise<vo
     .from('fee_payments')
     .update({ voided_at: null, voided_by: null, void_reason: null })
     .eq('id', id).eq('school_id', schoolId).select().single();
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   const studentName = (before as { student_fees?: { students?: { full_name?: string } } }).student_fees?.students?.full_name;
   const beforeRow: Record<string, unknown> = { ...(before as Record<string, unknown>) };
   delete beforeRow.student_fees;
@@ -1168,7 +1169,7 @@ export async function refundPayment(req: AuthRequest, res: Response): Promise<vo
     receipt_number: receiptNumber,
     recorded_by: userId,
   }).select().single();
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
   const studentName = ((original as any).student_fees?.students?.full_name) as string | undefined;
   await logAudit({ req, entityType: 'fee_payment', entityId: refund.id, action: 'create', after: refund, label: studentName, reason: `Refund of ${id}` });
@@ -1215,7 +1216,7 @@ export async function listLateFees(req: AuthRequest, res: Response): Promise<voi
   if (studentFeeId) q = q.eq('student_fee_id', studentFeeId);
   if (cursor) q = q.or(keysetAfter('applied_on', cursor));
   const { data, error } = await q;
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   const page = buildPageWith(
     ((data ?? []) as any[]).map(r => ({ ...r, id: String(r.id) })),
     limit,
@@ -1237,7 +1238,7 @@ export async function voidLateFee(req: AuthRequest, res: Response): Promise<void
     .from('student_fee_late_fees')
     .update({ voided_at: new Date().toISOString(), voided_by: userId, void_reason: reason })
     .eq('id', id).eq('school_id', schoolId).select().single();
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   await logAudit({ req, entityType: 'late_fee', entityId: String(id), action: 'update', before, after, reason: reason ?? undefined });
   res.json({ success: true });
 }
@@ -1250,7 +1251,7 @@ export async function applyLateFeesNow(req: AuthRequest, res: Response): Promise
   const guard = await ensurePremium(schoolId);
   if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
   const { error } = await supabase.rpc('apply_late_fees');
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json({ success: true });
 }
 
@@ -1270,7 +1271,7 @@ export async function listVoidedPayments(req: AuthRequest, res: Response): Promi
     .limit(limit + 1);
   if (cursor) q = q.or(keysetAfter('voided_at', cursor));
   const { data, error } = await q;
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
   const page = buildPageWith(
     ((data ?? []) as any[]).map(r => ({ ...r, id: String(r.id) })),
@@ -1326,7 +1327,7 @@ export async function updateStudentFee(req: AuthRequest, res: Response): Promise
     .select('*, students(full_name)').eq('id', id).eq('school_id', schoolId).single();
 
   const { error } = await supabase.from('student_fees').update(upd).eq('id', id).eq('school_id', schoolId);
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
   const { data: after } = await supabase.from('student_fees').select('*').eq('id', id).eq('school_id', schoolId).single();
   const studentName = (before as { students?: { full_name?: string } } | null)?.students?.full_name;
@@ -1391,7 +1392,7 @@ export async function updateConfig(req: AuthRequest, res: Response): Promise<voi
   if (!['percent', 'fixed'].includes(next.siblingDiscount.type)) next.siblingDiscount.type = 'percent';
 
   const { error } = await supabase.from('schools').update({ tuition_config: next }).eq('id', schoolId);
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(next);
 }
 
@@ -1449,7 +1450,7 @@ export async function setLock(req: AuthRequest, res: Response): Promise<void> {
     locked_by: userId,
     locked_at: new Date().toISOString(),
   }, { onConflict: 'student_id,feature' });
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json({ success: true });
 }
 
@@ -1459,7 +1460,7 @@ export async function removeLock(req: AuthRequest, res: Response): Promise<void>
   const { error } = await supabase
     .from('student_access_locks').delete()
     .eq('school_id', schoolId).eq('student_id', studentId).eq('feature', feature);
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json({ success: true });
 }
 

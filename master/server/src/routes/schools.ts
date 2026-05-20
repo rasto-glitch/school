@@ -1,3 +1,4 @@
+import { safeDbErrorMessage, safeDbErrorStatus } from '../utils/dbErrors';
 import { Router, Request, Response } from 'express';
 import { createClient } from '@supabase/supabase-js';
 import { createHash } from 'crypto';
@@ -130,7 +131,7 @@ router.get('/', async (_req: Request, res: Response) => {
     .select('*')
     .order('created_at', { ascending: false });
 
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
   const schoolsWithCounts = await Promise.all((schools || []).map(async (school) => {
     const [{ count: studentCount }, { count: adminCount }, { count: userCount }] = await Promise.all([
@@ -180,7 +181,7 @@ router.post('/', async (req: Request, res: Response) => {
     .select()
     .single();
 
-  if (schoolErr) { res.status(400).json({ error: schoolErr.message }); return; }
+  if (schoolErr) { res.status(400).json({ error: safeDbErrorMessage(schoolErr) }); return; }
 
   const passwordHash = await bcrypt.hash(adminPassword, 10);
   const { error: userErr } = await supabase.from('users').insert({
@@ -196,7 +197,7 @@ router.post('/', async (req: Request, res: Response) => {
 
   if (userErr) {
     await supabase.from('schools').delete().eq('id', school.id);
-    res.status(400).json({ error: userErr.message });
+    res.status(400).json({ error: safeDbErrorMessage(userErr) });
     return;
   }
 
@@ -232,7 +233,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     .select()
     .single();
 
-  if (error) { res.status(400).json({ error: error.message }); return; }
+  if (error) { res.status(400).json({ error: safeDbErrorMessage(error) }); return; }
 
   // Cleanup AFTER the update succeeds so we never wipe data and then fail.
   // The purge is irreversible (drops archived_students + graduated students),
@@ -324,7 +325,7 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
     .select()
     .single();
 
-  if (error) { res.status(400).json({ error: error.message }); return; }
+  if (error) { res.status(400).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(data);
 });
 
@@ -345,7 +346,7 @@ router.patch('/:id/admin-password', async (req: Request, res: Response) => {
     .eq('school_id', id)
     .eq('role', 'admin');
 
-  if (error) { res.status(400).json({ error: error.message }); return; }
+  if (error) { res.status(400).json({ error: safeDbErrorMessage(error) }); return; }
   res.json({ message: 'Admin password updated.' });
 });
 
@@ -357,7 +358,7 @@ router.get('/:id/backups', async (req: Request, res: Response) => {
     .select('id, kind, storage_path, byte_size, student_count, employee_count, reason, created_by_name, sha256, verified_at, verify_status, verify_detail, created_at')
     .eq('school_id', id)
     .order('created_at', { ascending: false });
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(data ?? []);
 });
 
@@ -379,7 +380,7 @@ router.post('/:id/backups/:backupId/verify', async (req: Request, res: Response)
 router.get('/:id/integrity', async (req: Request, res: Response) => {
   const id = req.params.id as string;
   const { data, error } = await supabase.rpc('verify_school_integrity', { p_school_id: id });
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   const issues = (data ?? []) as { kind: string; table_name: string; row_id: string; detail: string }[];
   const tampered = issues.filter(i => i.kind !== 'unhashed');
   res.json({
@@ -399,7 +400,7 @@ router.get('/:id/integrity', async (req: Request, res: Response) => {
 router.delete('/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   const { error } = await supabase.rpc('delete_school_cascade', { p_school_id: id });
-  if (error) { res.status(400).json({ error: error.message }); return; }
+  if (error) { res.status(400).json({ error: safeDbErrorMessage(error) }); return; }
   res.json({ message: 'School deleted' });
 });
 

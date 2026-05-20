@@ -1,3 +1,4 @@
+import { safeDbErrorMessage, safeDbErrorStatus } from '../utils/dbErrors';
 import { Response } from 'express';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
@@ -94,7 +95,7 @@ async function performEmployeeArchive(a: PerformEmployeeArchiveArgs): Promise<{ 
     p_archived_by_name: a.actorName,
     p_archived_by_role: a.actorRole,
   });
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: safeDbErrorMessage(error) };
   return { ok: true, archiveId: data as string };
 }
 
@@ -150,7 +151,7 @@ export async function getStudents(req: AuthRequest, res: Response): Promise<void
   if (search) query = query.or(`full_name.ilike.%${search}%,home_address.ilike.%${search}%,phone_number.ilike.%${search}%`);
 
   const { data, error, count } = await query;
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json({ students: toCC(data), total: count });
 }
 
@@ -288,7 +289,7 @@ export async function createStudent(req: AuthRequest, res: Response): Promise<vo
     previous_archive_id: resolvedPreviousArchiveId,
   }).select().single();
 
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   await logAudit({ req, entityType: 'student', entityId: data.id, action: 'create', after: data, label: data.full_name });
   res.status(201).json({ ...(toCC(data) as Record<string, unknown>), parentAccountCreated });
 }
@@ -313,7 +314,7 @@ export async function updateStudent(req: AuthRequest, res: Response): Promise<vo
     })
     .eq('id', id).eq('school_id', schoolId).select().single();
 
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   await logAudit({ req, entityType: 'student', entityId: String(id), action: 'update', before: before || undefined, after: data, label: data.full_name });
   res.json(toCC(data));
 }
@@ -323,7 +324,7 @@ export async function deleteStudent(req: AuthRequest, res: Response): Promise<vo
   const { id } = req.params;
   const { data: before } = await supabase.from('students').select('*').eq('id', id).eq('school_id', schoolId).single();
   const { error } = await supabase.from('students').delete().eq('id', id).eq('school_id', schoolId);
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   if (before) await logAudit({ req, entityType: 'student', entityId: String(id), action: 'delete', before, label: (before as { full_name?: string }).full_name });
   res.json({ message: 'Student removed' });
 }
@@ -340,7 +341,7 @@ export async function assignStudent(req: AuthRequest, res: Response): Promise<vo
   if (graduated && !(await hasArchiveFeature(schoolId))) {
     const { error } = await supabase.from('students')
       .delete().eq('id', studentId).eq('school_id', schoolId);
-    if (error) { res.status(500).json({ error: error.message }); return; }
+    if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
     if (before) await logAudit({ req, entityType: 'student', entityId: studentId, action: 'delete', before, label: (before as { full_name?: string }).full_name, reason: 'Graduated (no archive)' });
     res.json({ deleted: true });
     return;
@@ -353,7 +354,7 @@ export async function assignStudent(req: AuthRequest, res: Response): Promise<vo
   const { data, error } = await supabase.from('students')
     .update(update).eq('id', studentId).eq('school_id', schoolId).select().single();
 
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   await logAudit({ req, entityType: 'student', entityId: studentId, action: 'update', before: before || undefined, after: data, label: data.full_name, reason: graduated ? 'Graduated' : null });
   // Freeze a graduated snapshot (archive on — the no-archive branch above
   // already returned). Best-effort; never blocks the response.
@@ -1024,7 +1025,7 @@ export async function archiveStudent(req: AuthRequest, res: Response): Promise<v
   });
 
   if (rpcErr) {
-    res.status(500).json({ error: rpcErr.message });
+    res.status(safeDbErrorStatus(rpcErr)).json({ error: safeDbErrorMessage(rpcErr) });
     return;
   }
 
@@ -1058,7 +1059,7 @@ export async function getArchivedStudents(req: AuthRequest, res: Response): Prom
   if (departureTo) query = query.lte('departure_date', departureTo);
 
   const { data, error } = await query;
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data));
 }
 
@@ -1132,7 +1133,7 @@ export async function getArchivedEmployees(req: AuthRequest, res: Response): Pro
   if (search) query = query.ilike('full_name', `%${search}%`);
 
   const { data, error } = await query;
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data));
 }
 
@@ -1159,7 +1160,7 @@ export async function searchArchivedEmployees(req: AuthRequest, res: Response): 
   if (role && ['teacher', 'driver', 'supervisor', 'staff', 'admin'].includes(role)) query = query.eq('role', role);
 
   const { data, error } = await query;
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data ?? []));
 }
 
@@ -1248,7 +1249,7 @@ export async function restoreArchivedStudent(req: AuthRequest, res: Response): P
     is_graduated: false,
     previous_archive_id: (arch as any).id,
   }).select().single();
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
   await logAudit({ req, entityType: 'student', entityId: String((student as any).id), action: 'create', after: student as Record<string, unknown>, label: (student as any).full_name, reason: 'Restored from archive' });
   res.status(201).json({ ...(toCC(student) as object), parentRelinked: !!parentId });
@@ -1277,7 +1278,7 @@ export async function restoreArchivedEmployee(req: AuthRequest, res: Response): 
       is_active: true,
       previous_archive_id: (arch as any).id,
     }).select().single();
-    if (error) { res.status(500).json({ error: error.message }); return; }
+    if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
     await logAudit({ req, entityType: 'staff_member', entityId: String((staff as any).id), action: 'create', after: staff as Record<string, unknown>, label: (staff as any).full_name, reason: 'Restored from archive' });
     res.status(201).json({ kind: 'staff', ...(toCC(staff) as object) });
     return;
@@ -1316,7 +1317,12 @@ export async function restoreArchivedEmployee(req: AuthRequest, res: Response): 
   // feeds the response or the audit log. (toCC and audit EXCLUDED_FIELDS
   // also strip it, but defense in depth at every layer.)
   }).select('id, school_id, username, email, phone, role, first_name, last_name, profile_picture, is_active, created_at, password_changed_at').single();
-  if (userErr) { res.status(userErr.message.includes('unique') ? 409 : 500).json({ error: userErr.message }); return; }
+  if (userErr) {
+    const isDupe = userErr.code === '23505' || /unique|duplicate/i.test(userErr.message || '');
+    res.status(isDupe ? 409 : safeDbErrorStatus(userErr))
+      .json({ error: isDupe ? 'Username is already taken.' : safeDbErrorMessage(userErr) });
+    return;
+  }
 
   if (role === 'teacher') {
     await supabase.from('teachers').insert({
@@ -1363,7 +1369,7 @@ export async function searchArchivedStudents(req: AuthRequest, res: Response): P
   if (dob) query = query.eq('date_of_birth', dob);
 
   const { data, error } = await query;
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data ?? []));
 }
 
@@ -1371,7 +1377,7 @@ export async function searchArchivedStudents(req: AuthRequest, res: Response): P
 export async function getClasses(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
   const { data, error } = await supabase.from('classes').select('*').eq('school_id', schoolId).order('name');
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data));
 }
 
@@ -1391,7 +1397,7 @@ export async function createClass(req: AuthRequest, res: Response): Promise<void
     next_class_id: nextClassId || null,
   }).select().single();
 
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.status(201).json(toCC(data));
 }
 
@@ -1409,7 +1415,7 @@ export async function updateClass(req: AuthRequest, res: Response): Promise<void
     })
     .eq('id', id).eq('school_id', schoolId).select().single();
 
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data));
 }
 
@@ -1434,7 +1440,7 @@ export async function deleteClass(req: AuthRequest, res: Response): Promise<void
   //   - homework, assignments, weekly_summaries, schedule_assignments,
   //     class_subject_teachers, academic_posts
   const { error } = await supabase.from('classes').delete().eq('id', id).eq('school_id', schoolId);
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   await recomputeCaches(schoolId, { teacherIds: affTeachers, subjectIds: affSubjects });
   res.json({ message: 'Class deleted. Students unassigned; grades and attendance preserved as historical records.' });
 }
@@ -1504,7 +1510,7 @@ export async function getCurriculum(req: AuthRequest, res: Response): Promise<vo
     .from('class_subject_teachers')
     .select('id, class_id, subject_id, teacher_id, classes(name), subjects(name), teachers(full_name)')
     .eq('school_id', schoolId);
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   const rows = ((data ?? []) as any[]).map(r => ({
     id: r.id,
     classId: r.class_id,
@@ -1529,7 +1535,7 @@ export async function addCurriculumRow(req: AuthRequest, res: Response): Promise
   const { data, error } = await supabase.from('class_subject_teachers')
     .upsert({ school_id: schoolId, class_id: classId, subject_id: subjectId, teacher_id: teacherId }, { onConflict: 'class_id,subject_id,teacher_id' })
     .select('id').single();
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   await recomputeCaches(schoolId, { teacherIds: [teacherId], subjectIds: [subjectId] });
   res.status(201).json({ id: data.id });
 }
@@ -1562,7 +1568,7 @@ export async function getTeachers(req: AuthRequest, res: Response): Promise<void
     .select('*, users(id, username, email, phone), teacher_classes(class_id, classes(name)), class_subject_teachers(class_id, subject_id, classes(name), subjects(id, name))')
     .eq('school_id', schoolId)
     .in('user_id', activeUserIds.length > 0 ? activeUserIds : ['00000000-0000-0000-0000-000000000000']);
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   const teachers = ((data ?? []) as any[]).map(t => {
     // group curriculum rows into subjects: [{ id, name, classes: [{ id, name }] }]
     const bySubject = new Map<string, { id: string; name: string; classes: { id: string; name: string }[] }>();
@@ -1629,7 +1635,7 @@ export async function createTeacher(req: AuthRequest, res: Response): Promise<vo
     previous_archive_id: prevArchiveId,
   }).select().single();
 
-  if (teacherErr) { res.status(500).json({ error: teacherErr.message }); return; }
+  if (teacherErr) { res.status(safeDbErrorStatus(teacherErr)).json({ error: safeDbErrorMessage(teacherErr) }); return; }
 
   const idsToAssign: string[] = Array.isArray(classIds) ? classIds : classId ? [classId] : [];
   if (idsToAssign.length > 0) {
@@ -1660,7 +1666,7 @@ export async function updateTeacher(req: AuthRequest, res: Response): Promise<vo
     ? await supabase.from('teachers').update(updateFields).eq('id', id).eq('school_id', schoolId).select().single()
     : await supabase.from('teachers').select('*').eq('id', id).eq('school_id', schoolId).single();
 
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
   // Handle the teacher's class list. teachers.subject / curriculum rows are scoped per class,
   // so dropping a class also drops any curriculum rows the teacher had for it.
@@ -1703,7 +1709,7 @@ export async function getDrivers(req: AuthRequest, res: Response): Promise<void>
     .select('*, buses(bus_number, plate_number), users(id, username)')
     .eq('school_id', schoolId)
     .in('user_id', activeUserIds.length > 0 ? activeUserIds : ['00000000-0000-0000-0000-000000000000']);
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data));
 }
 
@@ -1768,7 +1774,7 @@ export async function createDriver(req: AuthRequest, res: Response): Promise<voi
     previous_archive_id: prevArchiveId,
   }).select().single();
 
-  if (driverErr) { res.status(500).json({ error: driverErr.message }); return; }
+  if (driverErr) { res.status(safeDbErrorStatus(driverErr)).json({ error: safeDbErrorMessage(driverErr) }); return; }
 
   // Assign students to this driver
   if (studentIds && Array.isArray(studentIds) && studentIds.length > 0) {
@@ -1816,7 +1822,7 @@ export async function updateDriver(req: AuthRequest, res: Response): Promise<voi
     .update(updateData)
     .eq('id', id).eq('school_id', schoolId).select().single();
 
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
   // Update student assignments — only when explicitly provided in the request
   if (req.body.hasOwnProperty('studentIds') && Array.isArray(studentIds)) {
@@ -1860,11 +1866,11 @@ export async function createAccount(req: AuthRequest, res: Response): Promise<vo
   }).select('id, school_id, username, email, phone, role, first_name, last_name, profile_picture, is_active, created_at, password_changed_at').single();
 
   if (error) {
-    const isDupe = error.message.includes('unique') || error.message.includes('duplicate');
-    res.status(isDupe ? 409 : 500).json({
+    const isDupe = error.code === '23505' || /unique|duplicate/i.test(error.message || '');
+    res.status(isDupe ? 409 : safeDbErrorStatus(error)).json({
       error: isDupe
         ? `Username "${username}" already exists. Please choose a different username.`
-        : error.message,
+        : safeDbErrorMessage(error),
     });
     return;
   }
@@ -1897,7 +1903,7 @@ export async function getPendingAppointmentCount(req: AuthRequest, res: Response
     .select('*', { count: 'exact', head: true })
     .eq('school_id', schoolId)
     .eq('status', 'pending');
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json({ count: count ?? 0 });
 }
 
@@ -1908,7 +1914,7 @@ export async function getAppointments(req: AuthRequest, res: Response): Promise<
     .select('*, parents(full_name, phone_number, user_id)')
     .eq('school_id', schoolId)
     .order('created_at', { ascending: false });
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data));
 }
 
@@ -1923,7 +1929,7 @@ export async function respondToAppointment(req: AuthRequest, res: Response): Pro
     .select('*, parents(user_id)')
     .single();
 
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
   // Notify parent of approval/denial
   const parentUserId = (data as any)?.parents?.user_id;
@@ -2027,7 +2033,7 @@ export async function getAnnouncements(req: AuthRequest, res: Response): Promise
     .order('created_at', { ascending: false })
     .order('id', { ascending: false })
     .limit(limit + 1);
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
   // Page first, then decorate only the rows we return (bounded fan-out).
   const page = buildPage((data ?? []) as { id: string; created_at: string }[], limit);
@@ -2059,7 +2065,7 @@ export async function uploadAnnouncementFile(req: AuthRequest, res: Response): P
   const { error } = await supabase.storage
     .from(bucket)
     .upload(path, file.buffer, { contentType: file.mimetype, upsert: false });
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   const { data: { publicUrl } } = supabase.storage.from(bucket).getPublicUrl(path);
   res.json({ url: publicUrl, name: file.originalname });
 }
@@ -2095,7 +2101,7 @@ export async function createAnnouncement(req: AuthRequest, res: Response): Promi
     link_url: linkUrl || null,
   }).select(ANNOUNCEMENT_SELECT).single();
 
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
   // Notify target audience in real-time + push.
   // target_audience values are plural ('parents'|'teachers'|'students'|'all') but
@@ -2123,7 +2129,7 @@ export async function deleteAnnouncement(req: AuthRequest, res: Response): Promi
   const { schoolId } = req.user!;
   const { id } = req.params;
   const { error } = await supabase.from('announcements').delete().eq('id', id).eq('school_id', schoolId);
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json({ message: 'Deleted' });
 }
 
@@ -2149,7 +2155,7 @@ export async function toggleAnnouncementLike(req: AuthRequest, res: Response): P
   const { error } = await supabase
     .from('announcement_likes')
     .insert({ school_id: schoolId, announcement_id: announcementId, user_id: userId });
-  if (error) { res.status(400).json({ error: error.message }); return; }
+  if (error) { res.status(400).json({ error: safeDbErrorMessage(error) }); return; }
 
   const { count } = await supabase.from('announcement_likes').select('*', { count: 'exact', head: true }).eq('announcement_id', announcementId);
   res.json({ liked: true, likesCount: count ?? 0 });
@@ -2167,7 +2173,7 @@ export async function getAnnouncementComments(req: AuthRequest, res: Response): 
     .eq('is_deleted', false)
     .order('created_at', { ascending: true });
 
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
   const comments = data ?? [];
   if (comments.length === 0) { res.json([]); return; }
@@ -2237,7 +2243,7 @@ export async function createAnnouncementComment(req: AuthRequest, res: Response)
     .select('id, announcement_id, user_id, parent_id, body, created_at, users(first_name, last_name, role, profile_picture)')
     .single();
 
-  if (error) { res.status(400).json({ error: error.message }); return; }
+  if (error) { res.status(400).json({ error: safeDbErrorMessage(error) }); return; }
 
   // Notify announcement author + (if reply) the user being replied to.
   // Skip self-notification and de-duplicate when the same user is both targets.
@@ -2306,7 +2312,7 @@ export async function toggleAnnouncementCommentLike(req: AuthRequest, res: Respo
   const { error } = await supabase
     .from('announcement_comment_likes')
     .insert({ school_id: schoolId, comment_id: commentId, user_id: userId });
-  if (error) { res.status(400).json({ error: error.message }); return; }
+  if (error) { res.status(400).json({ error: safeDbErrorMessage(error) }); return; }
 
   const { count } = await supabase.from('announcement_comment_likes').select('*', { count: 'exact', head: true }).eq('comment_id', commentId);
   res.json({ liked: true, likesCount: count ?? 0 });
@@ -2334,7 +2340,7 @@ export async function deleteAnnouncementComment(req: AuthRequest, res: Response)
     .update({ is_deleted: true })
     .eq('id', commentId);
 
-  if (error) { res.status(400).json({ error: error.message }); return; }
+  if (error) { res.status(400).json({ error: safeDbErrorMessage(error) }); return; }
   res.json({ success: true });
 }
 
@@ -2481,9 +2487,9 @@ export async function deleteTeacher(req: AuthRequest, res: Response): Promise<vo
 
   // Archive feature off — hard delete (no historical record retained).
   const { error: delTeacherErr } = await supabase.from('teachers').delete().eq('id', id).eq('school_id', schoolId);
-  if (delTeacherErr) { res.status(500).json({ error: delTeacherErr.message }); return; }
+  if (delTeacherErr) { res.status(safeDbErrorStatus(delTeacherErr)).json({ error: safeDbErrorMessage(delTeacherErr) }); return; }
   const { error: delUserErr } = await supabase.from('users').delete().eq('id', teacher.user_id);
-  if (delUserErr) { res.status(500).json({ error: delUserErr.message }); return; }
+  if (delUserErr) { res.status(safeDbErrorStatus(delUserErr)).json({ error: safeDbErrorMessage(delUserErr) }); return; }
   await logAudit({ req, entityType: 'teacher', entityId: String(id), action: 'delete', before: teacher as Record<string, unknown>, label: teacher.full_name, reason: 'Deleted (no archive)' });
   res.json({ message: 'Teacher removed' });
 }
@@ -2547,9 +2553,9 @@ export async function deleteDriver(req: AuthRequest, res: Response): Promise<voi
   }
 
   const { error: delDriverErr } = await supabase.from('drivers').delete().eq('id', id).eq('school_id', schoolId);
-  if (delDriverErr) { res.status(500).json({ error: delDriverErr.message }); return; }
+  if (delDriverErr) { res.status(safeDbErrorStatus(delDriverErr)).json({ error: safeDbErrorMessage(delDriverErr) }); return; }
   const { error: delUserErr } = await supabase.from('users').delete().eq('id', driver.user_id);
-  if (delUserErr) { res.status(500).json({ error: delUserErr.message }); return; }
+  if (delUserErr) { res.status(safeDbErrorStatus(delUserErr)).json({ error: safeDbErrorMessage(delUserErr) }); return; }
   await logAudit({ req, entityType: 'driver', entityId: String(id), action: 'delete', before: driver as Record<string, unknown>, label: driver.full_name, reason: 'Deleted (no archive)' });
   res.json({ message: 'Driver removed' });
 }
@@ -2565,7 +2571,7 @@ export async function getSubjects(req: AuthRequest, res: Response): Promise<void
     .select('id, name, school_id, created_at, teacher_id, class_subject_teachers(teacher_id, class_id, teachers(id, full_name), classes(name))')
     .eq('school_id', schoolId)
     .order('name');
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   const subjects = ((data ?? []) as any[]).map(s => {
     const byTeacher = new Map<string, { id: string; fullName: string; classes: { id: string; name: string }[] }>();
     for (const r of (s.class_subject_teachers ?? [])) {
@@ -2590,7 +2596,7 @@ export async function createSubject(req: AuthRequest, res: Response): Promise<vo
   const { data, error } = await supabase.from('subjects').insert({
     school_id: schoolId, name: String(name).trim(), teacher_id: null,
   }).select().single();
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.status(201).json(toCC(data));
 }
 
@@ -2601,7 +2607,7 @@ export async function updateSubject(req: AuthRequest, res: Response): Promise<vo
   if (!name || !String(name).trim()) { res.status(400).json({ error: 'Subject name is required' }); return; }
   const { data, error } = await supabase.from('subjects')
     .update({ name: String(name).trim() }).eq('id', id).eq('school_id', schoolId).select().single();
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data));
 }
 
@@ -2634,7 +2640,7 @@ export async function getWeeklySummaries(req: AuthRequest, res: Response): Promi
   if (weekStartDate) query = query.eq('week_start_date', weekStartDate);
 
   const { data, error } = await query;
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data));
 }
 
@@ -2682,7 +2688,7 @@ export async function getGraduatedStudents(req: AuthRequest, res: Response): Pro
   if (search) query = query.ilike('full_name', `%${search}%`);
 
   const { data, error } = await query;
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data));
 }
 
@@ -2727,7 +2733,7 @@ export async function verifyArchiveIntegrity(req: AuthRequest, res: Response): P
     return;
   }
   const { data, error } = await supabase.rpc('verify_school_integrity', { p_school_id: schoolId });
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   const issues = (data ?? []) as { kind: string; table_name: string; row_id: string; detail: string }[];
   const tampered = issues.filter(i => i.kind !== 'unhashed');
   res.json({
@@ -2785,14 +2791,14 @@ export async function yearTransition(req: AuthRequest, res: Response): Promise<v
   // 1. Collect all currently active student IDs
   const { data: activeStudents, error: activeErr } = await supabase
     .from('students').select('id').eq('school_id', schoolId).eq('is_graduated', false);
-  if (activeErr) { res.status(500).json({ error: activeErr.message }); return; }
+  if (activeErr) { res.status(safeDbErrorStatus(activeErr)).json({ error: safeDbErrorMessage(activeErr) }); return; }
   const activeIds = (activeStudents || []).map((s: any) => s.id);
 
   // 2. Clear reports for all active students — clean slate for new year
   if (activeIds.length > 0) {
     const { error: repErr } = await supabase.from('reports')
       .delete().in('student_id', activeIds).eq('school_id', schoolId);
-    if (repErr) { res.status(500).json({ error: repErr.message }); return; }
+    if (repErr) { res.status(safeDbErrorStatus(repErr)).json({ error: safeDbErrorMessage(repErr) }); return; }
   }
 
   // 3. Graduate selected students. Schools without the archive feature can't
@@ -2803,7 +2809,7 @@ export async function yearTransition(req: AuthRequest, res: Response): Promise<v
       const { error: gradErr } = await supabase.from('students')
         .update({ is_graduated: true })
         .in('id', studentIdsToGraduate).eq('school_id', schoolId);
-      if (gradErr) { res.status(500).json({ error: gradErr.message }); return; }
+      if (gradErr) { res.status(safeDbErrorStatus(gradErr)).json({ error: safeDbErrorMessage(gradErr) }); return; }
       // Freeze a snapshot per graduated student (best-effort, idempotent).
       const actor = { id: req.user!.userId, name: req.user!.username, role: req.user!.role };
       for (const sid of studentIdsToGraduate) {
@@ -2812,7 +2818,7 @@ export async function yearTransition(req: AuthRequest, res: Response): Promise<v
     } else {
       const { error: delErr } = await supabase.from('students')
         .delete().in('id', studentIdsToGraduate).eq('school_id', schoolId);
-      if (delErr) { res.status(500).json({ error: delErr.message }); return; }
+      if (delErr) { res.status(safeDbErrorStatus(delErr)).json({ error: safeDbErrorMessage(delErr) }); return; }
     }
   }
 
@@ -2826,14 +2832,14 @@ export async function yearTransition(req: AuthRequest, res: Response): Promise<v
     for (const [classId, studentIds] of Object.entries(byClass)) {
       const { error: assignErr } = await supabase.from('students')
         .update({ class_id: classId }).in('id', studentIds).eq('school_id', schoolId);
-      if (assignErr) { res.status(500).json({ error: assignErr.message }); return; }
+      if (assignErr) { res.status(safeDbErrorStatus(assignErr)).json({ error: safeDbErrorMessage(assignErr) }); return; }
     }
   }
 
   // 5. Advance the school's academic year
   const { error: yearErr } = await supabase.from('schools')
     .update({ current_academic_year: newAcademicYear }).eq('id', schoolId);
-  if (yearErr) { res.status(500).json({ error: yearErr.message }); return; }
+  if (yearErr) { res.status(safeDbErrorStatus(yearErr)).json({ error: safeDbErrorMessage(yearErr) }); return; }
 
   res.json({ graduated: studentIdsToGraduate.length, assigned: classAssignments.length, newAcademicYear });
 }
@@ -2844,7 +2850,7 @@ export async function getResetRequests(req: AuthRequest, res: Response): Promise
   const { data, error } = await supabase.from('password_reset_requests')
     .select('*').eq('school_id', schoolId).eq('status', 'pending')
     .order('requested_at', { ascending: false });
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data));
 }
 
@@ -2860,7 +2866,7 @@ export async function resetUserPassword(req: AuthRequest, res: Response): Promis
   const rounds = parseInt(process.env.BCRYPT_ROUNDS || '10');
   const hash = await bcrypt.hash(newPassword, rounds);
   const { error } = await supabase.from('users').update({ password_hash: hash, password_changed_at: new Date().toISOString() }).eq('id', userId).eq('school_id', schoolId);
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   await supabase.from('password_reset_requests').update({ status: 'resolved' })
     .eq('user_id', userId).eq('school_id', schoolId).eq('status', 'pending');
   notify({ schoolId, userId: userId as string, title: 'Password Reset', message: 'Your password has been reset by the school administrator. Please log in with your new credentials.', type: 'system' }).catch(() => {});
@@ -2895,7 +2901,7 @@ export async function searchInactiveUsers(req: AuthRequest, res: Response): Prom
     .eq('is_active', false)
     .or(`first_name.ilike.%${safeName}%,last_name.ilike.%${safeName}%,username.ilike.%${safeName}%`)
     .limit(8);
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data ?? []));
 }
 
@@ -2926,7 +2932,7 @@ export async function reactivateUser(req: AuthRequest, res: Response): Promise<v
   }
 
   const { error } = await supabase.from('users').update(updates).eq('id', userId).eq('school_id', schoolId);
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json({
     message: 'User reactivated',
     username: user.username,
@@ -2942,7 +2948,7 @@ export async function getSettings(req: AuthRequest, res: Response): Promise<void
   const { data, error } = await supabase.from('schools')
     .select('current_academic_year, timezone, chat_restrictions')
     .eq('id', schoolId).single();
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data));
 }
 
@@ -3007,7 +3013,7 @@ export async function updateSettings(req: AuthRequest, res: Response): Promise<v
     .update(patch)
     .eq('id', schoolId)
     .select('current_academic_year, timezone, chat_restrictions').single();
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data));
 }
 
@@ -3066,7 +3072,7 @@ export async function exportCredentialsPdf(req: AuthRequest, res: Response): Pro
       .select('full_name, users!inner(username, is_active)')
       .eq('school_id', schoolId)
       .order('full_name');
-    if (error) { res.status(500).json({ error: error.message }); return; }
+    if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
     for (const t of (data || []) as any[]) {
       if (t.users?.is_active === false) continue;
       entries.push({
@@ -3083,7 +3089,7 @@ export async function exportCredentialsPdf(req: AuthRequest, res: Response): Pro
       .select('full_name, users!inner(username, is_active)')
       .eq('school_id', schoolId)
       .order('full_name');
-    if (error) { res.status(500).json({ error: error.message }); return; }
+    if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
     for (const d of (data || []) as any[]) {
       if (d.users?.is_active === false) continue;
       entries.push({
@@ -3128,7 +3134,7 @@ export async function exportCredentialsPdf(req: AuthRequest, res: Response): Pro
         .eq('school_id', schoolId)
         .eq('class_id', classId)
         .eq('is_graduated', false);
-      if (error) { res.status(500).json({ error: error.message }); return; }
+      if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
       // Group by parent so a parent with multiple children in the same class shows once
       const byParent = new Map<string, CredentialEntry>();
@@ -3157,7 +3163,7 @@ export async function exportCredentialsPdf(req: AuthRequest, res: Response): Pro
         .select('id, full_name, users!inner(username, is_active), students(full_name, classes(name))')
         .eq('school_id', schoolId)
         .order('full_name');
-      if (error) { res.status(500).json({ error: error.message }); return; }
+      if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
       for (const p of (data || []) as any[]) {
         if (p.users?.is_active === false) continue;
         entries.push({
@@ -3191,7 +3197,7 @@ export async function getAccounts(req: AuthRequest, res: Response): Promise<void
     .eq('school_id', schoolId)
     .order('role')
     .order('first_name');
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data));
 }
 
@@ -3220,7 +3226,11 @@ export async function updateAccount(req: AuthRequest, res: Response): Promise<vo
     // `password_hash` back to the admin caller (M-10 in the pen test).
     .select('id, school_id, username, email, phone, role, first_name, last_name, profile_picture, is_active, created_at, password_changed_at').single();
   if (error) {
-    res.status(error.message.includes('unique') ? 409 : 500).json({ error: error.message }); return;
+    const isDupe = error.code === '23505' || /unique|duplicate/i.test(error.message || '');
+    res.status(isDupe ? 409 : safeDbErrorStatus(error)).json({
+      error: isDupe ? 'Username is already taken.' : safeDbErrorMessage(error),
+    });
+    return;
   }
 
   // Sync full_name in the role-specific profile table
@@ -3329,7 +3339,7 @@ export async function deleteAccount(req: AuthRequest, res: Response): Promise<vo
 
   // Archive feature off (or teacher row missing) — hard delete.
   const { error: delErr } = await supabase.from('users').delete().eq('id', userId);
-  if (delErr) { res.status(500).json({ error: delErr.message }); return; }
+  if (delErr) { res.status(safeDbErrorStatus(delErr)).json({ error: safeDbErrorMessage(delErr) }); return; }
   await logAudit({ req, entityType: user.role as 'teacher' | 'supervisor' | 'admin', entityId: String(userId), action: 'delete', before: account, label: fullName, reason: 'Deleted (no archive)' });
   res.json({ message: 'Account deleted' });
 }
@@ -3341,7 +3351,7 @@ export async function getParents(req: AuthRequest, res: Response): Promise<void>
     .select('id, full_name, phone_number, email, user_id, users(username), students(id, full_name)')
     .eq('school_id', schoolId)
     .order('full_name');
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data));
 }
 
@@ -3377,7 +3387,7 @@ export async function deleteParent(req: AuthRequest, res: Response): Promise<voi
   if (!parent) { res.status(404).json({ error: 'Parent not found' }); return; }
   // Deleting the user cascades to the parent record; students.parent_id becomes NULL via ON DELETE SET NULL
   const { error } = await supabase.from('users').delete().eq('id', parent.user_id);
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json({ message: 'Parent account deleted' });
 }
 
@@ -3390,7 +3400,7 @@ export async function updateParent(req: AuthRequest, res: Response): Promise<voi
   if (blockNumber !== undefined) update.block_number = blockNumber || null;
   if (Object.keys(update).length === 0) { res.status(400).json({ error: 'Nothing to update' }); return; }
   const { error } = await supabase.from('parents').update(update).eq('id', id).eq('school_id', schoolId);
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json({ success: true });
 }
 
@@ -3462,7 +3472,7 @@ export async function updateScheduleConfig(req: AuthRequest, res: Response): Pro
   }
 
   const { error } = await supabase.from('schools').update(update).eq('id', schoolId);
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json({ ...await readScheduleConfig(schoolId) });
 }
 
@@ -3494,7 +3504,7 @@ export async function setScheduleCell(req: AuthRequest, res: Response): Promise<
       .eq('teacher_id', teacherId)
       .eq('day_of_week', dayOfWeek)
       .eq('period_index', periodIndex);
-    if (error) { res.status(500).json({ error: error.message }); return; }
+    if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
     res.json({ success: true, cleared: true });
     return;
   }
@@ -3541,7 +3551,7 @@ export async function setScheduleCell(req: AuthRequest, res: Response): Promise<
     })
     .select('id, teacher_id, class_id, day_of_week, period_index')
     .single();
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json({ success: true, assignment: toCC(data) });
 }
 
@@ -3560,7 +3570,7 @@ export async function getTeacherSchedule(req: AuthRequest, res: Response): Promi
     .select('id, day_of_week, period_index, classes(id, name)')
     .eq('school_id', schoolId)
     .eq('teacher_id', teacher.id);
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
   res.json({ ...config, assignments: toCC(data) });
 }
@@ -3589,7 +3599,7 @@ export async function getParentSchedule(req: AuthRequest, res: Response): Promis
     .select('id, day_of_week, period_index, teachers(id, full_name, subject)')
     .eq('school_id', schoolId)
     .eq('class_id', student.class_id);
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
   res.json({ ...config, assignments: toCC(data) });
 }
@@ -3601,7 +3611,7 @@ export async function getMarkTypes(req: AuthRequest, res: Response): Promise<voi
   let query = supabase.from('mark_types').select('*').eq('school_id', schoolId).order('order_index').order('created_at');
   if (appliesTo) query = (query as any).in('applies_to', [appliesTo, 'both']);
   const { data, error } = await query;
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data));
 }
 
@@ -3614,7 +3624,7 @@ export async function createMarkType(req: AuthRequest, res: Response): Promise<v
     name: name.trim(),
     applies_to: appliesTo || 'both',
   }).select().single();
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.status(201).json(toCC(data));
 }
 
@@ -3622,7 +3632,7 @@ export async function deleteMarkType(req: AuthRequest, res: Response): Promise<v
   const { schoolId } = req.user!;
   const { id } = req.params;
   const { error } = await supabase.from('mark_types').delete().eq('id', id).eq('school_id', schoolId);
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json({ message: 'Deleted' });
 }
 
@@ -3632,7 +3642,7 @@ export async function getTerms(req: AuthRequest, res: Response): Promise<void> {
   const { data, error } = await supabase
     .from('terms').select('*').eq('school_id', schoolId)
     .order('order_index').order('created_at');
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data));
 }
 
@@ -3650,8 +3660,9 @@ export async function createTerm(req: AuthRequest, res: Response): Promise<void>
     order_index: nextOrder,
   }).select().single();
   if (error) {
-    res.status(error.message.includes('unique') || error.code === '23505' ? 409 : 500)
-      .json({ error: error.message });
+    const isDupe = error.code === '23505' || /unique|duplicate/i.test(error.message || '');
+    res.status(isDupe ? 409 : safeDbErrorStatus(error))
+      .json({ error: isDupe ? 'A term with that name already exists.' : safeDbErrorMessage(error) });
     return;
   }
   res.status(201).json(toCC(data));
@@ -3661,7 +3672,7 @@ export async function deleteTerm(req: AuthRequest, res: Response): Promise<void>
   const { schoolId } = req.user!;
   const { id } = req.params;
   const { error } = await supabase.from('terms').delete().eq('id', id).eq('school_id', schoolId);
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json({ message: 'Deleted' });
 }
 
@@ -3705,6 +3716,6 @@ export async function getAuditLogs(req: AuthRequest, res: Response): Promise<voi
   }
 
   const { data, error, count } = await q;
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json({ logs: toCC(data || []), total: count ?? 0, page: pageNum, limit: limNum });
 }

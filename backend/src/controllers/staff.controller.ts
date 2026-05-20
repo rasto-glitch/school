@@ -1,3 +1,4 @@
+import { safeDbErrorMessage, safeDbErrorStatus } from '../utils/dbErrors';
 import { Response } from 'express';
 // Elevated controller — see Phase 0 inventory.
 import { adminDb as supabase } from '../utils/db';
@@ -82,7 +83,7 @@ async function snapshotStaffArchive(
     .select('id')
     .single();
 
-  if (error) return { ok: false, error: error.message };
+  if (error) return { ok: false, error: safeDbErrorMessage(error) };
   return { ok: true, archiveId: (data as { id: string }).id };
 }
 
@@ -260,7 +261,7 @@ export async function getStaffSetup(req: AuthRequest, res: Response): Promise<vo
     .eq('school_id', schoolId)
     .eq('users.is_active', true)
     .order('full_name');
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
   const linkedRes = await supabase
     .from('staff_members')
@@ -288,7 +289,7 @@ export async function getStaffSetup(req: AuthRequest, res: Response): Promise<vo
     .eq('role', 'supervisor')
     .eq('is_active', true)
     .order('first_name');
-  if (supErr) { res.status(500).json({ error: supErr.message }); return; }
+  if (supErr) { res.status(safeDbErrorStatus(supErr)).json({ error: safeDbErrorMessage(supErr) }); return; }
 
   const supervisors = ((supervisorUsers ?? []) as { id: string; first_name: string; last_name: string }[]).map(u => ({
     userId: u.id,
@@ -305,7 +306,7 @@ export async function getStaffSetup(req: AuthRequest, res: Response): Promise<vo
     .eq('role', 'admin')
     .eq('is_active', true)
     .order('first_name');
-  if (admErr) { res.status(500).json({ error: admErr.message }); return; }
+  if (admErr) { res.status(safeDbErrorStatus(admErr)).json({ error: safeDbErrorMessage(admErr) }); return; }
 
   const admins = ((adminUsers ?? []) as { id: string; first_name: string; last_name: string }[]).map(u => ({
     userId: u.id,
@@ -359,7 +360,7 @@ export async function createStaff(req: AuthRequest, res: Response): Promise<void
   if (error) {
     // Unique-constraint violation when linking a user already on the roster
     if (error.code === '23505') { res.status(409).json({ error: 'This user is already on the staff roster' }); return; }
-    res.status(500).json({ error: error.message });
+    res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) });
     return;
   }
 
@@ -406,7 +407,7 @@ export async function updateStaff(req: AuthRequest, res: Response): Promise<void
   const { error } = await supabase.from('staff_members').update(upd).eq('id', id).eq('school_id', schoolId);
   if (error) {
     if (error.code === '23505') { res.status(409).json({ error: 'This user is already on the staff roster' }); return; }
-    res.status(500).json({ error: error.message });
+    res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) });
     return;
   }
   const { data: after } = await supabase.from('staff_members').select('*').eq('id', id).eq('school_id', schoolId).single();
@@ -427,7 +428,7 @@ export async function deleteStaff(req: AuthRequest, res: Response): Promise<void
     .from('staff_members')
     .update({ voided_at: new Date().toISOString(), voided_by: userId, void_reason: reason })
     .eq('id', id).eq('school_id', schoolId).select().single();
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   await logAudit({ req, entityType: 'staff_member', entityId: String(id), action: 'update', before, after, label: (before as { full_name?: string }).full_name, reason: reason ?? undefined });
 
   // HR archive entry (additive — the soft-void above is the accounting
@@ -455,7 +456,7 @@ export async function unvoidStaff(req: AuthRequest, res: Response): Promise<void
     .from('staff_members')
     .update({ voided_at: null, voided_by: null, void_reason: null })
     .eq('id', id).eq('school_id', schoolId).select().single();
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   await logAudit({ req, entityType: 'staff_member', entityId: String(id), action: 'update', before, after, label: (before as { full_name?: string }).full_name });
   res.json({ success: true });
 }
@@ -476,7 +477,7 @@ export async function listVoidedStaff(req: AuthRequest, res: Response): Promise<
     .limit(limit + 1);
   if (cursor) q = q.or(keysetAfter('voided_at', cursor));
   const { data, error } = await q;
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   const page = buildPageWith(
     ((data ?? []) as any[]).map(r => ({ ...r, id: String(r.id) })),
     limit,
@@ -537,8 +538,8 @@ export async function listStaffPayments(req: AuthRequest, res: Response): Promis
     .is('voided_at', null);
 
   const [{ data, error }, { data: aggData, error: aggErr }] = await Promise.all([q, aggQ]);
-  if (error) { res.status(500).json({ error: error.message }); return; }
-  if (aggErr) { res.status(500).json({ error: aggErr.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+  if (aggErr) { res.status(safeDbErrorStatus(aggErr)).json({ error: safeDbErrorMessage(aggErr) }); return; }
 
   const tMap = new Map<string, { currency: string; gross: number; insurance: number; net: number; count: number }>();
   for (const r of (aggData ?? []) as any[]) {
@@ -633,7 +634,7 @@ export async function recordStaffPayment(req: AuthRequest, res: Response): Promi
     payment_account_id: paymentAccountId ?? null,
     recorded_by: userId,
   }).select().single();
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
   await logAudit({ req, entityType: 'staff_salary_payment', entityId: (data as { id: string }).id, action: 'create', after: data as Record<string, unknown>, label: staffRow.full_name });
 
@@ -673,7 +674,7 @@ export async function deleteStaffPayment(req: AuthRequest, res: Response): Promi
     .from('staff_salary_payments')
     .update({ voided_at: new Date().toISOString(), voided_by: userId, void_reason: reason })
     .eq('id', id).eq('school_id', schoolId).select().single();
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   const label = (before as { staff_members?: { full_name?: string } }).staff_members?.full_name;
   const beforeRow: Record<string, unknown> = { ...(before as Record<string, unknown>) };
   delete beforeRow.staff_members;
@@ -698,7 +699,7 @@ export async function unvoidStaffPayment(req: AuthRequest, res: Response): Promi
     .from('staff_salary_payments')
     .update({ voided_at: null, voided_by: null, void_reason: null })
     .eq('id', id).eq('school_id', schoolId).select().single();
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   const label = (before as { staff_members?: { full_name?: string } }).staff_members?.full_name;
   const beforeRow: Record<string, unknown> = { ...(before as Record<string, unknown>) };
   delete beforeRow.staff_members;
@@ -722,7 +723,7 @@ export async function listVoidedStaffPayments(req: AuthRequest, res: Response): 
     .limit(limit + 1);
   if (cursor) q = q.or(keysetAfter('voided_at', cursor));
   const { data, error } = await q;
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
   const page = buildPageWith(
     ((data ?? []) as any[]).map(r => ({ ...r, id: String(r.id) })),
@@ -812,7 +813,7 @@ export async function markStaffInsurancePaid(req: AuthRequest, res: Response): P
     insurance_paid_out_currency: finalCurrency,
     insurance_paid_out_notes: body.notes?.trim() || null,
   }).eq('id', id).eq('school_id', schoolId);
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
   const { data: afterIns } = await supabase.from('staff_members').select('*').eq('id', id).eq('school_id', schoolId).single();
   await logAudit({ req, entityType: 'staff_member', entityId: id, action: 'update', before: beforeIns || undefined, after: afterIns || undefined, label: s.full_name, reason: 'Insurance paid out' });
@@ -857,7 +858,7 @@ export async function reverseStaffInsurancePayout(req: AuthRequest, res: Respons
     insurance_paid_out_currency: null,
     insurance_paid_out_notes: null,
   }).eq('id', id).eq('school_id', schoolId);
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
   const { data: afterRev } = await supabase.from('staff_members').select('*').eq('id', id).eq('school_id', schoolId).single();
   await logAudit({ req, entityType: 'staff_member', entityId: id, action: 'update', before: beforeRev || undefined, after: afterRev || undefined, label: (afterRev as { full_name?: string } | null)?.full_name, reason: 'Insurance payout reversed' });
@@ -912,7 +913,7 @@ export async function bulkSetNextPaymentDate(req: AuthRequest, res: Response): P
   }
 
   const { data, error } = await q.select('*');
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
   for (const row of (data || []) as Record<string, unknown>[]) {
     const id = row.id as string;
@@ -973,7 +974,7 @@ export async function notifyAllStaffDue(req: AuthRequest, res: Response): Promis
     .is('voided_at', null)
     .eq('is_active', true)
     .not('user_id', 'is', null);
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
   const todayMs = new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00Z').getTime();
   const cutoffMs = filterDays !== null ? todayMs + filterDays * 86400000 : null;

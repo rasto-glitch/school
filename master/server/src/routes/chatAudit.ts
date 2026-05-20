@@ -1,3 +1,4 @@
+import { safeDbErrorMessage, safeDbErrorStatus } from '../utils/dbErrors';
 import { Router, Request, Response } from 'express';
 import { createClient } from '@supabase/supabase-js';
 
@@ -28,7 +29,7 @@ router.get('/schools/:schoolId/conversations', async (req: Request, res: Respons
     .eq('school_id', schoolId)
     .order('last_message_at', { ascending: false, nullsFirst: false });
 
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   if (!convs || convs.length === 0) { res.json([]); return; }
 
   const userIds = Array.from(new Set(convs.flatMap(c => [c.parent_id, c.staff_id])));
@@ -82,7 +83,7 @@ router.get('/conversations/:id/messages', async (req: Request, res: Response) =>
     .eq('conversation_id', id)
     .order('created_at', { ascending: true });
 
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
   // Edit history for every message in this conversation
   const messageIds = (messages || []).map(m => m.id);
@@ -216,7 +217,7 @@ router.get('/access-log', async (req: Request, res: Response) => {
   if (schoolId) query = query.eq('school_id', schoolId);
 
   const { data, error } = await query;
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(data || []);
 });
 

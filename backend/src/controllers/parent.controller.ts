@@ -1,3 +1,4 @@
+import { safeDbErrorMessage, safeDbErrorStatus } from '../utils/dbErrors';
 import { Response } from 'express';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AuthRequest } from '../middleware/auth';
@@ -22,7 +23,7 @@ export async function getChildren(req: AuthRequest, res: Response): Promise<void
   if (!parent) { res.status(404).json({ error: 'Parent not found' }); return; }
 
   const { data, error } = await req.db!.from('students').select('id, full_name, profile_picture, class_id, classes(name), drivers(full_name, phone_number, license_number, buses(bus_number))').eq('parent_id', parent.id).eq('school_id', schoolId);
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
   // Attach per-child locked feature list so the UI can render a "Contact school" state
   const ids = (data ?? []).map(s => (s as any).id);
@@ -48,7 +49,7 @@ export async function getArchivedChildren(req: AuthRequest, res: Response): Prom
     .eq('school_id', schoolId)
     .eq('original_parent_id', parent.id)
     .order('created_at', { ascending: false });
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data ?? []));
 }
 
@@ -84,7 +85,7 @@ export async function getHomework(req: AuthRequest, res: Response): Promise<void
   if (subject) query = query.eq('subject', subject);
 
   const { data, error } = await query;
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data));
 }
 
@@ -160,7 +161,7 @@ export async function getAnnouncements(req: AuthRequest, res: Response): Promise
     .order('created_at', { ascending: false })
     .order('id', { ascending: false })
     .limit(limit + 1);
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
   const page = buildPage((data ?? []) as { id: string; created_at: string }[], limit);
   const decorated = await decorateAnnouncements(page.data, userId);
@@ -235,7 +236,7 @@ export async function getReport(req: AuthRequest, res: Response): Promise<void> 
   if (subject) query = query.eq('subject', subject);
 
   const { data, error } = await query;
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data));
 }
 
@@ -264,7 +265,7 @@ export async function getGrades(req: AuthRequest, res: Response): Promise<void> 
     .eq('student_id', targetId)
     .order('academic_year', { ascending: false })
     .order('grading_period');
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data));
 }
 
@@ -361,7 +362,7 @@ export async function getNotifications(req: AuthRequest, res: Response): Promise
     .order('created_at', { ascending: false })
     .order('id', { ascending: false })
     .limit(limit + 1); // over-fetch one to detect "has more"
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
   res.json(buildPage(toCC(data) as { id: string; createdAt: string }[], limit));
 }
@@ -410,7 +411,7 @@ export async function getAppointments(req: AuthRequest, res: Response): Promise<
   const { data, error } = await req.db!.from('appointments')
     .select('*').eq('school_id', schoolId).eq('parent_id', parent.id)
     .order('created_at', { ascending: false });
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data));
 }
 
@@ -424,7 +425,7 @@ export async function updatePickupLocation(req: AuthRequest, res: Response): Pro
   if (residenceType !== undefined) update.residence_type = residenceType;
   if (blockNumber !== undefined) update.block_number = blockNumber;
   const { error } = await req.db!.from('parents').update(update).eq('user_id', userId).eq('school_id', schoolId);
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json({ success: true });
 }
 
@@ -433,7 +434,7 @@ export async function getPickupLocation(req: AuthRequest, res: Response): Promis
   const { data, error } = await req.db!.from('parents')
     .select('latitude, longitude, residence_type, block_number')
     .eq('user_id', userId).eq('school_id', schoolId).single();
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json({
     latitude: data?.latitude ?? null,
     longitude: data?.longitude ?? null,
@@ -458,7 +459,7 @@ export async function createAppointment(req: AuthRequest, res: Response): Promis
     student_ids: studentIds,
   }).select().single();
 
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
   emitToAdmins(schoolId, 'new_appointment', { appointmentId: data.id });
 

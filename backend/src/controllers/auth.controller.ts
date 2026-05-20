@@ -1,3 +1,4 @@
+import { safeDbErrorMessage, safeDbErrorStatus } from '../utils/dbErrors';
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
@@ -196,7 +197,7 @@ export async function getSchools(_req: Request, res: Response): Promise<void> {
     .select('id, name, slug, logo_url, primary_color')
     .eq('is_active', true)
     .order('name');
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data || []));
 }
 
@@ -494,7 +495,7 @@ export async function updateMyEmail(req: Request, res: Response): Promise<void> 
       .update({ email: cleaned })
       .eq('id', userId);
     if (error) {
-      res.status(500).json({ error: error.message });
+      res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) });
       return;
     }
     res.json({ email: cleaned, pending: false });
@@ -526,7 +527,7 @@ export async function updateMyEmail(req: Request, res: Response): Promise<void> 
       expires_at: expiresAt,
     });
   if (insErr) {
-    res.status(500).json({ error: insErr.message });
+    res.status(safeDbErrorStatus(insErr)).json({ error: safeDbErrorMessage(insErr) });
     return;
   }
 
@@ -567,8 +568,10 @@ export async function updateMyEmail(req: Request, res: Response): Promise<void> 
   try {
     await sendMail(cleaned, subject, html, text);
   } catch (err) {
-    const e = err as Error;
-    res.status(502).json({ error: e.message });
+    // SECURITY: don't echo mailer error detail (SMTP rejection reason,
+    // domain auth state, etc.) to the caller. Operator triages via logs.
+    logger.error('email-change confirmation send failed', { err, target: cleaned });
+    res.status(502).json({ error: 'Could not send confirmation email. Please try again later.' });
     return;
   }
 
@@ -609,7 +612,7 @@ export async function confirmEmail(req: Request, res: Response): Promise<void> {
     .update({ email: r.new_email })
     .eq('id', r.user_id);
   if (upErr) {
-    res.status(500).json({ error: upErr.message });
+    res.status(safeDbErrorStatus(upErr)).json({ error: safeDbErrorMessage(upErr) });
     return;
   }
   // tenant-check-allow: email_change_tokens is user-keyed (no school_id by design)
@@ -767,7 +770,7 @@ export async function resetWithToken(req: Request, res: Response): Promise<void>
     .from('users')
     .update({ password_hash: passwordHash, password_changed_at: new Date().toISOString() })
     .eq('id', r.user_id);
-  if (upErr) { res.status(500).json({ error: upErr.message }); return; }
+  if (upErr) { res.status(safeDbErrorStatus(upErr)).json({ error: safeDbErrorMessage(upErr) }); return; }
 
   // tenant-check-allow: password_reset_tokens is user-keyed (no school_id by design)
   await supabase
