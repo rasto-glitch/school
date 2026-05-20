@@ -136,7 +136,11 @@ export const demoRequest = async (req: Request, res: Response) => {
       subject: `Demo request - ${schoolName}`,
       html,
       text,
-      replyTo: email,
+      // SECURITY (M-4): we display the submitter's email in the body of
+      // the operator email, but we do NOT set it as Reply-To. Trusting
+      // the form-supplied email as Reply-To lets an attacker submit
+      // `school@example.org`, prompting the operator to reply to what
+      // they think is the school — silently delivered to the attacker.
     });
     res.json({ ok: true });
   } catch (err) {
@@ -171,7 +175,7 @@ export const contactRequest = async (req: Request, res: Response) => {
       subject: `Contact form - ${subject || name}`,
       html,
       text,
-      replyTo: email,
+      // SECURITY (M-4): no Reply-To from the form body — see demoRequest.
       to: CONTACT_TO_EMAIL,
     });
     res.json({ ok: true });
@@ -211,7 +215,7 @@ export const partnerApplication = async (req: Request, res: Response) => {
       subject: `Partner application - ${companyName}`,
       html,
       text,
-      replyTo: email,
+      // SECURITY (M-4): no Reply-To from the form body — see demoRequest.
       to: PARTNER_TO_EMAIL,
     });
     res.json({ ok: true });

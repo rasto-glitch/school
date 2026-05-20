@@ -5,6 +5,7 @@ import { toCC } from '../utils/transform';
 import type { AuthRequest } from '../middleware/auth';
 import { getIo, chatPush } from '../utils/notify';
 import { isChatOpen, type ChatWindowState } from '../utils/chatWindow';
+import { safeDbErrorMessage, safeDbErrorStatus } from '../utils/dbErrors';
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -143,35 +144,52 @@ export async function getContacts(req: AuthRequest, res: Response): Promise<void
 
     res.json(contacts);
   } else {
-    // Teacher / Supervisor → all parents, using separate queries to avoid join issues
-    const { data: parents } = await req.db!
-      .from('parents').select('user_id, full_name').eq('school_id', schoolId);
+    // Teacher / Supervisor → all parents in this school.
+    // L-5: the previous implementation fetched parents.user_id[] then did
+    // `.in('id', parentUserIds)` against users — a URL with 1000+ UUIDs
+    // exceeds PostgREST / Cloudflare URL limits in any school over ~150
+    // parents, silently returning [] (the error was never checked). Query
+    // users directly by role + school instead, then attach parents.full_name
+    // by a second small lookup.
+    const { data: parentUsers, error: usersErr } = await req.db!
+      .from('users')
+      .select('id, first_name, last_name, profile_picture')
+      .eq('school_id', schoolId)
+      .eq('role', 'parent')
+      .eq('is_active', true)
+      .order('first_name');
+    if (usersErr) {
+      res.status(safeDbErrorStatus(usersErr)).json({ error: safeDbErrorMessage(usersErr) });
+      return;
+    }
+    const users = parentUsers ?? [];
+    if (users.length === 0) { res.json([]); return; }
 
-    const contacts: any[] = [];
-    if (parents && parents.length > 0) {
-      const parentUserIds = parents.map((p: any) => p.user_id);
-      const { data: parentUsers } = await req.db!
-        .from('users').select('id, first_name, last_name, profile_picture, is_active')
-        .in('id', parentUserIds).eq('is_active', true);
-
-      const userMap: Record<string, any> = {};
-      (parentUsers || []).forEach((u: any) => { userMap[u.id] = u; });
-
-      // Build a map of user_id → full_name from parents table
-      const nameMap: Record<string, string> = {};
-      parents.forEach((p: any) => { nameMap[p.user_id] = p.full_name; });
-
-      (parentUsers || []).forEach((u: any) => {
-        contacts.push({
-          id: u.id,
-          firstName: u.first_name,
-          lastName: u.last_name,
-          fullName: nameMap[u.id] || `${u.first_name} ${u.last_name}`.trim(),
-          role: 'parent',
-          profilePicture: u.profile_picture,
-        });
+    const userIds = users.map((u: any) => u.id);
+    // Page through parents.full_name in chunks so a 1000+-parent school
+    // never exceeds the URL length cap (~250 uuids ≈ 9-10 kB).
+    const CHUNK = 200;
+    const nameMap: Record<string, string> = {};
+    for (let i = 0; i < userIds.length; i += CHUNK) {
+      const slice = userIds.slice(i, i + CHUNK);
+      const { data: parents } = await req.db!
+        .from('parents')
+        .select('user_id, full_name')
+        .eq('school_id', schoolId)
+        .in('user_id', slice);
+      (parents ?? []).forEach((p: any) => {
+        if (p.user_id) nameMap[p.user_id] = p.full_name;
       });
     }
+
+    const contacts = users.map((u: any) => ({
+      id: u.id,
+      firstName: u.first_name,
+      lastName: u.last_name,
+      fullName: nameMap[u.id] || `${u.first_name} ${u.last_name}`.trim(),
+      role: 'parent',
+      profilePicture: u.profile_picture,
+    }));
 
     res.json(contacts);
   }

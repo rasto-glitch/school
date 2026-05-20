@@ -183,6 +183,28 @@ export async function createAttendanceRecord(req: AuthRequest, res: Response): P
     res.status(400).json({ error: 'Valid status (present, absent, late, excused) is required' }); return;
   }
 
+  // SECURITY (I-2): verify the student actually belongs to the supplied
+  // class. Previously a supervisor could mis-attribute a student to any
+  // class in their school (Grade 7 student marked absent in Grade 1) —
+  // we confirmed the bug live during the pen test and the row landed.
+  // The supervisor already has school-wide attendance authority, so this
+  // is data integrity / audit clarity rather than privilege escalation,
+  // but it's cheap to enforce here.
+  const { data: student } = await req.db!
+    .from('students')
+    .select('class_id')
+    .eq('id', studentId)
+    .eq('school_id', schoolId)
+    .maybeSingle();
+  if (!student) {
+    res.status(404).json({ error: 'Student not found in this school.' });
+    return;
+  }
+  if ((student as { class_id: string | null }).class_id !== classId) {
+    res.status(400).json({ error: 'Student is not in the supplied class.' });
+    return;
+  }
+
   const { data, error } = await req.db!
     .from('attendance')
     .insert({

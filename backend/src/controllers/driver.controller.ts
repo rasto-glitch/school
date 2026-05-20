@@ -209,10 +209,32 @@ export async function startDrive(req: AuthRequest, res: Response): Promise<void>
 
   const today = new Date().toISOString().split('T')[0];
 
-  // Save per-student bus ride records (upsert — safe to re-start a drive)
+  // SECURITY (M-3): the body's studentRides[] previously took every
+  // studentId at face value. Combined with `onConflict: student_id,date`,
+  // a malicious driver could overwrite another driver's bus_ride_records
+  // for any student in the same school. Validate that every studentId in
+  // the body actually belongs to this driver's route before writing.
+  let validRides = studentRides;
   if (studentRides.length > 0) {
-    await req.db!.from('bus_ride_records').upsert(
-      studentRides.map(r => ({
+    const { data: myStudents } = await req.db!
+      .from('students')
+      .select('id')
+      .eq('driver_id', driver.id)
+      .eq('school_id', schoolId);
+    const owned = new Set((myStudents ?? []).map((s: { id: string }) => s.id));
+    validRides = studentRides.filter(r => owned.has(r.studentId));
+    if (validRides.length !== studentRides.length) {
+      res.status(403).json({ error: 'One or more students are not on your route.' });
+      return;
+    }
+  }
+
+  // Save per-student bus ride records (upsert — safe to re-start a drive).
+  // L-6: previously the upsert error was discarded so an FK / RLS rejection
+  // came back as a "success" 200. Surface it instead.
+  if (validRides.length > 0) {
+    const { error: rideErr } = await req.db!.from('bus_ride_records').upsert(
+      validRides.map(r => ({
         school_id: schoolId,
         driver_id: driver.id,
         student_id: r.studentId,
@@ -221,12 +243,16 @@ export async function startDrive(req: AuthRequest, res: Response): Promise<void>
         exclusion_reason: r.rodeBus ? null : (r.exclusionReason ?? null),
         school_attendance_status: r.schoolAttendanceStatus ?? null,
       })),
-      { onConflict: 'student_id,date' }
+      { onConflict: 'student_id,date' },
     );
+    if (rideErr) {
+      res.status(safeDbErrorStatus(rideErr)).json({ error: safeDbErrorMessage(rideErr) });
+      return;
+    }
   }
 
   // Derive excluded IDs for proximity-alert filtering (existing logic unchanged)
-  const excludedStudentIds = studentRides.filter(r => !r.rodeBus).map(r => r.studentId);
+  const excludedStudentIds = validRides.filter(r => !r.rodeBus).map(r => r.studentId);
 
   // Persist excluded students so the backend can filter them throughout the drive
   const { error } = await req.db!.from('drivers').update({ excluded_student_ids: excludedStudentIds }).eq('id', driver.id);
