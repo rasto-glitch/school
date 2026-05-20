@@ -36,7 +36,16 @@ interface LogParams {
 }
 
 // Fields excluded from diffs — either auto-managed or sensitive.
-const EXCLUDED_FIELDS = new Set(['created_at', 'updated_at', 'id']);
+// Sensitive entries (`password_hash` etc.) are stripped here so the audit
+// log's `changes` JSONB never permanently retains a credential, even when
+// the caller hands logAudit() a full `after: user` row from a bare
+// `.select()`. This is the inner of two defenses; the outer is the
+// SENSITIVE_KEYS strip in utils/transform.ts.
+const EXCLUDED_FIELDS = new Set([
+  'created_at', 'updated_at', 'id',
+  'password_hash', 'password',
+  'token_hash', 'reset_token_hash', 'refresh_token_hash',
+]);
 
 function eq(a: unknown, b: unknown): boolean {
   if (a === b) return true;

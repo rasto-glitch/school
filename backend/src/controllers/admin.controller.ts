@@ -1,4 +1,5 @@
 import { Response } from 'express';
+import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import * as XLSX from 'xlsx';
 // admin.controller is intentionally an ELEVATED controller (Phase 0 inventory):
@@ -1289,7 +1290,11 @@ export async function restoreArchivedEmployee(req: AuthRequest, res: Response): 
   const { data: clash } = await supabase.from('users').select('id').eq('school_id', schoolId).eq('username', username).maybeSingle();
   if (clash) { res.status(409).json({ error: `Username "${username}" is in use. Re-add this employee from the Employees tab (it will link the archive).` }); return; }
 
-  const tempPassword = `Restore@${Math.floor(1000 + Math.random() * 9000)}`;
+  // Temp password: 96 bits of CSPRNG entropy, base64url so it stays a
+  // reasonable length to dictate to the restored employee verbally.
+  // Earlier `Restore@${1000-9999}` (L-7) was only 9000 possibilities and
+  // trivially crackable against any leaked bcrypt hash.
+  const tempPassword = crypto.randomBytes(12).toString('base64url');
   const rounds = parseInt(process.env.BCRYPT_ROUNDS || '10');
   const passwordHash = await bcrypt.hash(tempPassword, rounds);
 
@@ -1306,7 +1311,10 @@ export async function restoreArchivedEmployee(req: AuthRequest, res: Response): 
     username,
     password_hash: passwordHash,
     role,
-  }).select().single();
+  // Explicit projection — never select password_hash on a read path that
+  // feeds the response or the audit log. (toCC and audit EXCLUDED_FIELDS
+  // also strip it, but defense in depth at every layer.)
+  }).select('id, school_id, username, email, phone, role, first_name, last_name, profile_picture, is_active, created_at, password_changed_at').single();
   if (userErr) { res.status(userErr.message.includes('unique') ? 409 : 500).json({ error: userErr.message }); return; }
 
   if (role === 'teacher') {
@@ -1595,7 +1603,7 @@ export async function createTeacher(req: AuthRequest, res: Response): Promise<vo
     username: finalUsername,
     password_hash: passwordHash,
     role: 'teacher',
-  }).select().single();
+  }).select('id, school_id, username, email, phone, role, first_name, last_name, profile_picture, is_active, created_at, password_changed_at').single();
 
   if (userErr) {
     const isDupe = userErr.message.includes('unique') || userErr.message.includes('duplicate');
@@ -1719,7 +1727,7 @@ export async function createDriver(req: AuthRequest, res: Response): Promise<voi
     username: finalUsername,
     password_hash: passwordHash,
     role: 'driver',
-  }).select().single();
+  }).select('id, school_id, username, email, phone, role, first_name, last_name, profile_picture, is_active, created_at, password_changed_at').single();
 
   if (userErr) {
     const isDupe = userErr.message.includes('unique') || userErr.message.includes('duplicate');
@@ -1847,7 +1855,7 @@ export async function createAccount(req: AuthRequest, res: Response): Promise<vo
     username: finalUsername,
     password_hash: passwordHash,
     role,
-  }).select().single();
+  }).select('id, school_id, username, email, phone, role, first_name, last_name, profile_picture, is_active, created_at, password_changed_at').single();
 
   if (error) {
     const isDupe = error.message.includes('unique') || error.message.includes('duplicate');
@@ -3184,7 +3192,10 @@ export async function updateAccount(req: AuthRequest, res: Response): Promise<vo
   if (isActive !== undefined) updateFields.is_active = isActive;
 
   const { data: user, error } = await supabase
-    .from('users').update(updateFields).eq('id', userId).eq('school_id', schoolId).select().single();
+    .from('users').update(updateFields).eq('id', userId).eq('school_id', schoolId)
+    // Explicit projection — bare `.select()` here previously echoed
+    // `password_hash` back to the admin caller (M-10 in the pen test).
+    .select('id, school_id, username, email, phone, role, first_name, last_name, profile_picture, is_active, created_at, password_changed_at').single();
   if (error) {
     res.status(error.message.includes('unique') ? 409 : 500).json({ error: error.message }); return;
   }
