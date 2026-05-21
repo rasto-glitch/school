@@ -3597,12 +3597,41 @@ export async function getParentSchedule(req: AuthRequest, res: Response): Promis
   const config = await readScheduleConfig(schoolId);
   const { data, error } = await supabase
     .from('schedule_assignments')
-    .select('id, day_of_week, period_index, teachers(id, full_name, subject)')
+    .select('id, teacher_id, day_of_week, period_index, teachers(id, full_name, subject)')
     .eq('school_id', schoolId)
     .eq('class_id', student.class_id);
   if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
-  res.json({ ...config, assignments: toCC(data) });
+  // `teachers.subject` is the comma-joined list of every subject the teacher teaches
+  // across ALL classes. For a parent looking at one child's class we want only the
+  // subject(s) that teacher teaches to THIS class, so resolve from class_subject_teachers
+  // (the curriculum source of truth). Fall back to teachers.subject when the school has
+  // no curriculum rows for the pair yet, so unconfigured schools aren't left blank.
+  const { data: cst } = await supabase
+    .from('class_subject_teachers')
+    .select('teacher_id, subjects(name)')
+    .eq('school_id', schoolId)
+    .eq('class_id', student.class_id);
+
+  const subjectsByTeacher = new Map<string, string[]>();
+  for (const row of (cst || []) as Array<{ teacher_id: string; subjects?: { name?: string } | null }>) {
+    const name = row.subjects?.name?.trim();
+    if (!name) continue;
+    const list = subjectsByTeacher.get(row.teacher_id) ?? [];
+    if (!list.includes(name)) list.push(name);
+    subjectsByTeacher.set(row.teacher_id, list);
+  }
+
+  const assignments = (data || []).map((a) => {
+    const cell = a as { teacher_id?: string; teachers?: { subject?: string } | null };
+    const classSubjects = cell.teacher_id ? subjectsByTeacher.get(cell.teacher_id) : undefined;
+    if (classSubjects && classSubjects.length > 0 && cell.teachers) {
+      cell.teachers.subject = classSubjects.join(', ');
+    }
+    return a;
+  });
+
+  res.json({ ...config, assignments: toCC(assignments) });
 }
 
 // ---- MARK TYPES ----
