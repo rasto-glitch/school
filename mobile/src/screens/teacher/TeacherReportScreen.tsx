@@ -4,6 +4,7 @@ import {
   TextInput, ActivityIndicator, Alert, Modal,
 } from 'react-native';
 import { Plus, Trash2, Send, ChevronDown, Check } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 import { teacherApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
 import { spacing, radius, font } from '../../theme';
@@ -17,6 +18,7 @@ interface Mark { name: string; value: string }
 interface Props { subject?: string; classes: ClassItem[]; subjects?: SubjectOpt[]; teaching?: TeachingEntry[] }
 
 export default function TeacherReportScreen({ subject, classes, subjects, teaching }: Props) {
+  const { t } = useTranslation();
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
@@ -71,7 +73,7 @@ export default function TeacherReportScreen({ subject, classes, subjects, teachi
   };
 
   const handleSave = async () => {
-    if (!selectedStudent) { Alert.alert('Required', 'Please select a student.'); return; }
+    if (!selectedStudent) { Alert.alert(t('teacher.required'), t('teacher.select_student_required')); return; }
     const validMarks = marks.filter(m => m.name.trim() && m.value !== '');
     setSaving(true);
     try {
@@ -83,12 +85,12 @@ export default function TeacherReportScreen({ subject, classes, subjects, teachi
         behaviorNotes: behaviorNotes.trim() || undefined,
         teacherNotes: teacherNotes.trim() || undefined,
       });
-      Alert.alert('Saved', 'Report submitted successfully.');
+      Alert.alert(t('teacher.saved'), t('teacher.report_saved'));
       setMarks([{ name: '', value: '' }]);
       setAttendanceNotes(''); setBehaviorNotes(''); setTeacherNotes('');
       setSelectedStudent('');
     } catch {
-      Alert.alert('Error', 'Could not submit report.');
+      Alert.alert(t('common.error'), t('teacher.submit_report_failed'));
     } finally {
       setSaving(false);
     }
@@ -96,7 +98,7 @@ export default function TeacherReportScreen({ subject, classes, subjects, teachi
 
   return (
     <ScrollView contentContainerStyle={{ padding: spacing.md, paddingBottom: 40 }}>
-      <Text style={styles.label}>Class</Text>
+      <Text style={styles.label}>{t('teacher.class')}</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing.md }}>
         {classes.map(c => (
           <TouchableOpacity key={c.id} style={[styles.chip, selectedClass === c.id && styles.chipActive]} onPress={() => setSelectedClass(c.id)}>
@@ -107,7 +109,7 @@ export default function TeacherReportScreen({ subject, classes, subjects, teachi
 
       {students.length > 0 && (
         <>
-          <Text style={styles.label}>Student *</Text>
+          <Text style={styles.label}>{t('teacher.student_required')}</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing.md }}>
             {students.map(s => (
               <TouchableOpacity key={s.id} style={[styles.chip, selectedStudent === s.id && styles.chipActive]} onPress={() => setSelectedStudent(s.id)}>
@@ -119,10 +121,10 @@ export default function TeacherReportScreen({ subject, classes, subjects, teachi
       )}
 
       {selectedClass ? (subjectOptions.length === 0 ? (
-        <Text style={[styles.label, { color: colors.warning, textTransform: 'none', marginBottom: spacing.md }]}>You aren't assigned any subject for this class.</Text>
+        <Text style={[styles.label, { color: colors.warning, textTransform: 'none', marginBottom: spacing.md }]}>{t('teacher.no_subject_for_class')}</Text>
       ) : (
         <>
-          <Text style={styles.label}>Subject</Text>
+          <Text style={styles.label}>{t('common.subject')}</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing.md }}>
             {subjectOptions.map(s => (
               <TouchableOpacity key={s.id} style={[styles.chip, selectedSubject === s.name && styles.chipActive]} onPress={() => setSelectedSubject(s.name)}>
@@ -133,21 +135,21 @@ export default function TeacherReportScreen({ subject, classes, subjects, teachi
         </>
       )) : null}
 
-      <Text style={styles.label}>Marks</Text>
+      <Text style={styles.label}>{t('teacher.marks')}</Text>
       {marks.map((mark, i) => (
         <View key={i} style={styles.markRow}>
           <View style={{ flex: 2 }}>
             {markTypes.length > 0 ? (
               <TouchableOpacity style={[styles.input, styles.dropdownBtn]} onPress={() => setPickerIndex(i)}>
                 <Text style={[styles.dropdownText, !mark.name && { color: colors.textMuted }]}>
-                  {mark.name || 'Select mark type'}
+                  {mark.name || t('teacher.select_mark_type')}
                 </Text>
                 <ChevronDown size={14} color={colors.textMuted} />
               </TouchableOpacity>
             ) : (
               <TextInput
                 style={styles.input}
-                placeholder="Mark name"
+                placeholder={t('teacher.mark_name')}
                 placeholderTextColor={colors.textMuted}
                 value={mark.name}
                 onChangeText={v => updateMark(i, 'name', v)}
@@ -174,29 +176,29 @@ export default function TeacherReportScreen({ subject, classes, subjects, teachi
       <View style={styles.marksFooter}>
         <TouchableOpacity style={styles.addMarkBtn} onPress={addMark}>
           <Plus size={16} color={colors.primary} />
-          <Text style={styles.addMarkText}>Add Mark</Text>
+          <Text style={styles.addMarkText}>{t('teacher.add_mark')}</Text>
         </TouchableOpacity>
-        {marks.length > 1 && <Text style={styles.totalText}>Total: {total.toFixed(1)}</Text>}
+        {marks.length > 1 && <Text style={styles.totalText}>{t('grades.total')}: {total.toFixed(1)}</Text>}
       </View>
 
-      <Text style={styles.label}>Attendance Notes</Text>
-      <TextInput style={[styles.input, styles.textarea]} placeholder="Attendance observations..." placeholderTextColor={colors.textMuted} value={attendanceNotes} onChangeText={setAttendanceNotes} multiline numberOfLines={3} />
+      <Text style={styles.label}>{t('reports.attendance_notes')}</Text>
+      <TextInput style={[styles.input, styles.textarea]} placeholder={t('teacher.attendance_obs_ph')} placeholderTextColor={colors.textMuted} value={attendanceNotes} onChangeText={setAttendanceNotes} multiline numberOfLines={3} />
 
-      <Text style={styles.label}>Behavior Notes</Text>
-      <TextInput style={[styles.input, styles.textarea]} placeholder="Behavior observations..." placeholderTextColor={colors.textMuted} value={behaviorNotes} onChangeText={setBehaviorNotes} multiline numberOfLines={3} />
+      <Text style={styles.label}>{t('reports.behavior_notes')}</Text>
+      <TextInput style={[styles.input, styles.textarea]} placeholder={t('teacher.behavior_obs_ph')} placeholderTextColor={colors.textMuted} value={behaviorNotes} onChangeText={setBehaviorNotes} multiline numberOfLines={3} />
 
-      <Text style={styles.label}>Teacher Notes</Text>
-      <TextInput style={[styles.input, styles.textarea]} placeholder="Additional notes..." placeholderTextColor={colors.textMuted} value={teacherNotes} onChangeText={setTeacherNotes} multiline numberOfLines={4} />
+      <Text style={styles.label}>{t('reports.teacher_notes')}</Text>
+      <TextInput style={[styles.input, styles.textarea]} placeholder={t('teacher.additional_notes_ph')} placeholderTextColor={colors.textMuted} value={teacherNotes} onChangeText={setTeacherNotes} multiline numberOfLines={4} />
 
       <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={saving || !selectedStudent}>
-        {saving ? <ActivityIndicator color="#fff" size="small" /> : <><Send size={16} color="#fff" /><Text style={styles.saveBtnText}>Submit Report</Text></>}
+        {saving ? <ActivityIndicator color="#fff" size="small" /> : <><Send size={16} color="#fff" /><Text style={styles.saveBtnText}>{t('teacher.submit_report')}</Text></>}
       </TouchableOpacity>
 
       {/* Mark type picker modal */}
       <Modal visible={pickerIndex !== null} animationType="slide" presentationStyle="pageSheet" transparent>
         <View style={styles.pickerOverlay}>
           <View style={[styles.pickerBox, { backgroundColor: colors.card }]}>
-            <Text style={styles.pickerTitle}>Select Mark Type</Text>
+            <Text style={styles.pickerTitle}>{t('teacher.select_mark_type_title')}</Text>
             {markTypes.map(mt => (
               <TouchableOpacity
                 key={mt.id}
@@ -210,7 +212,7 @@ export default function TeacherReportScreen({ subject, classes, subjects, teachi
               </TouchableOpacity>
             ))}
             <TouchableOpacity style={styles.pickerCancel} onPress={() => setPickerIndex(null)}>
-              <Text style={styles.pickerCancelText}>Cancel</Text>
+              <Text style={styles.pickerCancelText}>{t('common.cancel')}</Text>
             </TouchableOpacity>
           </View>
         </View>

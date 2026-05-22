@@ -4,6 +4,7 @@ import {
   TextInput, ActivityIndicator, Alert, Modal,
 } from 'react-native';
 import { Plus, Trash2, Send, ChevronDown, Check } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 import { teacherApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
 import { spacing, radius, font, shadow } from '../../theme';
@@ -19,6 +20,7 @@ interface GradeRecord { id: string; gradingPeriod?: string; academicYear?: strin
 interface Props { subject?: string; classes: ClassItem[]; subjects?: SubjectOpt[]; teaching?: TeachingEntry[]; academicYear?: string }
 
 export default function TeacherGradingScreen({ subject, classes, subjects, teaching, academicYear }: Props) {
+  const { t } = useTranslation();
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
@@ -79,18 +81,18 @@ export default function TeacherGradingScreen({ subject, classes, subjects, teach
   };
 
   const handleSave = async () => {
-    if (!selectedStudent || !gradingPeriod.trim()) { Alert.alert('Required', 'Select a student and enter a grading period.'); return; }
+    if (!selectedStudent || !gradingPeriod.trim()) { Alert.alert(t('teacher.required'), t('teacher.need_student_period')); return; }
     const validMarks = marks.filter(m => m.name.trim() && m.value !== '');
-    if (validMarks.length === 0) { Alert.alert('Required', 'Add at least one mark.'); return; }
+    if (validMarks.length === 0) { Alert.alert(t('teacher.required'), t('teacher.need_one_mark')); return; }
     setSaving(true);
     try {
       await teacherApi.upsertGrade({ studentId: selectedStudent, classId: selectedClass, subject: selectedSubject || subject, gradingPeriod: gradingPeriod.trim(), marks: validMarks.map(m => ({ name: m.name, value: parseFloat(m.value) })) });
-      Alert.alert('Saved', 'Grade saved successfully.');
+      Alert.alert(t('teacher.saved'), t('teacher.grade_saved'));
       setMarks([{ name: '', value: '' }]);
       setGradingPeriod('');
       teacherApi.getGrades(selectedStudent).then(r => setHistory(r.data || [])).catch(() => {});
     } catch {
-      Alert.alert('Error', 'Could not save grade.');
+      Alert.alert(t('common.error'), t('teacher.save_grade_failed'));
     } finally {
       setSaving(false);
     }
@@ -99,7 +101,7 @@ export default function TeacherGradingScreen({ subject, classes, subjects, teach
   return (
     <ScrollView contentContainerStyle={{ padding: spacing.md, paddingBottom: 40 }}>
       {/* Class selector */}
-      <Text style={styles.label}>Class</Text>
+      <Text style={styles.label}>{t('teacher.class')}</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing.md }}>
         {classes.map(c => (
           <TouchableOpacity key={c.id} style={[styles.chip, selectedClass === c.id && styles.chipActive]} onPress={() => setSelectedClass(c.id)}>
@@ -111,7 +113,7 @@ export default function TeacherGradingScreen({ subject, classes, subjects, teach
       {/* Student selector */}
       {students.length > 0 && (
         <>
-          <Text style={styles.label}>Student</Text>
+          <Text style={styles.label}>{t('teacher.student')}</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing.md }}>
             {students.map(s => (
               <TouchableOpacity key={s.id} style={[styles.chip, selectedStudent === s.id && styles.chipActive]} onPress={() => setSelectedStudent(s.id)}>
@@ -123,10 +125,10 @@ export default function TeacherGradingScreen({ subject, classes, subjects, teach
       )}
 
       {selectedClass ? (subjectOptions.length === 0 ? (
-        <Text style={[styles.label, { color: colors.warning, textTransform: 'none', marginBottom: spacing.md }]}>You aren't assigned any subject for this class.</Text>
+        <Text style={[styles.label, { color: colors.warning, textTransform: 'none', marginBottom: spacing.md }]}>{t('teacher.no_subject_for_class')}</Text>
       ) : (
         <>
-          <Text style={styles.label}>Subject</Text>
+          <Text style={styles.label}>{t('common.subject')}</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing.sm }}>
             {subjectOptions.map(s => (
               <TouchableOpacity key={s.id} style={[styles.chip, selectedSubject === s.name && styles.chipActive]} onPress={() => setSelectedSubject(s.name)}>
@@ -142,15 +144,15 @@ export default function TeacherGradingScreen({ subject, classes, subjects, teach
         </>
       )) : null}
 
-      <Text style={styles.label}>Term *</Text>
+      <Text style={styles.label}>{t('teacher.term_required')}</Text>
       <TouchableOpacity style={[styles.input, styles.dropdownBtn]} onPress={() => setTermPickerOpen(true)}>
         <Text style={[styles.dropdownText, !gradingPeriod && { color: colors.textMuted }]}>
-          {gradingPeriod || (terms.length ? 'Select term' : 'No terms configured')}
+          {gradingPeriod || (terms.length ? t('teacher.select_term') : t('teacher.no_terms'))}
         </Text>
         <ChevronDown size={14} color={colors.textMuted} />
       </TouchableOpacity>
 
-      <Text style={styles.label}>Marks</Text>
+      <Text style={styles.label}>{t('teacher.marks')}</Text>
       {marks.map((mark, i) => (
         <View key={i} style={styles.markRow}>
           {/* Mark name — dropdown if markTypes available, else text input */}
@@ -158,14 +160,14 @@ export default function TeacherGradingScreen({ subject, classes, subjects, teach
             {markTypes.length > 0 ? (
               <TouchableOpacity style={[styles.input, styles.dropdownBtn]} onPress={() => setPickerIndex(i)}>
                 <Text style={[styles.dropdownText, !mark.name && { color: colors.textMuted }]}>
-                  {mark.name || 'Select mark type'}
+                  {mark.name || t('teacher.select_mark_type')}
                 </Text>
                 <ChevronDown size={14} color={colors.textMuted} />
               </TouchableOpacity>
             ) : (
               <TextInput
                 style={styles.input}
-                placeholder="Mark name"
+                placeholder={t('teacher.mark_name')}
                 placeholderTextColor={colors.textMuted}
                 value={mark.name}
                 onChangeText={v => updateMark(i, 'name', v)}
@@ -193,20 +195,20 @@ export default function TeacherGradingScreen({ subject, classes, subjects, teach
       <View style={styles.marksFooter}>
         <TouchableOpacity style={styles.addMarkBtn} onPress={addMark}>
           <Plus size={16} color={colors.primary} />
-          <Text style={styles.addMarkText}>Add Mark</Text>
+          <Text style={styles.addMarkText}>{t('teacher.add_mark')}</Text>
         </TouchableOpacity>
-        {marks.length > 1 && <Text style={styles.totalText}>Total: {total.toFixed(1)}</Text>}
+        {marks.length > 1 && <Text style={styles.totalText}>{t('grades.total')}: {total.toFixed(1)}</Text>}
       </View>
 
       <TouchableOpacity style={[styles.saveBtn, (!selectedStudent) && { opacity: 0.4 }]} onPress={handleSave} disabled={saving || !selectedStudent}>
-        {saving ? <ActivityIndicator color="#fff" size="small" /> : <><Send size={16} color="#fff" /><Text style={styles.saveBtnText}>Save Grade</Text></>}
+        {saving ? <ActivityIndicator color="#fff" size="small" /> : <><Send size={16} color="#fff" /><Text style={styles.saveBtnText}>{t('teacher.save_grade')}</Text></>}
       </TouchableOpacity>
 
       {/* Grade history — current academic year only.
           Past years are kept in the DB; admins/parents/exports still see them. */}
       {visibleHistory.length > 0 && (
         <>
-          <Text style={[styles.label, { marginTop: spacing.lg }]}>Grade History</Text>
+          <Text style={[styles.label, { marginTop: spacing.lg }]}>{t('teacher.grade_history')}</Text>
           {visibleHistory.map(g => (
             <View key={g.id} style={styles.historyCard}>
               <View style={styles.historyTop}>
@@ -228,23 +230,23 @@ export default function TeacherGradingScreen({ subject, classes, subjects, teach
       <Modal visible={termPickerOpen} animationType="slide" presentationStyle="pageSheet" transparent>
         <View style={styles.pickerOverlay}>
           <View style={[styles.pickerBox, { backgroundColor: colors.card }]}>
-            <Text style={styles.pickerTitle}>Select Term</Text>
+            <Text style={styles.pickerTitle}>{t('teacher.select_term_title')}</Text>
             {terms.length === 0 ? (
               <Text style={{ fontSize: font.sm, color: colors.textMuted, paddingVertical: 14 }}>
-                No terms configured. Ask your administrator to add terms in school settings.
+                {t('teacher.no_terms_help')}
               </Text>
-            ) : terms.map(t => (
+            ) : terms.map(term => (
               <TouchableOpacity
-                key={t.id}
+                key={term.id}
                 style={styles.pickerOption}
-                onPress={() => { setGradingPeriod(t.name); setTermPickerOpen(false); }}
+                onPress={() => { setGradingPeriod(term.name); setTermPickerOpen(false); }}
               >
-                <Text style={styles.pickerOptionText}>{t.name}</Text>
-                {gradingPeriod === t.name && <Check size={16} color={colors.primary} />}
+                <Text style={styles.pickerOptionText}>{term.name}</Text>
+                {gradingPeriod === term.name && <Check size={16} color={colors.primary} />}
               </TouchableOpacity>
             ))}
             <TouchableOpacity style={styles.pickerCancel} onPress={() => setTermPickerOpen(false)}>
-              <Text style={styles.pickerCancelText}>Cancel</Text>
+              <Text style={styles.pickerCancelText}>{t('common.cancel')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -254,7 +256,7 @@ export default function TeacherGradingScreen({ subject, classes, subjects, teach
       <Modal visible={pickerIndex !== null} animationType="slide" presentationStyle="pageSheet" transparent>
         <View style={styles.pickerOverlay}>
           <View style={[styles.pickerBox, { backgroundColor: colors.card }]}>
-            <Text style={styles.pickerTitle}>Select Mark Type</Text>
+            <Text style={styles.pickerTitle}>{t('teacher.select_mark_type_title')}</Text>
             {markTypes.map(mt => (
               <TouchableOpacity
                 key={mt.id}
@@ -268,7 +270,7 @@ export default function TeacherGradingScreen({ subject, classes, subjects, teach
               </TouchableOpacity>
             ))}
             <TouchableOpacity style={styles.pickerCancel} onPress={() => setPickerIndex(null)}>
-              <Text style={styles.pickerCancelText}>Cancel</Text>
+              <Text style={styles.pickerCancelText}>{t('common.cancel')}</Text>
             </TouchableOpacity>
           </View>
         </View>
