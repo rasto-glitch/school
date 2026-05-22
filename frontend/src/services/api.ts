@@ -769,12 +769,65 @@ export interface JournalEntry {
   lines: JournalLine[];
 }
 
+export interface PLAccount { code: string; name: string; amount: number; }
+export interface IncomeStatementCurrency {
+  currency: string;
+  income: PLAccount[];
+  expense: PLAccount[];
+  totalIncome: number;
+  totalExpense: number;
+  netIncome: number;
+}
+
+export interface BSAccount { code: string; name: string; amount: number; }
+export interface BalanceSheetCurrency {
+  currency: string;
+  assets: BSAccount[];
+  liabilities: BSAccount[];
+  equity: BSAccount[];
+  currentEarnings: number;
+  totalAssets: number;
+  totalLiabilities: number;
+  totalEquity: number;
+  balanced: boolean;
+}
+
+export interface AccountLedgerRow {
+  entryId: string;
+  entryNo: number;
+  date: string;
+  memo: string | null;
+  source: string;
+  debit: number;
+  credit: number;
+  balance: number;
+}
+export interface AccountLedgerCurrency {
+  currency: string;
+  opening: number;
+  rows: AccountLedgerRow[];
+  closing: number;
+}
+export interface AccountLedger {
+  account: { id: string; code: string; name: string; type: string };
+  debitNormal: boolean;
+  startDate: string | null;
+  endDate: string | null;
+  currencies: AccountLedgerCurrency[];
+}
+
 export const glApi = {
   accounts: () => api.get<GlAccount[]>('/accounting/gl/accounts'),
   trialBalance: (params?: { asOf?: string }) =>
     api.get<{ asOf: string | null; currencies: TrialBalanceCurrency[] }>('/accounting/gl/trial-balance', { params }),
   journal: (params?: { limit?: number }) =>
     api.get<JournalEntry[]>('/accounting/gl/journal', { params }),
+  incomeStatement: (params?: { startDate?: string; endDate?: string }) =>
+    api.get<{ startDate: string | null; endDate: string | null; currencies: IncomeStatementCurrency[] }>('/accounting/gl/income-statement', { params }),
+  balanceSheet: (params?: { asOf?: string }) =>
+    api.get<{ asOf: string | null; currencies: BalanceSheetCurrency[] }>('/accounting/gl/balance-sheet', { params }),
+  accountLedger: (id: string, params?: { startDate?: string; endDate?: string }) =>
+    api.get<AccountLedger>(`/accounting/gl/account/${id}`, { params }),
 };
 
 export interface ArchiveListItem {

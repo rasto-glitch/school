@@ -365,6 +365,9 @@ export function createRouter(io: SocketServer) {
   router.get('/accounting/gl/accounts', authenticate, authorize(...accountingRW), (req, res) => gl.listAccounts(req as AuthRequest, res));
   router.get('/accounting/gl/trial-balance', authenticate, authorize(...accountingRW), validate({ query: vq.listQuery }), (req, res) => gl.getTrialBalance(req as AuthRequest, res));
   router.get('/accounting/gl/journal', authenticate, authorize(...accountingRW), validate({ query: vq.listQuery }), (req, res) => gl.listJournal(req as AuthRequest, res));
+  router.get('/accounting/gl/income-statement', authenticate, authorize(...accountingRW), validate({ query: vq.listQuery }), (req, res) => gl.getIncomeStatement(req as AuthRequest, res));
+  router.get('/accounting/gl/balance-sheet', authenticate, authorize(...accountingRW), validate({ query: vq.listQuery }), (req, res) => gl.getBalanceSheet(req as AuthRequest, res));
+  router.get('/accounting/gl/account/:id', authenticate, authorize(...accountingRW), validate({ params: va.idParam, query: vq.listQuery }), (req, res) => gl.getAccountLedger(req as AuthRequest, res));
 
   // Refunds, late fees, period close, payment accounts, FX rates
   router.post('/accounting/payments/:id/refund', authenticate, authorize(...accountingRW), validate({ params: va.idParam, body: va.refundPaymentSchema }), (req, res) => fees.refundPayment(req as AuthRequest, res));
