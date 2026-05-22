@@ -1,4 +1,5 @@
 import PDFDocument from 'pdfkit';
+import { setupPdfFonts } from './pdfFont';
 import * as XLSX from 'xlsx';
 import type { Writable } from 'stream';
 
@@ -64,6 +65,7 @@ function fmt(amount: number, currency: string): string {
 
 export async function streamArchivePaymentPdf(stream: Writable, data: ArchivePaymentExportData): Promise<void> {
   const doc = new PDFDocument({ margin: 40, size: 'A4' });
+  const F = setupPdfFonts(doc);
   doc.pipe(stream);
 
   const logoBuf = await fetchLogoBuffer(data.schoolLogoUrl);
@@ -71,29 +73,29 @@ export async function streamArchivePaymentPdf(stream: Writable, data: ArchivePay
   if (logoBuf) {
     try { doc.image(logoBuf, 40, 40, { fit: [60, 60] }); } catch { /* invalid */ }
   }
-  doc.font('Helvetica-Bold').fontSize(18).fillColor(COLOR_HEADING).text(data.schoolName, 110, 48);
+  doc.font(F.bold).fontSize(18).fillColor(COLOR_HEADING).text(data.schoolName, 110, 48);
   const subtitle = data.status === 'archived' ? 'Archived student · Payment history' : 'Graduated student · Payment history';
-  doc.font('Helvetica').fontSize(10).fillColor(COLOR_MUTED).text(subtitle, 110, 72);
+  doc.font(F.regular).fontSize(10).fillColor(COLOR_MUTED).text(subtitle, 110, 72);
   doc.moveTo(40, 112).lineTo(555, 112).strokeColor(COLOR_BORDER).lineWidth(1).stroke();
 
   // Student strip
-  doc.font('Helvetica').fontSize(8).fillColor(COLOR_MUTED).text('STUDENT', 40, 128);
-  doc.font('Helvetica-Bold').fontSize(13).fillColor(COLOR_HEADING).text(data.studentName, 40, 142);
+  doc.font(F.regular).fontSize(8).fillColor(COLOR_MUTED).text('STUDENT', 40, 128);
+  doc.font(F.bold).fontSize(13).fillColor(COLOR_HEADING).text(data.studentName, 40, 142);
 
   let metaY = 168;
   if (data.parentName) {
-    doc.font('Helvetica').fontSize(9).fillColor(COLOR_MUTED).text('Parent', 40, metaY);
-    doc.font('Helvetica-Bold').fontSize(10).fillColor(COLOR_HEADING).text(`${data.parentName}${data.parentPhone ? ` · ${data.parentPhone}` : ''}`, 100, metaY);
+    doc.font(F.regular).fontSize(9).fillColor(COLOR_MUTED).text('Parent', 40, metaY);
+    doc.font(F.bold).fontSize(10).fillColor(COLOR_HEADING).text(`${data.parentName}${data.parentPhone ? ` · ${data.parentPhone}` : ''}`, 100, metaY);
     metaY += 16;
   }
   if (data.className) {
-    doc.font('Helvetica').fontSize(9).fillColor(COLOR_MUTED).text('Last class', 40, metaY);
-    doc.font('Helvetica-Bold').fontSize(10).fillColor(COLOR_HEADING).text(data.className, 100, metaY);
+    doc.font(F.regular).fontSize(9).fillColor(COLOR_MUTED).text('Last class', 40, metaY);
+    doc.font(F.bold).fontSize(10).fillColor(COLOR_HEADING).text(data.className, 100, metaY);
     metaY += 16;
   }
   if (data.departureDate) {
-    doc.font('Helvetica').fontSize(9).fillColor(COLOR_MUTED).text(data.status === 'archived' ? 'Archived' : 'Graduated', 40, metaY);
-    doc.font('Helvetica-Bold').fontSize(10).fillColor(COLOR_HEADING).text(`${data.departureDate}${data.reason ? ` · ${data.reason}` : ''}`, 100, metaY);
+    doc.font(F.regular).fontSize(9).fillColor(COLOR_MUTED).text(data.status === 'archived' ? 'Archived' : 'Graduated', 40, metaY);
+    doc.font(F.bold).fontSize(10).fillColor(COLOR_HEADING).text(`${data.departureDate}${data.reason ? ` · ${data.reason}` : ''}`, 100, metaY);
     metaY += 16;
   }
 
@@ -102,7 +104,7 @@ export async function streamArchivePaymentPdf(stream: Writable, data: ArchivePay
   y += 14;
 
   if (data.plans.length === 0) {
-    doc.font('Helvetica').fontSize(11).fillColor(COLOR_MUTED).text('No tuition plans on record for this student.', 40, y, { width: 515, align: 'center' });
+    doc.font(F.regular).fontSize(11).fillColor(COLOR_MUTED).text('No tuition plans on record for this student.', 40, y, { width: 515, align: 'center' });
     doc.end();
     return;
   }
@@ -115,7 +117,7 @@ export async function streamArchivePaymentPdf(stream: Writable, data: ArchivePay
     if (y > 720) { doc.addPage(); y = 60; }
 
     const planLabel = plan.academicYear ? `${plan.planName} · ${plan.academicYear}` : plan.planName;
-    doc.font('Helvetica-Bold').fontSize(12).fillColor(COLOR_HEADING).text(planLabel, 40, y, { width: 515 });
+    doc.font(F.bold).fontSize(12).fillColor(COLOR_HEADING).text(planLabel, 40, y, { width: 515 });
     y += 18;
 
     const due = plan.totalAmount + plan.adjustment;
@@ -123,7 +125,7 @@ export async function streamArchivePaymentPdf(stream: Writable, data: ArchivePay
     grandDue += due;
     grandPaid += paid;
 
-    doc.font('Helvetica').fontSize(9).fillColor(COLOR_MUTED).text(
+    doc.font(F.regular).fontSize(9).fillColor(COLOR_MUTED).text(
       `Tuition ${fmt(plan.totalAmount, plan.currency)}${plan.adjustment !== 0 ? ` · Adjustment ${fmt(plan.adjustment, plan.currency)}` : ''} · Due ${fmt(due, plan.currency)} · Paid ${fmt(paid, plan.currency)}`,
       40, y, { width: 515 },
     );
@@ -131,10 +133,10 @@ export async function streamArchivePaymentPdf(stream: Writable, data: ArchivePay
 
     // Payments table for this plan
     if (plan.payments.length === 0) {
-      doc.font('Helvetica').fontSize(10).fillColor(COLOR_MUTED).text('No payments recorded.', 40, y, { width: 515 });
+      doc.font(F.regular).fontSize(10).fillColor(COLOR_MUTED).text('No payments recorded.', 40, y, { width: 515 });
       y += 18;
     } else {
-      doc.font('Helvetica-Bold').fontSize(8).fillColor(COLOR_MUTED);
+      doc.font(F.bold).fontSize(8).fillColor(COLOR_MUTED);
       doc.text('DATE', 40, y, { width: 80 });
       doc.text('METHOD', 120, y, { width: 90 });
       doc.text('REFERENCE', 210, y, { width: 200 });
@@ -145,7 +147,7 @@ export async function streamArchivePaymentPdf(stream: Writable, data: ArchivePay
 
       for (const p of plan.payments) {
         if (y > 760) { doc.addPage(); y = 60; }
-        doc.font('Helvetica').fontSize(10).fillColor(COLOR_HEADING);
+        doc.font(F.regular).fontSize(10).fillColor(COLOR_HEADING);
         doc.text(p.paidOn, 40, y, { width: 80 });
         doc.text(p.method ? p.method[0].toUpperCase() + p.method.slice(1) : '—', 120, y, { width: 90 });
         doc.text(p.reference || '—', 210, y, { width: 200, ellipsis: true });
@@ -162,18 +164,18 @@ export async function streamArchivePaymentPdf(stream: Writable, data: ArchivePay
     if (y > 720) { doc.addPage(); y = 60; }
     doc.moveTo(40, y).lineTo(555, y).strokeColor(COLOR_BORDER).stroke();
     y += 12;
-    doc.font('Helvetica-Bold').fontSize(11).fillColor(COLOR_HEADING).text('Grand total due', 40, y);
-    doc.font('Helvetica-Bold').fontSize(11).fillColor(COLOR_HEADING).text(fmt(grandDue, primaryCurrency), 410, y, { width: 145, align: 'right' });
+    doc.font(F.bold).fontSize(11).fillColor(COLOR_HEADING).text('Grand total due', 40, y);
+    doc.font(F.bold).fontSize(11).fillColor(COLOR_HEADING).text(fmt(grandDue, primaryCurrency), 410, y, { width: 145, align: 'right' });
     y += 16;
-    doc.font('Helvetica').fontSize(11).fillColor(COLOR_MUTED).text('Grand total paid', 40, y);
-    doc.font('Helvetica').fontSize(11).fillColor(COLOR_HEADING).text(fmt(grandPaid, primaryCurrency), 410, y, { width: 145, align: 'right' });
+    doc.font(F.regular).fontSize(11).fillColor(COLOR_MUTED).text('Grand total paid', 40, y);
+    doc.font(F.regular).fontSize(11).fillColor(COLOR_HEADING).text(fmt(grandPaid, primaryCurrency), 410, y, { width: 145, align: 'right' });
     y += 16;
     const balance = Math.max(0, grandDue - grandPaid);
-    doc.font('Helvetica-Bold').fontSize(12).fillColor(COLOR_ACCENT).text(balance === 0 ? 'Settled in full' : 'Balance remaining', 40, y);
-    doc.font('Helvetica-Bold').fontSize(12).fillColor(COLOR_ACCENT).text(fmt(balance, primaryCurrency), 410, y, { width: 145, align: 'right' });
+    doc.font(F.bold).fontSize(12).fillColor(COLOR_ACCENT).text(balance === 0 ? 'Settled in full' : 'Balance remaining', 40, y);
+    doc.font(F.bold).fontSize(12).fillColor(COLOR_ACCENT).text(fmt(balance, primaryCurrency), 410, y, { width: 145, align: 'right' });
   }
 
-  doc.font('Helvetica').fontSize(9).fillColor(COLOR_MUTED).text(
+  doc.font(F.regular).fontSize(9).fillColor(COLOR_MUTED).text(
     `Generated by ${data.schoolName} · ${new Date().toISOString().split('T')[0]}`,
     40, 800, { width: 515, align: 'center' },
   );

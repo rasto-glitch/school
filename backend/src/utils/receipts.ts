@@ -1,4 +1,5 @@
 import PDFDocument from 'pdfkit';
+import { setupPdfFonts } from './pdfFont';
 import type { Writable } from 'stream';
 
 interface SchoolInfo {
@@ -89,22 +90,25 @@ function fmt(amount: number, currency: string): string {
 }
 
 function drawHeader(doc: PDFKit.PDFDocument, school: SchoolInfo, logoBuf: Buffer | null, subtitle: string) {
+  const F = setupPdfFonts(doc);
   if (logoBuf) {
     try { doc.image(logoBuf, 40, 40, { fit: [60, 60] }); } catch { /* invalid image */ }
   }
-  doc.font('Helvetica-Bold').fontSize(18).fillColor(COLOR_HEADING).text(school.name, 110, 48);
-  doc.font('Helvetica').fontSize(10).fillColor(COLOR_MUTED).text(subtitle, 110, 72);
+  doc.font(F.bold).fontSize(18).fillColor(COLOR_HEADING).text(school.name, 110, 48);
+  doc.font(F.regular).fontSize(10).fillColor(COLOR_MUTED).text(subtitle, 110, 72);
   doc.moveTo(40, 112).lineTo(555, 112).strokeColor(COLOR_BORDER).lineWidth(1).stroke();
   doc.y = 128;
 }
 
 function field(doc: PDFKit.PDFDocument, label: string, value: string, x: number, y: number, width: number) {
-  doc.font('Helvetica').fontSize(8).fillColor(COLOR_MUTED).text(label.toUpperCase(), x, y, { width });
-  doc.font('Helvetica-Bold').fontSize(11).fillColor(COLOR_HEADING).text(value, x, y + 12, { width });
+  const F = setupPdfFonts(doc);
+  doc.font(F.regular).fontSize(8).fillColor(COLOR_MUTED).text(label.toUpperCase(), x, y, { width });
+  doc.font(F.bold).fontSize(11).fillColor(COLOR_HEADING).text(value, x, y + 12, { width });
 }
 
 function moneyRow(doc: PDFKit.PDFDocument, label: string, value: string, y: number, opts: { bold?: boolean; accent?: boolean } = {}) {
-  const font = opts.bold ? 'Helvetica-Bold' : 'Helvetica';
+  const F = setupPdfFonts(doc);
+  const font = opts.bold ? F.bold : F.regular;
   const color = opts.accent ? COLOR_ACCENT : COLOR_HEADING;
   doc.font(font).fontSize(11).fillColor(opts.bold ? COLOR_HEADING : COLOR_MUTED).text(label, 320, y, { width: 140, align: 'left' });
   doc.font(font).fontSize(11).fillColor(color).text(value, 460, y, { width: 95, align: 'right' });
@@ -112,6 +116,7 @@ function moneyRow(doc: PDFKit.PDFDocument, label: string, value: string, y: numb
 
 export async function streamPaymentReceipt(stream: Writable, data: PaymentReceiptData): Promise<void> {
   const doc = new PDFDocument({ margin: 40, size: 'A4' });
+  const F = setupPdfFonts(doc);
   doc.pipe(stream);
 
   const logoBuf = await fetchLogoBuffer(data.school.logoUrl);
@@ -130,17 +135,17 @@ export async function streamPaymentReceipt(stream: Writable, data: PaymentReceip
 
   // Payment details box
   doc.moveTo(40, 270).lineTo(555, 270).strokeColor(COLOR_BORDER).stroke();
-  doc.font('Helvetica-Bold').fontSize(12).fillColor(COLOR_HEADING).text('This payment', 40, 285);
+  doc.font(F.bold).fontSize(12).fillColor(COLOR_HEADING).text('This payment', 40, 285);
 
   const amountLine = fmt(data.amount, data.currency);
-  doc.font('Helvetica').fontSize(10).fillColor(COLOR_MUTED).text('Method', 40, 310);
-  doc.font('Helvetica-Bold').fontSize(11).fillColor(COLOR_HEADING).text(data.method ? data.method[0].toUpperCase() + data.method.slice(1) : '—', 40, 322);
+  doc.font(F.regular).fontSize(10).fillColor(COLOR_MUTED).text('Method', 40, 310);
+  doc.font(F.bold).fontSize(11).fillColor(COLOR_HEADING).text(data.method ? data.method[0].toUpperCase() + data.method.slice(1) : '—', 40, 322);
 
-  doc.font('Helvetica').fontSize(10).fillColor(COLOR_MUTED).text('Reference', 200, 310);
-  doc.font('Helvetica-Bold').fontSize(11).fillColor(COLOR_HEADING).text(data.reference || '—', 200, 322);
+  doc.font(F.regular).fontSize(10).fillColor(COLOR_MUTED).text('Reference', 200, 310);
+  doc.font(F.bold).fontSize(11).fillColor(COLOR_HEADING).text(data.reference || '—', 200, 322);
 
-  doc.font('Helvetica').fontSize(10).fillColor(COLOR_MUTED).text('Amount paid', 320, 310, { width: 235, align: 'right' });
-  doc.font('Helvetica-Bold').fontSize(18).fillColor(COLOR_ACCENT).text(amountLine, 320, 320, { width: 235, align: 'right' });
+  doc.font(F.regular).fontSize(10).fillColor(COLOR_MUTED).text('Amount paid', 320, 310, { width: 235, align: 'right' });
+  doc.font(F.bold).fontSize(18).fillColor(COLOR_ACCENT).text(amountLine, 320, 320, { width: 235, align: 'right' });
 
   // Tax breakdown — surfaces the withholding portion when present. The
   // amount above is the full payment received; this line tells the parent
@@ -149,25 +154,25 @@ export async function streamPaymentReceipt(stream: Writable, data: PaymentReceip
   if (data.taxAmount && data.taxAmount > 0) {
     const taxLabel = data.taxLabel && data.taxLabel.trim() ? `Including ${data.taxLabel}` : 'Including tax';
     const taxText = `${taxLabel}: ${fmt(data.taxAmount, data.currency)}`;
-    doc.font('Helvetica').fontSize(9).fillColor(COLOR_MUTED).text(taxText, 320, 344, { width: 235, align: 'right' });
+    doc.font(F.regular).fontSize(9).fillColor(COLOR_MUTED).text(taxText, 320, 344, { width: 235, align: 'right' });
     taxLineHeight = 14;
   }
 
   // Allocation breakdown — which installment(s) this payment covers
   let extraY = 360 + taxLineHeight;
   if (data.allocations.length > 0) {
-    doc.font('Helvetica').fontSize(10).fillColor(COLOR_MUTED).text('Applied to', 40, extraY);
+    doc.font(F.regular).fontSize(10).fillColor(COLOR_MUTED).text('Applied to', 40, extraY);
     const lines = data.allocations.map(a =>
       `Installment ${a.sequence}${a.dueDate ? ` (due ${a.dueDate})` : ''} — ${fmt(a.amount, data.currency)}`,
     );
-    doc.font('Helvetica-Bold').fontSize(10).fillColor(COLOR_HEADING).text(lines.join('\n'), 40, extraY + 12, { width: 515 });
+    doc.font(F.bold).fontSize(10).fillColor(COLOR_HEADING).text(lines.join('\n'), 40, extraY + 12, { width: 515 });
     extraY += 16 + lines.length * 14;
   }
 
   if (data.unallocatedAmount > 0) {
-    doc.font('Helvetica').fontSize(10).fillColor(COLOR_MUTED).text(`Other / advance — ${fmt(data.unallocatedAmount, data.currency)}`, 40, extraY);
+    doc.font(F.regular).fontSize(10).fillColor(COLOR_MUTED).text(`Other / advance — ${fmt(data.unallocatedAmount, data.currency)}`, 40, extraY);
     if (data.unallocatedNote) {
-      doc.font('Helvetica').fontSize(10).fillColor(COLOR_HEADING).text(data.unallocatedNote, 40, extraY + 12, { width: 515 });
+      doc.font(F.regular).fontSize(10).fillColor(COLOR_HEADING).text(data.unallocatedNote, 40, extraY + 12, { width: 515 });
       extraY += 16 + Math.max(14, doc.heightOfString(data.unallocatedNote, { width: 515 }));
     } else {
       extraY += 18;
@@ -175,15 +180,15 @@ export async function streamPaymentReceipt(stream: Writable, data: PaymentReceip
   }
 
   if (data.notes) {
-    doc.font('Helvetica').fontSize(10).fillColor(COLOR_MUTED).text('Notes', 40, extraY);
-    doc.font('Helvetica').fontSize(10).fillColor(COLOR_HEADING).text(data.notes, 40, extraY + 12, { width: 515 });
+    doc.font(F.regular).fontSize(10).fillColor(COLOR_MUTED).text('Notes', 40, extraY);
+    doc.font(F.regular).fontSize(10).fillColor(COLOR_HEADING).text(data.notes, 40, extraY + 12, { width: 515 });
     extraY += 16 + Math.max(14, doc.heightOfString(data.notes, { width: 515 }));
   }
 
   // Balance summary
   const yStart = 470;
   doc.moveTo(40, yStart - 10).lineTo(555, yStart - 10).strokeColor(COLOR_BORDER).stroke();
-  doc.font('Helvetica-Bold').fontSize(12).fillColor(COLOR_HEADING).text('Account summary', 40, yStart);
+  doc.font(F.bold).fontSize(12).fillColor(COLOR_HEADING).text('Account summary', 40, yStart);
 
   const due = data.totalAmount + data.adjustment - data.siblingDiscount;
   const paidIncluding = data.paidBefore + data.amount;
@@ -206,7 +211,7 @@ export async function streamPaymentReceipt(stream: Writable, data: PaymentReceip
   moneyRow(doc, remaining === 0 ? 'Paid in full' : 'Balance remaining', fmt(remaining, data.currency), y, { bold: true, accent: true });
 
   // Footer
-  doc.font('Helvetica').fontSize(9).fillColor(COLOR_MUTED).text(
+  doc.font(F.regular).fontSize(9).fillColor(COLOR_MUTED).text(
     `Generated by ${data.school.name} · This is a record of payment received.`,
     40, 780, { width: 515, align: 'center' },
   );
@@ -216,6 +221,7 @@ export async function streamPaymentReceipt(stream: Writable, data: PaymentReceip
 
 export async function streamYearSummary(stream: Writable, data: YearSummaryData): Promise<void> {
   const doc = new PDFDocument({ margin: 40, size: 'A4' });
+  const F = setupPdfFonts(doc);
   doc.pipe(stream);
 
   const logoBuf = await fetchLogoBuffer(data.school.logoUrl);
@@ -228,11 +234,11 @@ export async function streamYearSummary(stream: Writable, data: YearSummaryData)
 
   // Payments table
   doc.moveTo(40, 220).lineTo(555, 220).strokeColor(COLOR_BORDER).stroke();
-  doc.font('Helvetica-Bold').fontSize(12).fillColor(COLOR_HEADING).text('Payment history', 40, 235);
+  doc.font(F.bold).fontSize(12).fillColor(COLOR_HEADING).text('Payment history', 40, 235);
 
   // Header row — 5 columns: DATE | METHOD | REFERENCE | RECORDED BY | AMOUNT
   let y = 265;
-  doc.font('Helvetica-Bold').fontSize(9).fillColor(COLOR_MUTED);
+  doc.font(F.bold).fontSize(9).fillColor(COLOR_MUTED);
   doc.text('DATE', 40, y, { width: 70 });
   doc.text('METHOD', 110, y, { width: 70 });
   doc.text('REFERENCE', 180, y, { width: 130 });
@@ -244,11 +250,11 @@ export async function streamYearSummary(stream: Writable, data: YearSummaryData)
 
   let totalPaid = 0;
   if (data.payments.length === 0) {
-    doc.font('Helvetica').fontSize(10).fillColor(COLOR_MUTED).text('No payments recorded yet.', 40, y, { width: 515, align: 'center' });
+    doc.font(F.regular).fontSize(10).fillColor(COLOR_MUTED).text('No payments recorded yet.', 40, y, { width: 515, align: 'center' });
     y += 24;
   } else {
     for (const p of data.payments) {
-      doc.font('Helvetica').fontSize(10).fillColor(COLOR_HEADING);
+      doc.font(F.regular).fontSize(10).fillColor(COLOR_HEADING);
       doc.text(p.paidOn, 40, y, { width: 70 });
       doc.text(p.method ? p.method[0].toUpperCase() + p.method.slice(1) : '—', 110, y, { width: 70 });
       doc.text(p.reference || '—', 180, y, { width: 130, ellipsis: true });
@@ -266,7 +272,7 @@ export async function streamYearSummary(stream: Writable, data: YearSummaryData)
         parts.push(`Other ${fmt(p.unallocatedAmount, data.currency)}${noteSuffix}`);
       }
       if (parts.length > 0) {
-        doc.font('Helvetica').fontSize(8).fillColor(COLOR_MUTED).text(parts.join(' · '), 40, y, { width: 515 });
+        doc.font(F.regular).fontSize(8).fillColor(COLOR_MUTED).text(parts.join(' · '), 40, y, { width: 515 });
         const subHeight = Math.max(12, doc.heightOfString(parts.join(' · '), { width: 515 }));
         y += subHeight;
       }
@@ -301,7 +307,7 @@ export async function streamYearSummary(stream: Writable, data: YearSummaryData)
   doc.moveTo(320, y - 6).lineTo(555, y - 6).strokeColor(COLOR_BORDER).stroke();
   moneyRow(doc, remaining === 0 ? 'Paid in full' : 'Balance remaining', fmt(remaining, data.currency), y, { bold: true, accent: true });
 
-  doc.font('Helvetica').fontSize(9).fillColor(COLOR_MUTED).text(
+  doc.font(F.regular).fontSize(9).fillColor(COLOR_MUTED).text(
     `Generated by ${data.school.name} · ${new Date().toISOString().split('T')[0]}`,
     40, 780, { width: 515, align: 'center' },
   );

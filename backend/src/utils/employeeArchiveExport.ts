@@ -4,6 +4,7 @@
 
 import * as XLSX from 'xlsx';
 import PDFDocument from 'pdfkit';
+import { setupPdfFonts } from './pdfFont';
 import { supabase } from '../config/supabase';
 
 export interface ArchivedEmployeeRecord {
@@ -84,6 +85,7 @@ function money(amount: number, currency: string): string {
 
 export function streamPdf(snapshot: EmployeeArchiveSnapshot, dest: NodeJS.WritableStream): void {
   const doc = new PDFDocument({ size: 'A4', margin: 48, bufferPages: true });
+  const F = setupPdfFonts(doc);
   doc.pipe(dest);
 
   doc.fontSize(28).text(snapshot.schoolName, { align: 'left' });

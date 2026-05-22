@@ -3,6 +3,7 @@
 // and default password.
 
 import PDFDocument from 'pdfkit';
+import { setupPdfFonts } from './pdfFont';
 
 export interface CredentialEntry {
   fullName: string;
@@ -26,6 +27,7 @@ export function streamCredentialsPdf(
   dest: NodeJS.WritableStream,
 ): void {
   const doc = new PDFDocument({ size: 'A4', margin: 36, bufferPages: true });
+  const F = setupPdfFonts(doc);
   doc.pipe(dest);
 
   // ---- Cover header on first page ----
@@ -91,6 +93,7 @@ function drawCard(
   schoolName: string,
   entry: CredentialEntry,
 ): void {
+  const F = setupPdfFonts(doc);
   // Dashed border (acts as cut line)
   doc.save();
   doc.lineWidth(0.8).strokeColor('#9CA3AF').dash(4, { space: 3 });
@@ -115,13 +118,13 @@ function drawCard(
   cy += 14;
 
   // Full name (bold, large)
-  doc.fontSize(13).fillColor('#111827').font('Helvetica-Bold').text(entry.fullName, x + padX, cy, {
+  doc.fontSize(13).fillColor('#111827').font(F.bold).text(entry.fullName, x + padX, cy, {
     width: w - padX * 2, align: 'center', ellipsis: true,
   });
   cy += 18;
 
   // Role
-  doc.fontSize(9).fillColor('#374151').font('Helvetica').text(ROLE_LABEL[entry.role], x + padX, cy, {
+  doc.fontSize(9).fillColor('#374151').font(F.regular).text(ROLE_LABEL[entry.role], x + padX, cy, {
     width: w - padX * 2, align: 'center',
   });
   cy += 16;
@@ -136,7 +139,7 @@ function drawCard(
   });
   cy += rowH;
 
-  doc.font('Helvetica').fontSize(9).fillColor('#6B7280').text('Password:', x + padX, cy, { width: labelW });
+  doc.font(F.regular).fontSize(9).fillColor('#6B7280').text('Password:', x + padX, cy, { width: labelW });
   doc.fontSize(11).fillColor('#111827').font('Courier-Bold').text(entry.password, x + padX + labelW, cy, {
     width: w - padX * 2 - labelW, ellipsis: true,
   });
@@ -144,7 +147,7 @@ function drawCard(
 
   // Children (parent only) — bottom block
   if (entry.role === 'parent' && entry.children && entry.children.length > 0) {
-    doc.font('Helvetica').fontSize(8).fillColor('#9CA3AF').text('Children:', x + padX, cy, { width: w - padX * 2 });
+    doc.font(F.regular).fontSize(8).fillColor('#9CA3AF').text('Children:', x + padX, cy, { width: w - padX * 2 });
     cy += 10;
     doc.fontSize(9).fillColor('#374151');
     const remaining = y + h - cy - padY;
@@ -162,12 +165,12 @@ function drawCard(
   }
 
   // Footer note
-  doc.font('Helvetica').fontSize(7).fillColor('#9CA3AF').text(
+  doc.font(F.regular).fontSize(7).fillColor('#9CA3AF').text(
     'Default password — please change after first login.',
     x + padX, y + h - padY - 8,
     { width: w - padX * 2, align: 'center' },
   );
 
   // Reset state for the next card
-  doc.fillColor('black').font('Helvetica');
+  doc.fillColor('black').font(F.regular);
 }

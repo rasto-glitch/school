@@ -4,6 +4,7 @@
 
 import * as XLSX from 'xlsx';
 import PDFDocument from 'pdfkit';
+import { setupPdfFonts } from './pdfFont';
 import { supabase } from '../config/supabase';
 
 export interface ArchiveSnapshot {
@@ -169,6 +170,7 @@ export async function loadArchiveSnapshot(schoolId: string): Promise<ArchiveSnap
 
 export function streamPdf(snapshot: ArchiveSnapshot, dest: NodeJS.WritableStream): void {
   const doc = new PDFDocument({ size: 'A4', margin: 48, bufferPages: true });
+  const F = setupPdfFonts(doc);
   doc.pipe(dest);
 
   // Cover

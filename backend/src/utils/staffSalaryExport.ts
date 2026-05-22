@@ -1,4 +1,5 @@
 import PDFDocument from 'pdfkit';
+import { setupPdfFonts } from './pdfFont';
 import * as XLSX from 'xlsx';
 import type { Writable } from 'stream';
 
@@ -61,6 +62,7 @@ function fmt(amount: number, currency: string): string {
 
 export async function streamStaffSalaryPdf(stream: Writable, data: StaffSalaryExportData): Promise<void> {
   const doc = new PDFDocument({ margin: 40, size: 'A4' });
+  const F = setupPdfFonts(doc);
   doc.pipe(stream);
 
   const logoBuf = await fetchLogoBuffer(data.schoolLogoUrl);
@@ -68,31 +70,31 @@ export async function streamStaffSalaryPdf(stream: Writable, data: StaffSalaryEx
   if (logoBuf) {
     try { doc.image(logoBuf, 40, 40, { fit: [60, 60] }); } catch { /* invalid */ }
   }
-  doc.font('Helvetica-Bold').fontSize(18).fillColor(COLOR_HEADING).text(data.schoolName, 110, 48);
+  doc.font(F.bold).fontSize(18).fillColor(COLOR_HEADING).text(data.schoolName, 110, 48);
   const subtitle = data.status === 'archived' ? 'Archived staff · Salary history' : 'Staff · Salary history';
-  doc.font('Helvetica').fontSize(10).fillColor(COLOR_MUTED).text(subtitle, 110, 72);
+  doc.font(F.regular).fontSize(10).fillColor(COLOR_MUTED).text(subtitle, 110, 72);
   doc.moveTo(40, 112).lineTo(555, 112).strokeColor(COLOR_BORDER).lineWidth(1).stroke();
 
   // Staff strip
-  doc.font('Helvetica').fontSize(8).fillColor(COLOR_MUTED).text('STAFF', 40, 128);
-  doc.font('Helvetica-Bold').fontSize(13).fillColor(COLOR_HEADING).text(data.fullName, 40, 142);
+  doc.font(F.regular).fontSize(8).fillColor(COLOR_MUTED).text('STAFF', 40, 128);
+  doc.font(F.bold).fontSize(13).fillColor(COLOR_HEADING).text(data.fullName, 40, 142);
 
   let metaY = 168;
   if (data.position) {
-    doc.font('Helvetica').fontSize(9).fillColor(COLOR_MUTED).text('Position', 40, metaY);
-    doc.font('Helvetica-Bold').fontSize(10).fillColor(COLOR_HEADING).text(data.position, 110, metaY);
+    doc.font(F.regular).fontSize(9).fillColor(COLOR_MUTED).text('Position', 40, metaY);
+    doc.font(F.bold).fontSize(10).fillColor(COLOR_HEADING).text(data.position, 110, metaY);
     metaY += 16;
   }
-  doc.font('Helvetica').fontSize(9).fillColor(COLOR_MUTED).text('Salary', 40, metaY);
-  doc.font('Helvetica-Bold').fontSize(10).fillColor(COLOR_HEADING).text(`${fmt(data.salaryAmount, data.currency)} ${data.currency}`, 110, metaY);
+  doc.font(F.regular).fontSize(9).fillColor(COLOR_MUTED).text('Salary', 40, metaY);
+  doc.font(F.bold).fontSize(10).fillColor(COLOR_HEADING).text(`${fmt(data.salaryAmount, data.currency)} ${data.currency}`, 110, metaY);
   metaY += 16;
   if (data.insurancePercentage !== null) {
-    doc.font('Helvetica').fontSize(9).fillColor(COLOR_MUTED).text('Insurance', 40, metaY);
-    doc.font('Helvetica-Bold').fontSize(10).fillColor(COLOR_HEADING).text(`${data.insurancePercentage}% deducted from each salary`, 110, metaY);
+    doc.font(F.regular).fontSize(9).fillColor(COLOR_MUTED).text('Insurance', 40, metaY);
+    doc.font(F.bold).fontSize(10).fillColor(COLOR_HEADING).text(`${data.insurancePercentage}% deducted from each salary`, 110, metaY);
     metaY += 16;
   }
   if (data.insuranceHeld > 0 || data.insurancePaidOut) {
-    doc.font('Helvetica').fontSize(9).fillColor(COLOR_MUTED).text('Insurance held', 40, metaY);
+    doc.font(F.regular).fontSize(9).fillColor(COLOR_MUTED).text('Insurance held', 40, metaY);
     let insStatus = `${fmt(data.insuranceHeld, data.currency)} ${data.currency}`;
     if (data.insurancePaidOut) {
       const amt = data.insurancePaidOutAmount ?? 0;
@@ -101,17 +103,17 @@ export async function streamStaffSalaryPdf(stream: Writable, data: StaffSalaryEx
     } else if (data.status === 'archived') {
       insStatus += ' · Pending payout';
     }
-    doc.font('Helvetica-Bold').fontSize(10).fillColor(data.insurancePaidOut ? '#059669' : COLOR_HEADING).text(insStatus, 110, metaY);
+    doc.font(F.bold).fontSize(10).fillColor(data.insurancePaidOut ? '#059669' : COLOR_HEADING).text(insStatus, 110, metaY);
     metaY += 16;
   }
   if (data.nextPaymentDate && data.status === 'active') {
-    doc.font('Helvetica').fontSize(9).fillColor(COLOR_MUTED).text('Next payment', 40, metaY);
-    doc.font('Helvetica-Bold').fontSize(10).fillColor(COLOR_HEADING).text(data.nextPaymentDate, 110, metaY);
+    doc.font(F.regular).fontSize(9).fillColor(COLOR_MUTED).text('Next payment', 40, metaY);
+    doc.font(F.bold).fontSize(10).fillColor(COLOR_HEADING).text(data.nextPaymentDate, 110, metaY);
     metaY += 16;
   }
   if (data.status === 'archived') {
-    doc.font('Helvetica').fontSize(9).fillColor(COLOR_MUTED).text('Status', 40, metaY);
-    doc.font('Helvetica-Bold').fontSize(10).fillColor(COLOR_HEADING).text(`Archived${data.archiveReason ? ` · ${data.archiveReason}` : ''}`, 110, metaY);
+    doc.font(F.regular).fontSize(9).fillColor(COLOR_MUTED).text('Status', 40, metaY);
+    doc.font(F.bold).fontSize(10).fillColor(COLOR_HEADING).text(`Archived${data.archiveReason ? ` · ${data.archiveReason}` : ''}`, 110, metaY);
     metaY += 16;
   }
 
@@ -119,16 +121,16 @@ export async function streamStaffSalaryPdf(stream: Writable, data: StaffSalaryEx
   doc.moveTo(40, y).lineTo(555, y).strokeColor(COLOR_BORDER).stroke();
   y += 14;
 
-  doc.font('Helvetica-Bold').fontSize(12).fillColor(COLOR_HEADING).text('Payment history', 40, y);
+  doc.font(F.bold).fontSize(12).fillColor(COLOR_HEADING).text('Payment history', 40, y);
   y += 18;
 
   if (data.payments.length === 0) {
-    doc.font('Helvetica').fontSize(11).fillColor(COLOR_MUTED).text('No payments recorded for this staff member.', 40, y, { width: 515, align: 'center' });
+    doc.font(F.regular).fontSize(11).fillColor(COLOR_MUTED).text('No payments recorded for this staff member.', 40, y, { width: 515, align: 'center' });
     doc.end();
     return;
   }
 
-  doc.font('Helvetica-Bold').fontSize(8).fillColor(COLOR_MUTED);
+  doc.font(F.bold).fontSize(8).fillColor(COLOR_MUTED);
   doc.text('DATE', 40, y, { width: 70 });
   doc.text('PERIOD', 110, y, { width: 110 });
   doc.text('GROSS', 220, y, { width: 80, align: 'right' });
@@ -148,7 +150,7 @@ export async function streamStaffSalaryPdf(stream: Writable, data: StaffSalaryEx
     if (y > 760) { doc.addPage(); y = 60; }
     const ins = p.insuranceAmount || 0;
     const net = Math.round((p.amount - ins) * 100) / 100;
-    doc.font('Helvetica').fontSize(10).fillColor(COLOR_HEADING);
+    doc.font(F.regular).fontSize(10).fillColor(COLOR_HEADING);
     doc.text(p.paidOn, 40, y, { width: 70 });
     doc.text(p.periodLabel || '—', 110, y, { width: 110, ellipsis: true });
     doc.text(fmt(p.amount, p.currency), 220, y, { width: 80, align: 'right' });
@@ -168,16 +170,16 @@ export async function streamStaffSalaryPdf(stream: Writable, data: StaffSalaryEx
     if (y > 720) { doc.addPage(); y = 60; }
     doc.moveTo(40, y).lineTo(555, y).strokeColor(COLOR_BORDER).stroke();
     y += 12;
-    doc.font('Helvetica-Bold').fontSize(10).fillColor(COLOR_ACCENT).text('Totals', 40, y);
+    doc.font(F.bold).fontSize(10).fillColor(COLOR_ACCENT).text('Totals', 40, y);
     doc.text(fmt(totalGross, data.currency), 220, y, { width: 80, align: 'right' });
     doc.text(fmt(totalInsurance, data.currency), 305, y, { width: 80, align: 'right' });
     doc.text(fmt(totalNet, data.currency), 390, y, { width: 80, align: 'right' });
     y += 18;
 
     if (totalInsurance > 0) {
-      doc.font('Helvetica-Bold').fontSize(11).fillColor(COLOR_HEADING).text('Insurance summary', 40, y);
+      doc.font(F.bold).fontSize(11).fillColor(COLOR_HEADING).text('Insurance summary', 40, y);
       y += 16;
-      doc.font('Helvetica').fontSize(10).fillColor(COLOR_HEADING).text(`Total insurance withheld: ${fmt(totalInsurance, data.currency)} ${data.currency}`, 40, y);
+      doc.font(F.regular).fontSize(10).fillColor(COLOR_HEADING).text(`Total insurance withheld: ${fmt(totalInsurance, data.currency)} ${data.currency}`, 40, y);
       y += 14;
       if (data.insurancePaidOut) {
         const amt = data.insurancePaidOutAmount ?? 0;
@@ -195,7 +197,7 @@ export async function streamStaffSalaryPdf(stream: Writable, data: StaffSalaryEx
     }
   }
 
-  doc.font('Helvetica').fontSize(9).fillColor(COLOR_MUTED).text(
+  doc.font(F.regular).fontSize(9).fillColor(COLOR_MUTED).text(
     `Generated by ${data.schoolName} · ${new Date().toISOString().split('T')[0]}`,
     40, 800, { width: 515, align: 'center' },
   );
