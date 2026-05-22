@@ -5,6 +5,7 @@ import { adminDb as supabase } from '../utils/db';
 import type { AuthRequest } from '../middleware/auth';
 import { toCC } from '../utils/transform';
 import { logAudit } from '../utils/audit';
+import { postExpense, reverseEntry, reinstateEntry } from '../utils/glPosting';
 import { assertPeriodOpen } from '../utils/period';
 import { parseCursorParams, buildPageWith, keysetAfter } from '../utils/pagination';
 
@@ -273,6 +274,12 @@ export async function recordTemplate(req: AuthRequest, res: Response): Promise<v
   }).select().single();
   if (insertErr) { res.status(safeDbErrorStatus(insertErr)).json({ error: safeDbErrorMessage(insertErr) }); return; }
   await logAudit({ req, entityType: 'expense', entityId: String(expense.id), action: 'create', after: expense, label: expense.name });
+  // GL: Dr Expense(category) / Cr Cash.
+  await postExpense({
+    schoolId, expenseId: String(expense.id), amount: Number(expense.amount) || 0, currency: expense.currency,
+    categoryId: expense.category_id ?? null, paymentAccountId: expense.payment_account_id ?? null,
+    entryDate: expense.expense_date, postedBy: req.user!.userId, memo: expense.name,
+  });
 
   const baseDate = t.next_due_date || dateUsed;
   const newNext = bumpDate(baseDate, t.cadence as 'monthly' | 'quarterly' | 'yearly');
@@ -392,6 +399,12 @@ export async function createExpense(req: AuthRequest, res: Response): Promise<vo
   }).select().single();
   if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   await logAudit({ req, entityType: 'expense', entityId: String(data.id), action: 'create', after: data, label: data.name });
+  // GL: Dr Expense(category) / Cr Cash.
+  await postExpense({
+    schoolId, expenseId: String(data.id), amount: Number(data.amount) || 0, currency: data.currency,
+    categoryId: data.category_id ?? null, paymentAccountId: data.payment_account_id ?? null,
+    entryDate: data.expense_date, postedBy: req.user!.userId, memo: data.name,
+  });
   res.json(toCC(data));
 }
 
@@ -466,6 +479,7 @@ export async function voidExpense(req: AuthRequest, res: Response): Promise<void
   }).eq('id', id).eq('school_id', schoolId).select().single();
   if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   await logAudit({ req, entityType: 'expense', entityId: String(id), action: 'update', before, after, label: (before as any).name, reason });
+  await reverseEntry(schoolId, String(id), { postedBy: req.user!.userId, memo: 'Expense voided' });
   res.json({ success: true });
 }
 
@@ -484,6 +498,7 @@ export async function unvoidExpense(req: AuthRequest, res: Response): Promise<vo
   }).eq('id', id).eq('school_id', schoolId).select().single();
   if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   await logAudit({ req, entityType: 'expense', entityId: String(id), action: 'update', before, after, label: (before as any).name });
+  await reinstateEntry(schoolId, String(id), { postedBy: req.user!.userId });
   res.json({ success: true });
 }
 

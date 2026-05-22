@@ -7,6 +7,7 @@ import { toCC } from '../utils/transform';
 import { notify, notifyMany } from '../utils/notify';
 import { streamStaffSalaryPdf, buildStaffSalaryXlsx, type StaffSalaryExportData } from '../utils/staffSalaryExport';
 import { logAudit } from '../utils/audit';
+import { postSalary, postInsurancePayout, reverseEntry, reinstateEntry } from '../utils/glPosting';
 import { assertPeriodOpen } from '../utils/period';
 import { hasArchiveFeature, normalizeArchiveReason, resolveEmployeeArchiveId } from '../utils/employeeArchive';
 import { parseCursorParams, buildPageWith, keysetAfter } from '../utils/pagination';
@@ -638,6 +639,13 @@ export async function recordStaffPayment(req: AuthRequest, res: Response): Promi
 
   await logAudit({ req, entityType: 'staff_salary_payment', entityId: (data as { id: string }).id, action: 'create', after: data as Record<string, unknown>, label: staffRow.full_name });
 
+  // GL: Dr Salary Expense (gross) / Cr Cash (net) / Cr Insurance Payable (withheld).
+  await postSalary({
+    schoolId, paymentId: (data as { id: string }).id, staffId: String(id),
+    amount, insuranceAmount: insAmt, currency: finalCurrency,
+    paymentAccountId: typeof paymentAccountId === 'string' ? paymentAccountId : null, entryDate: paidOn, postedBy: userId,
+  });
+
   // Notify linked teacher (if any) that their salary was recorded
   const linkedUser = staffRow.user_id;
   if (linkedUser) {
@@ -679,6 +687,7 @@ export async function deleteStaffPayment(req: AuthRequest, res: Response): Promi
   const beforeRow: Record<string, unknown> = { ...(before as Record<string, unknown>) };
   delete beforeRow.staff_members;
   await logAudit({ req, entityType: 'staff_salary_payment', entityId: String(id), action: 'update', before: beforeRow, after, label, reason: reason ?? undefined });
+  await reverseEntry(schoolId, String(id), { postedBy: userId, memo: 'Salary voided' });
   res.json({ success: true });
 }
 
@@ -704,6 +713,7 @@ export async function unvoidStaffPayment(req: AuthRequest, res: Response): Promi
   const beforeRow: Record<string, unknown> = { ...(before as Record<string, unknown>) };
   delete beforeRow.staff_members;
   await logAudit({ req, entityType: 'staff_salary_payment', entityId: String(id), action: 'update', before: beforeRow, after, label });
+  await reinstateEntry(schoolId, String(id), { postedBy: req.user!.userId });
   res.json({ success: true });
 }
 
@@ -818,6 +828,12 @@ export async function markStaffInsurancePaid(req: AuthRequest, res: Response): P
   const { data: afterIns } = await supabase.from('staff_members').select('*').eq('id', id).eq('school_id', schoolId).single();
   await logAudit({ req, entityType: 'staff_member', entityId: id, action: 'update', before: beforeIns || undefined, after: afterIns || undefined, label: s.full_name, reason: 'Insurance paid out' });
 
+  // GL: Dr Insurance Payable / Cr Cash. Keyed on staff id.
+  await postInsurancePayout({
+    schoolId, staffId: id, amount: payoutAmount, currency: finalCurrency,
+    entryDate: paidOn, postedBy: req.user!.userId,
+  });
+
   // Notify linked teacher (if any) that their insurance was paid out
   if (s.user_id) {
     await notify({
@@ -862,6 +878,7 @@ export async function reverseStaffInsurancePayout(req: AuthRequest, res: Respons
 
   const { data: afterRev } = await supabase.from('staff_members').select('*').eq('id', id).eq('school_id', schoolId).single();
   await logAudit({ req, entityType: 'staff_member', entityId: id, action: 'update', before: beforeRev || undefined, after: afterRev || undefined, label: (afterRev as { full_name?: string } | null)?.full_name, reason: 'Insurance payout reversed' });
+  await reverseEntry(schoolId, id, { postedBy: req.user!.userId, memo: 'Insurance payout reversed' });
   res.json({ success: true });
 }
 

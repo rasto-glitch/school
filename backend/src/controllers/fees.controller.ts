@@ -11,7 +11,7 @@ import { notify, notifyMany } from '../utils/notify';
 import { streamPaymentReceipt, streamYearSummary } from '../utils/receipts';
 import { streamArchivePaymentPdf, buildArchivePaymentXlsx, type ArchivePaymentExportData, type ArchivePlanEntry } from '../utils/paymentArchiveExport';
 import { logAudit } from '../utils/audit';
-import { postTuitionBilling, postTuitionPayment } from '../utils/glPosting';
+import { postTuitionBilling, postTuitionPayment, postRefund, reverseEntry, reinstateEntry } from '../utils/glPosting';
 import { assertPeriodOpen } from '../utils/period';
 import { allocateReceiptNumber } from '../utils/receiptNumber';
 import { parseCursorParams, buildPageWith, keysetAfter } from '../utils/pagination';
@@ -1102,6 +1102,7 @@ export async function deletePayment(req: AuthRequest, res: Response): Promise<vo
   const beforeRow: Record<string, unknown> = { ...(before as Record<string, unknown>) };
   delete beforeRow.student_fees;
   await logAudit({ req, entityType: 'fee_payment', entityId: String(id), action: 'update', before: beforeRow, after, label: studentName, reason: reason ?? undefined });
+  await reverseEntry(schoolId, String(id), { postedBy: userId, memo: 'Payment voided' });
   res.json({ success: true });
 }
 
@@ -1127,6 +1128,7 @@ export async function unvoidPayment(req: AuthRequest, res: Response): Promise<vo
   const beforeRow: Record<string, unknown> = { ...(before as Record<string, unknown>) };
   delete beforeRow.student_fees;
   await logAudit({ req, entityType: 'fee_payment', entityId: String(id), action: 'update', before: beforeRow, after, label: studentName });
+  await reinstateEntry(schoolId, String(id), { postedBy: req.user!.userId });
   res.json({ success: true });
 }
 
@@ -1146,7 +1148,7 @@ export async function refundPayment(req: AuthRequest, res: Response): Promise<vo
 
   const { data: original } = await supabase
     .from('fee_payments')
-    .select('id, school_id, student_fee_id, amount, currency, is_refund, voided_at, student_fees(students(full_name, parents(user_id)))')
+    .select('id, school_id, student_fee_id, amount, currency, is_refund, voided_at, student_fees(student_id, students(full_name, parents(user_id)), fee_plans(kind))')
     .eq('id', id).eq('school_id', schoolId).single();
   if (!original) { res.status(404).json({ error: 'Original payment not found' }); return; }
   if ((original as any).is_refund) { res.status(400).json({ error: 'Cannot refund a refund' }); return; }
@@ -1191,6 +1193,15 @@ export async function refundPayment(req: AuthRequest, res: Response): Promise<vo
 
   const studentName = ((original as any).student_fees?.students?.full_name) as string | undefined;
   await logAudit({ req, entityType: 'fee_payment', entityId: refund.id, action: 'create', after: refund, label: studentName, reason: `Refund of ${id}` });
+
+  // GL: Dr Income(kind) / Cr Cash — reverses recognised revenue.
+  await postRefund({
+    schoolId, refundId: refund.id,
+    studentId: (original as any).student_fees?.student_id ?? null,
+    amount, currency: (original as any).currency ?? 'USD',
+    feeKind: (original as any).student_fees?.fee_plans?.kind ?? 'tuition',
+    paymentAccountId: paymentAccountId ?? null, entryDate: refundedOn, postedBy: userId,
+  });
 
   const parentUserId = (original as any).student_fees?.students?.parents?.user_id;
   if (parentUserId) {
@@ -1258,6 +1269,8 @@ export async function voidLateFee(req: AuthRequest, res: Response): Promise<void
     .eq('id', id).eq('school_id', schoolId).select().single();
   if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   await logAudit({ req, entityType: 'late_fee', entityId: String(id), action: 'update', before, after, reason: reason ?? undefined });
+  // GL: reverse the late-fee accrual (posted from apply_late_fees, keyed on late-fee id).
+  await reverseEntry(schoolId, String(id), { postedBy: userId, memo: 'Late fee voided' });
   res.json({ success: true });
 }
 

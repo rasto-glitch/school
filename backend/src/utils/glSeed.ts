@@ -37,6 +37,7 @@ const SYSTEM_ACCOUNTS: SeedAccount[] = [
   { code: '4100', name: 'Late Fee Income', type: 'income' },
   { code: '5000', name: 'Salary Expense', type: 'expense' },
   { code: '5010', name: 'Insurance Expense', type: 'expense' },
+  { code: '5090', name: 'Other Expense', type: 'expense' }, // fallback for uncategorized expenses
 ];
 
 // Returns a generator that hands out the next unused code at/after `base`,
