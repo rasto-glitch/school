@@ -9,8 +9,10 @@ import { Send, Paperclip, Check, X, FileText } from 'lucide-react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useHeaderHeight } from '@react-navigation/elements';
 import { format, isToday, isYesterday, isSameDay } from 'date-fns';
+import { useTranslation } from 'react-i18next';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
+import i18n from '../../i18n';
 import { useColors } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
 import { useSocketStore } from '../../store/socketStore';
@@ -23,7 +25,7 @@ const LIMIT = 30;
 function formatTime(iso: string) {
   const d = new Date(iso);
   if (isToday(d)) return format(d, 'HH:mm');
-  if (isYesterday(d)) return `Yesterday ${format(d, 'HH:mm')}`;
+  if (isYesterday(d)) return `${i18n.t('common.yesterday')} ${format(d, 'HH:mm')}`;
   return format(d, 'MMM d, HH:mm');
 }
 
@@ -50,7 +52,7 @@ function isSafeAttachmentUrl(u: string | undefined): u is string {
 }
 
 function DateSeparator({ date, colors }: { date: Date; colors: any }) {
-  const label = isToday(date) ? 'Today' : isYesterday(date) ? 'Yesterday' : format(date, 'MMMM d, yyyy');
+  const label = isToday(date) ? i18n.t('common.today') : isYesterday(date) ? i18n.t('common.yesterday') : format(date, 'MMMM d, yyyy');
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 12, paddingHorizontal: 16 }}>
       <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
@@ -74,7 +76,7 @@ function Bubble({ msg, isMine, showAvatar, initials, primaryColor, colors, onLon
   if (msg.isDeleted) {
     return (
       <View style={{ paddingHorizontal: 20, marginVertical: 2 }}>
-        <Text style={{ fontSize: 12, color: colors.textMuted, fontStyle: 'italic', textAlign: isMine ? 'right' : 'left' }}>Message deleted</Text>
+        <Text style={{ fontSize: 12, color: colors.textMuted, fontStyle: 'italic', textAlign: isMine ? 'right' : 'left' }}>{i18n.t('chat.message_deleted')}</Text>
       </View>
     );
   }
@@ -127,7 +129,7 @@ function Bubble({ msg, isMine, showAvatar, initials, primaryColor, colors, onLon
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={{ fontSize: 13, fontWeight: '600', color: isMine ? '#fff' : colors.text }} numberOfLines={2}>
-                  {msg.attachmentName || 'File'}
+                  {msg.attachmentName || i18n.t('chat.file')}
                 </Text>
                 {msg.attachmentSize != null && (
                   <Text style={{ fontSize: 11, color: isMine ? 'rgba(255,255,255,0.7)' : colors.textMuted }}>{humanSize(msg.attachmentSize)}</Text>
@@ -139,7 +141,7 @@ function Bubble({ msg, isMine, showAvatar, initials, primaryColor, colors, onLon
 
         <View style={{ flexDirection: isMine ? 'row-reverse' : 'row', alignItems: 'center', gap: 4, marginTop: 3, paddingHorizontal: 2 }}>
           <Text style={{ fontSize: 10, color: colors.textMuted }}>{formatTime(msg.createdAt)}</Text>
-          {msg.editedAt && <Text style={{ fontSize: 10, color: colors.textMuted, fontStyle: 'italic' }}>edited</Text>}
+          {msg.editedAt && <Text style={{ fontSize: 10, color: colors.textMuted, fontStyle: 'italic' }}>{i18n.t('chat.edited')}</Text>}
         </View>
       </Pressable>
     </View>
@@ -170,6 +172,7 @@ function TypingDots({ color }: { color: string }) {
 }
 
 export default function ChatScreen() {
+  const { t } = useTranslation();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const conversation: Conversation = route.params?.conversation;
@@ -197,14 +200,14 @@ export default function ChatScreen() {
 
   // Set header title with role/subject subtitle
   const roleSubtitle = otherUser?.role === 'teacher'
-    ? (otherUser.subject || 'Teacher')
-    : otherUser?.role === 'supervisor' ? 'Supervisor' : null;
+    ? (otherUser.subject || t('nav.teacher'))
+    : otherUser?.role === 'supervisor' ? t('nav.supervisor') : null;
 
   useEffect(() => {
     navigation.setOptions({
       headerTitle: () => (
         <View style={{ alignItems: 'center' }}>
-          <Text style={{ fontSize: 16, fontWeight: '700', color: colors.text }}>{otherUser?.fullName || 'Chat'}</Text>
+          <Text style={{ fontSize: 16, fontWeight: '700', color: colors.text }}>{otherUser?.fullName || t('nav.chat')}</Text>
           {roleSubtitle && <Text style={{ fontSize: 12, color: colors.primary, fontWeight: '500' }}>{roleSubtitle}</Text>}
         </View>
       ),
@@ -227,11 +230,11 @@ export default function ChatScreen() {
   useEffect(() => {
     let alive = true;
     const check = () => chatApi.getChatWindow()
-      .then(r => { if (alive) setClosedMsg(r.data?.open ? null : (r.data?.message || 'Chat is currently closed by the school.')); })
+      .then(r => { if (alive) setClosedMsg(r.data?.open ? null : (r.data?.message || t('chat.closed_by_school'))); })
       .catch(() => {});
     check();
-    const t = setInterval(check, 60_000);
-    return () => { alive = false; clearInterval(t); };
+    const timer = setInterval(check, 60_000);
+    return () => { alive = false; clearInterval(timer); };
   }, [conversation.id]);
 
   // Attach/detach socket listeners for this conversation
@@ -322,38 +325,32 @@ export default function ChatScreen() {
 
   const handleLongPress = (msg: ChatMessage) => {
     if (msg.isDeleted) return;
-    const options: string[] = [];
-    const actions: (() => void)[] = [];
+    const buttons: { text: string; style?: 'cancel' | 'destructive' | 'default'; onPress?: () => void }[] = [];
 
     if (msg.senderId === user?.id && msg.type === 'text') {
-      options.push('Edit');
-      actions.push(() => { setEditingMsg(msg); setEditText(msg.content || ''); });
+      buttons.push({ text: t('chat.edit'), onPress: () => { setEditingMsg(msg); setEditText(msg.content || ''); } });
     }
     if (msg.senderId === user?.id) {
-      options.push('Delete');
-      actions.push(() => {
-        Alert.alert('Delete message?', 'This cannot be undone.', [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Delete', style: 'destructive', onPress: async () => {
-            await chatApi.deleteMessage(msg.id).catch(() => {});
-            setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, isDeleted: true, content: undefined } : m));
-          }},
-        ]);
+      buttons.push({
+        text: t('common.delete'), style: 'destructive', onPress: () => {
+          Alert.alert(t('chat.delete_message_title'), t('chat.delete_message_body'), [
+            { text: t('common.cancel'), style: 'cancel' },
+            { text: t('common.delete'), style: 'destructive', onPress: async () => {
+              await chatApi.deleteMessage(msg.id).catch(() => {});
+              setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, isDeleted: true, content: undefined } : m));
+            }},
+          ]);
+        },
       });
     }
-    options.push('Cancel');
-    actions.push(() => {});
+    buttons.push({ text: t('common.cancel'), style: 'cancel' });
 
-    Alert.alert('Message', undefined, options.map((o, i) => ({
-      text: o,
-      style: o === 'Cancel' ? 'cancel' : o === 'Delete' ? 'destructive' : 'default',
-      onPress: actions[i],
-    })));
+    Alert.alert(t('chat.message'), undefined, buttons);
   };
 
   const handlePickImage = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) { Alert.alert('Permission required', 'Please allow photo access.'); return; }
+    if (!perm.granted) { Alert.alert(t('profile.photo_perm_title'), t('profile.photo_perm_body')); return; }
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 });
     if (result.canceled || !result.assets[0]) return;
     const asset = result.assets[0];
@@ -366,7 +363,7 @@ export default function ChatScreen() {
       });
       setMessages(prev => prev.find(m => m.id === res.data.id) ? prev : [...prev, res.data]);
       setTimeout(() => flatRef.current?.scrollToEnd({ animated: true }), 100);
-    } catch { Alert.alert('Upload failed', 'Could not send image.'); }
+    } catch { Alert.alert(t('chat.upload_failed'), t('chat.send_image_failed')); }
     finally { setUploading(false); }
   };
 
@@ -382,15 +379,15 @@ export default function ChatScreen() {
       });
       setMessages(prev => prev.find(m => m.id === res.data.id) ? prev : [...prev, res.data]);
       setTimeout(() => flatRef.current?.scrollToEnd({ animated: true }), 100);
-    } catch { Alert.alert('Upload failed', 'Could not send file.'); }
+    } catch { Alert.alert(t('chat.upload_failed'), t('chat.send_file_failed')); }
     finally { setUploading(false); }
   };
 
   const handleAttach = () => {
-    Alert.alert('Attach', undefined, [
-      { text: 'Image', onPress: handlePickImage },
-      { text: 'File', onPress: handlePickFile },
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('chat.attach'), undefined, [
+      { text: t('chat.image'), onPress: handlePickImage },
+      { text: t('chat.file'), onPress: handlePickFile },
+      { text: t('common.cancel'), style: 'cancel' },
     ]);
   };
 
@@ -509,7 +506,7 @@ export default function ChatScreen() {
             </TouchableOpacity>
             <TextInput
               style={[s.input, { color: colors.text, backgroundColor: colors.bg, borderColor: colors.border, opacity: closedMsg ? 0.5 : 1 }]}
-              placeholder={closedMsg ? 'Chat is closed' : 'Type a message…'}
+              placeholder={closedMsg ? t('chat.chat_closed') : t('chat.type_message')}
               placeholderTextColor={colors.textMuted}
               value={text}
               onChangeText={emitTyping}

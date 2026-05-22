@@ -7,6 +7,7 @@ import { ChatListSkeleton as ChatSkeleton } from '../../components/Skeleton';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MessageSquare, Plus, Search, X } from 'lucide-react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { formatDistanceToNow } from 'date-fns';
 import { useColors, useIsDark } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
@@ -29,13 +30,14 @@ function Avatar({ user, size, primaryColor }: { user: ChatUser; size: number; pr
   );
 }
 
-function roleLabel(role: string, subject?: string) {
-  if (role === 'teacher') return subject ? `Teacher · ${subject}` : 'Teacher';
-  if (role === 'supervisor') return 'Supervisor';
-  return 'Parent';
+function roleLabel(t: (k: string) => string, role: string, subject?: string) {
+  if (role === 'teacher') return subject ? `${t('nav.teacher')} · ${subject}` : t('nav.teacher');
+  if (role === 'supervisor') return t('nav.supervisor');
+  return t('nav.parent');
 }
 
 export default function ChatListScreen() {
+  const { t } = useTranslation();
   const navigation = useNavigation<Nav>();
   const colors = useColors();
   const isDark = useIsDark();
@@ -65,7 +67,7 @@ export default function ChatListScreen() {
   useEffect(() => {
     if (!socket || !user) return;
     const onMessage = (data: any) => {
-      const preview = data.type === 'text' ? (data.content || '') : data.type === 'image' ? '📷 Photo' : `📎 ${data.attachmentName || 'File'}`;
+      const preview = data.type === 'text' ? (data.content || '') : data.type === 'image' ? `📷 ${t('chat.photo')}` : `📎 ${data.attachmentName || t('chat.file')}`;
       setConvs(prev => {
         const existing = prev.find(c => c.id === data.conversationId);
         if (!existing) return prev;
@@ -119,7 +121,7 @@ export default function ChatListScreen() {
           <Search size={14} color={colors.textMuted} />
           <TextInput
             style={[s.searchInput, { color: colors.text }]}
-            placeholder="Search…"
+            placeholder={t('chat.search_ph')}
             placeholderTextColor={colors.textMuted}
             value={search}
             onChangeText={setSearch}
@@ -146,8 +148,8 @@ export default function ChatListScreen() {
       ) : filtered.length === 0 ? (
         <View style={s.empty}>
           <MessageSquare size={40} color={colors.textMuted} />
-          <Text style={[s.emptyText, { color: colors.textMuted }]}>No conversations yet</Text>
-          <Text style={[s.emptySubText, { color: colors.textMuted }]}>Tap + to start one</Text>
+          <Text style={[s.emptyText, { color: colors.textMuted }]}>{t('chat.no_conversations')}</Text>
+          <Text style={[s.emptySubText, { color: colors.textMuted }]}>{t('chat.tap_to_start')}</Text>
         </View>
       ) : (
         <FlatList
@@ -173,10 +175,10 @@ export default function ChatListScreen() {
               <View style={s.rowContent}>
                 <View style={s.rowTop}>
                   <Text style={[s.rowName, { color: colors.text, fontWeight: conv.hasUnread ? '700' : '600' }]} numberOfLines={1}>
-                    {conv.otherUser?.fullName || 'Unknown'}
+                    {conv.otherUser?.fullName || t('chat.unknown_user')}
                     {conv.otherUser?.role && conv.otherUser.role !== 'parent' && (
                       <Text style={{ fontSize: 11, fontWeight: '500', color: colors.primary }}>
-                        {' '}({conv.otherUser.role === 'teacher' ? (conv.otherUser.subject || 'Teacher') : conv.otherUser.role === 'supervisor' ? 'Supervisor' : conv.otherUser.role})
+                        {' '}({conv.otherUser.role === 'teacher' ? (conv.otherUser.subject || t('nav.teacher')) : conv.otherUser.role === 'supervisor' ? t('nav.supervisor') : conv.otherUser.role})
                       </Text>
                     )}
                   </Text>
@@ -190,8 +192,8 @@ export default function ChatListScreen() {
                 <View style={s.rowBottom}>
                   <Text style={[s.rowPreview, { color: conv.hasUnread ? colors.text : colors.textSecondary, fontWeight: conv.hasUnread ? '600' : '400' }]} numberOfLines={1}>
                     {conv.lastMessagePreview
-                      ? (conv.lastMessageSenderId === user?.id ? `You: ${conv.lastMessagePreview}` : conv.lastMessagePreview)
-                      : 'No messages yet'}
+                      ? (conv.lastMessageSenderId === user?.id ? `${t('chat.you')}: ${conv.lastMessagePreview}` : conv.lastMessagePreview)
+                      : t('chat.no_messages')}
                   </Text>
                   {conv.hasUnread && (
                     <View style={[s.unreadDot, { backgroundColor: colors.primary }]} />
@@ -208,7 +210,7 @@ export default function ChatListScreen() {
         <View style={s.modalOverlay}>
           <View style={[s.modal, { backgroundColor: colors.card }]}>
             <View style={[s.modalHeader, { borderBottomColor: colors.border }]}>
-              <Text style={[s.modalTitle, { color: colors.text }]}>New Conversation</Text>
+              <Text style={[s.modalTitle, { color: colors.text }]}>{t('chat.new_conversation')}</Text>
               <TouchableOpacity onPress={() => setShowNew(false)} style={s.closeBtn}>
                 <X size={18} color={colors.textSecondary} />
               </TouchableOpacity>
@@ -217,7 +219,7 @@ export default function ChatListScreen() {
               <Search size={14} color={colors.textMuted} />
               <TextInput
                 style={[s.searchInput, { color: colors.text, flex: 1 }]}
-                placeholder="Search contacts…"
+                placeholder={t('chat.search_contacts')}
                 placeholderTextColor={colors.textMuted}
                 value={contactSearch}
                 onChangeText={setContactSearch}
@@ -231,7 +233,7 @@ export default function ChatListScreen() {
                 data={filteredContacts}
                 keyExtractor={c => c.id}
                 style={{ maxHeight: 360 }}
-                ListEmptyComponent={<Text style={[s.emptyText, { color: colors.textMuted, padding: 24 }]}>No contacts found</Text>}
+                ListEmptyComponent={<Text style={[s.emptyText, { color: colors.textMuted, padding: 24 }]}>{t('chat.no_contacts')}</Text>}
                 renderItem={({ item: contact }) => (
                   <TouchableOpacity
                     style={[s.contactRow, { borderBottomColor: colors.borderLight }]}
@@ -242,7 +244,7 @@ export default function ChatListScreen() {
                     <Avatar user={contact} size={38} primaryColor={colors.primary} />
                     <View style={{ flex: 1 }}>
                       <Text style={[s.contactName, { color: colors.text }]}>{contact.fullName}</Text>
-                      <Text style={[s.contactRole, { color: colors.textMuted }]}>{roleLabel(contact.role, contact.subject)}</Text>
+                      <Text style={[s.contactRole, { color: colors.textMuted }]}>{roleLabel(t, contact.role, contact.subject)}</Text>
                     </View>
                     {startingId === contact.id && <ActivityIndicator size="small" color={colors.primary} />}
                   </TouchableOpacity>
