@@ -828,6 +828,20 @@ export const glApi = {
     api.get<{ asOf: string | null; currencies: BalanceSheetCurrency[] }>('/accounting/gl/balance-sheet', { params }),
   accountLedger: (id: string, params?: { startDate?: string; endDate?: string }) =>
     api.get<AccountLedger>(`/accounting/gl/account/${id}`, { params }),
+  // Phase 4 — management + entry
+  createAccount: (body: { code: string; name: string; type: GlAccount['type']; subtype?: string | null }) =>
+    api.post<GlAccount>('/accounting/gl/accounts', body),
+  updateAccount: (id: string, body: { name?: string; subtype?: string | null; isActive?: boolean }) =>
+    api.patch<GlAccount>(`/accounting/gl/accounts/${id}`, body),
+  deleteAccount: (id: string) => api.delete(`/accounting/gl/accounts/${id}`),
+  createJournalEntry: (body: {
+    entryDate: string; currency: string; memo?: string | null;
+    lines: { accountId: string; debit?: number; credit?: number; description?: string | null }[];
+  }) => api.post<{ id: string }>('/accounting/gl/journal', body),
+  postOpeningBalances: (body: {
+    asOf?: string; currency: string; memo?: string | null;
+    balances: { accountId: string; amount: number }[];
+  }) => api.post<{ id: string }>('/accounting/gl/opening-balances', body),
 };
 
 export interface ArchiveListItem {

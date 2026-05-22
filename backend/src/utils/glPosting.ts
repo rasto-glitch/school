@@ -39,16 +39,21 @@ export interface PostEntryOpts {
 
 const round2 = (n: number): number => Math.round((n + Number.EPSILON) * 100) / 100;
 
-// Low-level post. Returns the new entry id, or null on failure (logged).
-export async function postEntry(opts: PostEntryOpts): Promise<string | null> {
+export type PostResult = { ok: true; entryId: string } | { ok: false; error: string };
+
+// Low-level post returning a result. Use when the caller wants to surface the
+// outcome (e.g. manual journal entries). Auto-posting uses postEntry() below,
+// which discards the error (best-effort).
+export async function postEntryResult(opts: PostEntryOpts): Promise<PostResult> {
   try {
     const totalDebit = round2(opts.lines.reduce((s, l) => s + (l.debit ?? 0), 0));
     const totalCredit = round2(opts.lines.reduce((s, l) => s + (l.credit ?? 0), 0));
     if (totalDebit !== totalCredit) {
-      console.error(`[gl] refusing unbalanced ${opts.source} entry: debit ${totalDebit} != credit ${totalCredit}`);
-      return null;
+      const msg = `Entry does not balance: debits ${totalDebit} ≠ credits ${totalCredit}`;
+      console.error(`[gl] refusing unbalanced ${opts.source} entry: ${msg}`);
+      return { ok: false, error: msg };
     }
-    if (totalDebit === 0) return null; // nothing to record
+    if (totalDebit === 0) return { ok: false, error: 'Entry has no amounts' };
 
     const { data, error } = await supabase.rpc('gl_post_entry', {
       p_school_id: opts.schoolId,
@@ -69,12 +74,19 @@ export async function postEntry(opts: PostEntryOpts): Promise<string | null> {
         staff_id: l.staffId ?? null,
       })),
     });
-    if (error) { console.error(`[gl] post ${opts.source} failed:`, error.message); return null; }
-    return (data as string) ?? null;
+    if (error) { console.error(`[gl] post ${opts.source} failed:`, error.message); return { ok: false, error: error.message }; }
+    return { ok: true, entryId: data as string };
   } catch (e) {
-    console.error('[gl] postEntry threw:', (e as Error).message);
-    return null;
+    const msg = (e as Error).message;
+    console.error('[gl] postEntry threw:', msg);
+    return { ok: false, error: msg };
   }
+}
+
+// Best-effort post. Returns the new entry id, or null on failure (logged).
+export async function postEntry(opts: PostEntryOpts): Promise<string | null> {
+  const r = await postEntryResult(opts);
+  return r.ok ? r.entryId : null;
 }
 
 interface AccountLookup {

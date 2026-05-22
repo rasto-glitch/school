@@ -368,6 +368,12 @@ export function createRouter(io: SocketServer) {
   router.get('/accounting/gl/income-statement', authenticate, authorize(...accountingRW), validate({ query: vq.listQuery }), (req, res) => gl.getIncomeStatement(req as AuthRequest, res));
   router.get('/accounting/gl/balance-sheet', authenticate, authorize(...accountingRW), validate({ query: vq.listQuery }), (req, res) => gl.getBalanceSheet(req as AuthRequest, res));
   router.get('/accounting/gl/account/:id', authenticate, authorize(...accountingRW), validate({ params: va.idParam, query: vq.listQuery }), (req, res) => gl.getAccountLedger(req as AuthRequest, res));
+  // GL management (Phase 4): chart-of-accounts CRUD, manual entries, opening balances.
+  router.post('/accounting/gl/accounts', authenticate, authorize(...accountingRW), validate({ body: va.createGlAccountSchema }), (req, res) => gl.createAccount(req as AuthRequest, res));
+  router.patch('/accounting/gl/accounts/:id', authenticate, authorize(...accountingRW), validate({ params: va.idParam, body: va.updateGlAccountSchema }), (req, res) => gl.updateAccount(req as AuthRequest, res));
+  router.delete('/accounting/gl/accounts/:id', authenticate, authorize(...accountingRW), validate({ params: va.idParam }), (req, res) => gl.deleteAccount(req as AuthRequest, res));
+  router.post('/accounting/gl/journal', authenticate, authorize(...accountingRW), validate({ body: va.manualJournalSchema }), (req, res) => gl.createJournalEntry(req as AuthRequest, res));
+  router.post('/accounting/gl/opening-balances', authenticate, authorize(...accountingRW), validate({ body: va.openingBalancesSchema }), (req, res) => gl.postOpeningBalances(req as AuthRequest, res));
 
   // Refunds, late fees, period close, payment accounts, FX rates
   router.post('/accounting/payments/:id/refund', authenticate, authorize(...accountingRW), validate({ params: va.idParam, body: va.refundPaymentSchema }), (req, res) => fees.refundPayment(req as AuthRequest, res));

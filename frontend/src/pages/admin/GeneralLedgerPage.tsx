@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { toast } from 'react-toastify';
-import { Scale, BookText, ListTree, CheckCircle2, AlertTriangle, TrendingUp, FileBarChart } from 'lucide-react';
+import { Scale, BookText, ListTree, CheckCircle2, AlertTriangle, TrendingUp, FileBarChart, Plus, Pencil, Trash2, Power, X } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import {
   glApi,
@@ -10,6 +10,7 @@ import {
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
 import Input from '../../components/common/Input';
+import Select from '../../components/common/Select';
 import Button from '../../components/common/Button';
 import Modal from '../../components/common/Modal';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
@@ -68,6 +69,12 @@ export default function GeneralLedgerPage() {
   const [ledger, setLedger] = useState<AccountLedger | null>(null);
   const [ledgerLoading, setLedgerLoading] = useState(false);
 
+  // Phase 4 — management modals
+  const [showEntry, setShowEntry] = useState(false);
+  const [showNewAccount, setShowNewAccount] = useState(false);
+  const [editAccount, setEditAccount] = useState<GlAccount | null>(null);
+  const [showOpening, setShowOpening] = useState(false);
+
   const loadTrialBalance = useCallback(async (d: string) => {
     setTbLoading(true);
     try { setTb((await glApi.trialBalance({ asOf: d || undefined })).data.currencies); }
@@ -106,6 +113,30 @@ export default function GeneralLedgerPage() {
     catch (e: any) { toast.error(e.response?.data?.error || 'Failed to load account'); setLedger(null); }
     finally { setLedgerLoading(false); }
   }, []);
+
+  const toggleActive = async (a: GlAccount) => {
+    try {
+      await glApi.updateAccount(a.id, { isActive: !a.isActive });
+      toast.success(a.isActive ? 'Account deactivated' : 'Account activated');
+      loadAccounts();
+    } catch (e: any) { toast.error(e.response?.data?.error || 'Failed to update account'); }
+  };
+  const removeAccount = async (a: GlAccount) => {
+    if (!window.confirm(`Delete account ${a.code} ${a.name}? This cannot be undone.`)) return;
+    try { await glApi.deleteAccount(a.id); toast.success('Account deleted'); loadAccounts(); }
+    catch (e: any) { toast.error(e.response?.data?.error || 'Failed to delete account'); }
+  };
+
+  // After posting an entry, every report is stale — drop the caches and reload
+  // whatever tab is in view.
+  const reloadActive = () => {
+    setTb(null); setPl(null); setBs(null); setJournal(null); setAccounts(null);
+    if (tab === 'trial') loadTrialBalance(asOf);
+    else if (tab === 'pl') loadPl(plStart, plEnd);
+    else if (tab === 'balance') loadBs(bsAsOf);
+    else if (tab === 'accounts') loadAccounts();
+    else if (tab === 'journal') loadJournal();
+  };
 
   useEffect(() => {
     if (!isPremium) return;
@@ -284,7 +315,13 @@ export default function GeneralLedgerPage() {
       {/* ── Chart of Accounts ── */}
       {tab === 'accounts' && (
         <Card>
-          <h3 className="font-semibold text-gray-900 mb-3">Chart of Accounts</h3>
+          <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+            <h3 className="font-semibold text-gray-900">Chart of Accounts</h3>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="ghost" onClick={() => { if (accounts === null) loadAccounts(); setShowOpening(true); }}>Opening balances</Button>
+              <Button size="sm" icon={<Plus className="w-4 h-4" />} onClick={() => setShowNewAccount(true)}>Add account</Button>
+            </div>
+          </div>
           {accounts === null ? <LoadingSpinner /> : accounts.length === 0 ? (
             <EmptyState title="No accounts" description="The chart is seeded on first use." icon={<ListTree className="w-8 h-8 text-gray-400" />} />
           ) : (
@@ -296,13 +333,24 @@ export default function GeneralLedgerPage() {
                     <table className="w-full text-sm">
                       <tbody>
                         {accounts.filter(a => a.type === type).map(a => (
-                          <tr key={a.id} className="border-b border-gray-50 last:border-0">
+                          <tr key={a.id} className="border-b border-gray-50 last:border-0 group">
                             <td className="py-2 pr-3 text-gray-500 font-mono text-xs whitespace-nowrap w-16">{a.code}</td>
                             <td className="py-2 pr-3 text-gray-900">
                               {acctBtn(a.id, a.name)}
-                              {!a.isActive && <span className="ml-2 text-xs text-gray-400">(inactive)</span>}
+                              {a.isSystem && <span className="ml-2 text-xs text-gray-400">system</span>}
+                              {!a.isActive && <span className="ml-2 text-xs text-amber-600">inactive</span>}
                             </td>
-                            <td className="py-2 pr-3 text-right">{a.isSystem && <span className="text-xs text-gray-400">system</span>}</td>
+                            <td className="py-2 pr-3 text-right whitespace-nowrap">
+                              <div className="inline-flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button title="Edit" onClick={() => setEditAccount(a)} className="p-1 rounded hover:bg-gray-100 text-gray-500"><Pencil className="w-3.5 h-3.5" /></button>
+                                {!a.isSystem && (
+                                  <button title={a.isActive ? 'Deactivate' : 'Activate'} onClick={() => toggleActive(a)} className={`p-1 rounded hover:bg-gray-100 ${a.isActive ? 'text-gray-500' : 'text-amber-600'}`}><Power className="w-3.5 h-3.5" /></button>
+                                )}
+                                {!a.isSystem && (
+                                  <button title="Delete" onClick={() => removeAccount(a)} className="p-1 rounded hover:bg-rose-50 text-rose-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                                )}
+                              </div>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -318,7 +366,10 @@ export default function GeneralLedgerPage() {
       {/* ── Journal ── */}
       {tab === 'journal' && (
         <Card>
-          <h3 className="font-semibold text-gray-900 mb-3">Journal</h3>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold text-gray-900">Journal</h3>
+            <Button size="sm" icon={<Plus className="w-4 h-4" />} onClick={() => { if (accounts === null) loadAccounts(); setShowEntry(true); }}>New entry</Button>
+          </div>
           {journal === null ? <LoadingSpinner /> : journal.length === 0 ? (
             <EmptyState title="No journal entries yet" description="Entries are posted automatically as money moves." icon={<BookText className="w-8 h-8 text-gray-400" />} />
           ) : (
@@ -351,6 +402,17 @@ export default function GeneralLedgerPage() {
             </div>
           )}
         </Card>
+      )}
+
+      {/* ── Phase 4 management modals ── */}
+      {showEntry && (
+        <ManualEntryModal accounts={accounts ?? []} onClose={() => setShowEntry(false)} onSaved={() => { setShowEntry(false); reloadActive(); }} />
+      )}
+      {(showNewAccount || editAccount) && (
+        <AccountFormModal account={editAccount} onClose={() => { setShowNewAccount(false); setEditAccount(null); }} onSaved={() => { setShowNewAccount(false); setEditAccount(null); loadAccounts(); }} />
+      )}
+      {showOpening && (
+        <OpeningBalancesModal accounts={accounts ?? []} onClose={() => setShowOpening(false)} onSaved={() => { setShowOpening(false); reloadActive(); }} />
       )}
 
       {/* ── Account drill-down ── */}
@@ -443,5 +505,205 @@ function Section({ title, rows, currency, total, totalLabel, tone }: {
         <span className="font-semibold text-gray-900">{fmt(total, currency)}</span>
       </div>
     </div>
+  );
+}
+
+const ACCOUNT_TYPES: GlAccount['type'][] = ['asset', 'liability', 'equity', 'income', 'expense'];
+
+// ── Manual journal entry ──
+interface EntryLine { accountId: string; debit: string; credit: string; description: string }
+function ManualEntryModal({ accounts, onClose, onSaved }: { accounts: GlAccount[]; onClose: () => void; onSaved: () => void }) {
+  const [entryDate, setEntryDate] = useState(todayISO());
+  const [currency, setCurrency] = useState('USD');
+  const [memo, setMemo] = useState('');
+  const [lines, setLines] = useState<EntryLine[]>([
+    { accountId: '', debit: '', credit: '', description: '' },
+    { accountId: '', debit: '', credit: '', description: '' },
+  ]);
+  const [saving, setSaving] = useState(false);
+
+  const active = accounts.filter(a => a.isActive);
+  const acctOptions = [{ value: '', label: '— account —' }, ...active.map(a => ({ value: a.id, label: `${a.code} ${a.name}` }))];
+  const num = (s: string) => { const n = parseFloat(s); return isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : 0; };
+  const totalDebit = lines.reduce((s, l) => s + num(l.debit), 0);
+  const totalCredit = lines.reduce((s, l) => s + num(l.credit), 0);
+  const diff = Math.round((totalDebit - totalCredit) * 100) / 100;
+  const filled = lines.filter(l => l.accountId && (num(l.debit) > 0 || num(l.credit) > 0));
+  const canSave = filled.length >= 2 && diff === 0 && totalDebit > 0 && !saving;
+
+  const setLine = (i: number, patch: Partial<EntryLine>) => setLines(ls => ls.map((l, idx) => idx === i ? { ...l, ...patch } : l));
+  const addLine = () => setLines(ls => [...ls, { accountId: '', debit: '', credit: '', description: '' }]);
+  const removeLine = (i: number) => setLines(ls => ls.length > 2 ? ls.filter((_, idx) => idx !== i) : ls);
+
+  const submit = async () => {
+    setSaving(true);
+    try {
+      await glApi.createJournalEntry({
+        entryDate, currency: currency.trim().toUpperCase() || 'USD', memo: memo.trim() || null,
+        lines: filled.map(l => ({
+          accountId: l.accountId,
+          debit: num(l.debit) || undefined,
+          credit: num(l.credit) || undefined,
+          description: l.description.trim() || null,
+        })),
+      });
+      toast.success('Journal entry posted');
+      onSaved();
+    } catch (e: any) { toast.error(e.response?.data?.error || 'Failed to post entry'); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <Modal isOpen onClose={onClose} title="New journal entry" size="xl">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+        <Input label="Date" type="date" value={entryDate} onChange={e => setEntryDate(e.target.value)} />
+        <Input label="Currency" value={currency} onChange={e => setCurrency(e.target.value)} maxLength={8} />
+        <Input label="Memo" value={memo} onChange={e => setMemo(e.target.value)} placeholder="Optional" />
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-xs font-medium text-gray-500 border-b border-gray-100">
+              <th className="py-2 pr-2">Account</th>
+              <th className="py-2 pr-2 text-right w-28">Debit</th>
+              <th className="py-2 pr-2 text-right w-28">Credit</th>
+              <th className="py-2 pr-2">Description</th>
+              <th className="w-8" />
+            </tr>
+          </thead>
+          <tbody>
+            {lines.map((l, i) => (
+              <tr key={i}>
+                <td className="py-1 pr-2">
+                  <Select options={acctOptions} value={l.accountId} onChange={e => setLine(i, { accountId: e.target.value })} />
+                </td>
+                <td className="py-1 pr-2">
+                  <Input type="number" value={l.debit} onChange={e => setLine(i, { debit: e.target.value, credit: e.target.value ? '' : l.credit })} className="text-right" />
+                </td>
+                <td className="py-1 pr-2">
+                  <Input type="number" value={l.credit} onChange={e => setLine(i, { credit: e.target.value, debit: e.target.value ? '' : l.debit })} className="text-right" />
+                </td>
+                <td className="py-1 pr-2">
+                  <Input value={l.description} onChange={e => setLine(i, { description: e.target.value })} placeholder="Optional" />
+                </td>
+                <td className="py-1 text-center">
+                  <button onClick={() => removeLine(i)} disabled={lines.length <= 2} className="p-1 rounded hover:bg-gray-100 text-gray-400 disabled:opacity-30"><X className="w-4 h-4" /></button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="flex items-center justify-between mt-2">
+        <Button size="sm" variant="ghost" icon={<Plus className="w-4 h-4" />} onClick={addLine}>Add line</Button>
+        <div className="text-sm">
+          <span className="text-gray-500 mr-3">Debit {totalDebit.toFixed(2)} · Credit {totalCredit.toFixed(2)}</span>
+          {diff === 0
+            ? <span className="text-emerald-700 font-medium">Balanced</span>
+            : <span className="text-rose-700 font-medium">Off by {Math.abs(diff).toFixed(2)}</span>}
+        </div>
+      </div>
+      <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-gray-100">
+        <Button variant="ghost" onClick={onClose}>Cancel</Button>
+        <Button onClick={submit} loading={saving} disabled={!canSave}>Post entry</Button>
+      </div>
+    </Modal>
+  );
+}
+
+// ── Create / edit account ──
+function AccountFormModal({ account, onClose, onSaved }: { account: GlAccount | null; onClose: () => void; onSaved: () => void }) {
+  const editing = !!account;
+  const [code, setCode] = useState(account?.code ?? '');
+  const [name, setName] = useState(account?.name ?? '');
+  const [type, setType] = useState<GlAccount['type']>(account?.type ?? 'expense');
+  const [subtype, setSubtype] = useState(account?.subtype ?? '');
+  const [saving, setSaving] = useState(false);
+
+  const submit = async () => {
+    if (!name.trim() || (!editing && !code.trim())) { toast.error('Code and name are required'); return; }
+    setSaving(true);
+    try {
+      if (editing) await glApi.updateAccount(account!.id, { name: name.trim(), subtype: subtype.trim() || null });
+      else await glApi.createAccount({ code: code.trim(), name: name.trim(), type, subtype: subtype.trim() || null });
+      toast.success(editing ? 'Account updated' : 'Account created');
+      onSaved();
+    } catch (e: any) { toast.error(e.response?.data?.error || 'Failed to save account'); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <Modal isOpen onClose={onClose} title={editing ? 'Edit account' : 'New account'} size="md">
+      <div className="space-y-3">
+        <Input label="Code" value={code} onChange={e => setCode(e.target.value)} disabled={editing} placeholder="e.g. 5200" />
+        <Input label="Name" value={name} onChange={e => setName(e.target.value)} />
+        <Select label="Type" options={ACCOUNT_TYPES.map(t => ({ value: t, label: t[0].toUpperCase() + t.slice(1) }))} value={type} onChange={e => setType(e.target.value as GlAccount['type'])} disabled={editing} />
+        <Input label="Subtype (optional)" value={subtype ?? ''} onChange={e => setSubtype(e.target.value)} placeholder="e.g. cash, payable" />
+        {editing && <p className="text-xs text-gray-400">Code and type can't be changed once an account exists.</p>}
+      </div>
+      <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-gray-100">
+        <Button variant="ghost" onClick={onClose}>Cancel</Button>
+        <Button onClick={submit} loading={saving}>{editing ? 'Save' : 'Create'}</Button>
+      </div>
+    </Modal>
+  );
+}
+
+// ── Opening balances ──
+function OpeningBalancesModal({ accounts, onClose, onSaved }: { accounts: GlAccount[]; onClose: () => void; onSaved: () => void }) {
+  const [asOf, setAsOf] = useState(todayISO());
+  const [currency, setCurrency] = useState('USD');
+  const [amounts, setAmounts] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
+
+  // 3000 = Opening Balance Equity is the auto-plug; never entered directly.
+  const eligible = accounts.filter(a => a.isActive && a.code !== '3000');
+  const num = (s: string) => { const n = parseFloat(s); return isFinite(n) ? Math.round(n * 100) / 100 : 0; };
+  const nonZero = eligible.filter(a => num(amounts[a.id]) !== 0);
+
+  const submit = async () => {
+    if (nonZero.length === 0) { toast.error('Enter at least one opening balance'); return; }
+    setSaving(true);
+    try {
+      await glApi.postOpeningBalances({
+        asOf, currency: currency.trim().toUpperCase() || 'USD',
+        balances: nonZero.map(a => ({ accountId: a.id, amount: num(amounts[a.id]) })),
+      });
+      toast.success('Opening balances posted');
+      onSaved();
+    } catch (e: any) { toast.error(e.response?.data?.error || 'Failed to post opening balances'); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <Modal isOpen onClose={onClose} title="Set opening balances" size="lg">
+      <div className="grid grid-cols-2 gap-3 mb-3">
+        <Input label="As of" type="date" value={asOf} onChange={e => setAsOf(e.target.value)} />
+        <Input label="Currency" value={currency} onChange={e => setCurrency(e.target.value)} maxLength={8} />
+      </div>
+      <p className="text-xs text-gray-500 mb-3">
+        Enter each account's starting balance in its normal direction (assets &amp; expenses positive = debit; liabilities, equity &amp; income positive = credit). The difference is posted automatically to Opening Balance Equity.
+      </p>
+      <div className="max-h-[45vh] overflow-y-auto space-y-4">
+        {ACCOUNT_TYPES.filter(t => eligible.some(a => a.type === t)).map(t => (
+          <div key={t}>
+            <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1.5">{t}</div>
+            <div className="space-y-1">
+              {eligible.filter(a => a.type === t).map(a => (
+                <div key={a.id} className="flex items-center gap-3">
+                  <span className="text-xs font-mono text-gray-400 w-14">{a.code}</span>
+                  <span className="flex-1 text-sm text-gray-800">{a.name}</span>
+                  <Input type="number" value={amounts[a.id] ?? ''} onChange={e => setAmounts(m => ({ ...m, [a.id]: e.target.value }))} className="w-32 text-right" placeholder="0.00" />
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-gray-100">
+        <Button variant="ghost" onClick={onClose}>Cancel</Button>
+        <Button onClick={submit} loading={saving} disabled={nonZero.length === 0}>Post opening balances</Button>
+      </div>
+    </Modal>
   );
 }

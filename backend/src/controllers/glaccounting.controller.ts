@@ -4,6 +4,8 @@ import { adminDb as supabase } from '../utils/db';
 import type { AuthRequest } from '../middleware/auth';
 import { toCC } from '../utils/transform';
 import { ensureChartSeeded } from '../utils/glSeed';
+import { postEntryResult, type PostLine } from '../utils/glPosting';
+import { assertPeriodOpen } from '../utils/period';
 
 // GL is part of the accounting module — gated by the same premium flag.
 async function ensurePremium(schoolId: string): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
@@ -374,4 +376,175 @@ export async function getAccountLedger(req: AuthRequest, res: Response): Promise
     account: { id: acct.id, code: acct.code, name: acct.name, type: acct.type },
     debitNormal, startDate, endDate, currencies,
   });
+}
+
+// ── Chart-of-accounts management (Phase 4) ──────────────────────────────────
+export async function createAccount(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const guard = await ensurePremium(schoolId);
+  if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
+  await ensureChartSeeded(schoolId);
+
+  const { code, name, type, subtype } = req.body as { code: string; name: string; type: string; subtype?: string | null };
+  const { data: clash } = await supabase
+    .from('chart_of_accounts').select('id').eq('school_id', schoolId).eq('code', code.trim()).limit(1);
+  if (clash && clash.length) { res.status(409).json({ error: `Account code ${code.trim()} already exists` }); return; }
+
+  const { data, error } = await supabase.from('chart_of_accounts').insert({
+    school_id: schoolId, code: code.trim(), name: name.trim(), type,
+    subtype: subtype?.trim() || null, is_system: false, is_active: true,
+  }).select().single();
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.status(201).json(toCC(data));
+}
+
+export async function updateAccount(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const guard = await ensurePremium(schoolId);
+  if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
+
+  const id = String(req.params.id);
+  const { name, subtype, isActive } = req.body as { name?: string; subtype?: string | null; isActive?: boolean };
+
+  const { data: before } = await supabase
+    .from('chart_of_accounts').select('id, is_system').eq('school_id', schoolId).eq('id', id).single();
+  if (!before) { res.status(404).json({ error: 'Account not found' }); return; }
+  // System accounts are renamable but must stay active — posting depends on them.
+  if (isActive === false && (before as { is_system: boolean }).is_system) {
+    res.status(409).json({ error: 'System accounts cannot be deactivated' }); return;
+  }
+
+  const updates: Record<string, unknown> = {};
+  if (typeof name === 'string') { if (!name.trim()) { res.status(400).json({ error: 'Name cannot be empty' }); return; } updates.name = name.trim(); }
+  if (subtype !== undefined) updates.subtype = subtype?.trim() || null;
+  if (isActive !== undefined) updates.is_active = isActive;
+  if (Object.keys(updates).length === 0) { res.status(400).json({ error: 'Nothing to update' }); return; }
+
+  const { data, error } = await supabase.from('chart_of_accounts')
+    .update(updates).eq('school_id', schoolId).eq('id', id).select().single();
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json(toCC(data));
+}
+
+export async function deleteAccount(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const guard = await ensurePremium(schoolId);
+  if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
+
+  const id = String(req.params.id);
+  const { data: acct } = await supabase
+    .from('chart_of_accounts').select('id, is_system').eq('school_id', schoolId).eq('id', id).single();
+  if (!acct) { res.status(404).json({ error: 'Account not found' }); return; }
+  if ((acct as { is_system: boolean }).is_system) { res.status(409).json({ error: 'System accounts cannot be deleted' }); return; }
+
+  const { data: used } = await supabase
+    .from('journal_lines').select('id').eq('school_id', schoolId).eq('account_id', id).limit(1);
+  if (used && used.length) { res.status(409).json({ error: 'Account has journal entries — deactivate it instead' }); return; }
+
+  const { error } = await supabase.from('chart_of_accounts').delete().eq('school_id', schoolId).eq('id', id);
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json({ success: true });
+}
+
+// ── Manual journal entry (Phase 4) ──────────────────────────────────────────
+interface RawLine { accountId: string; debit?: number; credit?: number; description?: string | null }
+
+export async function createJournalEntry(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId, userId } = req.user!;
+  const guard = await ensurePremium(schoolId);
+  if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
+  await ensureChartSeeded(schoolId);
+
+  const { entryDate, currency, memo, source, lines: rawLines } = req.body as {
+    entryDate: string; currency: string; memo?: string | null; source?: 'manual' | 'opening'; lines: RawLine[];
+  };
+
+  // Each line must be a debit XOR a credit, strictly positive on one side.
+  const lines: PostLine[] = [];
+  let totalDebit = 0, totalCredit = 0;
+  for (const l of rawLines) {
+    const debit = Number(l.debit) || 0;
+    const credit = Number(l.credit) || 0;
+    if ((debit > 0) === (credit > 0)) { res.status(400).json({ error: 'Each line must have either a debit or a credit (not both, not neither)' }); return; }
+    totalDebit += debit; totalCredit += credit;
+    lines.push({ accountId: l.accountId, debit, credit, description: l.description?.trim() || null });
+  }
+  if (Math.round((totalDebit - totalCredit) * 100) !== 0) {
+    res.status(400).json({ error: `Entry does not balance: debits ${totalDebit.toFixed(2)} ≠ credits ${totalCredit.toFixed(2)}` }); return;
+  }
+
+  // Every account must belong to this school and be active.
+  const accountIds = Array.from(new Set(lines.map(l => l.accountId)));
+  const { data: accts } = await supabase
+    .from('chart_of_accounts').select('id, is_active').eq('school_id', schoolId).in('id', accountIds);
+  const okIds = new Set((accts ?? []).filter(a => (a as any).is_active).map(a => (a as any).id));
+  for (const aid of accountIds) {
+    if (!okIds.has(aid)) { res.status(400).json({ error: 'A line references an unknown or inactive account' }); return; }
+  }
+
+  // Period-close guard — the journal-level enforcement that auto-posting got
+  // for free (it always ran downstream of a controller period check).
+  const periodGuard = await assertPeriodOpen(schoolId, [entryDate]);
+  if (!periodGuard.ok) { res.status(periodGuard.status).json({ error: periodGuard.error }); return; }
+
+  const result = await postEntryResult({
+    schoolId, entryDate, currency, source: source === 'opening' ? 'opening' : 'manual',
+    memo: memo?.trim() || (source === 'opening' ? 'Opening balance' : 'Manual entry'),
+    postedBy: userId, lines,
+  });
+  if (!result.ok) { res.status(400).json({ error: result.error }); return; }
+  res.status(201).json({ id: result.entryId });
+}
+
+// ── Opening balances (Phase 4) ──────────────────────────────────────────────
+// One normal-direction amount per account; the difference is plugged into
+// Opening Balance Equity (3000) so the entry balances.
+export async function postOpeningBalances(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId, userId } = req.user!;
+  const guard = await ensurePremium(schoolId);
+  if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
+  await ensureChartSeeded(schoolId);
+
+  const { asOf, currency, memo, balances } = req.body as {
+    asOf?: string; currency: string; memo?: string | null; balances: { accountId: string; amount: number }[];
+  };
+  const entryDate = asOf || new Date().toISOString().slice(0, 10);
+
+  const { data: accts } = await supabase
+    .from('chart_of_accounts').select('id, code, type, is_active').eq('school_id', schoolId);
+  const byId = new Map((accts ?? []).map(a => [(a as any).id, a as any]));
+  const obe = (accts ?? []).find(a => (a as any).code === '3000');
+  if (!obe) { res.status(500).json({ error: 'Opening Balance Equity account (3000) is missing' }); return; }
+
+  const lines: PostLine[] = [];
+  let totalDebit = 0, totalCredit = 0;
+  for (const b of balances) {
+    const amount = Math.round((Number(b.amount) || 0) * 100) / 100;
+    if (amount === 0) continue;
+    const acc = byId.get(b.accountId);
+    if (!acc || !acc.is_active) { res.status(400).json({ error: 'A balance references an unknown or inactive account' }); return; }
+    if (acc.id === (obe as any).id) continue; // never set OBE directly — it's the plug
+    const debitNormal = acc.type === 'asset' || acc.type === 'expense';
+    // Positive amount sits on the account's normal side; negative flips it.
+    const onDebit = debitNormal ? amount > 0 : amount < 0;
+    const mag = Math.abs(amount);
+    if (onDebit) { lines.push({ accountId: acc.id, debit: mag, description: 'Opening balance' }); totalDebit += mag; }
+    else { lines.push({ accountId: acc.id, credit: mag, description: 'Opening balance' }); totalCredit += mag; }
+  }
+  if (lines.length === 0) { res.status(400).json({ error: 'No non-zero opening balances provided' }); return; }
+
+  // Plug the difference into Opening Balance Equity so the entry balances.
+  const diff = Math.round((totalDebit - totalCredit) * 100) / 100;
+  if (diff > 0) lines.push({ accountId: (obe as any).id, credit: diff, description: 'Opening balance equity' });
+  else if (diff < 0) lines.push({ accountId: (obe as any).id, debit: -diff, description: 'Opening balance equity' });
+
+  const periodGuard = await assertPeriodOpen(schoolId, [entryDate]);
+  if (!periodGuard.ok) { res.status(periodGuard.status).json({ error: periodGuard.error }); return; }
+
+  const result = await postEntryResult({
+    schoolId, entryDate, currency, source: 'opening',
+    memo: memo?.trim() || 'Opening balances', postedBy: userId, lines,
+  });
+  if (!result.ok) { res.status(400).json({ error: result.error }); return; }
+  res.status(201).json({ id: result.entryId });
 }

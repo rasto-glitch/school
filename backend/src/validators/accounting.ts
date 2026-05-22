@@ -225,4 +225,46 @@ export const rollupCurrenciesSchema = z.object({
   asOf: isoDate.optional(),
 });
 
+// ── General Ledger (Phase 4) ─────────────────────────────────────────────
+const glAccountType = z.enum(['asset', 'liability', 'equity', 'income', 'expense']);
+export const createGlAccountSchema = z.object({
+  code: nonEmptyStr(20),
+  name: nonEmptyStr(120),
+  type: glAccountType,
+  subtype: optText(40),
+});
+export const updateGlAccountSchema = z.object({
+  name: nonEmptyStr(120).optional(),
+  subtype: optText(40),
+  isActive: z.boolean().optional(),
+}).partial();
+
+// Manual journal entry: shape/bounds only; the controller owns the deeper
+// semantic checks (debit XOR credit per line, debits = credits, accounts
+// belong to the school + active, period open).
+export const manualJournalSchema = z.object({
+  entryDate: isoDate,
+  currency,
+  memo: optText(500),
+  source: z.enum(['manual', 'opening']).optional(),
+  lines: z.array(z.object({
+    accountId: uuid,
+    debit: z.number().finite().min(0).optional(),
+    credit: z.number().finite().min(0).optional(),
+    description: optText(200),
+  })).min(2).max(200),
+});
+
+// Opening balances: one normal-direction amount per account; the backend
+// plugs the difference into Opening Balance Equity to balance.
+export const openingBalancesSchema = z.object({
+  asOf: isoDate.optional(),
+  currency,
+  memo: optText(500),
+  balances: z.array(z.object({
+    accountId: uuid,
+    amount: z.number().finite(),
+  })).min(1).max(500),
+});
+
 export { idParam };
