@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import { Search, FileText } from 'lucide-react';
 import { supervisorApi } from '../../services/api';
@@ -11,6 +12,7 @@ import type { Report, Grade } from '../../types';
 import { format, parseISO, differenceInYears } from 'date-fns';
 
 export default function SupervisorStudentReportsPage() {
+  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const [students, setStudents] = useState<any[]>([]);
   const [selectedStudentId, setSelectedStudentId] = useState(searchParams.get('id') || '');
@@ -66,7 +68,7 @@ export default function SupervisorStudentReportsPage() {
 
   const gradesByPeriod: Record<string, Grade[]> = {};
   for (const g of filteredGrades) {
-    const period = g.gradingPeriod || 'Unknown Term';
+    const period = g.gradingPeriod || t('supervisor.unknown_term');
     if (!gradesByPeriod[period]) gradesByPeriod[period] = [];
     gradesByPeriod[period].push(g);
   }
@@ -97,7 +99,7 @@ export default function SupervisorStudentReportsPage() {
   const picture = s?.profilePicture || s?.profile_picture;
 
   return (
-    <PageLayout title="Student Reports" subtitle="Search a student to view their academic reports and grades">
+    <PageLayout title={t('supervisor.student_reports')} subtitle={t('supervisor.student_reports_subtitle')}>
       <div className="space-y-6">
         {/* Search */}
         <div className="relative max-w-md" ref={searchRef}>
@@ -105,7 +107,7 @@ export default function SupervisorStudentReportsPage() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
             <input
               className="w-full border border-gray-300 rounded-xl pl-10 pr-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent min-h-[44px]"
-              placeholder="Type student name to search…"
+              placeholder={t('supervisor.search_student_ph')}
               value={search}
               onChange={e => { setSearch(e.target.value); setShowDropdown(true); }}
               onFocus={() => { if (search) setShowDropdown(true); }}
@@ -136,15 +138,15 @@ export default function SupervisorStudentReportsPage() {
           )}
           {showDropdown && search.trim() && matchingStudents.length === 0 && (
             <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-20 px-4 py-3">
-              <p className="text-sm text-gray-500">No students found for "{search}"</p>
+              <p className="text-sm text-gray-500">{t('supervisor.no_students_for', { query: search })}</p>
             </div>
           )}
         </div>
 
         {!selectedStudentId && !loading && (
           <EmptyState
-            title="Search for a student"
-            description="Type a student's name above to load their reports and grades."
+            title={t('supervisor.search_student_title')}
+            description={t('supervisor.search_student_desc')}
             icon={<FileText className="w-8 h-8 text-gray-400" />}
           />
         )}
@@ -165,25 +167,25 @@ export default function SupervisorStudentReportsPage() {
                 </div>
                 <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
                   <div>
-                    <span className="font-semibold text-gray-500 block text-xs uppercase">Name</span>
+                    <span className="font-semibold text-gray-500 block text-xs uppercase">{t('common.name')}</span>
                     <span className="text-gray-900 font-medium">{name}</span>
                   </div>
                   {age !== null && (
                     <div>
-                      <span className="font-semibold text-gray-500 block text-xs uppercase">Age</span>
-                      <span className="text-gray-900 font-medium">{age} years</span>
+                      <span className="font-semibold text-gray-500 block text-xs uppercase">{t('supervisor.age')}</span>
+                      <span className="text-gray-900 font-medium">{t('supervisor.age_years', { count: age })}</span>
                     </div>
                   )}
                   <div>
-                    <span className="font-semibold text-gray-500 block text-xs uppercase">Class</span>
+                    <span className="font-semibold text-gray-500 block text-xs uppercase">{t('common.class')}</span>
                     <span className="text-gray-900 font-medium">{className}</span>
                   </div>
                   <div>
-                    <span className="font-semibold text-gray-500 block text-xs uppercase">Parent</span>
+                    <span className="font-semibold text-gray-500 block text-xs uppercase">{t('common.parent')}</span>
                     <span className="text-gray-900 font-medium">{parentName}</span>
                   </div>
                   <div>
-                    <span className="font-semibold text-gray-500 block text-xs uppercase">Contact</span>
+                    <span className="font-semibold text-gray-500 block text-xs uppercase">{t('supervisor.contact')}</span>
                     <span className="text-gray-900 font-medium">{parentPhone}</span>
                   </div>
                 </div>
@@ -193,12 +195,12 @@ export default function SupervisorStudentReportsPage() {
             {/* Grades */}
             <div>
               <div className="flex items-center justify-between mb-4">
-                <h2 className="font-semibold text-gray-900 text-lg">Grades</h2>
+                <h2 className="font-semibold text-gray-900 text-lg">{t('grades.title')}</h2>
                 {gradeYears.length > 1 && (
                   <div className="w-44">
                     <Select
                       options={gradeYears.map(y => ({ value: y, label: y }))}
-                      placeholder="All Years"
+                      placeholder={t('supervisor.all_years')}
                       value={selectedYear}
                       onChange={e => setSelectedYear(e.target.value)}
                     />
@@ -206,7 +208,7 @@ export default function SupervisorStudentReportsPage() {
                 )}
               </div>
               {filteredGrades.length === 0 ? (
-                <Card><p className="text-sm text-gray-500 text-center py-4">No grades recorded.</p></Card>
+                <Card><p className="text-sm text-gray-500 text-center py-4">{t('teacher.no_grades')}</p></Card>
               ) : (
                 <Card>
                   <div className="space-y-5">
@@ -217,8 +219,8 @@ export default function SupervisorStudentReportsPage() {
                           <table className="w-full text-xs border-collapse">
                             <thead>
                               <tr className="bg-gray-50">
-                                {['Subject', 'Daily', 'Quiz', 'Monthly Exam', 'Term Exam', 'Total'].map(h => (
-                                  <th key={h} className={`px-3 py-2 font-medium text-gray-500 border border-gray-200 ${h === 'Subject' ? 'text-left' : 'text-center'}`}>{h}</th>
+                                {[[t('common.subject'),'s'], [t('grades.daily'),'c'], [t('grades.quiz'),'c'], [t('supervisor.monthly_exam'),'c'], [t('supervisor.term_exam'),'c'], [t('common.total'),'c']].map(([h, align]) => (
+                                  <th key={h} className={`px-3 py-2 font-medium text-gray-500 border border-gray-200 ${align === 's' ? 'text-left' : 'text-center'}`}>{h}</th>
                                 ))}
                               </tr>
                             </thead>
@@ -246,8 +248,8 @@ export default function SupervisorStudentReportsPage() {
                     {yearMark && (
                       <div className="flex items-center justify-between bg-indigo-50 rounded-xl px-4 py-3 mt-2">
                         <span className="text-sm text-gray-600">
-                          Full Year Mark{selectedYear && ` — ${selectedYear}`}
-                          {` (${gradePeriods.length} term${gradePeriods.length !== 1 ? 's' : ''})`}
+                          {t('supervisor.full_year_mark')}{selectedYear && ` — ${selectedYear}`}
+                          {` (${t('supervisor.terms_count', { count: gradePeriods.length })})`}
                         </span>
                         <span className="text-xl font-bold text-indigo-600">{yearMark}</span>
                       </div>
@@ -260,18 +262,18 @@ export default function SupervisorStudentReportsPage() {
             {/* Reports */}
             <div>
               <div className="flex items-center justify-between mb-4">
-                <h2 className="font-semibold text-gray-900 text-lg">Reports</h2>
+                <h2 className="font-semibold text-gray-900 text-lg">{t('reports.title')}</h2>
                 <div className="w-48">
                   <Select
                     options={subjects.map(sub => ({ value: sub, label: sub }))}
-                    placeholder="All Subjects"
+                    placeholder={t('common.all_subjects')}
                     value={selectedSubject}
                     onChange={e => setSelectedSubject(e.target.value)}
                   />
                 </div>
               </div>
               {filteredReports.length === 0 ? (
-                <Card><p className="text-sm text-gray-500 text-center py-4">No reports available.</p></Card>
+                <Card><p className="text-sm text-gray-500 text-center py-4">{t('supervisor.no_reports_available')}</p></Card>
               ) : (
                 <div className="space-y-4">
                   {filteredReports.map(r => (
@@ -282,33 +284,33 @@ export default function SupervisorStudentReportsPage() {
                       </div>
                       {r.attendanceNotes && (
                         <div className="mb-3">
-                          <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Attendance</p>
+                          <p className="text-xs font-semibold text-gray-500 uppercase mb-1">{t('reports.attendance')}</p>
                           <p className="text-sm text-gray-700">{r.attendanceNotes}</p>
                         </div>
                       )}
                       {r.behaviorNotes && (
                         <div className="mb-3">
-                          <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Behaviour</p>
+                          <p className="text-xs font-semibold text-gray-500 uppercase mb-1">{t('reports.behavior')}</p>
                           <p className="text-sm text-gray-700">{r.behaviorNotes}</p>
                         </div>
                       )}
                       <div className="grid grid-cols-2 gap-3 mb-3">
                         {r.quizMarks != null && (
                           <div className="bg-blue-50 rounded-xl p-3">
-                            <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Quiz Marks</p>
+                            <p className="text-xs font-semibold text-gray-500 uppercase mb-1">{t('supervisor.quiz_marks')}</p>
                             <p className="text-xl font-bold text-blue-600">{r.quizMarks}</p>
                           </div>
                         )}
                         {r.examMarks != null && (
                           <div className="bg-green-50 rounded-xl p-3">
-                            <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Exam Marks</p>
+                            <p className="text-xs font-semibold text-gray-500 uppercase mb-1">{t('supervisor.exam_marks')}</p>
                             <p className="text-xl font-bold text-green-600">{r.examMarks}</p>
                           </div>
                         )}
                       </div>
                       {r.teacherNotes && (
                         <div className="bg-gray-50 rounded-xl p-3">
-                          <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Teacher's Notes</p>
+                          <p className="text-xs font-semibold text-gray-500 uppercase mb-1">{t('reports.teacher_notes')}</p>
                           <p className="text-sm text-gray-700 leading-relaxed">{r.teacherNotes}</p>
                         </div>
                       )}

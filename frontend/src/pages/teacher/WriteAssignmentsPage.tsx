@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useForm } from 'react-hook-form';
 import { toast } from 'react-toastify';
 import { ClipboardList, Trash2, Paperclip, X } from 'lucide-react';
@@ -13,6 +14,7 @@ import Badge from '../../components/common/Badge';
 import type { Class, Assignment, Student } from '../../types';
 
 export default function WriteAssignmentsPage() {
+  const { t } = useTranslation();
   const { subjectsForClass } = useTeacherProfile();
   const [classes, setClasses] = useState<Class[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
@@ -58,13 +60,13 @@ export default function WriteAssignmentsPage() {
         payload = fd;
       }
       await teacherApi.createAssignment(payload);
-      toast.success('Assignment posted!');
+      toast.success(t('teacher.assignment_posted'));
       reset();
       setAttachedFile(null);
       if (fileRef.current) fileRef.current.value = '';
       teacherApi.getAssignments().then(r => setAssignments(r.data || []));
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to post assignment');
+      toast.error(err.response?.data?.error || t('teacher.post_assignment_failed'));
     } finally {
       setLoading(false);
     }
@@ -79,26 +81,26 @@ export default function WriteAssignmentsPage() {
   };
 
   return (
-    <PageLayout title="Write Assignment">
+    <PageLayout title={t('teacher.write_assignment')}>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
-          <h2 className="font-semibold text-gray-900 mb-4">New Assignment</h2>
+          <h2 className="font-semibold text-gray-900 mb-4">{t('teacher.new_assignment')}</h2>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            <Select label="Class" options={classes.map(c => ({ value: c.id, label: c.name }))} placeholder="Select class" {...register('classId', { required: true })} />
-            <Select label="Student (optional)" options={students.map(s => ({ value: s.id, label: s.fullName }))} placeholder="All students in class" {...register('studentId')} />
+            <Select label={t('common.class')} options={classes.map(c => ({ value: c.id, label: c.name }))} placeholder={t('teacher.select_class')} {...register('classId', { required: true })} />
+            <Select label={t('teacher.student_optional')} options={students.map(s => ({ value: s.id, label: s.fullName }))} placeholder={t('teacher.all_students_in_class')} {...register('studentId')} />
             {subjectOptions.length === 0 ? (
-              <p className="text-sm text-amber-600">You aren't assigned any subject for this class. Ask an admin to add it in Class Management → Curriculum.</p>
+              <p className="text-sm text-amber-600">{t('teacher.no_subject_for_class')}</p>
             ) : (
-              <Select label="Subject" options={subjectOptions.map(s => ({ value: s.name, label: s.name }))} placeholder="Select subject" {...register('subject', { required: true })} />
+              <Select label={t('common.subject')} options={subjectOptions.map(s => ({ value: s.name, label: s.name }))} placeholder={t('teacher.select_subject')} {...register('subject', { required: true })} />
             )}
-            <Input label="Title" placeholder="Assignment title" {...register('title', { required: true })} />
+            <Input label={t('teacher.title_label')} placeholder={t('teacher.assignment_title_ph')} {...register('title', { required: true })} />
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Description</label>
-              <textarea className="input-field min-h-[100px] resize-none" placeholder="Assignment description..." {...register('description')} />
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('common.description')}</label>
+              <textarea className="input-field min-h-[100px] resize-none" placeholder={t('teacher.assignment_desc_ph')} {...register('description')} />
             </div>
-            <Input label="Due Date" type="date" {...register('dueDate')} />
+            <Input label={t('teacher.due_date')} type="date" {...register('dueDate')} />
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Attachment (optional)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('teacher.attachment_optional')}</label>
               <input ref={fileRef} type="file" className="hidden" onChange={e => setAttachedFile(e.target.files?.[0] || null)} />
               {attachedFile ? (
                 <div className="flex items-center gap-2 p-2.5 bg-primary-50 border border-primary-200 rounded-xl text-sm">
@@ -111,19 +113,19 @@ export default function WriteAssignmentsPage() {
               ) : (
                 <button type="button" onClick={() => fileRef.current?.click()}
                   className="flex items-center gap-2 px-3 py-2 border border-dashed border-gray-300 rounded-xl text-sm text-gray-500 hover:border-primary-400 hover:text-primary-600 transition-colors w-full">
-                  <Paperclip className="w-4 h-4" /> Attach a file
+                  <Paperclip className="w-4 h-4" /> {t('teacher.attach_file')}
                 </button>
               )}
             </div>
-            <Button type="submit" loading={loading} fullWidth icon={<ClipboardList className="w-4 h-4" />}>Post Assignment</Button>
+            <Button type="submit" loading={loading} fullWidth icon={<ClipboardList className="w-4 h-4" />}>{t('teacher.post_assignment')}</Button>
           </form>
         </Card>
 
         <Card>
-          <h2 className="font-semibold text-gray-900 mb-4">Posted Assignments ({filteredAssignments.length})</h2>
+          <h2 className="font-semibold text-gray-900 mb-4">{t('teacher.posted_assignments', { count: filteredAssignments.length })}</h2>
           <div className="space-y-2 max-h-[500px] overflow-y-auto">
             {filteredAssignments.length === 0 ? (
-              <p className="text-sm text-gray-500 text-center py-6">No assignments posted yet</p>
+              <p className="text-sm text-gray-500 text-center py-6">{t('teacher.no_assignments_posted')}</p>
             ) : filteredAssignments.map(a => (
               <div key={a.id} className="p-3 bg-gray-50 rounded-xl">
                 <div className="flex justify-between items-start gap-2">
@@ -132,21 +134,21 @@ export default function WriteAssignmentsPage() {
                     <p className="text-xs text-gray-500">{a.subject} · {(a as any).classes?.name || (a as any).classId}</p>
                     {(a as any).students && <p className="text-xs text-gray-400">{(a as any).students.fullName}</p>}
                     <div className="flex items-center gap-2 mt-1">
-                      <Badge color={statusColors[a.submissionStatus] || 'gray'}>{a.submissionStatus}</Badge>
-                      {a.dueDate && <span className="text-xs text-gray-400">Due: {a.dueDate}</span>}
+                      <Badge color={statusColors[a.submissionStatus] || 'gray'}>{t(`assignments.status_${a.submissionStatus}`, { defaultValue: a.submissionStatus })}</Badge>
+                      {a.dueDate && <span className="text-xs text-gray-400">{t('homework.due_label')} {a.dueDate}</span>}
                     </div>
                   </div>
                   <button
                     onClick={async () => {
-                      if (!confirm('Delete this assignment?')) return;
+                      if (!confirm(t('teacher.delete_assignment_confirm'))) return;
                       try {
                         await teacherApi.deleteAssignment(a.id);
-                        toast.success('Assignment deleted');
+                        toast.success(t('teacher.assignment_deleted'));
                         teacherApi.getAssignments().then(r => setAssignments(r.data || []));
-                      } catch { toast.error('Failed to delete'); }
+                      } catch { toast.error(t('teacher.delete_failed')); }
                     }}
                     className="p-1.5 hover:bg-red-50 rounded-lg flex-shrink-0 transition-colors"
-                    title="Delete assignment"
+                    title={t('teacher.delete_assignment')}
                   >
                     <Trash2 className="w-4 h-4 text-red-400" />
                   </button>

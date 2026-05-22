@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'react-toastify';
 import { CheckCircle2, XCircle, Clock, Save, ChevronLeft, ChevronRight } from 'lucide-react';
 import { teacherApi } from '../../services/api';
@@ -28,6 +29,7 @@ function offsetDate(base: string, days: number) {
 }
 
 export default function AttendancePage() {
+  const { t } = useTranslation();
   const [classes, setClasses] = useState<Class[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [selectedClass, setSelectedClass] = useState('');
@@ -71,7 +73,7 @@ export default function AttendancePage() {
       });
       setRecords(init);
     }).catch(() => {
-      toast.error('Failed to load attendance data');
+      toast.error(t('teacher.load_attendance_failed'));
     }).finally(() => setLoadingStudents(false));
   }, [selectedClass, date]);
 
@@ -100,10 +102,10 @@ export default function AttendancePage() {
         date,
         records: Object.values(records),
       });
-      toast.success('Attendance saved. Parents of absent/late students have been notified.');
+      toast.success(t('teacher.attendance_saved'));
       setAlreadySaved(true);
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to save attendance');
+      toast.error(err.response?.data?.error || t('teacher.save_attendance_failed'));
     } finally {
       setSaving(false);
     }
@@ -115,14 +117,14 @@ export default function AttendancePage() {
   );
 
   return (
-    <PageLayout title="Attendance" subtitle="Mark daily attendance for your classes">
+    <PageLayout title={t('teacher.attendance_title')} subtitle={t('teacher.attendance_subtitle')}>
       <div className="space-y-4 max-w-3xl">
         {/* Controls */}
         <Card>
           <div className="flex flex-wrap gap-4 items-end">
             <div className="w-48">
               <Select
-                label="Class"
+                label={t('common.class')}
                 options={classes.map(c => ({ value: c.id, label: c.name }))}
                 value={selectedClass}
                 onChange={e => setSelectedClass(e.target.value)}
@@ -130,7 +132,7 @@ export default function AttendancePage() {
             </div>
             <div className="flex items-end gap-2">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('common.date')}</label>
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() => setDate(d => offsetDate(d, -1))}
@@ -158,10 +160,10 @@ export default function AttendancePage() {
             {students.length > 0 && (
               <div className="flex gap-2 ml-auto">
                 <button onClick={() => markAll('present')} className="text-xs px-3 py-1.5 bg-green-50 text-green-700 hover:bg-green-100 rounded-lg font-medium transition-colors">
-                  All Present
+                  {t('teacher.all_present')}
                 </button>
                 <button onClick={() => markAll('absent')} className="text-xs px-3 py-1.5 bg-red-50 text-red-700 hover:bg-red-100 rounded-lg font-medium transition-colors">
-                  All Absent
+                  {t('teacher.all_absent')}
                 </button>
               </div>
             )}
@@ -171,16 +173,16 @@ export default function AttendancePage() {
           {students.length > 0 && (
             <div className="flex gap-3 mt-4 pt-4 border-t border-gray-100">
               <span className="flex items-center gap-1.5 text-sm text-green-700 bg-green-50 px-3 py-1 rounded-full">
-                <CheckCircle2 className="w-3.5 h-3.5" /> {statusCounts.present || 0} Present
+                <CheckCircle2 className="w-3.5 h-3.5" /> {statusCounts.present || 0} {t('common.present')}
               </span>
               <span className="flex items-center gap-1.5 text-sm text-red-700 bg-red-50 px-3 py-1 rounded-full">
-                <XCircle className="w-3.5 h-3.5" /> {statusCounts.absent || 0} Absent
+                <XCircle className="w-3.5 h-3.5" /> {statusCounts.absent || 0} {t('common.absent')}
               </span>
               <span className="flex items-center gap-1.5 text-sm text-amber-700 bg-amber-50 px-3 py-1 rounded-full">
-                <Clock className="w-3.5 h-3.5" /> {statusCounts.late || 0} Late
+                <Clock className="w-3.5 h-3.5" /> {statusCounts.late || 0} {t('common.late')}
               </span>
               {alreadySaved && (
-                <span className="ml-auto text-xs text-gray-400 italic self-center">Previously saved</span>
+                <span className="ml-auto text-xs text-gray-400 italic self-center">{t('teacher.previously_saved')}</span>
               )}
             </div>
           )}
@@ -190,7 +192,7 @@ export default function AttendancePage() {
         {loadingStudents ? (
           <LoadingSpinner />
         ) : students.length === 0 ? (
-          <Card><p className="text-sm text-gray-400 text-center py-4">No students in this class.</p></Card>
+          <Card><p className="text-sm text-gray-400 text-center py-4">{t('teacher.no_students_in_class')}</p></Card>
         ) : (
           <Card className="p-0 overflow-hidden">
             <div className="divide-y divide-gray-100">
@@ -221,7 +223,7 @@ export default function AttendancePage() {
                               : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                           }`}
                         >
-                          {s.charAt(0).toUpperCase() + s.slice(1)}
+                          {t(`common.${s}`)}
                         </button>
                       ))}
                     </div>
@@ -232,7 +234,7 @@ export default function AttendancePage() {
                         type="text"
                         value={rec.notes}
                         onChange={e => setNotes(student.id, e.target.value)}
-                        placeholder="Note (optional)"
+                        placeholder={t('teacher.note_optional')}
                         className="w-36 text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500"
                       />
                     )}
@@ -245,7 +247,7 @@ export default function AttendancePage() {
 
         {students.length > 0 && (
           <Button fullWidth loading={saving} icon={<Save className="w-4 h-4" />} onClick={onSave}>
-            Save Attendance
+            {t('teacher.save_attendance')}
           </Button>
         )}
       </div>

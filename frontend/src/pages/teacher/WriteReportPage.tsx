@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'react-toastify';
 import { FileText, Plus, Trash2 } from 'lucide-react';
 import { teacherApi } from '../../services/api';
@@ -10,6 +11,7 @@ import Button from '../../components/common/Button';
 import type { Class, Student, MarkType, Mark } from '../../types';
 
 export default function WriteReportPage() {
+  const { t } = useTranslation();
   const { subjectsForClass } = useTeacherProfile();
   const [classes, setClasses] = useState<Class[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
@@ -67,7 +69,7 @@ export default function WriteReportPage() {
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!selectedStudent || !selectedSubject) {
-      toast.error('Please select a student and a subject');
+      toast.error(t('teacher.select_student_subject'));
       return;
     }
     setLoading(true);
@@ -80,49 +82,49 @@ export default function WriteReportPage() {
         teacherNotes,
         marks: marks.map(m => ({ name: m.name, value: parseFloat(String(m.value)) || 0 })),
       });
-      toast.success('Report submitted!');
+      toast.success(t('teacher.report_submitted'));
       setSelectedStudent('');
       setAttendanceNotes('');
       setBehaviorNotes('');
       setTeacherNotes('');
       setMarks([]);
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to submit report');
+      toast.error(err.response?.data?.error || t('teacher.submit_report_failed'));
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <PageLayout title="Write Report" subtitle="Submit student academic reports">
+    <PageLayout title={t('teacher.write_report')} subtitle={t('teacher.write_report_subtitle')}>
       <div className="max-w-xl">
         <Card>
           <div className="flex items-center gap-2 mb-4">
             <FileText className="w-5 h-5 text-purple-600" />
-            <h2 className="font-semibold text-gray-900">New Report</h2>
+            <h2 className="font-semibold text-gray-900">{t('teacher.new_report')}</h2>
           </div>
           <form onSubmit={onSubmit} className="space-y-4">
             <Select
-              label="Class"
+              label={t('common.class')}
               options={classes.map(c => ({ value: c.id, label: c.name }))}
-              placeholder="Select class"
+              placeholder={t('teacher.select_class')}
               value={selectedClass}
               onChange={e => { setSelectedClass(e.target.value); setSelectedStudent(''); }}
             />
             <Select
-              label="Student"
+              label={t('common.student')}
               options={students.map(s => ({ value: s.id, label: s.fullName }))}
-              placeholder="Select student"
+              placeholder={t('teacher.select_student')}
               value={selectedStudent}
               onChange={e => setSelectedStudent(e.target.value)}
             />
             {selectedClass && (subjectOptions.length === 0 ? (
-              <p className="text-sm text-amber-600">You aren't assigned any subject for this class. Ask an admin to add it in Class Management → Curriculum.</p>
+              <p className="text-sm text-amber-600">{t('teacher.no_subject_for_class')}</p>
             ) : (
               <Select
-                label="Subject"
+                label={t('common.subject')}
                 options={subjectOptions.map(s => ({ value: s.name, label: s.name }))}
-                placeholder="Select subject"
+                placeholder={t('teacher.select_subject')}
                 value={selectedSubject}
                 onChange={e => setSelectedSubject(e.target.value)}
               />
@@ -131,26 +133,26 @@ export default function WriteReportPage() {
             {/* Dynamic marks */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-medium text-gray-700">Marks</label>
+                <label className="text-sm font-medium text-gray-700">{t('teacher.marks')}</label>
                 <button
                   type="button"
                   onClick={addMark}
                   className="flex items-center gap-1 text-xs font-medium text-primary-600 hover:text-primary-700 transition-colors"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  Add Mark
+                  {t('teacher.add_mark')}
                 </button>
               </div>
 
               {marks.length === 0 ? (
                 <div className="border-2 border-dashed border-gray-200 rounded-xl p-4 text-center">
-                  <p className="text-sm text-gray-400">No marks added yet.</p>
+                  <p className="text-sm text-gray-400">{t('teacher.no_marks')}</p>
                   <button
                     type="button"
                     onClick={addMark}
                     className="mt-1 text-xs text-primary-600 hover:text-primary-700 font-medium"
                   >
-                    + Add first mark
+                    {t('teacher.add_first_mark')}
                   </button>
                 </div>
               ) : (
@@ -172,7 +174,7 @@ export default function WriteReportPage() {
                           type="text"
                           value={m.name}
                           onChange={e => updateMark(i, 'name', e.target.value)}
-                          placeholder="Mark name"
+                          placeholder={t('teacher.mark_name')}
                           className="input-field flex-1 text-sm"
                         />
                       )}
@@ -197,7 +199,7 @@ export default function WriteReportPage() {
                   {marks.length > 1 && (
                     <div className="flex justify-end pt-1">
                       <span className="text-sm font-semibold text-gray-700">
-                        Total: <span className="text-primary-600">{total.toFixed(1)}</span>
+                        {t('common.total')}: <span className="text-primary-600">{total.toFixed(1)}</span>
                       </span>
                     </div>
                   )}
@@ -206,34 +208,34 @@ export default function WriteReportPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Attendance Notes</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('teacher.attendance_notes')}</label>
               <textarea
                 className="input-field min-h-[80px] resize-none"
                 value={attendanceNotes}
                 onChange={e => setAttendanceNotes(e.target.value)}
-                placeholder="Attendance observations..."
+                placeholder={t('teacher.attendance_notes_ph')}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Behavior Notes</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('teacher.behavior_notes')}</label>
               <textarea
                 className="input-field min-h-[80px] resize-none"
                 value={behaviorNotes}
                 onChange={e => setBehaviorNotes(e.target.value)}
-                placeholder="Behavior observations..."
+                placeholder={t('teacher.behavior_notes_ph')}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Teacher Notes</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('reports.teacher_notes')}</label>
               <textarea
                 className="input-field min-h-[100px] resize-none"
                 value={teacherNotes}
                 onChange={e => setTeacherNotes(e.target.value)}
-                placeholder="Additional notes..."
+                placeholder={t('teacher.additional_notes_ph')}
               />
             </div>
             <Button type="submit" loading={loading} fullWidth icon={<FileText className="w-4 h-4" />}>
-              Submit Report
+              {t('teacher.submit_report')}
             </Button>
           </form>
         </Card>

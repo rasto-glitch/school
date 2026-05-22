@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ClipboardList, Trash2, Calendar, User, GraduationCap } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { supervisorApi } from '../../services/api';
@@ -19,6 +20,7 @@ interface AssignmentItem {
 }
 
 export default function SupervisorAssignmentsPage() {
+  const { t } = useTranslation();
   const [items, setItems] = useState<AssignmentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -26,29 +28,29 @@ export default function SupervisorAssignmentsPage() {
   useEffect(() => {
     supervisorApi.getAssignments()
       .then(r => setItems(r.data || []))
-      .catch(() => toast.error('Failed to load assignments'))
+      .catch(() => toast.error(t('supervisor.load_assignments_failed')))
       .finally(() => setLoading(false));
   }, []);
 
   const handleDelete = async (id: string, title: string) => {
-    if (!window.confirm(`Delete "${title}"? This cannot be undone.`)) return;
+    if (!window.confirm(t('supervisor.delete_confirm', { title }))) return;
     setDeletingId(id);
     try {
       await supervisorApi.deleteAssignment(id);
       setItems(prev => prev.filter(a => a.id !== id));
-      toast.success('Assignment deleted');
+      toast.success(t('supervisor.assignment_deleted'));
     } catch {
-      toast.error('Failed to delete assignment');
+      toast.error(t('supervisor.delete_assignment_failed'));
     } finally {
       setDeletingId(null);
     }
   };
 
   return (
-    <PageLayout title="Assignments" subtitle="All assignments assigned by teachers">
+    <PageLayout title={t('nav.assignments')} subtitle={t('supervisor.assignments_subtitle')}>
       <div className="space-y-3 max-w-3xl">
         {loading ? <LoadingSpinner /> : items.length === 0 ? (
-          <EmptyState icon={<ClipboardList className="w-8 h-8 text-gray-400" />} title="No assignments found" description="No assignments have been created yet." />
+          <EmptyState icon={<ClipboardList className="w-8 h-8 text-gray-400" />} title={t('supervisor.no_assignments')} description={t('supervisor.no_assignments_desc')} />
         ) : items.map(item => (
           <Card key={item.id} className="flex items-start gap-4">
             <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -82,7 +84,7 @@ export default function SupervisorAssignmentsPage() {
                 )}
                 {item.dueDate && (
                   <span className="flex items-center gap-1 text-xs text-amber-600 font-medium">
-                    <Calendar className="w-3 h-3" />Due {new Date(item.dueDate).toLocaleDateString()}
+                    <Calendar className="w-3 h-3" />{t('teacher.due', { date: new Date(item.dueDate).toLocaleDateString() })}
                   </span>
                 )}
               </div>

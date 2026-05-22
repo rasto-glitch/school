@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { ChevronLeft, ChevronRight, CheckCircle2, XCircle, Clock } from 'lucide-react';
@@ -26,6 +27,7 @@ const STATUS_ICONS: Record<AttendanceStatus, React.ElementType> = {
 };
 
 export default function AttendanceOverviewPage() {
+  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const [classes, setClasses] = useState<Class[]>([]);
   const [records, setRecords] = useState<Attendance[]>([]);
@@ -55,11 +57,11 @@ export default function AttendanceOverviewPage() {
   const saveEdit = async (id: string) => {
     try {
       await supervisorApi.updateAttendanceRecord(id, editStatus);
-      toast.success('Attendance updated');
+      toast.success(t('supervisor.attendance_updated'));
       setRecords(prev => prev.map(r => r.id === id ? { ...r, status: editStatus } : r));
       setEditingId(null);
     } catch {
-      toast.error('Failed to update');
+      toast.error(t('supervisor.update_failed'));
     }
   };
 
@@ -68,20 +70,20 @@ export default function AttendanceOverviewPage() {
   }, {} as Record<AttendanceStatus, number>);
 
   return (
-    <PageLayout title="Attendance Overview" subtitle="Browse and correct attendance records by class and date">
+    <PageLayout title={t('supervisor.attendance_overview')} subtitle={t('supervisor.attendance_overview_subtitle')}>
       <div className="space-y-4 max-w-3xl">
         <Card>
           <div className="flex flex-wrap gap-4 items-end">
             <div className="w-48">
               <Select
-                label="Class"
+                label={t('common.class')}
                 options={classes.map(c => ({ value: c.id, label: c.name }))}
                 value={selectedClass}
                 onChange={e => setSelectedClass(e.target.value)}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t('common.date')}</label>
               <div className="flex items-center gap-1">
                 <button onClick={() => setDate(d => offsetDate(d, -1))} className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-50">
                   <ChevronLeft className="w-4 h-4 text-gray-500" />
@@ -100,7 +102,7 @@ export default function AttendanceOverviewPage() {
                 const Icon = STATUS_ICONS[s];
                 return (
                   <span key={s} className={`flex items-center gap-1.5 text-sm px-3 py-1 rounded-full font-medium ${STATUS_STYLES[s]}`}>
-                    <Icon className="w-3.5 h-3.5" /> {counts[s] || 0} {s.charAt(0).toUpperCase() + s.slice(1)}
+                    <Icon className="w-3.5 h-3.5" /> {counts[s] || 0} {t(`common.${s}`)}
                   </span>
                 );
               })}
@@ -109,7 +111,7 @@ export default function AttendanceOverviewPage() {
         </Card>
 
         {loading ? <LoadingSpinner /> : records.length === 0 ? (
-          <Card><p className="text-sm text-gray-400 text-center py-6">No attendance recorded for this class on this date.</p></Card>
+          <Card><p className="text-sm text-gray-400 text-center py-6">{t('supervisor.no_attendance_class_date')}</p></Card>
         ) : (
           <Card className="p-0 overflow-hidden">
             <div className="divide-y divide-gray-100">
@@ -129,21 +131,21 @@ export default function AttendanceOverviewPage() {
                       <div className="flex items-center gap-2">
                         <select value={editStatus} onChange={e => setEditStatus(e.target.value as AttendanceStatus)}
                           className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500">
-                          <option value="present">Present</option>
-                          <option value="absent">Absent</option>
-                          <option value="late">Late</option>
+                          <option value="present">{t('common.present')}</option>
+                          <option value="absent">{t('common.absent')}</option>
+                          <option value="late">{t('common.late')}</option>
                         </select>
-                        <button onClick={() => saveEdit(r.id)} className="text-xs bg-primary-500 text-white px-2.5 py-1.5 rounded-lg font-medium hover:bg-primary-600">Save</button>
-                        <button onClick={() => setEditingId(null)} className="text-xs text-gray-500 hover:text-gray-700">Cancel</button>
+                        <button onClick={() => saveEdit(r.id)} className="text-xs bg-primary-500 text-white px-2.5 py-1.5 rounded-lg font-medium hover:bg-primary-600">{t('common.save')}</button>
+                        <button onClick={() => setEditingId(null)} className="text-xs text-gray-500 hover:text-gray-700">{t('common.cancel')}</button>
                       </div>
                     ) : (
                       <>
                         <span className={`flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full ${STATUS_STYLES[r.status as AttendanceStatus] ?? ''}`}>
                           <Icon className="w-3 h-3" />
-                          {r.status.charAt(0).toUpperCase() + r.status.slice(1)}
+                          {t(`common.${r.status}`)}
                         </span>
                         <button onClick={() => { setEditingId(r.id); setEditStatus(r.status as AttendanceStatus); }}
-                          className="text-xs text-gray-400 hover:text-primary-600 transition-colors">Edit</button>
+                          className="text-xs text-gray-400 hover:text-primary-600 transition-colors">{t('common.edit')}</button>
                       </>
                     )}
                   </div>

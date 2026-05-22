@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Search, User, FileText, Star } from 'lucide-react';
 import { teacherApi } from '../../services/api';
 import { useDebounce } from '../../hooks/useDebounce';
@@ -22,6 +23,7 @@ function totalMarks(marks?: Mark[] | null): number {
 }
 
 export default function StudentsPage() {
+  const { t } = useTranslation();
   const [students, setStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
   const [search, setSearch] = useState('');
@@ -55,19 +57,19 @@ export default function StudentsPage() {
   const closeModal = () => { setSelectedId(null); };
 
   return (
-    <PageLayout title="Students" subtitle="View and manage your students">
+    <PageLayout title={t('nav.students')} subtitle={t('teacher.students_subtitle')}>
       <div className="space-y-4">
         <div className="flex flex-wrap gap-3">
           <div className="flex-1 min-w-48">
-            <Input placeholder="Search students..." icon={<Search className="w-4 h-4" />} value={search} onChange={e => setSearch(e.target.value)} />
+            <Input placeholder={t('teacher.search_students')} icon={<Search className="w-4 h-4" />} value={search} onChange={e => setSearch(e.target.value)} />
           </div>
           <div className="w-48">
-            <Select options={classes.map(c => ({ value: c.id, label: c.name }))} placeholder="All Classes" value={classFilter} onChange={e => setClassFilter(e.target.value)} />
+            <Select options={classes.map(c => ({ value: c.id, label: c.name }))} placeholder={t('common.all_classes')} value={classFilter} onChange={e => setClassFilter(e.target.value)} />
           </div>
         </div>
 
         {loading ? <LoadingSpinner /> : students.length === 0 ? (
-          <EmptyState title="No students found" icon={<User className="w-8 h-8 text-gray-400" />} />
+          <EmptyState title={t('teacher.no_students_found')} icon={<User className="w-8 h-8 text-gray-400" />} />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {students.map(s => (
@@ -82,7 +84,7 @@ export default function StudentsPage() {
                   </div>
                   <div className="min-w-0">
                     <p className="font-semibold text-gray-900 truncate">{s.fullName}</p>
-                    <p className="text-xs text-gray-500">{s.classes?.name || 'No class'}</p>
+                    <p className="text-xs text-gray-500">{s.classes?.name || t('common.no_class')}</p>
                   </div>
                 </div>
               </Card>
@@ -99,21 +101,21 @@ export default function StudentsPage() {
           <div className="space-y-5">
             {/* Basic info — no parent phone */}
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <div><span className="text-gray-500">Class:</span> <span className="font-medium">{brief.student.classes?.name || '—'}</span></div>
-              <div><span className="text-gray-500">Phone:</span> <span className="font-medium">{brief.student.phoneNumber || '—'}</span></div>
-              <div><span className="text-gray-500">Emergency:</span> <span className="font-medium">{brief.student.emergencyContact || '—'}</span></div>
-              <div><span className="text-gray-500">Address:</span> <span className="font-medium">{brief.student.homeAddress || '—'}</span></div>
+              <div><span className="text-gray-500">{t('common.class')}:</span> <span className="font-medium">{brief.student.classes?.name || '—'}</span></div>
+              <div><span className="text-gray-500">{t('teacher.phone_label')}</span> <span className="font-medium">{brief.student.phoneNumber || '—'}</span></div>
+              <div><span className="text-gray-500">{t('teacher.emergency_label')}</span> <span className="font-medium">{brief.student.emergencyContact || '—'}</span></div>
+              <div><span className="text-gray-500">{t('common.address')}:</span> <span className="font-medium">{brief.student.homeAddress || '—'}</span></div>
             </div>
 
             {/* Grades — this teacher's subject only */}
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <Star className="w-4 h-4 text-amber-500" />
-                <h3 className="font-semibold text-gray-900">Grades</h3>
+                <h3 className="font-semibold text-gray-900">{t('grades.title')}</h3>
                 <span className="text-xs text-gray-400">({brief.grades.length})</span>
               </div>
               {brief.grades.length === 0 ? (
-                <p className="text-sm text-gray-400">No grades recorded.</p>
+                <p className="text-sm text-gray-400">{t('teacher.no_grades')}</p>
               ) : (
                 <div className="space-y-2">
                   {brief.grades.map(g => {
@@ -150,11 +152,11 @@ export default function StudentsPage() {
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <FileText className="w-4 h-4 text-purple-600" />
-                <h3 className="font-semibold text-gray-900">Reports</h3>
+                <h3 className="font-semibold text-gray-900">{t('reports.title')}</h3>
                 <span className="text-xs text-gray-400">({brief.reports.length})</span>
               </div>
               {brief.reports.length === 0 ? (
-                <p className="text-sm text-gray-400">No reports submitted.</p>
+                <p className="text-sm text-gray-400">{t('teacher.no_reports')}</p>
               ) : (
                 <div className="space-y-2">
                   {brief.reports.map(r => (
@@ -173,8 +175,8 @@ export default function StudentsPage() {
                           ))}
                         </div>
                       )}
-                      {r.attendanceNotes && <p className="text-xs text-gray-600 mt-1"><span className="text-gray-400">Attendance:</span> {r.attendanceNotes}</p>}
-                      {r.behaviorNotes && <p className="text-xs text-gray-600 mt-1"><span className="text-gray-400">Behavior:</span> {r.behaviorNotes}</p>}
+                      {r.attendanceNotes && <p className="text-xs text-gray-600 mt-1"><span className="text-gray-400">{t('reports.attendance')}:</span> {r.attendanceNotes}</p>}
+                      {r.behaviorNotes && <p className="text-xs text-gray-600 mt-1"><span className="text-gray-400">{t('reports.behavior')}:</span> {r.behaviorNotes}</p>}
                       {r.teacherNotes && <p className="text-xs text-gray-600 mt-1">{r.teacherNotes}</p>}
                     </div>
                   ))}

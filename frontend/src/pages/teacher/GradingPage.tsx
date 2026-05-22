@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'react-toastify';
 import { Star, Plus, Trash2 } from 'lucide-react';
 import { teacherApi } from '../../services/api';
@@ -10,6 +11,7 @@ import Button from '../../components/common/Button';
 import type { Class, Student, MarkType, Mark, Grade, Term } from '../../types';
 
 export default function GradingPage() {
+  const { t } = useTranslation();
   const { subjectsForClass } = useTeacherProfile();
   const [classes, setClasses] = useState<Class[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
@@ -72,7 +74,7 @@ export default function GradingPage() {
   const onSubmit = async (e: { preventDefault(): void }) => {
     e.preventDefault();
     if (!selectedStudent || !selectedSubject) {
-      toast.error('Please select a student and a subject');
+      toast.error(t('teacher.select_student_subject'));
       return;
     }
     setLoading(true);
@@ -84,10 +86,10 @@ export default function GradingPage() {
         gradingPeriod,
         marks: marks.map(m => ({ name: m.name, value: parseFloat(String(m.value)) || 0 })),
       });
-      toast.success('Grade saved!');
+      toast.success(t('teacher.grade_saved'));
       teacherApi.getGrades(selectedStudent).then(r => setGradeSummary(r.data || []));
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to save grade');
+      toast.error(err.response?.data?.error || t('teacher.save_grade_failed'));
     } finally {
       setLoading(false);
     }
@@ -107,50 +109,50 @@ export default function GradingPage() {
   const summaryYears = Object.keys(summaryByYear).sort();
 
   return (
-    <PageLayout title="Grading" subtitle="Enter student grades">
+    <PageLayout title={t('teacher.grading_title')} subtitle={t('teacher.grading_subtitle')}>
       <div className="max-w-xl space-y-6">
         <Card>
           <div className="flex items-center gap-2 mb-4">
             <Star className="w-5 h-5 text-amber-500" />
-            <h2 className="font-semibold text-gray-900">Enter Grade</h2>
+            <h2 className="font-semibold text-gray-900">{t('teacher.enter_grade')}</h2>
           </div>
           <form onSubmit={onSubmit} className="space-y-4">
             <Select
-              label="Class"
+              label={t('common.class')}
               options={classes.map(c => ({ value: c.id, label: c.name }))}
-              placeholder="Select class"
+              placeholder={t('teacher.select_class')}
               value={selectedClass}
               onChange={e => { setSelectedClass(e.target.value); setSelectedStudent(''); }}
             />
             <Select
-              label="Student"
+              label={t('common.student')}
               options={students.map(s => ({ value: s.id, label: s.fullName }))}
-              placeholder="Select student"
+              placeholder={t('teacher.select_student')}
               value={selectedStudent}
               onChange={e => setSelectedStudent(e.target.value)}
             />
             {selectedClass && (subjectOptions.length === 0 ? (
-              <p className="text-sm text-amber-600">You aren't assigned any subject for this class. Ask an admin to add it in Class Management → Curriculum.</p>
+              <p className="text-sm text-amber-600">{t('teacher.no_subject_for_class')}</p>
             ) : (
               <Select
-                label="Subject"
+                label={t('common.subject')}
                 options={subjectOptions.map(s => ({ value: s.name, label: s.name }))}
-                placeholder="Select subject"
+                placeholder={t('teacher.select_subject')}
                 value={selectedSubject}
                 onChange={e => setSelectedSubject(e.target.value)}
               />
             ))}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Academic Year</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('teacher.academic_year')}</label>
                 <div className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-700">
-                  {academicYear || <span className="text-gray-400 italic">Not set</span>}
+                  {academicYear || <span className="text-gray-400 italic">{t('teacher.not_set')}</span>}
                 </div>
               </div>
               <Select
-                label="Term"
-                options={terms.map(t => ({ value: t.name, label: t.name }))}
-                placeholder={terms.length ? 'Select term' : 'No terms configured'}
+                label={t('teacher.term')}
+                options={terms.map(tm => ({ value: tm.name, label: tm.name }))}
+                placeholder={terms.length ? t('teacher.select_term') : t('teacher.no_terms')}
                 value={gradingPeriod}
                 onChange={e => setGradingPeriod(e.target.value)}
               />
@@ -159,26 +161,26 @@ export default function GradingPage() {
             {/* Dynamic marks */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-medium text-gray-700">Marks</label>
+                <label className="text-sm font-medium text-gray-700">{t('teacher.marks')}</label>
                 <button
                   type="button"
                   onClick={addMark}
                   className="flex items-center gap-1 text-xs font-medium text-primary-600 hover:text-primary-700 transition-colors"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  Add Mark
+                  {t('teacher.add_mark')}
                 </button>
               </div>
 
               {marks.length === 0 ? (
                 <div className="border-2 border-dashed border-gray-200 rounded-xl p-4 text-center">
-                  <p className="text-sm text-gray-400">No marks added yet.</p>
+                  <p className="text-sm text-gray-400">{t('teacher.no_marks')}</p>
                   <button
                     type="button"
                     onClick={addMark}
                     className="mt-1 text-xs text-primary-600 hover:text-primary-700 font-medium"
                   >
-                    + Add first mark
+                    {t('teacher.add_first_mark')}
                   </button>
                 </div>
               ) : (
@@ -200,7 +202,7 @@ export default function GradingPage() {
                           type="text"
                           value={m.name}
                           onChange={e => updateMark(i, 'name', e.target.value)}
-                          placeholder="Mark name"
+                          placeholder={t('teacher.mark_name')}
                           className="input-field flex-1 text-sm"
                         />
                       )}
@@ -223,7 +225,7 @@ export default function GradingPage() {
                     </div>
                   ))}
                   <div className="bg-primary-50 rounded-xl p-3 flex items-center justify-between">
-                    <span className="text-sm text-gray-600">Total</span>
+                    <span className="text-sm text-gray-600">{t('common.total')}</span>
                     <span className="text-xl font-bold text-primary-600">{total.toFixed(1)}</span>
                   </div>
                 </div>
@@ -231,7 +233,7 @@ export default function GradingPage() {
             </div>
 
             <Button type="submit" loading={loading} fullWidth icon={<Star className="w-4 h-4" />}>
-              Save Grade
+              {t('teacher.save_grade')}
             </Button>
           </form>
         </Card>
@@ -240,7 +242,7 @@ export default function GradingPage() {
         {summaryYears.length > 0 && (
           <Card>
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">
-              Grade History — {gradeSummary[0]?.subject}
+              {t('teacher.grade_history', { subject: gradeSummary[0]?.subject })}
             </p>
             <div className="space-y-5">
               {summaryYears.map(year => {
@@ -274,7 +276,7 @@ export default function GradingPage() {
                                 ))}
                               </div>
                             ) : (
-                              <span className="text-xs text-gray-400">No marks</span>
+                              <span className="text-xs text-gray-400">{t('teacher.no_marks_short')}</span>
                             )}
                           </div>
                         );

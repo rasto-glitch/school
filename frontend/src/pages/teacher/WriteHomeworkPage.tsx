@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useForm } from 'react-hook-form';
 import { toast } from 'react-toastify';
 import { BookOpen, Paperclip, Trash2 } from 'lucide-react';
@@ -12,6 +13,7 @@ import Button from '../../components/common/Button';
 import type { Class, Homework } from '../../types';
 
 export default function WriteHomeworkPage() {
+  const { t } = useTranslation();
   const { subjectsForClass } = useTeacherProfile();
   const [classes, setClasses] = useState<Class[]>([]);
   const [homework, setHomework] = useState<Homework[]>([]);
@@ -49,12 +51,12 @@ export default function WriteHomeworkPage() {
       } else {
         await teacherApi.createHomework(data);
       }
-      toast.success('Homework posted!');
+      toast.success(t('teacher.homework_posted'));
       reset();
       setFile(null);
       teacherApi.getHomework().then(r => setHomework(r.data || []));
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to post homework');
+      toast.error(err.response?.data?.error || t('teacher.post_homework_failed'));
     } finally {
       setLoading(false);
     }
@@ -63,61 +65,61 @@ export default function WriteHomeworkPage() {
   const filteredHW = selectedClass ? homework.filter(h => h.classId === selectedClass) : homework;
 
   return (
-    <PageLayout title="Write Homework">
+    <PageLayout title={t('teacher.write_homework')}>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Form */}
         <Card>
-          <h2 className="font-semibold text-gray-900 mb-4">New Homework</h2>
+          <h2 className="font-semibold text-gray-900 mb-4">{t('teacher.new_homework')}</h2>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            <Select label="Class" options={classes.map(c => ({ value: c.id, label: c.name }))} placeholder="Select class" {...register('classId', { required: true })} />
+            <Select label={t('common.class')} options={classes.map(c => ({ value: c.id, label: c.name }))} placeholder={t('teacher.select_class')} {...register('classId', { required: true })} />
             {subjectOptions.length === 0 ? (
-              <p className="text-sm text-amber-600">You aren't assigned any subject for this class. Ask an admin to add it in Class Management → Curriculum.</p>
+              <p className="text-sm text-amber-600">{t('teacher.no_subject_for_class')}</p>
             ) : (
-              <Select label="Subject" options={subjectOptions.map(s => ({ value: s.name, label: s.name }))} placeholder="Select subject" {...register('subject', { required: true })} />
+              <Select label={t('common.subject')} options={subjectOptions.map(s => ({ value: s.name, label: s.name }))} placeholder={t('teacher.select_subject')} {...register('subject', { required: true })} />
             )}
-            <Input label="Title" placeholder="Homework title" {...register('title', { required: true })} />
+            <Input label={t('teacher.title_label')} placeholder={t('teacher.homework_title_ph')} {...register('title', { required: true })} />
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Description</label>
-              <textarea className="input-field min-h-[100px] resize-none" placeholder="Homework description..." {...register('description')} />
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('common.description')}</label>
+              <textarea className="input-field min-h-[100px] resize-none" placeholder={t('teacher.homework_desc_ph')} {...register('description')} />
             </div>
-            <Input label="Due Date" type="date" {...register('dueDate')} />
+            <Input label={t('teacher.due_date')} type="date" {...register('dueDate')} />
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Attachment (optional)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('teacher.attachment_optional')}</label>
               <label className="flex items-center gap-2 cursor-pointer border-2 border-dashed border-gray-300 rounded-xl p-4 hover:border-primary-400 transition-colors">
                 <Paperclip className="w-5 h-5 text-gray-400" />
-                <span className="text-sm text-gray-500">{file ? file.name : 'Click to attach file'}</span>
+                <span className="text-sm text-gray-500">{file ? file.name : t('teacher.click_attach')}</span>
                 <input type="file" className="hidden" onChange={e => setFile(e.target.files?.[0] || null)} accept=".pdf,.doc,.docx,.jpg,.png" />
               </label>
             </div>
-            <Button type="submit" loading={loading} fullWidth icon={<BookOpen className="w-4 h-4" />}>Post Homework</Button>
+            <Button type="submit" loading={loading} fullWidth icon={<BookOpen className="w-4 h-4" />}>{t('teacher.post_homework')}</Button>
           </form>
         </Card>
 
         {/* Current homework */}
         <Card>
-          <h2 className="font-semibold text-gray-900 mb-4">Posted Homework ({filteredHW.length})</h2>
+          <h2 className="font-semibold text-gray-900 mb-4">{t('teacher.posted_homework', { count: filteredHW.length })}</h2>
           <div className="space-y-2 max-h-[500px] overflow-y-auto">
             {filteredHW.length === 0 ? (
-              <p className="text-sm text-gray-500 text-center py-6">No homework posted yet</p>
+              <p className="text-sm text-gray-500 text-center py-6">{t('teacher.no_homework_posted')}</p>
             ) : filteredHW.map(hw => (
               <div key={hw.id} className="p-3 bg-gray-50 rounded-xl">
                 <div className="flex justify-between items-start gap-2">
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-gray-900 truncate">{hw.title}</p>
                     <p className="text-xs text-gray-500">{hw.subject} · {hw.classes?.name}</p>
-                    {hw.dueDate && <p className="text-xs text-gray-400">Due: {hw.dueDate}</p>}
+                    {hw.dueDate && <p className="text-xs text-gray-400">{t('homework.due_label')} {hw.dueDate}</p>}
                   </div>
                   <button
                     onClick={async () => {
-                      if (!confirm('Delete this homework?')) return;
+                      if (!confirm(t('teacher.delete_homework_confirm'))) return;
                       try {
                         await teacherApi.deleteHomework(hw.id);
-                        toast.success('Homework deleted');
+                        toast.success(t('teacher.homework_deleted'));
                         teacherApi.getHomework().then(r => setHomework(r.data || []));
-                      } catch { toast.error('Failed to delete'); }
+                      } catch { toast.error(t('teacher.delete_failed')); }
                     }}
                     className="p-1.5 hover:bg-red-50 rounded-lg flex-shrink-0 transition-colors"
-                    title="Delete homework"
+                    title={t('teacher.delete_homework')}
                   >
                     <Trash2 className="w-4 h-4 text-red-400" />
                   </button>

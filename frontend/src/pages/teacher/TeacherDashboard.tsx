@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { BookOpen, ClipboardList, FileText, Star, Clock, Users } from 'lucide-react';
 import { teacherApi } from '../../services/api';
@@ -9,6 +10,7 @@ import LoadingSpinner from '../../components/common/LoadingSpinner';
 import type { Homework, Class } from '../../types';
 
 export default function TeacherDashboard() {
+  const { t } = useTranslation();
   const { user } = useAuthStore();
   const [recentHW, setRecentHW] = useState<Homework[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
@@ -24,23 +26,23 @@ export default function TeacherDashboard() {
   }, []);
 
   const actions = [
-    { to: '/teacher/homework', icon: BookOpen, label: 'Write Homework', color: 'bg-blue-50 text-blue-600' },
-    { to: '/teacher/assignments', icon: ClipboardList, label: 'Write Assignment', color: 'bg-green-50 text-green-600' },
-    { to: '/teacher/reports', icon: FileText, label: 'Write Report', color: 'bg-purple-50 text-purple-600' },
-    { to: '/teacher/grades', icon: Star, label: 'Enter Grades', color: 'bg-amber-50 text-amber-600' },
-    { to: '/teacher/weekly-summary', icon: Clock, label: 'Weekly Summary', color: 'bg-pink-50 text-pink-600' },
-    { to: '/teacher/students', icon: Users, label: 'My Students', color: 'bg-teal-50 text-teal-600' },
+    { to: '/teacher/homework', icon: BookOpen, label: t('teacher.write_homework'), color: 'bg-blue-50 text-blue-600' },
+    { to: '/teacher/assignments', icon: ClipboardList, label: t('teacher.write_assignment'), color: 'bg-green-50 text-green-600' },
+    { to: '/teacher/reports', icon: FileText, label: t('teacher.write_report'), color: 'bg-purple-50 text-purple-600' },
+    { to: '/teacher/grades', icon: Star, label: t('teacher.enter_grades'), color: 'bg-amber-50 text-amber-600' },
+    { to: '/teacher/weekly-summary', icon: Clock, label: t('teacher.weekly_summary'), color: 'bg-pink-50 text-pink-600' },
+    { to: '/teacher/students', icon: Users, label: t('teacher.my_students'), color: 'bg-teal-50 text-teal-600' },
   ];
 
-  if (loading) return <PageLayout title="Dashboard"><LoadingSpinner /></PageLayout>;
+  if (loading) return <PageLayout title={t('nav.dashboard')}><LoadingSpinner /></PageLayout>;
 
   return (
-    <PageLayout title="Dashboard" subtitle={`Welcome, ${user?.firstName}!`}>
+    <PageLayout title={t('nav.dashboard')} subtitle={t('teacher.welcome', { name: user?.firstName })}>
       <div className="space-y-6">
         {/* Classes */}
         {classes.length > 0 && (
           <div>
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">My Classes</h2>
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">{t('teacher.my_classes')}</h2>
             <div className="flex flex-wrap gap-2">
               {classes.map(c => (
                 <span key={c.id} className="px-3 py-1.5 bg-primary-50 text-primary-700 rounded-xl text-sm font-medium">{c.name}</span>
@@ -51,7 +53,7 @@ export default function TeacherDashboard() {
 
         {/* Quick actions */}
         <div>
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Quick Actions</h2>
+          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">{t('teacher.quick_actions')}</h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             {actions.map(({ to, icon: Icon, label, color }) => (
               <Link key={to} to={to}>
@@ -69,7 +71,7 @@ export default function TeacherDashboard() {
         {/* Recent homework */}
         {recentHW.length > 0 && (
           <Card>
-            <h2 className="font-semibold text-gray-900 mb-3">Recently Posted Homework</h2>
+            <h2 className="font-semibold text-gray-900 mb-3">{t('teacher.recent_homework')}</h2>
             <div className="space-y-2">
               {recentHW.map(hw => (
                 <div key={hw.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
@@ -77,7 +79,7 @@ export default function TeacherDashboard() {
                     <p className="text-sm font-medium text-gray-900">{hw.title}</p>
                     <p className="text-xs text-gray-500">{hw.subject} · {hw.classes?.name}</p>
                   </div>
-                  {hw.dueDate && <span className="text-xs text-gray-400">Due {hw.dueDate}</span>}
+                  {hw.dueDate && <span className="text-xs text-gray-400">{t('teacher.due', { date: hw.dueDate })}</span>}
                 </div>
               ))}
             </div>

@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { Bell, Check, CheckCheck } from 'lucide-react';
 import { supervisorApi } from '../../services/api';
@@ -10,11 +11,11 @@ import LoadingSpinner from '../../components/common/LoadingSpinner';
 import type { Notification } from '../../types';
 import { format, parseISO, isToday, isYesterday } from 'date-fns';
 
-function groupByDate(notifications: Notification[]) {
+function groupByDate(notifications: Notification[], t: (key: string) => string) {
   const groups: Record<string, Notification[]> = {};
   for (const n of notifications) {
     const d = parseISO(n.createdAt);
-    const label = isToday(d) ? 'Today' : isYesterday(d) ? 'Yesterday' : format(d, 'MMMM d, yyyy');
+    const label = isToday(d) ? t('common.today') : isYesterday(d) ? t('common.yesterday') : format(d, 'MMMM d, yyyy');
     if (!groups[label]) groups[label] = [];
     groups[label].push(n);
   }
@@ -22,6 +23,7 @@ function groupByDate(notifications: Notification[]) {
 }
 
 export default function SupervisorNotificationsPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const {
     items: notifications, setItems, loading, loadingMore, loadMore,
@@ -61,7 +63,7 @@ export default function SupervisorNotificationsPage() {
     }
   };
 
-  const groups = groupByDate(notifications);
+  const groups = groupByDate(notifications, t);
   const unreadCount = notifications.filter(n => !n.isRead).length;
   const entries = Object.entries(groups);
   const groupLabels = entries.map(([label]) => label);
@@ -69,16 +71,16 @@ export default function SupervisorNotificationsPage() {
   const flat = entries.flatMap(([, items]) => items);
 
   return (
-    <PageLayout title="Notifications" subtitle={unreadCount > 0 ? `${unreadCount} unread` : 'All caught up!'}>
+    <PageLayout title={t('nav.notifications')} subtitle={unreadCount > 0 ? t('notifications.unread', { count: unreadCount }) : t('notifications.all_caught_up')}>
       {unreadCount > 0 && (
         <div className="flex justify-end mb-4">
           <button onClick={markAllRead} className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-primary-600 hover:bg-primary-50 rounded-lg transition-colors">
-            <CheckCheck className="w-4 h-4" /> Mark all read
+            <CheckCheck className="w-4 h-4" /> {t('notifications.mark_all_read')}
           </button>
         </div>
       )}
       {loading ? <LoadingSpinner /> : notifications.length === 0 ? (
-        <EmptyState title="No notifications" icon={<Bell className="w-8 h-8 text-gray-400" />} />
+        <EmptyState title={t('notifications.none')} icon={<Bell className="w-8 h-8 text-gray-400" />} />
       ) : (
         <GroupedVirtuoso
           useWindowScroll
@@ -86,7 +88,7 @@ export default function SupervisorNotificationsPage() {
           endReached={loadMore}
           components={{
             Footer: () => loadingMore
-              ? <p className="py-3 text-center text-sm text-gray-400">Loading…</p>
+              ? <p className="py-3 text-center text-sm text-gray-400">{t('common.loading_more')}</p>
               : null,
           }}
           groupContent={(index) => (

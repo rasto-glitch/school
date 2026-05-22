@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Clock, CheckCircle, XCircle, PlayCircle, StopCircle } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { supervisorApi } from '../../services/api';
@@ -40,6 +41,7 @@ interface TeacherStatus {
 }
 
 export default function SupervisorWeeklySummaryPage() {
+  const { t } = useTranslation();
   const [period, setPeriod] = useState<Period | null | undefined>(undefined); // undefined = loading
   const [openStart, setOpenStart] = useState('');
   const [openEnd, setOpenEnd] = useState('');
@@ -86,31 +88,31 @@ export default function SupervisorWeeklySummaryPage() {
   }, [classFilter, subjectFilter, weekFilter]);
 
   const handleOpenPeriod = async () => {
-    if (!openStart || !openEnd) { toast.error('Select both start and end dates'); return; }
-    if (openEnd < openStart) { toast.error('End date must be after start date'); return; }
+    if (!openStart || !openEnd) { toast.error(t('supervisor.select_dates')); return; }
+    if (openEnd < openStart) { toast.error(t('supervisor.end_after_start')); return; }
     setOpeningPeriod(true);
     try {
       const res = await supervisorApi.openPeriod(openStart, openEnd);
       setPeriod(res.data);
       setOpenStart('');
       setOpenEnd('');
-      toast.success('Summary period opened — teachers can now submit');
+      toast.success(t('supervisor.period_opened'));
     } catch {
-      toast.error('Failed to open period');
+      toast.error(t('supervisor.open_period_failed'));
     } finally {
       setOpeningPeriod(false);
     }
   };
 
   const handleClosePeriod = async () => {
-    if (!confirm('Close the current period? Teachers will no longer be able to submit.')) return;
+    if (!confirm(t('supervisor.close_confirm'))) return;
     setClosingPeriod(true);
     try {
       await supervisorApi.closePeriod();
       setPeriod(null);
-      toast.success('Period closed');
+      toast.success(t('supervisor.period_closed'));
     } catch {
-      toast.error('Failed to close period');
+      toast.error(t('supervisor.close_period_failed'));
     } finally {
       setClosingPeriod(false);
     }
@@ -124,13 +126,13 @@ export default function SupervisorWeeklySummaryPage() {
   });
 
   return (
-    <PageLayout title="Weekly Summary" subtitle="Teacher weekly curriculum submissions">
+    <PageLayout title={t('supervisor.weekly_summary')} subtitle={t('supervisor.weekly_summary_subtitle')}>
       <div className="space-y-4">
 
         {/* ── Active Period Card ── */}
         <Card className="p-5">
           <h2 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
-            <Clock className="w-4 h-4" /> Submission Period
+            <Clock className="w-4 h-4" /> {t('supervisor.submission_period')}
           </h2>
           {period === undefined ? (
             <div className="h-8 flex items-center"><div className="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
@@ -138,27 +140,27 @@ export default function SupervisorWeeklySummaryPage() {
             <div className="flex items-center justify-between flex-wrap gap-3">
               <div>
                 <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-green-700 bg-green-50 px-2.5 py-1 rounded-full mb-2">
-                  <span className="w-1.5 h-1.5 bg-green-500 rounded-full" /> Open
+                  <span className="w-1.5 h-1.5 bg-green-500 rounded-full" /> {t('supervisor.open')}
                 </span>
                 <p className="text-sm text-gray-800 font-medium">
                   {format(parseISO(period.weekStartDate), 'MMM d')} — {format(parseISO(period.weekEndDate), 'MMM d, yyyy')}
                 </p>
-                <p className="text-xs text-gray-400 mt-0.5">Teachers can submit their weekly summary</p>
+                <p className="text-xs text-gray-400 mt-0.5">{t('supervisor.teachers_can_submit')}</p>
               </div>
               <button
                 onClick={handleClosePeriod}
                 disabled={closingPeriod}
                 className="flex items-center gap-1.5 text-sm font-semibold text-red-600 border border-red-200 hover:bg-red-50 px-3 py-2 rounded-xl transition-colors disabled:opacity-50"
               >
-                <StopCircle className="w-4 h-4" /> Close Period
+                <StopCircle className="w-4 h-4" /> {t('supervisor.close_period')}
               </button>
             </div>
           ) : (
             <div className="space-y-3">
-              <p className="text-sm text-gray-500">No active period. Open one to allow teachers to submit.</p>
+              <p className="text-sm text-gray-500">{t('supervisor.no_period_open')}</p>
               <div className="flex flex-wrap items-end gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Week Start</label>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">{t('supervisor.week_start')}</label>
                   <input
                     type="date"
                     value={openStart}
@@ -167,7 +169,7 @@ export default function SupervisorWeeklySummaryPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1">Week End</label>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">{t('supervisor.week_end')}</label>
                   <input
                     type="date"
                     value={openEnd}
@@ -176,7 +178,7 @@ export default function SupervisorWeeklySummaryPage() {
                   />
                 </div>
                 <Button onClick={handleOpenPeriod} loading={openingPeriod} icon={<PlayCircle className="w-4 h-4" />}>
-                  Open Period
+                  {t('supervisor.open_period')}
                 </Button>
               </div>
             </div>
@@ -186,13 +188,13 @@ export default function SupervisorWeeklySummaryPage() {
         {/* ── Filters ── */}
         <div className="flex flex-wrap gap-3">
           <div className="w-48">
-            <Select label="Class / Grade" options={classes.map(c => ({ value: c.id, label: c.name }))} placeholder="All Classes" value={classFilter} onChange={e => setClassFilter(e.target.value)} />
+            <Select label={t('supervisor.class_grade')} options={classes.map(c => ({ value: c.id, label: c.name }))} placeholder={t('common.all_classes')} value={classFilter} onChange={e => setClassFilter(e.target.value)} />
           </div>
           <div className="w-44">
-            <Select label="Subject" options={subjects.map(s => ({ value: s, label: s }))} placeholder="All Subjects" value={subjectFilter} onChange={e => setSubjectFilter(e.target.value)} />
+            <Select label={t('common.subject')} options={subjects.map(s => ({ value: s, label: s }))} placeholder={t('common.all_subjects')} value={subjectFilter} onChange={e => setSubjectFilter(e.target.value)} />
           </div>
           <div className="w-44">
-            <Input label="Week Starting" type="date" value={weekFilter} onChange={e => setWeekFilter(e.target.value)} />
+            <Input label={t('supervisor.week_starting')} type="date" value={weekFilter} onChange={e => setWeekFilter(e.target.value)} />
           </div>
         </div>
 
@@ -200,21 +202,21 @@ export default function SupervisorWeeklySummaryPage() {
         {statusList.length > 0 && (
           <Card className="p-0 overflow-hidden">
             <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
-              <h2 className="font-semibold text-gray-900">Submission Status</h2>
+              <h2 className="font-semibold text-gray-900">{t('supervisor.submission_status')}</h2>
               <span className="text-xs text-gray-500">
-                {statusList.filter(t => t.submitted).length} / {statusList.length} submitted
+                {t('supervisor.submitted_count', { done: statusList.filter(s => s.submitted).length, total: statusList.length })}
               </span>
             </div>
             <div className="divide-y divide-gray-50">
-              {statusList.map(t => (
-                <div key={t.id} className="flex items-center justify-between px-4 py-2.5">
+              {statusList.map(st => (
+                <div key={st.id} className="flex items-center justify-between px-4 py-2.5">
                   <div>
-                    <p className="text-sm font-medium text-gray-900">{t.fullName}</p>
-                    {t.subject && <p className="text-xs text-gray-400">{t.subject}</p>}
+                    <p className="text-sm font-medium text-gray-900">{st.fullName}</p>
+                    {st.subject && <p className="text-xs text-gray-400">{st.subject}</p>}
                   </div>
-                  {t.submitted
-                    ? <span className="flex items-center gap-1 text-xs font-medium text-green-600"><CheckCircle className="w-4 h-4" /> Submitted</span>
-                    : <span className="flex items-center gap-1 text-xs font-medium text-red-400"><XCircle className="w-4 h-4" /> Not submitted</span>
+                  {st.submitted
+                    ? <span className="flex items-center gap-1 text-xs font-medium text-green-600"><CheckCircle className="w-4 h-4" /> {t('supervisor.submitted')}</span>
+                    : <span className="flex items-center gap-1 text-xs font-medium text-red-400"><XCircle className="w-4 h-4" /> {t('supervisor.not_submitted')}</span>
                   }
                 </div>
               ))}
@@ -225,8 +227,8 @@ export default function SupervisorWeeklySummaryPage() {
         {/* ── Summaries Table ── */}
         {loading ? <LoadingSpinner /> : summaries.length === 0 ? (
           <EmptyState
-            title="No weekly summaries found"
-            description="Teachers haven't submitted summaries for the selected filters yet."
+            title={t('supervisor.no_summaries')}
+            description={t('supervisor.no_summaries_desc')}
             icon={<Clock className="w-8 h-8 text-gray-400" />}
           />
         ) : (
@@ -236,14 +238,14 @@ export default function SupervisorWeeklySummaryPage() {
                 <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
                   <h2 className="font-semibold text-gray-900">{className}</h2>
                   {weekFilter && (
-                    <p className="text-xs text-gray-500">Week of {format(parseISO(weekFilter), 'MMMM d, yyyy')}</p>
+                    <p className="text-xs text-gray-500">{t('supervisor.week_of', { date: format(parseISO(weekFilter), 'MMMM d, yyyy') })}</p>
                   )}
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-gray-100">
-                        {['Subject', 'Unit', 'Lessons', 'Pages', 'Homework Reminder', 'Teacher'].map(h => (
+                        {[t('common.subject'), t('teacher.unit'), t('teacher.lessons'), t('teacher.pages'), t('teacher.homework_reminder'), t('supervisor.teacher_col')].map(h => (
                           <th key={h} className="text-left px-4 py-3 font-semibold text-gray-600 bg-white">{h}</th>
                         ))}
                       </tr>

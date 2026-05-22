@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { Users, CheckCircle2, XCircle, Clock, ChevronRight } from 'lucide-react';
 import { supervisorApi } from '../../services/api';
@@ -17,6 +18,7 @@ interface ClassSummary {
 }
 
 export default function SupervisorDashboard() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [summary, setSummary] = useState<ClassSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -35,15 +37,15 @@ export default function SupervisorDashboard() {
   );
 
   return (
-    <PageLayout title="Supervisor Dashboard" subtitle={today}>
+    <PageLayout title={t('supervisor.dashboard_title')} subtitle={today}>
       <div className="space-y-6">
         {/* Totals */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           {[
-            { label: 'Total Marked', value: totals.total, icon: Users, color: 'text-gray-700', bg: 'bg-gray-100' },
-            { label: 'Present', value: totals.present, icon: CheckCircle2, color: 'text-green-700', bg: 'bg-green-100' },
-            { label: 'Absent', value: totals.absent, icon: XCircle, color: 'text-red-700', bg: 'bg-red-100' },
-            { label: 'Late', value: totals.late, icon: Clock, color: 'text-amber-700', bg: 'bg-amber-100' },
+            { label: t('supervisor.total_marked'), value: totals.total, icon: Users, color: 'text-gray-700', bg: 'bg-gray-100' },
+            { label: t('common.present'), value: totals.present, icon: CheckCircle2, color: 'text-green-700', bg: 'bg-green-100' },
+            { label: t('common.absent'), value: totals.absent, icon: XCircle, color: 'text-red-700', bg: 'bg-red-100' },
+            { label: t('common.late'), value: totals.late, icon: Clock, color: 'text-amber-700', bg: 'bg-amber-100' },
           ].map(({ label, value, icon: Icon, color, bg }) => (
             <Card key={label} className="flex items-center gap-3">
               <div className={`p-2.5 rounded-xl ${bg} flex-shrink-0`}>
@@ -66,9 +68,9 @@ export default function SupervisorDashboard() {
               <XCircle className="w-5 h-5 text-red-600" />
               <div className="text-left">
                 <p className="text-sm font-semibold text-red-800">
-                  {totals.absent + totals.late} student{totals.absent + totals.late !== 1 ? 's' : ''} absent or late today
+                  {t('supervisor.absent_late_today', { count: totals.absent + totals.late })}
                 </p>
-                <p className="text-xs text-red-600">Tap to view details and contact parents</p>
+                <p className="text-xs text-red-600">{t('supervisor.tap_details')}</p>
               </div>
             </div>
             <ChevronRight className="w-4 h-4 text-red-500" />
@@ -77,9 +79,9 @@ export default function SupervisorDashboard() {
 
         {/* Per-class breakdown */}
         <Card>
-          <h2 className="font-semibold text-gray-900 mb-4">Today's Attendance by Class</h2>
+          <h2 className="font-semibold text-gray-900 mb-4">{t('supervisor.today_attendance')}</h2>
           {loading ? <LoadingSpinner /> : summary.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-6">No attendance has been marked today.</p>
+            <p className="text-sm text-gray-400 text-center py-6">{t('supervisor.no_attendance_today')}</p>
           ) : (
             <div className="divide-y divide-gray-100">
               {summary.map(cls => (
@@ -90,7 +92,7 @@ export default function SupervisorDashboard() {
                 >
                   <div className="flex-1 text-left">
                     <p className="text-sm font-semibold text-gray-900">{cls.name}</p>
-                    {cls.gradeLevel && <p className="text-xs text-gray-400">Grade {cls.gradeLevel}</p>}
+                    {cls.gradeLevel && <p className="text-xs text-gray-400">{t('common.grade')} {cls.gradeLevel}</p>}
                   </div>
                   <div className="flex gap-3 text-xs">
                     <span className="text-green-700 font-semibold">{cls.present}P</span>
@@ -98,7 +100,7 @@ export default function SupervisorDashboard() {
                     <span className="text-amber-700 font-semibold">{cls.late}L</span>
                   </div>
                   {cls.total === 0 && (
-                    <span className="text-xs text-gray-400 italic">Not marked</span>
+                    <span className="text-xs text-gray-400 italic">{t('supervisor.not_marked')}</span>
                   )}
                   <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
                 </button>
