@@ -91,7 +91,7 @@ function PostCard({ post, onPress, onToggleLike, onToggleSave, onPressComment }:
         </View>
         {post.author_role === 'supervisor' && (
           <View style={[styles.badge, { backgroundColor: '#FEF3C7' }]}>
-            <Text style={[styles.badgeText, { color: '#92400E' }]}>School-wide</Text>
+            <Text style={[styles.badgeText, { color: '#92400E' }]}>{t('learn.school_wide')}</Text>
           </View>
         )}
       </View>

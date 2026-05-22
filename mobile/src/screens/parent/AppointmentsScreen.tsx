@@ -77,7 +77,7 @@ export default function AppointmentsScreen() {
       load();
       Alert.alert('✓', t('appointments.toast_success'));
     } catch {
-      Alert.alert('Error', t('appointments.toast_error'));
+      Alert.alert(t('common.error'), t('appointments.toast_error'));
     } finally {
       setSubmitting(false);
     }

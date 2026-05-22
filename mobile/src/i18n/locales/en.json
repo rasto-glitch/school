@@ -42,6 +42,8 @@
     "admin_sent_note": "Your school administrator has been notified. They will reset your password and contact you."
   },
   "nav": {
+    "parent": "Parent",
+    "children": "Children",
     "dashboard": "Dashboard",
     "homework": "Homework",
     "assignments": "Assignments",
@@ -62,6 +64,21 @@
     "logout": "Logout"
   },
   "common": {
+    "day": "Day",
+    "overdue": "Overdue",
+    "see_all": "See all",
+    "failed": "Failed",
+    "ok": "OK",
+    "school": "School",
+    "days": {
+      "sunday": "Sunday",
+      "monday": "Monday",
+      "tuesday": "Tuesday",
+      "wednesday": "Wednesday",
+      "thursday": "Thursday",
+      "friday": "Friday",
+      "saturday": "Saturday"
+    },
     "search": "Search",
     "save": "Save",
     "cancel": "Cancel",
@@ -83,6 +100,7 @@
     "portal": "{{role}} Portal"
   },
   "learn": {
+    "school_wide": "School-wide",
     "tab_ebooks": "E-Books",
     "tab_posts": "Posts",
     "tab_saved": "Saved",
@@ -202,7 +220,9 @@
     "report": "Report",
     "report_title": "Report an issue",
     "report_body": "Describe a problem with this bus or driver and our team will follow up.",
-    "report_send": "Send"
+    "report_send": "Send",
+    "map_unavailable": "Map unavailable on this device",
+    "map_key_required": "Google Maps API key required for Android"
   },
   "appointments": {
     "title": "Appointments",
@@ -262,6 +282,10 @@
     "insurance_withheld": "Insurance: {{ins}} · Net: {{net}}"
   },
   "settings": {
+    "unknown_error": "Unknown error",
+    "change_failed": "Failed to change password.",
+    "reset_request_failed": "Could not send reset request.",
+    "reset_email_failed": "Could not send reset email.",
     "notifications_section": "Notifications",
     "push_label": "Push Notifications",
     "push_enabled": "Enabled",
@@ -373,7 +397,66 @@
   },
   "profile": {
     "title": "Profile",
-    "subtitle": "Your account information"
+    "subtitle": "Your account information",
+    "full_name": "Full Name",
+    "username": "Username",
+    "role": "Role",
+    "school": "School",
+    "photo_perm_title": "Permission required",
+    "photo_perm_body": "Please allow photo access in settings.",
+    "upload_failed_title": "Upload failed",
+    "upload_failed_body": "Could not update profile picture."
+  },
+  "schedule": {
+    "title": "Schedule",
+    "me_subtitle": "See your child's weekly classes",
+    "whole_week": "Whole week",
+    "no_classes_today": "No classes scheduled for {{day}}.",
+    "none_published": "No schedule has been published for this class yet.",
+    "period_short": "P{{n}}"
+  },
+  "detail": {
+    "due_date": "Due date",
+    "description": "Description",
+    "attachment": "Attachment",
+    "downloading": "Downloading…",
+    "download": "Download",
+    "pdf_document": "PDF Document",
+    "tap_to_open_viewer": "Tap to open in viewer",
+    "tap_to_open": "Tap to open",
+    "open": "Open",
+    "open_link": "Open Link",
+    "download_attachment": "Download Attachment",
+    "student": "Student: {{name}}",
+    "posted": "Posted {{date}}",
+    "status_pending": "Pending",
+    "status_submitted": "Submitted",
+    "status_graded": "Graded"
+  },
+  "tuition": {
+    "title": "Tuition",
+    "subtitle": "Status, payments, receipts",
+    "no_records": "No tuition records",
+    "no_records_desc": "There's nothing on file yet. The school will set up your tuition plan.",
+    "family_total": "Family total",
+    "all_paid": "All paid",
+    "plan": "plan",
+    "plans": "plans",
+    "total": "Total",
+    "paid": "Paid",
+    "remaining": "Remaining",
+    "of": "of",
+    "remaining_lower": "remaining",
+    "installment": "Installment",
+    "due": "due",
+    "payments": "Payments",
+    "status_paid_up": "Paid up",
+    "status_current": "On track",
+    "status_due_soon": "Due soon",
+    "status_overdue": "Overdue",
+    "download_failed_title": "Download failed",
+    "statement_failed": "Could not download the statement.",
+    "receipt_failed": "Could not download the receipt."
   },
   "pickup": {
     "profile_row": "Pickup Location",
@@ -387,7 +470,14 @@
     "getting": "Getting location...",
     "saved": "Pickup location saved!",
     "save_error": "Failed to save location",
-    "permission_denied": "Location permission is required"
+    "permission_denied": "Location permission is required",
+    "residence_type": "Residence Type",
+    "apartment": "Apartment",
+    "house": "House",
+    "building_number": "Building Number",
+    "block_number": "Block Number",
+    "building_ph": "e.g. Building A or Building 3",
+    "block_ph": "e.g. Block 1 or Block B"
   },
   "supervisor": {
     "weekly_summary": "Weekly Summary",

@@ -102,7 +102,7 @@ export default function FeedScreen() {
             <>
               <TouchableOpacity onPress={() => navigation.navigate('Grades')} activeOpacity={0.8} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm }}>
                 <Text style={[styles.sectionLabel, { marginBottom: 0 }]}>{t('nav.grades', 'Grades')}</Text>
-                <Text style={{ fontSize: font.xs, color: colors.primary, fontWeight: '600' }}>See all →</Text>
+                <Text style={{ fontSize: font.xs, color: colors.primary, fontWeight: '600' }}>{t('common.see_all')} →</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={() => navigation.navigate('Grades')} activeOpacity={0.8}>
               <View style={styles.gradesRow}>

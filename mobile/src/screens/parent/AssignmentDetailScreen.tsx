@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Linking, Image } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { useRoute } from '@react-navigation/native';
 import { ClipboardList, Calendar, Paperclip, FileText, Download } from 'lucide-react-native';
 import ImageViewerModal from '../../components/ImageViewerModal';
@@ -35,6 +36,7 @@ const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
 };
 
 export default function AssignmentDetailScreen() {
+  const { t } = useTranslation();
   const route = useRoute<any>();
   const assignment: Assignment = route.params?.assignment;
   const colors = useColors();
@@ -45,6 +47,8 @@ export default function AssignmentDetailScreen() {
   if (!assignment) return null;
 
   const statusStyle = STATUS_COLORS[assignment.submissionStatus ?? ''] ?? { bg: colors.border, text: colors.textSecondary };
+  const statusLabel = (s?: string) =>
+    s && ['pending', 'submitted', 'graded'].includes(s) ? t(`detail.status_${s}`) : s;
 
   const handleDownload = async () => {
     if (!assignment.attachmentUrl || downloading) return;
@@ -74,7 +78,7 @@ export default function AssignmentDetailScreen() {
             )}
             {assignment.submissionStatus && (
               <View style={[styles.badge, { backgroundColor: statusStyle.bg }]}>
-                <Text style={[styles.badgeText, { color: statusStyle.text }]}>{assignment.submissionStatus}</Text>
+                <Text style={[styles.badgeText, { color: statusStyle.text }]}>{statusLabel(assignment.submissionStatus)}</Text>
               </View>
             )}
           </View>
@@ -84,7 +88,7 @@ export default function AssignmentDetailScreen() {
       {/* Grade */}
       {assignment.grade != null && (
         <View style={styles.gradeCard}>
-          <Text style={styles.gradeLabel}>Grade</Text>
+          <Text style={styles.gradeLabel}>{t('common.grade')}</Text>
           <Text style={styles.gradeValue}>{assignment.grade}</Text>
         </View>
       )}
@@ -93,7 +97,7 @@ export default function AssignmentDetailScreen() {
       {assignment.dueDate && (
         <View style={styles.metaCard}>
           <Calendar size={16} color={colors.textMuted} />
-          <Text style={styles.metaLabel}>Due date</Text>
+          <Text style={styles.metaLabel}>{t('detail.due_date')}</Text>
           <Text style={styles.metaValue}>
             {new Date(assignment.dueDate).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
           </Text>
@@ -103,7 +107,7 @@ export default function AssignmentDetailScreen() {
       {/* Description */}
       {assignment.description && (
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Description</Text>
+          <Text style={styles.sectionLabel}>{t('detail.description')}</Text>
           <Text style={styles.sectionValue}>{assignment.description}</Text>
         </View>
       )}
@@ -113,7 +117,7 @@ export default function AssignmentDetailScreen() {
         const type = getAttachmentType(assignment.attachmentUrl!);
         return (
           <View style={styles.section}>
-            <Text style={styles.sectionLabel}>Attachment</Text>
+            <Text style={styles.sectionLabel}>{t('detail.attachment')}</Text>
             {type === 'image' ? (
               <>
                 <TouchableOpacity activeOpacity={0.9} onPress={() => setViewerOpen(true)}>
@@ -125,25 +129,25 @@ export default function AssignmentDetailScreen() {
                   disabled={downloading}
                 >
                   <Download size={15} color={colors.primary} />
-                  <Text style={styles.attachText}>{downloading ? 'Downloading…' : 'Download'}</Text>
+                  <Text style={styles.attachText}>{downloading ? t('detail.downloading') : t('detail.download')}</Text>
                 </TouchableOpacity>
               </>
             ) : type === 'pdf' ? (
               <View style={styles.pdfCard}>
                 <FileText size={32} color={colors.primary} />
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.pdfLabel}>PDF Document</Text>
-                  <Text style={styles.pdfSub}>Tap to open in viewer</Text>
+                  <Text style={styles.pdfLabel}>{t('detail.pdf_document')}</Text>
+                  <Text style={styles.pdfSub}>{t('detail.tap_to_open_viewer')}</Text>
                 </View>
                 <TouchableOpacity style={styles.attachBtn} onPress={() => Linking.openURL(assignment.attachmentUrl!)}>
                   <Download size={15} color={colors.primary} />
-                  <Text style={styles.attachText}>Open</Text>
+                  <Text style={styles.attachText}>{t('detail.open')}</Text>
                 </TouchableOpacity>
               </View>
             ) : (
               <TouchableOpacity style={styles.attachBtn} onPress={handleDownload} disabled={downloading}>
                 <Paperclip size={16} color={colors.primary} />
-                <Text style={styles.attachText}>{downloading ? 'Downloading…' : 'Download Attachment'}</Text>
+                <Text style={styles.attachText}>{downloading ? t('detail.downloading') : t('detail.download_attachment')}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -152,10 +156,10 @@ export default function AssignmentDetailScreen() {
 
       {/* Student */}
       {assignment.students?.fullName && (
-        <Text style={styles.student}>Student: {assignment.students.fullName}</Text>
+        <Text style={styles.student}>{t('detail.student', { name: assignment.students.fullName })}</Text>
       )}
       <Text style={styles.posted}>
-        Posted {new Date(assignment.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+        {t('detail.posted', { date: new Date(assignment.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) })}
       </Text>
 
       <ImageViewerModal

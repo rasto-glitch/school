@@ -35,7 +35,7 @@ export default function MeScreen() {
 
   const pickAndUpload = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) { Alert.alert('Permission required', 'Please allow photo access in settings.'); return; }
+    if (!perm.granted) { Alert.alert(t('profile.photo_perm_title'), t('profile.photo_perm_body')); return; }
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8, allowsEditing: true, aspect: [1, 1] });
     if (result.canceled || !result.assets[0]) return;
     const asset = result.assets[0];
@@ -48,7 +48,7 @@ export default function MeScreen() {
       );
       setProfilePicture(data.profilePicture);
     } catch {
-      Alert.alert('Upload failed', 'Could not update profile picture.');
+      Alert.alert(t('profile.upload_failed_title'), t('profile.upload_failed_body'));
     } finally {
       setUploading(false);
     }
@@ -94,22 +94,22 @@ export default function MeScreen() {
       {/* Info card */}
       <View style={styles.infoCard}>
         <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>Full Name</Text>
+          <Text style={styles.infoLabel}>{t('profile.full_name')}</Text>
           <Text style={styles.infoValue}>{user?.firstName} {user?.lastName}</Text>
         </View>
         <View style={styles.divider} />
         <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>Username</Text>
+          <Text style={styles.infoLabel}>{t('profile.username')}</Text>
           <Text style={styles.infoValue}>@{user?.username}</Text>
         </View>
         <View style={styles.divider} />
         <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>Role</Text>
+          <Text style={styles.infoLabel}>{t('profile.role')}</Text>
           <Text style={styles.infoValue}>{t('nav.parent', 'Parent')}</Text>
         </View>
         <View style={styles.divider} />
         <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>School</Text>
+          <Text style={styles.infoLabel}>{t('profile.school')}</Text>
           <Text style={styles.infoValue}>{school?.name ?? '—'}</Text>
         </View>
       </View>
@@ -124,8 +124,8 @@ export default function MeScreen() {
           <Calendar size={20} color={isDark ? '#FFFFFF' : colors.primary} />
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={styles.actionTitle}>Schedule</Text>
-          <Text style={styles.actionSub}>See your child's weekly classes</Text>
+          <Text style={styles.actionTitle}>{t('schedule.title')}</Text>
+          <Text style={styles.actionSub}>{t('schedule.me_subtitle')}</Text>
         </View>
         <ChevronRight size={16} color={colors.textMuted} />
       </TouchableOpacity>
@@ -175,7 +175,7 @@ export default function MeScreen() {
         <CardListSkeleton count={2} />
       ) : children.length === 0 ? (
         <View style={styles.emptyBox}>
-          <Text style={styles.emptyText}>No children linked to this account.</Text>
+          <Text style={styles.emptyText}>{t('learn.no_children')}</Text>
         </View>
       ) : (
         children.map(child => (

@@ -72,7 +72,7 @@ export default function SetPickupLocationScreen() {
         residenceType ?? undefined,
         blockNumber.trim() || undefined,
       );
-      Alert.alert('', t('pickup.saved'), [{ text: 'OK', onPress: () => navigation.goBack() }]);
+      Alert.alert('', t('pickup.saved'), [{ text: t('common.ok'), onPress: () => navigation.goBack() }]);
     } catch {
       Alert.alert(t('pickup.save_error'));
     } finally {
@@ -81,8 +81,8 @@ export default function SetPickupLocationScreen() {
   };
 
   const residenceOptions: { type: ResidenceType; label: string; Icon: typeof Home }[] = [
-    { type: 'apartment', label: 'Apartment', Icon: Building2 },
-    { type: 'house', label: 'House', Icon: Home },
+    { type: 'apartment', label: t('pickup.apartment'), Icon: Building2 },
+    { type: 'house', label: t('pickup.house'), Icon: Home },
   ];
 
   return (
@@ -132,7 +132,7 @@ export default function SetPickupLocationScreen() {
       {/* Bottom panel */}
       <ScrollView style={styles.bottom} contentContainerStyle={{ paddingBottom: insets.bottom + spacing.md }}>
         {/* Residence type */}
-        <Text style={styles.sectionLabel}>Residence Type</Text>
+        <Text style={styles.sectionLabel}>{t('pickup.residence_type')}</Text>
         <View style={styles.residenceRow}>
           {residenceOptions.map(({ type, label, Icon }) => {
             const selected = residenceType === type;
@@ -157,11 +157,11 @@ export default function SetPickupLocationScreen() {
 
         {/* Block / Building number */}
         <Text style={[styles.sectionLabel, { marginTop: spacing.md }]}>
-          {residenceType === 'apartment' ? 'Building Number' : 'Block Number'}
+          {residenceType === 'apartment' ? t('pickup.building_number') : t('pickup.block_number')}
         </Text>
         <TextInput
           style={styles.blockInput}
-          placeholder={residenceType === 'apartment' ? 'e.g. Building A or Building 3' : 'e.g. Block 1 or Block B'}
+          placeholder={residenceType === 'apartment' ? t('pickup.building_ph') : t('pickup.block_ph')}
           placeholderTextColor={colors.textMuted}
           value={blockNumber}
           onChangeText={setBlockNumber}

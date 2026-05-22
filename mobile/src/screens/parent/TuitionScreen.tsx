@@ -11,13 +11,6 @@ import { useColors, useIsDark } from '../../store/themeStore';
 import { spacing, radius, font, shadow } from '../../theme';
 import type { ParentFeeRow, FeeStatus } from '../../types';
 
-const STATUS_LABEL: Record<FeeStatus, string> = {
-  paid_up: 'Paid up',
-  current: 'On track',
-  due_soon: 'Due soon',
-  overdue: 'Overdue',
-};
-
 function statusPalette(status: FeeStatus, isDark: boolean) {
   if (isDark) {
     switch (status) {
@@ -48,6 +41,7 @@ export default function TuitionScreen() {
   const colors = useColors();
   const isDark = useIsDark();
   const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
+  const statusLabel = (s: FeeStatus) => t(`tuition.status_${s}`);
 
   const [rows, setRows] = useState<ParentFeeRow[] | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -72,7 +66,7 @@ export default function TuitionScreen() {
     try {
       await downloadAuthPdf(feesApi.studentFeeStatementPath(sfId), `tuition-statement-${sfId.slice(0, 8)}.pdf`);
     } catch {
-      Alert.alert('Download failed', 'Could not download the statement.');
+      Alert.alert(t('tuition.download_failed_title'), t('tuition.statement_failed'));
     } finally {
       setBusyId(null);
     }
@@ -83,7 +77,7 @@ export default function TuitionScreen() {
     try {
       await downloadAuthPdf(feesApi.paymentReceiptPath(paymentId), `receipt-${paymentId.slice(0, 8)}.pdf`);
     } catch {
-      Alert.alert('Download failed', 'Could not download the receipt.');
+      Alert.alert(t('tuition.download_failed_title'), t('tuition.receipt_failed'));
     } finally {
       setBusyId(null);
     }
@@ -183,7 +177,7 @@ export default function TuitionScreen() {
                       {r.academicYear && <Text style={styles.planYear}>· {r.academicYear}</Text>}
                     </View>
                     <View style={[styles.statusPill, { backgroundColor: pal.bg, borderColor: pal.border, marginTop: 4, alignSelf: 'flex-start' }]}>
-                      <Text style={[styles.statusPillText, { color: pal.fg }]}>{STATUS_LABEL[r.status]}</Text>
+                      <Text style={[styles.statusPillText, { color: pal.fg }]}>{statusLabel(r.status)}</Text>
                     </View>
                   </View>
                   <TouchableOpacity

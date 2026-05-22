@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { Calendar } from 'lucide-react-native';
 import { parentApi } from '../../services/api';
 import { useColors, useIsDark } from '../../store/themeStore';
@@ -8,15 +9,13 @@ import type { Student } from '../../types';
 
 const DAY_NAMES = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'] as const;
 const DAY_INDEX: Record<string, number> = Object.fromEntries(DAY_NAMES.map((d, i) => [d, i]));
-const DAY_LABEL: Record<string, string> = {
-  sunday: 'Sunday', monday: 'Monday', tuesday: 'Tuesday',
-  wednesday: 'Wednesday', thursday: 'Thursday', friday: 'Friday', saturday: 'Saturday',
-};
 
 interface Cell { id: string; dayOfWeek: number; periodIndex: number; teachers?: { id: string; fullName: string; subject?: string } }
 type ViewMode = 'week' | 'today';
 
 export default function ParentScheduleScreen() {
+  const { t } = useTranslation();
+  const dayLabel = (d: string) => t(`common.days.${d}`);
   const colors = useColors();
   const isDark = useIsDark();
   const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
@@ -99,13 +98,13 @@ export default function ParentScheduleScreen() {
           onPress={() => setView('week')}
           style={[styles.toggleBtn, view === 'week' && styles.toggleBtnActive]}
         >
-          <Text style={[styles.toggleText, view === 'week' && styles.toggleTextActive]}>Whole week</Text>
+          <Text style={[styles.toggleText, view === 'week' && styles.toggleTextActive]}>{t('schedule.whole_week')}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           onPress={() => setView('today')}
           style={[styles.toggleBtn, view === 'today' && styles.toggleBtnActive]}
         >
-          <Text style={[styles.toggleText, view === 'today' && styles.toggleTextActive]}>Today</Text>
+          <Text style={[styles.toggleText, view === 'today' && styles.toggleTextActive]}>{t('common.today')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -114,28 +113,28 @@ export default function ParentScheduleScreen() {
       ) : children.length === 0 ? (
         <View style={styles.empty}>
           <Calendar size={20} color={colors.textMuted} />
-          <Text style={styles.emptyText}>No students linked to this account.</Text>
+          <Text style={styles.emptyText}>{t('learn.no_children')}</Text>
         </View>
       ) : view === 'today' && !todayIsScheduled ? (
         <View style={styles.empty}>
           <Calendar size={20} color={colors.textMuted} />
-          <Text style={styles.emptyText}>No classes scheduled for {DAY_LABEL[todayName]}.</Text>
+          <Text style={styles.emptyText}>{t('schedule.no_classes_today', { day: dayLabel(todayName) })}</Text>
         </View>
       ) : visibleDays.length === 0 || cells.length === 0 ? (
         <View style={styles.empty}>
           <Calendar size={20} color={colors.textMuted} />
-          <Text style={styles.emptyText}>No schedule has been published for this class yet.</Text>
+          <Text style={styles.emptyText}>{t('schedule.none_published')}</Text>
         </View>
       ) : (
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           <View style={styles.table}>
             <View style={styles.row}>
               <View style={[styles.cell, styles.headerCell, styles.dayCol]}>
-                <Text style={styles.headerText}>Day</Text>
+                <Text style={styles.headerText}>{t('common.day')}</Text>
               </View>
               {Array.from({ length: periodsPerDay }, (_, i) => (
                 <View key={i} style={[styles.cell, styles.headerCell]}>
-                  <Text style={styles.headerText}>P{i + 1}</Text>
+                  <Text style={styles.headerText}>{t('schedule.period_short', { n: i + 1 })}</Text>
                 </View>
               ))}
             </View>
@@ -145,7 +144,7 @@ export default function ParentScheduleScreen() {
               return (
                 <View key={day} style={styles.row}>
                   <View style={[styles.cell, styles.dayCell, styles.dayCol]}>
-                    <Text style={styles.dayText}>{DAY_LABEL[day]}</Text>
+                    <Text style={styles.dayText}>{dayLabel(day)}</Text>
                   </View>
                   {Array.from({ length: periodsPerDay }, (_, i) => {
                     const cell = cellMap.get(`${dayIdx}:${i + 1}`);

@@ -103,7 +103,7 @@ export default function AssignmentsScreen() {
                       <Text style={[styles.due, overdue && styles.overdue]}>
                         {new Date(item.dueDate).toLocaleDateString()}
                       </Text>
-                      {overdue && <View style={styles.overdueBadge}><Text style={styles.overdueBadgeText}>Overdue</Text></View>}
+                      {overdue && <View style={styles.overdueBadge}><Text style={styles.overdueBadgeText}>{t('common.overdue')}</Text></View>}
                     </View>
                   )}
                 </View>

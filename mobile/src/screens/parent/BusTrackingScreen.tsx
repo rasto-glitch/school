@@ -7,6 +7,7 @@ import * as Location from 'expo-location';
 import { io as socketIO } from 'socket.io-client';
 import { AlertCircle, Bus, Car, Phone, MessageSquare, Shield } from 'lucide-react-native';
 import { parentApi } from '../../services/api';
+import i18n from '../../i18n';
 import { useAuthStore } from '../../store/authStore';
 import { useColors, useIsDark } from '../../store/themeStore';
 import { font } from '../../theme';
@@ -64,8 +65,8 @@ class MapErrorBoundary extends Component<{ children: React.ReactNode }, { failed
     if (this.state.failed) {
       return (
         <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-          <Text style={{ fontSize: 13, fontWeight: '600', color: '#6B7280' }}>Map unavailable on this device</Text>
-          <Text style={{ fontSize: 12, color: '#9CA3AF', textAlign: 'center', paddingHorizontal: 24 }}>Google Maps API key required for Android</Text>
+          <Text style={{ fontSize: 13, fontWeight: '600', color: '#6B7280' }}>{i18n.t('bus.map_unavailable')}</Text>
+          <Text style={{ fontSize: 12, color: '#9CA3AF', textAlign: 'center', paddingHorizontal: 24 }}>{i18n.t('bus.map_key_required')}</Text>
         </View>
       );
     }

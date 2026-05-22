@@ -166,7 +166,7 @@ export default function AnnouncementDetailScreen() {
   const renderCommenter = (c: AnnouncementComment) => {
     const role = c.users?.role;
     if (role === 'admin') {
-      return school?.name || 'School';
+      return school?.name || t('common.school');
     }
     const name = `${c.users?.first_name ?? ''} ${c.users?.last_name ?? ''}`.trim() || 'User';
     if (role === 'teacher' && c.author_subject) return `${name} — ${c.author_subject}`;
@@ -231,8 +231,8 @@ export default function AnnouncementDetailScreen() {
   }
 
   const announcerName = announcement.users?.role === 'admin'
-    ? (school?.name || 'School')
-    : (`${announcement.users?.first_name ?? ''} ${announcement.users?.last_name ?? ''}`.trim() || 'School');
+    ? (school?.name || t('common.school'))
+    : (`${announcement.users?.first_name ?? ''} ${announcement.users?.last_name ?? ''}`.trim() || t('common.school'));
   const announcerAvatar = announcement.users?.profile_picture;
 
   return (
@@ -297,7 +297,7 @@ export default function AnnouncementDetailScreen() {
                 ) : (
                   <TouchableOpacity style={[styles.attachBtn, { backgroundColor: colors.primaryLight }]} onPress={() => Linking.openURL(announcement.linkUrl!)}>
                     <ExternalLink size={15} color={colors.primary} />
-                    <Text style={[styles.attachText, { color: colors.primary }]}>Open Link</Text>
+                    <Text style={[styles.attachText, { color: colors.primary }]}>{t('detail.open_link')}</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -313,15 +313,15 @@ export default function AnnouncementDetailScreen() {
                     <TouchableOpacity style={[styles.pdfCard, { backgroundColor: colors.primaryLight }]} onPress={() => Linking.openURL(announcement.attachmentUrl!)}>
                       <FileText size={28} color={colors.primary} />
                       <View style={{ flex: 1 }}>
-                        <Text style={[styles.pdfLabel, { color: colors.text }]}>PDF Document</Text>
-                        <Text style={[styles.pdfSub, { color: colors.textMuted }]}>Tap to open</Text>
+                        <Text style={[styles.pdfLabel, { color: colors.text }]}>{t('detail.pdf_document')}</Text>
+                        <Text style={[styles.pdfSub, { color: colors.textMuted }]}>{t('detail.tap_to_open')}</Text>
                       </View>
                       <Download size={16} color={colors.primary} />
                     </TouchableOpacity>
                   ) : (
                     <TouchableOpacity style={[styles.attachBtn, { backgroundColor: colors.primaryLight }]} onPress={() => Linking.openURL(announcement.attachmentUrl!)}>
                       <Paperclip size={15} color={colors.primary} />
-                      <Text style={[styles.attachText, { color: colors.primary }]}>Download Attachment</Text>
+                      <Text style={[styles.attachText, { color: colors.primary }]}>{t('detail.download_attachment')}</Text>
                     </TouchableOpacity>
                   )}
                 </View>

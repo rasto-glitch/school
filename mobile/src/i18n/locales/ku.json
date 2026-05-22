@@ -42,6 +42,8 @@
     "admin_sent_note": "بەڕێوەبەری قوتابخانەکەت ئاگادارکرایەوە. وشەی نهێنیت ڕێکدەخاتەوە و پەیوەندیت پێوە دەکات."
   },
   "nav": {
+    "parent": "دایک/باوک",
+    "children": "منداڵان",
     "dashboard": "داشبۆرد",
     "homework": "ئەرکی ماڵەوە",
     "assignments": "ئەرک",
@@ -62,6 +64,21 @@
     "logout": "دەرچون"
   },
   "common": {
+    "day": "ڕۆژ",
+    "overdue": "دواکەوتوو",
+    "see_all": "بینینی هەموو",
+    "failed": "سەرکەوتوو نەبوو",
+    "ok": "باشە",
+    "school": "قوتابخانە",
+    "days": {
+      "sunday": "یەکشەممە",
+      "monday": "دووشەممە",
+      "tuesday": "سێشەممە",
+      "wednesday": "چوارشەممە",
+      "thursday": "پێنجشەممە",
+      "friday": "هەینی",
+      "saturday": "شەممە"
+    },
     "search": "گەڕان",
     "save": "پاشکەوتکردن",
     "cancel": "هەڵوەشاندنەوە",
@@ -83,6 +100,7 @@
     "portal": "دەرگای {{role}}"
   },
   "learn": {
+    "school_wide": "هەموو قوتابخانە",
     "tab_ebooks": "کتێبە ئەلکترۆنییەکان",
     "tab_posts": "بابەتەکان",
     "tab_saved": "پاشکەوتکراوەکان",
@@ -202,7 +220,9 @@
     "report": "ڕاپۆرت",
     "report_title": "ڕاپۆرتی کێشە",
     "report_body": "کێشەیەک لەسەر ئەم پاسە یان شۆفێرەکە باس بکە و تیمەکەمان بەدوایدا دەچێت.",
-    "report_send": "ناردن"
+    "report_send": "ناردن",
+    "map_unavailable": "نەخشە لەسەر ئەم ئامێرە بەردەست نییە",
+    "map_key_required": "کلیلی Google Maps API پێویستە بۆ ئەندرۆید"
   },
   "appointments": {
     "title": "وادەکان",
@@ -262,6 +282,10 @@
     "insurance_withheld": "بیمە: {{ins}} · ڕوون: {{net}}"
   },
   "settings": {
+    "unknown_error": "هەڵەی نەزانراو",
+    "change_failed": "گۆڕینی وشەی نهێنی سەرکەوتوو نەبوو.",
+    "reset_request_failed": "نەتوانرا داواکاری ڕێستکردنەوە بنێردرێت.",
+    "reset_email_failed": "نەتوانرا ئیمەیڵی ڕێستکردنەوە بنێردرێت.",
     "notifications_section": "ئاگادارکردنەوەکان",
     "push_label": "ئاگادارکردنەوەی دووری",
     "push_enabled": "چالاکە",
@@ -373,7 +397,66 @@
   },
   "profile": {
     "title": "پرۆفایل",
-    "subtitle": "زانیارییەکانی ئەکاونتەکەت"
+    "subtitle": "زانیارییەکانی ئەکاونتەکەت",
+    "full_name": "ناوی تەواو",
+    "username": "ناوی بەکارهێنەر",
+    "role": "ڕۆڵ",
+    "school": "قوتابخانە",
+    "photo_perm_title": "مۆڵەت پێویستە",
+    "photo_perm_body": "تکایە لە ڕێکخستنەکان دەستگەیشتن بە وێنەکان ڕێگەپێبدە.",
+    "upload_failed_title": "بارکردن سەرکەوتوو نەبوو",
+    "upload_failed_body": "نەتوانرا وێنەی پرۆفایل نوێ بکرێتەوە."
+  },
+  "schedule": {
+    "title": "خشتە",
+    "me_subtitle": "خشتەی هەفتانەی منداڵەکەت ببینە",
+    "whole_week": "هەموو هەفتە",
+    "no_classes_today": "هیچ وانەیەک بۆ {{day}} دانەنراوە.",
+    "none_published": "تا ئێستا هیچ خشتەیەک بۆ ئەم پۆلە بڵاو نەکراوەتەوە.",
+    "period_short": "و{{n}}"
+  },
+  "detail": {
+    "due_date": "بەرواری کۆتایی",
+    "description": "وەسف",
+    "attachment": "هاوپێچ",
+    "downloading": "دابەزاندن…",
+    "download": "دابەزاندن",
+    "pdf_document": "بەڵگەی PDF",
+    "tap_to_open_viewer": "بکرژە بۆ کردنەوە لە پیشاندەردا",
+    "tap_to_open": "بکرژە بۆ کردنەوە",
+    "open": "کردنەوە",
+    "open_link": "کردنەوەی بەستەر",
+    "download_attachment": "دابەزاندنی هاوپێچ",
+    "student": "خوێندکار: {{name}}",
+    "posted": "بڵاوکراوەتەوە {{date}}",
+    "status_pending": "چاوەڕوان",
+    "status_submitted": "ناردرا",
+    "status_graded": "نمرەدراوە"
+  },
+  "tuition": {
+    "title": "کرێی خوێندن",
+    "subtitle": "دۆخ، پارەدان، پسووڵە",
+    "no_records": "هیچ تۆماری کرێی خوێندن نییە",
+    "no_records_desc": "تا ئێستا هیچ شتێک نییە. قوتابخانە پلانی کرێی خوێندنت ئامادە دەکات.",
+    "family_total": "کۆی خێزان",
+    "all_paid": "هەمووی دراوە",
+    "plan": "پلان",
+    "plans": "پلان",
+    "total": "کۆی گشتی",
+    "paid": "دراو",
+    "remaining": "ماوە",
+    "of": "لە",
+    "remaining_lower": "ماوە",
+    "installment": "قیست",
+    "due": "کاتی",
+    "payments": "پارەدانەکان",
+    "status_paid_up": "تەواو دراوە",
+    "status_current": "لەسەر ڕێگا",
+    "status_due_soon": "بەمزووانە کاتی",
+    "status_overdue": "دواکەوتوو",
+    "download_failed_title": "دابەزاندن سەرکەوتوو نەبوو",
+    "statement_failed": "نەتوانرا کشفی هەژمار دابەزێنرێت.",
+    "receipt_failed": "نەتوانرا پسووڵە دابەزێنرێت."
   },
   "pickup": {
     "profile_row": "شوێنی ورگرتن",
@@ -387,7 +470,14 @@
     "getting": "شوێنەکەت وەردەگیرێ...",
     "saved": "شوێنی وەرگرتن پاشەکەوت کرا!",
     "save_error": "شوێنەکەت پاشەکەوت نەکرا",
-    "permission_denied": "مۆڵەتی شوێن پێویستە"
+    "permission_denied": "مۆڵەتی شوێن پێویستە",
+    "residence_type": "جۆری نیشتەجێبوون",
+    "apartment": "شوقە",
+    "house": "ماڵ",
+    "building_number": "ژمارەی بینا",
+    "block_number": "ژمارەی بلۆک",
+    "building_ph": "بۆ نموونە بینای A یان بینای ٣",
+    "block_ph": "بۆ نموونە بلۆکی ١ یان بلۆکی B"
   },
   "supervisor": {
     "weekly_summary": "پوختەی هەفتانە",
