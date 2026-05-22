@@ -11,6 +11,7 @@ import { notify, notifyMany } from '../utils/notify';
 import { streamPaymentReceipt, streamYearSummary } from '../utils/receipts';
 import { streamArchivePaymentPdf, buildArchivePaymentXlsx, type ArchivePaymentExportData, type ArchivePlanEntry } from '../utils/paymentArchiveExport';
 import { logAudit } from '../utils/audit';
+import { postTuitionBilling, postTuitionPayment } from '../utils/glPosting';
 import { assertPeriodOpen } from '../utils/period';
 import { allocateReceiptNumber } from '../utils/receiptNumber';
 import { parseCursorParams, buildPageWith, keysetAfter } from '../utils/pagination';
@@ -416,7 +417,7 @@ export async function assignPlan(req: AuthRequest, res: Response): Promise<void>
   const { studentIds: bodyStudentIds } = req.body as { studentIds?: string[] };
 
   const { data: plan } = await supabase
-    .from('fee_plans').select('id, total_amount, applies_to').eq('id', id).eq('school_id', schoolId).is('voided_at', null).single();
+    .from('fee_plans').select('id, total_amount, applies_to, currency, kind').eq('id', id).eq('school_id', schoolId).is('voided_at', null).single();
   if (!plan) { res.status(404).json({ error: 'Plan not found' }); return; }
 
   let studentIds: string[] = [];
@@ -452,8 +453,18 @@ export async function assignPlan(req: AuthRequest, res: Response): Promise<void>
   }));
   const { data: inserted, error } = await supabase.from('student_fees').insert(rows).select();
   if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+  const billingDate = new Date().toISOString().split('T')[0];
   for (const row of (inserted || [])) {
-    await logAudit({ req, entityType: 'student_fee', entityId: (row as { id: string }).id, action: 'create', after: row as Record<string, unknown>, reason: 'Plan assigned' });
+    const r = row as { id: string; student_id: string; total_amount: number };
+    await logAudit({ req, entityType: 'student_fee', entityId: r.id, action: 'create', after: row as Record<string, unknown>, reason: 'Plan assigned' });
+    // GL: recognise the receivable when the fee is billed (accrual).
+    await postTuitionBilling({
+      schoolId, studentFeeId: r.id, studentId: r.student_id,
+      amount: Number(r.total_amount) || 0,
+      currency: (plan as { currency?: string }).currency || 'USD',
+      feeKind: (plan as { kind?: string }).kind ?? 'tuition',
+      entryDate: billingDate, postedBy: req.user!.userId,
+    });
   }
   res.json({ assigned: toInsert.length, skipped: studentIds.length - toInsert.length });
 }
@@ -979,7 +990,7 @@ export async function recordPayment(req: AuthRequest, res: Response): Promise<vo
   // Verify student_fee exists in this school + grab plan currency
   const { data: sf } = await supabase
     .from('student_fees')
-    .select('id, fee_plan_id, students(full_name, parents(user_id)), fee_plans(currency)')
+    .select('id, fee_plan_id, student_id, students(full_name, parents(user_id)), fee_plans(currency)')
     .eq('id', id).eq('school_id', schoolId).single();
   if (!sf) { res.status(404).json({ error: 'Student fee not found' }); return; }
 
@@ -1043,6 +1054,13 @@ export async function recordPayment(req: AuthRequest, res: Response): Promise<vo
 
   const studentName = (sf as { students?: { full_name?: string } }).students?.full_name;
   await logAudit({ req, entityType: 'fee_payment', entityId: data.id, action: 'create', after: { ...data, allocations }, label: studentName });
+
+  // GL: cash settles the receivable. Refunds are posted separately (Phase 2).
+  await postTuitionPayment({
+    schoolId, paymentId: data.id, studentId: (sf as { student_id?: string }).student_id ?? null,
+    amount, currency: resolvedCurrency, paymentAccountId: paymentAccountId ?? null,
+    entryDate: paidOn, postedBy: userId,
+  });
 
   // Notify the parent that a payment was recorded
   const parentUserId = (sf as any).students?.parents?.user_id;

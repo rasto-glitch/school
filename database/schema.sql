@@ -1637,6 +1637,201 @@ CREATE INDEX IF NOT EXISTS idx_fx_rates_lookup
   ON fx_rates(school_id, from_currency, to_currency, effective_from DESC);
 
 -- ============================================================================
+-- GENERAL LEDGER (double-entry book of record) — Phase 1
+-- Accountant-grade, accrual-on-revenue / cash-on-expenses. Gated by the same
+-- premium flag as the rest of accounting (schools.features.tuition_fees).
+--
+-- Three tables:
+--   chart_of_accounts — the buckets (asset/liability/equity/income/expense).
+--                       Auto-seeded per school from payment_accounts, fee
+--                       kinds and expense_categories (see utils/glSeed).
+--   journal_entries   — immutable, hash-chained entry headers. Append-only;
+--                       a correction is a REVERSING entry, never an edit.
+--   journal_lines     — the debit/credit lines; sum(debit)=sum(credit) per
+--                       entry is enforced by the posting layer (utils/glPosting).
+--
+-- The operational tables (fee_payments, expenses, staff_salary_payments) stay
+-- the source documents; the GL is POSTED-TO from them. Posting co-locates with
+-- logAudit() so the two never drift. Single currency per entry keeps balancing
+-- trivial; multi-currency consolidation is a report-time concern via fx_rates.
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS chart_of_accounts (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  code TEXT NOT NULL,                 -- 1xxx asset, 2xxx liability, 3xxx equity, 4xxx income, 5xxx expense
+  name TEXT NOT NULL,
+  type TEXT NOT NULL CHECK (type IN ('asset','liability','equity','income','expense')),
+  subtype TEXT,                       -- optional finer bucket: 'cash','receivable','payable', ...
+  currency TEXT,                      -- NULL = multi-currency; balances are always grouped by line currency
+  -- Links that let the seeder + posting layer route automatically:
+  payment_account_id  UUID REFERENCES payment_accounts(id)   ON DELETE SET NULL,  -- cash/bank asset accounts
+  fee_kind            TEXT,                                                       -- maps to fee_plans.kind (income)
+  expense_category_id UUID REFERENCES expense_categories(id) ON DELETE SET NULL,  -- expense accounts
+  is_system BOOLEAN NOT NULL DEFAULT FALSE,   -- system accounts (AR, cash, etc.) can't be deleted by the accountant
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (school_id, code)
+);
+CREATE INDEX IF NOT EXISTS idx_coa_school_type ON chart_of_accounts(school_id, type, is_active);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_coa_payment_account ON chart_of_accounts(school_id, payment_account_id) WHERE payment_account_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_coa_expense_category ON chart_of_accounts(school_id, expense_category_id) WHERE expense_category_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS journal_entries (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  entry_no BIGINT,                    -- per-school sequential, set by trigger (= chain_seq)
+  entry_date DATE NOT NULL,
+  currency TEXT NOT NULL,             -- single currency per entry
+  memo TEXT,
+  source TEXT NOT NULL CHECK (source IN (
+    'tuition_billing','fee_payment','refund','expense','salary',
+    'insurance_payout','late_fee','manual','reversal','opening'
+  )),
+  source_id UUID,                     -- FK-less pointer to the originating row (survives that row's deletion)
+  is_reversal BOOLEAN NOT NULL DEFAULT FALSE,
+  reverses_entry_id UUID REFERENCES journal_entries(id),
+  posted_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  lines_fingerprint TEXT,             -- sha256 of canonical lines, set by posting layer; folded into the hash chain
+  -- Per-school tamper-evident hash chain (mirrors audit_logs / Phase E-a):
+  chain_seq BIGINT,
+  prev_hash TEXT,
+  row_hash  TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_journal_entries_school_date ON journal_entries(school_id, entry_date DESC);
+CREATE INDEX IF NOT EXISTS idx_journal_entries_chain ON journal_entries(school_id, chain_seq);
+CREATE INDEX IF NOT EXISTS idx_journal_entries_source ON journal_entries(school_id, source, source_id);
+
+CREATE TABLE IF NOT EXISTS journal_lines (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  entry_id UUID NOT NULL REFERENCES journal_entries(id) ON DELETE CASCADE,
+  account_id UUID NOT NULL REFERENCES chart_of_accounts(id) ON DELETE CASCADE,
+  debit  NUMERIC(14,2) NOT NULL DEFAULT 0 CHECK (debit  >= 0),
+  credit NUMERIC(14,2) NOT NULL DEFAULT 0 CHECK (credit >= 0),
+  currency TEXT NOT NULL,
+  description TEXT,
+  student_id UUID REFERENCES students(id) ON DELETE SET NULL,   -- optional drill-down dimension
+  staff_id   UUID REFERENCES staff_members(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  CHECK (debit > 0 OR credit > 0),
+  CHECK (NOT (debit > 0 AND credit > 0))
+);
+CREATE INDEX IF NOT EXISTS idx_journal_lines_entry ON journal_lines(entry_id);
+CREATE INDEX IF NOT EXISTS idx_journal_lines_account ON journal_lines(school_id, account_id);
+
+-- ── Immutability: journal entries + lines are append-only (reuse the 016
+-- guard that honours the app.allow_archive_purge GUC set by delete_school_cascade).
+DROP TRIGGER IF EXISTS trg_journal_entries_append_only ON journal_entries;
+CREATE TRIGGER trg_journal_entries_append_only
+  BEFORE UPDATE OR DELETE ON journal_entries
+  FOR EACH ROW EXECUTE FUNCTION prevent_archive_mutation();
+DROP TRIGGER IF EXISTS trg_journal_lines_append_only ON journal_lines;
+CREATE TRIGGER trg_journal_lines_append_only
+  BEFORE UPDATE OR DELETE ON journal_lines
+  FOR EACH ROW EXECUTE FUNCTION prevent_archive_mutation();
+
+-- ── Hash chain on journal_entries (BEFORE INSERT, path-independent).
+CREATE OR REPLACE FUNCTION _canon_journal_entry(r journal_entries) RETURNS text
+LANGUAGE sql IMMUTABLE AS $$
+  SELECT concat_ws('|', 'je.v1',
+    r.chain_seq::text, r.school_id::text, coalesce(r.entry_no::text,''),
+    coalesce(r.entry_date::text,''), coalesce(r.currency,''), coalesce(r.source,''),
+    coalesce(r.source_id::text,''), coalesce(r.is_reversal::text,'false'),
+    coalesce(r.reverses_entry_id::text,''), coalesce(r.memo,''),
+    coalesce(r.lines_fingerprint,''), coalesce(r.posted_by::text,''),
+    coalesce(r.created_at::text,''))
+$$;
+
+CREATE OR REPLACE FUNCTION hash_journal_entry() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE v_seq BIGINT; v_prev TEXT;
+BEGIN
+  PERFORM pg_advisory_xact_lock(hashtext('je_chain:' || NEW.school_id::text));
+  SELECT chain_seq, row_hash INTO v_seq, v_prev
+    FROM journal_entries WHERE school_id = NEW.school_id ORDER BY chain_seq DESC LIMIT 1;
+  NEW.chain_seq := coalesce(v_seq, 0) + 1;
+  NEW.entry_no  := NEW.chain_seq;
+  NEW.prev_hash := coalesce(v_prev, 'GENESIS');
+  NEW.row_hash  := _sha(NEW.prev_hash || '|' || _canon_journal_entry(NEW));
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS trg_journal_entries_hash ON journal_entries;
+CREATE TRIGGER trg_journal_entries_hash BEFORE INSERT ON journal_entries
+  FOR EACH ROW EXECUTE FUNCTION hash_journal_entry();
+
+-- ── Atomic posting RPC. Inserts a balanced entry + its lines in ONE
+-- transaction. Because journal_entries is append-only (no UPDATE/DELETE), the
+-- backend can't manually roll back a half-written entry — so the whole post
+-- must be transactional here: any failure (unbalanced, bad account) RAISEs and
+-- aborts the tx, leaving NO orphan header and NOT advancing the hash chain.
+-- The lines fingerprint is computed DB-side (single source of truth) and folded
+-- into the entry's row_hash by the BEFORE INSERT trigger above.
+-- p_lines: [{account_id, debit, credit, description, student_id, staff_id}]
+CREATE OR REPLACE FUNCTION gl_post_entry(
+  p_school_id UUID,
+  p_entry_date DATE,
+  p_currency TEXT,
+  p_source TEXT,
+  p_source_id UUID,
+  p_memo TEXT,
+  p_posted_by UUID,
+  p_is_reversal BOOLEAN,
+  p_reverses_entry_id UUID,
+  p_lines JSONB
+) RETURNS UUID
+LANGUAGE plpgsql AS $$
+DECLARE
+  v_entry_id UUID;
+  v_total_debit  NUMERIC(14,2);
+  v_total_credit NUMERIC(14,2);
+  v_fp TEXT;
+BEGIN
+  SELECT coalesce(sum(round(coalesce((x->>'debit')::numeric,0),2)),0),
+         coalesce(sum(round(coalesce((x->>'credit')::numeric,0),2)),0)
+    INTO v_total_debit, v_total_credit
+    FROM jsonb_array_elements(p_lines) x;
+
+  IF v_total_debit <> v_total_credit THEN
+    RAISE EXCEPTION 'GL entry unbalanced: debit % <> credit %', v_total_debit, v_total_credit;
+  END IF;
+  IF v_total_debit = 0 THEN
+    RAISE EXCEPTION 'GL entry has zero total';
+  END IF;
+
+  -- Canonical lines fingerprint: sorted "account:debit:credit:currency".
+  SELECT _sha(string_agg(line_canon, '|' ORDER BY line_canon)) INTO v_fp
+    FROM (
+      SELECT concat_ws(':', x->>'account_id',
+               to_char(round(coalesce((x->>'debit')::numeric,0),2),  'FM999999999990.00'),
+               to_char(round(coalesce((x->>'credit')::numeric,0),2), 'FM999999999990.00'),
+               p_currency) AS line_canon
+      FROM jsonb_array_elements(p_lines) x
+    ) s;
+
+  INSERT INTO journal_entries (school_id, entry_date, currency, memo, source, source_id,
+                               is_reversal, reverses_entry_id, posted_by, lines_fingerprint)
+  VALUES (p_school_id, p_entry_date, p_currency, p_memo, p_source, p_source_id,
+          coalesce(p_is_reversal, false), p_reverses_entry_id, p_posted_by, v_fp)
+  RETURNING id INTO v_entry_id;
+
+  INSERT INTO journal_lines (school_id, entry_id, account_id, debit, credit, currency,
+                             description, student_id, staff_id)
+  SELECT p_school_id, v_entry_id, (x->>'account_id')::uuid,
+         round(coalesce((x->>'debit')::numeric,0),2),
+         round(coalesce((x->>'credit')::numeric,0),2),
+         p_currency,
+         nullif(x->>'description',''),
+         nullif(x->>'student_id','')::uuid,
+         nullif(x->>'staff_id','')::uuid
+  FROM jsonb_array_elements(p_lines) x;
+
+  RETURN v_entry_id;
+END $$;
+
+-- ============================================================================
 -- RLS PHASE 2 — denormalize school_id onto child tables + write all tenant
 -- isolation policies. Policies are CREATED but RLS is intentionally NOT
 -- enabled here; flipping enforcement on happens table-by-table in Phase 4
@@ -1779,8 +1974,8 @@ CREATE POLICY tenant_isolation ON schools
   WITH CHECK (id = app_current_school_id());
 
 -- Standard policy on every other table: school_id must match the JWT claim.
--- One macro applies to all 64 tables (59 originally-scoped + 5 newly
--- denormalized). DROP-IF-EXISTS makes the whole block re-runnable.
+-- One macro applies to all 67 tables (59 originally-scoped + 5 newly
+-- denormalized + 3 general-ledger). DROP-IF-EXISTS makes the whole block re-runnable.
 DO $$
 DECLARE
   t text;
@@ -1799,7 +1994,8 @@ DECLARE
     'expense_recurring_templates','expenses','student_fee_late_fees','accounting_periods',
     'payment_accounts','fx_rates',
     -- newly denormalized in section 1 above:
-    'teacher_classes','messages','conversation_reads','message_edits','fee_plan_classes'
+    'teacher_classes','messages','conversation_reads','message_edits','fee_plan_classes',
+    'chart_of_accounts','journal_entries','journal_lines'
   ];
 BEGIN
   FOREACH t IN ARRAY tables LOOP
@@ -1820,7 +2016,7 @@ END $$;
 --
 -- Idempotent. Some tables already have RLS on (from earlier "Enable RLS &
 -- run query" clicks in the Supabase editor); this block applies ENABLE +
--- FORCE consistently across all 65 tables.
+-- FORCE consistently across all 68 tables.
 --
 -- After this runs, any query made under the `authenticated` Postgres role
 -- (the role PostgREST switches into when our minted JWT carries
@@ -1833,7 +2029,7 @@ END $$;
 -- ORDER OF OPERATIONS (must follow exactly):
 --   1. Phase 3 backend changes are deployed (req.db plumbing live).
 --   2. Run THIS block in Supabase SQL editor.
---   3. Verify with the queries below (expect 65 / 65 / 65).
+--   3. Verify with the queries below (expect 68 / 68 / 68).
 --   4. Set SUPABASE_ANON_KEY + SUPABASE_JWT_SECRET in Railway env vars.
 --   5. Railway redeploys → tenant controllers now talk to the DB as the
 --      `authenticated` role → policies physically enforce per-school
@@ -1858,7 +2054,8 @@ DECLARE
     'staff_members','staff_salary_payments','expense_categories',
     'expense_recurring_templates','expenses','student_fee_late_fees','accounting_periods',
     'payment_accounts','fx_rates',
-    'teacher_classes','messages','conversation_reads','message_edits','fee_plan_classes'
+    'teacher_classes','messages','conversation_reads','message_edits','fee_plan_classes',
+    'chart_of_accounts','journal_entries','journal_lines'
   ];
 BEGIN
   FOREACH t IN ARRAY tables LOOP
@@ -1867,7 +2064,7 @@ BEGIN
   END LOOP;
 END $$;
 
--- Verification (run separately; expect 65 / 65 / 65) ─────────────────────────
+-- Verification (run separately; expect 68 / 68 / 68) ─────────────────────────
 --   SELECT count(*) FROM pg_class
 --    WHERE relkind='r' AND relrowsecurity = true
 --      AND relnamespace=(SELECT oid FROM pg_namespace WHERE nspname='public');

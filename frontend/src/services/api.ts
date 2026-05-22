@@ -718,6 +718,65 @@ export const ledgerApi = {
     api.get('/accounting/ledger/export.xlsx', { params, responseType: 'blob' }),
 };
 
+// ---- GENERAL LEDGER (double-entry) ----
+export interface GlAccount {
+  id: string;
+  code: string;
+  name: string;
+  type: 'asset' | 'liability' | 'equity' | 'income' | 'expense';
+  subtype: string | null;
+  currency: string | null;
+  isSystem: boolean;
+  isActive: boolean;
+  paymentAccountId: string | null;
+  expenseCategoryId: string | null;
+}
+
+export interface TrialBalanceAccount {
+  accountId: string;
+  code: string;
+  name: string;
+  type: string;
+  debit: number;
+  credit: number;
+}
+export interface TrialBalanceCurrency {
+  currency: string;
+  accounts: TrialBalanceAccount[];
+  totalDebit: number;
+  totalCredit: number;
+  balanced: boolean;
+}
+
+export interface JournalLine {
+  accountId: string;
+  code: string;
+  name: string;
+  debit: number;
+  credit: number;
+  currency: string;
+  description: string | null;
+}
+export interface JournalEntry {
+  id: string;
+  entryNo: number;
+  entryDate: string;
+  currency: string;
+  memo: string | null;
+  source: string;
+  sourceId: string | null;
+  isReversal: boolean;
+  lines: JournalLine[];
+}
+
+export const glApi = {
+  accounts: () => api.get<GlAccount[]>('/accounting/gl/accounts'),
+  trialBalance: (params?: { asOf?: string }) =>
+    api.get<{ asOf: string | null; currencies: TrialBalanceCurrency[] }>('/accounting/gl/trial-balance', { params }),
+  journal: (params?: { limit?: number }) =>
+    api.get<JournalEntry[]>('/accounting/gl/journal', { params }),
+};
+
 export interface ArchiveListItem {
   kind: 'archived' | 'graduated';
   id: string;

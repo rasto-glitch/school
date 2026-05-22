@@ -11,7 +11,7 @@ import {
   Calendar, Settings, UserCog, LogOut, ChevronLeft, ChevronRight,
   FileText, Star, Clock, X, ClipboardCheck, MessageSquare, Archive,
   CreditCard, Wallet, History, Receipt, BookOpenCheck,
-  AlertCircle, FileBarChart, BarChart3, CalendarClock, ArrowLeftRight,
+  AlertCircle, FileBarChart, BarChart3, CalendarClock, ArrowLeftRight, Scale,
 } from 'lucide-react';
 import type { Dispatch, SetStateAction } from 'react';
 import type { Role } from '../../types';
@@ -76,6 +76,7 @@ const navItems: Record<Role, NavItem[]> = {
     { to: '/accounting/staff', icon: Wallet, label: 'Staff Salaries', feature: 'tuition_fees' },
     { to: '/accounting/expenses', icon: Receipt, label: 'Expenses', feature: 'tuition_fees' },
     { to: '/accounting/ledger', icon: BookOpenCheck, label: 'Ledger', feature: 'tuition_fees' },
+    { to: '/accounting/general-ledger', icon: Scale, label: 'General Ledger', feature: 'tuition_fees' },
     { to: '/accounting/reports/ar-aging', icon: AlertCircle, label: 'AR aging', feature: 'tuition_fees' },
     { to: '/accounting/reports/profit-loss', icon: FileBarChart, label: 'P & L', feature: 'tuition_fees' },
     { to: '/accounting/reports/cash-flow', icon: BarChart3, label: 'Cash flow', feature: 'tuition_fees' },

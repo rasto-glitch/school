@@ -59,6 +59,7 @@ import AdminTuitionPage from './pages/admin/AdminTuitionPage';
 import AdminTuitionStudentDetailPage from './pages/admin/AdminTuitionStudentDetailPage';
 import ExpensesPage from './pages/admin/ExpensesPage';
 import LedgerPage from './pages/admin/LedgerPage';
+import GeneralLedgerPage from './pages/admin/GeneralLedgerPage';
 import AccountingDashboardPage from './pages/admin/AccountingDashboardPage';
 import ArAgingPage from './pages/admin/ArAgingPage';
 import ProfitLossPage from './pages/admin/ProfitLossPage';
@@ -229,6 +230,7 @@ export default function App() {
         <Route path="/accounting/staff" element={<ProtectedRoute allowedRoles={['accountant']}><AdminTuitionPage /></ProtectedRoute>} />
         <Route path="/accounting/expenses" element={<ProtectedRoute allowedRoles={['accountant']}><ExpensesPage /></ProtectedRoute>} />
         <Route path="/accounting/ledger" element={<ProtectedRoute allowedRoles={['accountant']}><LedgerPage /></ProtectedRoute>} />
+        <Route path="/accounting/general-ledger" element={<ProtectedRoute allowedRoles={['accountant']}><GeneralLedgerPage /></ProtectedRoute>} />
         <Route path="/accounting/student/:id" element={<ProtectedRoute allowedRoles={['accountant', 'reception']}><AdminTuitionStudentDetailPage /></ProtectedRoute>} />
         <Route path="/accounting/reports/ar-aging" element={<ProtectedRoute allowedRoles={['accountant']}><ArAgingPage /></ProtectedRoute>} />
         <Route path="/accounting/reports/profit-loss" element={<ProtectedRoute allowedRoles={['accountant']}><ProfitLossPage /></ProtectedRoute>} />

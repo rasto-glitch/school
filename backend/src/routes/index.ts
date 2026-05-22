@@ -16,6 +16,7 @@ import * as fees from '../controllers/fees.controller';
 import * as staff from '../controllers/staff.controller';
 import * as expenses from '../controllers/expenses.controller';
 import * as ledger from '../controllers/ledger.controller';
+import * as gl from '../controllers/glaccounting.controller';
 import * as accounting from '../controllers/accounting.controller';
 import * as reports from '../controllers/accountingReports.controller';
 import { authenticate, authorize } from '../middleware/auth';
@@ -358,6 +359,12 @@ export function createRouter(io: SocketServer) {
   router.get('/accounting/ledger', authenticate, authorize(...accountingRW), validate({ query: vq.listQuery }), (req, res) => ledger.getLedger(req as AuthRequest, res));
   router.get('/accounting/ledger/export.pdf', authenticate, authorize(...accountingRW), (req, res) => ledger.exportLedgerPdf(req as AuthRequest, res));
   router.get('/accounting/ledger/export.xlsx', authenticate, authorize(...accountingRW), (req, res) => ledger.exportLedgerXlsx(req as AuthRequest, res));
+
+  // General Ledger (double-entry) — chart of accounts, trial balance, journal.
+  // Accountant-only (RW); reception is intentionally excluded from the GL.
+  router.get('/accounting/gl/accounts', authenticate, authorize(...accountingRW), (req, res) => gl.listAccounts(req as AuthRequest, res));
+  router.get('/accounting/gl/trial-balance', authenticate, authorize(...accountingRW), validate({ query: vq.listQuery }), (req, res) => gl.getTrialBalance(req as AuthRequest, res));
+  router.get('/accounting/gl/journal', authenticate, authorize(...accountingRW), validate({ query: vq.listQuery }), (req, res) => gl.listJournal(req as AuthRequest, res));
 
   // Refunds, late fees, period close, payment accounts, FX rates
   router.post('/accounting/payments/:id/refund', authenticate, authorize(...accountingRW), validate({ params: va.idParam, body: va.refundPaymentSchema }), (req, res) => fees.refundPayment(req as AuthRequest, res));
