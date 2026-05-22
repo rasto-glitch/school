@@ -79,15 +79,15 @@ export default function StartDriveScreen() {
   const startDrive = async () => {
     const { status: fg } = await Location.requestForegroundPermissionsAsync();
     if (fg !== 'granted') {
-      Alert.alert('Permission Required', 'Location permission is needed to track your drive.');
+      Alert.alert(t('driver.perm_required_title'), t('driver.perm_required_body'));
       return;
     }
     const { status: bg } = await Location.requestBackgroundPermissionsAsync();
     if (bg !== 'granted') {
       Alert.alert(
-        'Background Location',
-        'For continuous tracking when you lock your phone or switch apps, go to Settings → Apps → Scholify → Location and select "Allow all the time".',
-        [{ text: 'Continue anyway' }, { text: 'Open Settings', onPress: () => Location.requestBackgroundPermissionsAsync() }]
+        t('driver.bg_location_title'),
+        t('driver.bg_location_body'),
+        [{ text: t('driver.continue_anyway') }, { text: t('driver.open_settings'), onPress: () => Location.requestBackgroundPermissionsAsync() }]
       );
     }
 
@@ -122,7 +122,7 @@ export default function StartDriveScreen() {
 
       setIsDriving(true);
     } catch (err: any) {
-      Alert.alert('Error', err.response?.data?.error || 'Could not start drive');
+      Alert.alert(t('common.error'), err.response?.data?.error || t('driver.start_failed'));
     } finally {
       setLoading(false);
     }
@@ -136,7 +136,7 @@ export default function StartDriveScreen() {
       await driverApi.stopDrive();
       setIsDriving(false);
     } catch (err: any) {
-      Alert.alert('Error', err.response?.data?.error || 'Could not stop drive');
+      Alert.alert(t('common.error'), err.response?.data?.error || t('driver.stop_failed'));
     } finally {
       setLoading(false);
     }
@@ -172,7 +172,7 @@ export default function StartDriveScreen() {
             <Text style={styles.sectionTitle}>{t('driver.exclude_absent')}</Text>
             {excludedCount > 0 && (
               <View style={styles.excludedBadge}>
-                <Text style={styles.excludedBadgeText}>{excludedCount} excluded</Text>
+                <Text style={styles.excludedBadgeText}>{t('driver.n_excluded', { count: excludedCount })}</Text>
               </View>
             )}
           </View>
@@ -195,14 +195,14 @@ export default function StartDriveScreen() {
                     <View style={styles.reasonTag}>
                       <AlertCircle size={11} color={colors.danger} />
                       <Text style={[styles.reasonTagText, { color: colors.danger }]}>
-                        {excl!.schoolStatus === 'excused' ? 'Excused by school' : 'Absent by school'}
+                        {excl!.schoolStatus === 'excused' ? t('driver.excused_by_school') : t('driver.absent_by_school')}
                       </Text>
                     </View>
                   )}
                   {isHomeWithParents && (
                     <View style={[styles.reasonTag, { backgroundColor: '#EDE9FE' }]}>
                       <Home size={11} color="#7C3AED" />
-                      <Text style={[styles.reasonTagText, { color: '#7C3AED' }]}>Home with parents</Text>
+                      <Text style={[styles.reasonTagText, { color: '#7C3AED' }]}>{t('driver.home_with_parents')}</Text>
                     </View>
                   )}
 
@@ -210,7 +210,7 @@ export default function StartDriveScreen() {
                   {!isExcluded && schoolAbsences.has(s.id) && (
                     <View style={[styles.reasonTag, { backgroundColor: colors.warningLight }]}>
                       <AlertCircle size={11} color={colors.warning} />
-                      <Text style={[styles.reasonTagText, { color: colors.warning }]}>School absent · Riding bus</Text>
+                      <Text style={[styles.reasonTagText, { color: colors.warning }]}>{t('driver.school_absent_riding')}</Text>
                     </View>
                   )}
                 </View>

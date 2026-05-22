@@ -50,7 +50,7 @@ export default function DriverMeScreen() {
 
   const pickAndUpload = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) { Alert.alert('Permission required', 'Please allow photo access in settings.'); return; }
+    if (!perm.granted) { Alert.alert(t('profile.photo_perm_title'), t('profile.photo_perm_body')); return; }
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8, allowsEditing: true, aspect: [1, 1] });
     if (result.canceled || !result.assets[0]) return;
     const asset = result.assets[0];
@@ -63,7 +63,7 @@ export default function DriverMeScreen() {
       );
       setProfilePicture(data.profilePicture);
     } catch {
-      Alert.alert('Upload failed', 'Could not update profile picture.');
+      Alert.alert(t('profile.upload_failed_title'), t('profile.upload_failed_body'));
     } finally {
       setUploading(false);
     }
@@ -108,47 +108,47 @@ export default function DriverMeScreen() {
       {/* Info card */}
       <View style={styles.infoCard}>
         <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>{t('me.full_name', 'Full Name')}</Text>
+          <Text style={styles.infoLabel}>{t('profile.full_name')}</Text>
           <Text style={styles.infoValue}>{user?.firstName} {user?.lastName}</Text>
         </View>
         <View style={styles.divider} />
         <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>{t('me.username', 'Username')}</Text>
+          <Text style={styles.infoLabel}>{t('profile.username')}</Text>
           <Text style={styles.infoValue}>@{user?.username}</Text>
         </View>
         <View style={styles.divider} />
         <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>{t('me.role', 'Role')}</Text>
-          <Text style={styles.infoValue}>{t('nav.driver', 'Driver')}</Text>
+          <Text style={styles.infoLabel}>{t('profile.role')}</Text>
+          <Text style={styles.infoValue}>{t('nav.driver')}</Text>
         </View>
         <View style={styles.divider} />
         <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>{t('me.school', 'School')}</Text>
+          <Text style={styles.infoLabel}>{t('profile.school')}</Text>
           <Text style={styles.infoValue}>{school?.name ?? '—'}</Text>
         </View>
       </View>
 
       {/* Bus info */}
-      <Text style={styles.sectionTitle}>{t('me.bus_info', 'Bus Information')}</Text>
+      <Text style={styles.sectionTitle}>{t('driver.bus_info')}</Text>
 
       {loading ? (
         <CardListSkeleton count={3} />
       ) : (
         <View style={styles.infoCard}>
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>{t('me.license', 'License Number')}</Text>
+            <Text style={styles.infoLabel}>{t('driver.license_number')}</Text>
             <Text style={styles.infoValue}>{profile?.licenseNumber ?? '—'}</Text>
           </View>
           <View style={styles.divider} />
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>{t('me.bus_number', 'Bus Number')}</Text>
+            <Text style={styles.infoLabel}>{t('driver.bus_number_label')}</Text>
             <Text style={styles.infoValue}>{profile?.buses?.busNumber ?? '—'}</Text>
           </View>
           {profile?.phoneNumber && (
             <>
               <View style={styles.divider} />
               <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>{t('me.phone', 'Phone')}</Text>
+                <Text style={styles.infoLabel}>{t('bus.phone')}</Text>
                 <Text style={styles.infoValue}>{profile.phoneNumber}</Text>
               </View>
             </>

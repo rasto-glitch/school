@@ -45,6 +45,7 @@
     "parent": "Parent",
     "teacher": "Teacher",
     "supervisor": "Supervisor",
+    "driver": "Driver",
     "children": "Children",
     "dashboard": "Dashboard",
     "homework": "Homework",
@@ -689,6 +690,22 @@
     "no_students": "No students assigned",
     "parent_label": "Parent: {{name}}",
     "guardian": "Parent / Guardian",
-    "emergency": "Emergency Contact"
+    "emergency": "Emergency Contact",
+    "bus_info": "Bus Information",
+    "license_number": "License Number",
+    "bus_number_label": "Bus Number",
+    "n_excluded": "{{count}} excluded",
+    "excused_by_school": "Excused by school",
+    "absent_by_school": "Absent by school",
+    "home_with_parents": "Home with parents",
+    "school_absent_riding": "School absent · Riding bus",
+    "perm_required_title": "Permission Required",
+    "perm_required_body": "Location permission is needed to track your drive.",
+    "bg_location_title": "Background Location",
+    "bg_location_body": "For continuous tracking when you lock your phone or switch apps, go to Settings → Apps → Scholify → Location and select \"Allow all the time\".",
+    "continue_anyway": "Continue anyway",
+    "open_settings": "Open Settings",
+    "start_failed": "Could not start drive",
+    "stop_failed": "Could not stop drive"
   }
 }

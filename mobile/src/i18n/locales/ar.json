@@ -45,6 +45,7 @@
     "parent": "ولي الأمر",
     "teacher": "معلم",
     "supervisor": "مشرف",
+    "driver": "سائق",
     "children": "الأبناء",
     "dashboard": "الرئيسية",
     "homework": "الواجبات",
@@ -689,6 +690,22 @@
     "no_students": "لا يوجد طلاب مخصصون",
     "parent_label": "الوالد: {{name}}",
     "guardian": "الوالد / الوصي",
-    "emergency": "جهة الاتصال في الطوارئ"
+    "emergency": "جهة الاتصال في الطوارئ",
+    "bus_info": "معلومات الحافلة",
+    "license_number": "رقم الرخصة",
+    "bus_number_label": "رقم الحافلة",
+    "n_excluded": "{{count}} مستثنى",
+    "excused_by_school": "بعذر من المدرسة",
+    "absent_by_school": "غائب حسب المدرسة",
+    "home_with_parents": "في المنزل مع الوالدين",
+    "school_absent_riding": "غائب في المدرسة · يركب الحافلة",
+    "perm_required_title": "الإذن مطلوب",
+    "perm_required_body": "إذن الموقع مطلوب لتتبع رحلتك.",
+    "bg_location_title": "موقع الخلفية",
+    "bg_location_body": "للتتبع المستمر عند قفل هاتفك أو تبديل التطبيقات، اذهب إلى الإعدادات ← التطبيقات ← Scholify ← الموقع واختر \"السماح طوال الوقت\".",
+    "continue_anyway": "المتابعة على أي حال",
+    "open_settings": "فتح الإعدادات",
+    "start_failed": "تعذر بدء القيادة",
+    "stop_failed": "تعذر إيقاف القيادة"
   }
 }
