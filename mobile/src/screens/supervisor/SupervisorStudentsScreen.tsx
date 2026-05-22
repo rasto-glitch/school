@@ -60,7 +60,7 @@ export default function SupervisorStudentsScreen() {
     const map = new Map<string, { label: string; grade?: string; items: StudentItem[] }>();
     filtered.forEach(s => {
       const key = s.classes?.id ?? 'unassigned';
-      const label = s.classes?.name ?? 'Unassigned';
+      const label = s.classes?.name ?? t('supervisor.unassigned');
       const grade = s.classes?.gradeLevel;
       if (!map.has(key)) map.set(key, { label, grade, items: [] });
       map.get(key)!.items.push(s);
@@ -85,7 +85,7 @@ export default function SupervisorStudentsScreen() {
         <Search size={16} color={colors.textMuted} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Search students or parents..."
+          placeholder={t('supervisor.search_students_parents')}
           placeholderTextColor={colors.textMuted}
           value={search}
           onChangeText={setSearch}
@@ -97,7 +97,7 @@ export default function SupervisorStudentsScreen() {
         <CardListSkeleton count={5} />
       ) : grouped.length === 0 ? (
         <View style={styles.emptyCard}>
-          <Text style={styles.emptyText}>No students found.</Text>
+          <Text style={styles.emptyText}>{t('teacher.no_students_found')}</Text>
         </View>
       ) : (
         grouped.map(group => (
@@ -106,7 +106,7 @@ export default function SupervisorStudentsScreen() {
             <View style={styles.groupHeader}>
               <Text style={styles.groupTitle}>{group.label}</Text>
               {group.grade && <Text style={styles.groupGrade}>{group.grade}</Text>}
-              <Text style={styles.groupCount}>{group.items.length} students</Text>
+              <Text style={styles.groupCount}>{t('supervisor.n_students', { count: group.items.length })}</Text>
             </View>
 
             {group.items.map(student => {
@@ -120,7 +120,7 @@ export default function SupervisorStudentsScreen() {
                   {/* Parent info */}
                   {parent?.fullName ? (
                     <View style={styles.parentRow}>
-                      <Text style={styles.parentLabel}>Parent</Text>
+                      <Text style={styles.parentLabel}>{t('common.parent')}</Text>
                       <Text style={styles.parentName}>{parent.fullName}</Text>
                     </View>
                   ) : null}
@@ -131,7 +131,7 @@ export default function SupervisorStudentsScreen() {
                       <Phone size={13} color={colors.textMuted} />
                       <Text style={styles.infoText}>{parent.phoneNumber}</Text>
                       <TouchableOpacity style={styles.callBtn} onPress={() => callParent(parent.phoneNumber!)}>
-                        <Text style={styles.callBtnText}>Call</Text>
+                        <Text style={styles.callBtnText}>{t('common.call')}</Text>
                       </TouchableOpacity>
                     </View>
                   ) : null}
@@ -143,7 +143,7 @@ export default function SupervisorStudentsScreen() {
                         ? <Building2 size={13} color={colors.textMuted} />
                         : <Home size={13} color={colors.textMuted} />}
                       <Text style={styles.infoText}>
-                        {parent.residenceType === 'apartment' ? 'Apartment' : parent.residenceType === 'house' ? 'House' : ''}
+                        {parent.residenceType === 'apartment' ? t('pickup.apartment') : parent.residenceType === 'house' ? t('pickup.house') : ''}
                         {parent.blockNumber ? ` · ${parent.blockNumber}` : ''}
                       </Text>
                     </View>
@@ -153,7 +153,7 @@ export default function SupervisorStudentsScreen() {
                   <View style={styles.infoRow}>
                     <MapPin size={13} color={hasLocation ? colors.success : colors.textMuted} />
                     <Text style={[styles.infoText, { color: hasLocation ? colors.success : colors.textMuted }]}>
-                      {hasLocation ? 'Pickup location set' : 'No pickup location'}
+                      {hasLocation ? t('supervisor.pickup_set') : t('supervisor.pickup_none')}
                     </Text>
                   </View>
                 </View>

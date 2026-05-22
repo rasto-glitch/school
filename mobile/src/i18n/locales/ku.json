@@ -44,6 +44,7 @@
   "nav": {
     "parent": "دایک/باوک",
     "teacher": "مامۆستا",
+    "supervisor": "سەرپەرشتیار",
     "children": "منداڵان",
     "dashboard": "داشبۆرد",
     "homework": "ئەرکی ماڵەوە",
@@ -66,6 +67,8 @@
   },
   "common": {
     "day": "ڕۆژ",
+    "present": "ئامادە",
+    "late": "دواکەوتوو",
     "overdue": "دواکەوتوو",
     "see_all": "بینینی هەموو",
     "failed": "سەرکەوتوو نەبوو",
@@ -596,7 +599,20 @@
   },
   "supervisor": {
     "weekly_summary": "پوختەی هەفتانە",
-    "student_reports": "ڕاپۆرتەکانی خوێندکار"
+    "student_reports": "ڕاپۆرتەکانی خوێندکار",
+    "absent_late_today": "غایب و دواکەوتووەکانی ئەمڕۆ",
+    "all_present_today": "هەموو خوێندکاران ئەمڕۆ ئامادەن",
+    "excused": "بە بیانوو",
+    "attendance_by_class": "ئامادەبوون بەپێی پۆل",
+    "confirm_delete": "دڵنیایت دەتەوێت \"{{title}}\" بسڕیتەوە؟",
+    "delete_item_failed": "نەتوانرا بڕگەکە بسڕدرێتەوە.",
+    "no_homework_found": "هیچ ئەرکی ماڵەوەیەک نەدۆزرایەوە.",
+    "no_assignments_found": "هیچ ئەرکێک نەدۆزرایەوە.",
+    "search_students_parents": "گەڕان بۆ خوێندکار یان دایک/باوک...",
+    "unassigned": "دیارینەکراو",
+    "n_students": "{{count}} خوێندکار",
+    "pickup_set": "شوێنی وەرگرتن دیاریکراوە",
+    "pickup_none": "هیچ شوێنی وەرگرتنێک نییە"
   },
   "driver": {
     "dashboard_title": "داشبۆردی شۆفێر",

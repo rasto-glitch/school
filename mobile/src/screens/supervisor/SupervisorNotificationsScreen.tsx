@@ -3,6 +3,7 @@ import { View, Text, SectionList, StyleSheet, ActivityIndicator, TouchableOpacit
 import { CardListSkeleton } from '../../components/Skeleton';
 import { usePaginated } from '../../hooks/usePaginated';
 import { Bell, CheckCircle } from 'lucide-react-native';
+import { useTranslation } from 'react-i18next';
 import { format, isToday, isYesterday, parseISO } from 'date-fns';
 import { supervisorApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
@@ -20,6 +21,7 @@ interface Notif {
 }
 
 export default function SupervisorNotificationsScreen() {
+  const { t } = useTranslation();
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
@@ -53,8 +55,8 @@ export default function SupervisorNotificationsScreen() {
 
   const groupLabel = (dateStr: string) => {
     const d = parseISO(dateStr);
-    if (isToday(d)) return 'Today';
-    if (isYesterday(d)) return 'Yesterday';
+    if (isToday(d)) return t('common.today');
+    if (isYesterday(d)) return t('common.yesterday');
     return format(d, 'MMM d, yyyy');
   };
 
@@ -82,16 +84,16 @@ export default function SupervisorNotificationsScreen() {
       ListHeaderComponent={
         <>
           <View style={styles.titleRow}>
-            <Text style={styles.title}>Notifications</Text>
+            <Text style={styles.title}>{t('nav.notifications')}</Text>
             {unreadCount > 0 && (
               <TouchableOpacity style={styles.markAllBtn} onPress={markAll} disabled={markingAll}>
                 {markingAll
                   ? <ActivityIndicator size="small" color={colors.primary} />
-                  : <Text style={styles.markAllText}>Mark all read</Text>}
+                  : <Text style={styles.markAllText}>{t('notifications.mark_all_read')}</Text>}
               </TouchableOpacity>
             )}
           </View>
-          {unreadCount > 0 && <Text style={styles.unreadLabel}>{unreadCount} unread</Text>}
+          {unreadCount > 0 && <Text style={styles.unreadLabel}>{t('notifications.unread', { count: unreadCount })}</Text>}
         </>
       }
       ListEmptyComponent={
@@ -100,7 +102,7 @@ export default function SupervisorNotificationsScreen() {
           : (
             <View style={styles.empty}>
               <Bell size={36} color={colors.textMuted} />
-              <Text style={styles.emptyText}>No notifications yet.</Text>
+              <Text style={styles.emptyText}>{t('notifications.no_notifications')}</Text>
             </View>
           )
       }

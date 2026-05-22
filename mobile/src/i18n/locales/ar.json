@@ -44,6 +44,7 @@
   "nav": {
     "parent": "ولي الأمر",
     "teacher": "معلم",
+    "supervisor": "مشرف",
     "children": "الأبناء",
     "dashboard": "الرئيسية",
     "homework": "الواجبات",
@@ -66,6 +67,8 @@
   },
   "common": {
     "day": "اليوم",
+    "present": "حاضر",
+    "late": "متأخر",
     "overdue": "متأخر",
     "see_all": "عرض الكل",
     "failed": "فشل",
@@ -596,7 +599,20 @@
   },
   "supervisor": {
     "weekly_summary": "الملخص الأسبوعي",
-    "student_reports": "تقارير الطلاب"
+    "student_reports": "تقارير الطلاب",
+    "absent_late_today": "الغائبون والمتأخرون اليوم",
+    "all_present_today": "جميع الطلاب حاضرون اليوم",
+    "excused": "بعذر",
+    "attendance_by_class": "الحضور حسب الصف",
+    "confirm_delete": "هل أنت متأكد أنك تريد حذف \"{{title}}\"؟",
+    "delete_item_failed": "تعذر حذف العنصر.",
+    "no_homework_found": "لا توجد واجبات.",
+    "no_assignments_found": "لا توجد مهام.",
+    "search_students_parents": "ابحث عن طلاب أو أولياء أمور...",
+    "unassigned": "غير مُعيَّن",
+    "n_students": "{{count}} طالب",
+    "pickup_set": "تم تحديد موقع التسليم",
+    "pickup_none": "لا يوجد موقع تسليم"
   },
   "driver": {
     "dashboard_title": "لوحة تحكم السائق",

@@ -44,6 +44,7 @@
   "nav": {
     "parent": "Parent",
     "teacher": "Teacher",
+    "supervisor": "Supervisor",
     "children": "Children",
     "dashboard": "Dashboard",
     "homework": "Homework",
@@ -66,6 +67,8 @@
   },
   "common": {
     "day": "Day",
+    "present": "Present",
+    "late": "Late",
     "overdue": "Overdue",
     "see_all": "See all",
     "failed": "Failed",
@@ -596,7 +599,20 @@
   },
   "supervisor": {
     "weekly_summary": "Weekly Summary",
-    "student_reports": "Student Reports"
+    "student_reports": "Student Reports",
+    "absent_late_today": "Absent & Late Today",
+    "all_present_today": "All students present today",
+    "excused": "Excused",
+    "attendance_by_class": "Attendance by Class",
+    "confirm_delete": "Are you sure you want to delete \"{{title}}\"?",
+    "delete_item_failed": "Could not delete item.",
+    "no_homework_found": "No homework found.",
+    "no_assignments_found": "No assignments found.",
+    "search_students_parents": "Search students or parents...",
+    "unassigned": "Unassigned",
+    "n_students": "{{count}} students",
+    "pickup_set": "Pickup location set",
+    "pickup_none": "No pickup location"
   },
   "driver": {
     "dashboard_title": "Driver Dashboard",

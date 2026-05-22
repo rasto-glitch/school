@@ -106,7 +106,7 @@ export default function SupervisorDashboardScreen() {
     >
       <View style={styles.titleRow}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.title}>Dashboard</Text>
+          <Text style={styles.title}>{t('nav.dashboard')}</Text>
           <Text style={styles.subtitle}>{today}</Text>
         </View>
         <TouchableOpacity
@@ -128,17 +128,17 @@ export default function SupervisorDashboardScreen() {
         <View style={[styles.statCard, { backgroundColor: colors.dangerLight }]}>
           <AlertCircle size={20} color={colors.danger} />
           <Text style={[styles.statNum, { color: colors.danger }]}>{totalAbsent}</Text>
-          <Text style={[styles.statLabel, { color: colors.danger }]}>Absent</Text>
+          <Text style={[styles.statLabel, { color: colors.danger }]}>{t('common.absent')}</Text>
         </View>
         <View style={[styles.statCard, { backgroundColor: colors.warningLight }]}>
           <Clock size={20} color={colors.warning} />
           <Text style={[styles.statNum, { color: colors.warning }]}>{totalLate}</Text>
-          <Text style={[styles.statLabel, { color: colors.warning }]}>Late</Text>
+          <Text style={[styles.statLabel, { color: colors.warning }]}>{t('common.late')}</Text>
         </View>
         <View style={[styles.statCard, { backgroundColor: colors.successLight }]}>
           <Users size={20} color={colors.success} />
           <Text style={[styles.statNum, { color: colors.success }]}>{summary.reduce((a, c) => a + c.present, 0)}</Text>
-          <Text style={[styles.statLabel, { color: colors.success }]}>Present</Text>
+          <Text style={[styles.statLabel, { color: colors.success }]}>{t('common.present')}</Text>
         </View>
       </View>
 
@@ -167,11 +167,11 @@ export default function SupervisorDashboardScreen() {
       {loading ? <DashboardSkeleton /> : (
         <>
           {/* Absent / Late today */}
-          <Text style={styles.sectionLabel}>Absent & Late Today</Text>
+          <Text style={styles.sectionLabel}>{t('supervisor.absent_late_today')}</Text>
           {absentList.length === 0 ? (
             <View style={styles.emptyCard}>
               <CheckCircle size={28} color={colors.success} />
-              <Text style={styles.emptyText}>All students present today</Text>
+              <Text style={styles.emptyText}>{t('supervisor.all_present_today')}</Text>
             </View>
           ) : (
             absentList.map(r => (
@@ -187,7 +187,7 @@ export default function SupervisorDashboardScreen() {
                 </View>
                 <View style={[styles.statusBadge, { backgroundColor: r.status === 'absent' ? colors.danger + '20' : r.status === 'excused' ? '#8B5CF620' : colors.warning + '20' }]}>
                   <Text style={[styles.statusBadgeText, { color: r.status === 'absent' ? colors.danger : r.status === 'excused' ? '#8B5CF6' : colors.warning }]}>
-                    {r.status === 'absent' ? 'Absent' : r.status === 'excused' ? 'Excused' : 'Late'}
+                    {r.status === 'absent' ? t('common.absent') : r.status === 'excused' ? t('supervisor.excused') : t('common.late')}
                   </Text>
                 </View>
               </View>
@@ -197,7 +197,7 @@ export default function SupervisorDashboardScreen() {
           {/* Class summary */}
           {summary.length > 0 && (
             <>
-              <Text style={[styles.sectionLabel, { marginTop: spacing.lg }]}>Attendance by Class</Text>
+              <Text style={[styles.sectionLabel, { marginTop: spacing.lg }]}>{t('supervisor.attendance_by_class')}</Text>
               {summary.map(cls => {
                 const presentPct = cls.total > 0 ? cls.present / cls.total : 0;
                 return (
@@ -210,9 +210,9 @@ export default function SupervisorDashboardScreen() {
                       <View style={[styles.barFill, { width: `${presentPct * 100}%` as any, backgroundColor: presentPct >= 0.8 ? colors.success : presentPct >= 0.6 ? colors.warning : colors.danger }]} />
                     </View>
                     <View style={styles.summaryRow}>
-                      {cls.absent > 0 && <Text style={[styles.summaryChip, { color: colors.danger }]}>{cls.absent} absent</Text>}
-                      {cls.late > 0 && <Text style={[styles.summaryChip, { color: colors.warning }]}>{cls.late} late</Text>}
-                      {cls.present > 0 && <Text style={[styles.summaryChip, { color: colors.success }]}>{cls.present} present</Text>}
+                      {cls.absent > 0 && <Text style={[styles.summaryChip, { color: colors.danger }]}>{t('teacher.n_absent', { count: cls.absent })}</Text>}
+                      {cls.late > 0 && <Text style={[styles.summaryChip, { color: colors.warning }]}>{t('teacher.n_late', { count: cls.late })}</Text>}
+                      {cls.present > 0 && <Text style={[styles.summaryChip, { color: colors.success }]}>{t('teacher.n_present', { count: cls.present })}</Text>}
                     </View>
                   </View>
                 );
@@ -223,7 +223,7 @@ export default function SupervisorDashboardScreen() {
           {/* Announcements */}
           {announcements.length > 0 && (
             <>
-              <Text style={[styles.sectionLabel, { marginTop: spacing.lg }]}>Announcements</Text>
+              <Text style={[styles.sectionLabel, { marginTop: spacing.lg }]}>{t('nav.announcements')}</Text>
               {announcements.map(ann => (
                 <AnnouncementCard
                   key={ann.id}

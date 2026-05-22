@@ -62,7 +62,7 @@ export default function SupervisorSettingsScreen() {
     setRetrying(false);
     if (result.status === 'registered') Alert.alert('✓ ' + t('settings.push_ok_title'), t('settings.push_ok_body'));
     else if (result.status === 'denied') Alert.alert(t('settings.push_denied_title'), t('settings.push_denied_body'));
-    else Alert.alert('Failed', result.error ?? 'Unknown error');
+    else Alert.alert(t('common.failed'), result.error ?? t('settings.unknown_error'));
   };
 
   const pushColor: Record<PushStatus, string> = {
@@ -102,7 +102,7 @@ export default function SupervisorSettingsScreen() {
       setCurrentPassword(''); setNewPassword(''); setConfirmPassword('');
       setShowPasswordModal(false);
     } catch (e: any) {
-      Alert.alert('Error', e?.response?.data?.error ?? 'Failed to change password.');
+      Alert.alert(t('common.error'), e?.response?.data?.error ?? t('settings.change_failed'));
     } finally {
       setChangingPassword(false);
     }
@@ -115,7 +115,7 @@ export default function SupervisorSettingsScreen() {
       await authApi.forgotPassword(user.username);
       Alert.alert(t('settings.forgot_sent_title'), t('settings.forgot_sent_body'));
     } catch {
-      Alert.alert('Error', 'Could not send reset request.');
+      Alert.alert(t('common.error'), t('settings.reset_request_failed'));
     } finally {
       setSendingForgot(false);
     }

@@ -59,7 +59,7 @@ export default function SupervisorContentScreen() {
   // Update tab when navigating from dashboard shortcuts (runs on every focus)
   useFocusEffect(
     useCallback(() => {
-      if (initialTab && TABS.find(t => t.key === initialTab)) setTab(initialTab);
+      if (initialTab && TABS.find(tb => tb.key === initialTab)) setTab(initialTab);
     }, [initialTab])
   );
 
@@ -78,12 +78,12 @@ export default function SupervisorContentScreen() {
   const handleDelete = (item: ContentItem) => {
     const isHw = tab === 'homework';
     Alert.alert(
-      `Delete ${isHw ? 'Homework' : 'Assignment'}`,
-      `Are you sure you want to delete "${item.title}"?`,
+      isHw ? t('teacher.delete_homework') : t('teacher.delete_assignment'),
+      t('supervisor.confirm_delete', { title: item.title }),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Delete', style: 'destructive', onPress: async () => {
+          text: t('common.delete'), style: 'destructive', onPress: async () => {
             setDeletingId(item.id);
             try {
               if (isHw) {
@@ -94,7 +94,7 @@ export default function SupervisorContentScreen() {
                 setAssignments(prev => prev.filter(a => a.id !== item.id));
               }
             } catch {
-              Alert.alert('Error', 'Could not delete item.');
+              Alert.alert(t('common.error'), t('supervisor.delete_item_failed'));
             } finally {
               setDeletingId(null);
             }
@@ -110,7 +110,7 @@ export default function SupervisorContentScreen() {
     <View style={[styles.root, { backgroundColor: colors.bg }]}>
       {/* Fixed header */}
       <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
-        <Text style={styles.title}>Content</Text>
+        <Text style={styles.title}>{t('nav.content')}</Text>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -152,7 +152,7 @@ export default function SupervisorContentScreen() {
               {tab === 'homework'
                 ? <BookOpen size={36} color={colors.textMuted} />
                 : <ClipboardList size={36} color={colors.textMuted} />}
-              <Text style={styles.emptyText}>No {tab === 'homework' ? 'homework' : 'assignments'} found.</Text>
+              <Text style={styles.emptyText}>{tab === 'homework' ? t('supervisor.no_homework_found') : t('supervisor.no_assignments_found')}</Text>
             </View>
           ) : (
             items.map(item => (
@@ -197,7 +197,7 @@ export default function SupervisorContentScreen() {
                     </View>
                   )}
                   {item.dueDate && (
-                    <Text style={styles.dueText}>Due {new Date(item.dueDate).toLocaleDateString()}</Text>
+                    <Text style={styles.dueText}>{t('common.due')} {new Date(item.dueDate).toLocaleDateString()}</Text>
                   )}
                   <Text style={styles.dateText}>{new Date(item.createdAt).toLocaleDateString()}</Text>
                 </View>
