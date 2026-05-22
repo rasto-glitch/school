@@ -296,10 +296,11 @@ async function isReversed(schoolId: string, entryId: string): Promise<boolean> {
   return !!(data && data.length);
 }
 
-async function entryLines(entryId: string): Promise<PostLine[]> {
+async function entryLines(schoolId: string, entryId: string): Promise<PostLine[]> {
   const { data } = await supabase
     .from('journal_lines')
     .select('account_id, debit, credit, description, student_id, staff_id')
+    .eq('school_id', schoolId)
     .eq('entry_id', entryId);
   return ((data ?? []) as any[]).map(l => ({
     accountId: l.account_id, debit: Number(l.debit) || 0, credit: Number(l.credit) || 0,
@@ -313,7 +314,7 @@ export async function reverseEntry(schoolId: string, sourceId: string, opts?: { 
     const orig = await findOriginalEntry(schoolId, sourceId);
     if (!orig) return;                       // GL wasn't posted (e.g. unseeded) — nothing to reverse
     if (await isReversed(schoolId, orig.id)) return;
-    const lines = await entryLines(orig.id);
+    const lines = await entryLines(schoolId, orig.id);
     if (!lines.length) return;
     await postEntry({
       schoolId, entryDate: orig.entry_date, currency: orig.currency,
@@ -330,7 +331,7 @@ export async function reinstateEntry(schoolId: string, sourceId: string, opts?: 
     const orig = await findOriginalEntry(schoolId, sourceId);
     if (!orig) return;
     if (!(await isReversed(schoolId, orig.id))) return;  // never voided in GL — nothing to reinstate
-    const lines = await entryLines(orig.id);
+    const lines = await entryLines(schoolId, orig.id);
     if (!lines.length) return;
     await postEntry({
       schoolId, entryDate: orig.entry_date, currency: orig.currency,

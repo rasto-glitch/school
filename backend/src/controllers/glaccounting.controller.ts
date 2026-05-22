@@ -131,6 +131,7 @@ export async function listJournal(req: AuthRequest, res: Response): Promise<void
     ? await supabase
         .from('journal_lines')
         .select('entry_id, debit, credit, currency, description, account_id, chart_of_accounts!inner(code, name)')
+        .eq('school_id', schoolId)
         .in('entry_id', ids)
     : { data: [] as any[] };
 
