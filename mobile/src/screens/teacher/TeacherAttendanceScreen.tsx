@@ -4,6 +4,7 @@ import {
   TouchableOpacity, Alert,
 } from 'react-native';
 import { CardListSkeleton } from '../../components/Skeleton';
+import { useTranslation } from 'react-i18next';
 import { ChevronLeft, ChevronRight, CheckCircle, XCircle, Clock, Save } from 'lucide-react-native';
 import { teacherApi } from '../../services/api';
 import { useColors, useIsDark } from '../../store/themeStore';
@@ -20,6 +21,8 @@ const STATUS_COLORS: Record<AttStatus, string> = {
 };
 
 export default function TeacherAttendanceScreen() {
+  const { t } = useTranslation();
+  const calDays = t('teacher.weekday_short', { returnObjects: true }) as string[];
   const colors = useColors();
   const isDark = useIsDark();
   const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
@@ -91,9 +94,9 @@ export default function TeacherAttendanceScreen() {
         notes: notes[s.id] || undefined,
       }));
       await teacherApi.markAttendance({ classId: selectedClass.id, date: selectedDate, records });
-      Alert.alert('Saved', 'Attendance saved successfully.');
+      Alert.alert(t('teacher.saved'), t('teacher.attendance_saved'));
     } catch {
-      Alert.alert('Error', 'Could not save attendance.');
+      Alert.alert(t('common.error'), t('teacher.attendance_save_failed'));
     } finally {
       setSaving(false);
     }
@@ -118,10 +121,10 @@ export default function TeacherAttendanceScreen() {
       style={styles.container}
       contentContainerStyle={styles.content}
     >
-      <Text style={styles.title}>Attendance</Text>
+      <Text style={styles.title}>{t('nav.attendance')}</Text>
 
       {/* Class selector */}
-      <Text style={styles.sectionLabel}>Class</Text>
+      <Text style={styles.sectionLabel}>{t('teacher.class')}</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing.md }}>
         {classes.map(c => (
           <TouchableOpacity
@@ -135,7 +138,7 @@ export default function TeacherAttendanceScreen() {
       </ScrollView>
 
       {/* Date picker */}
-      <Text style={styles.sectionLabel}>Date</Text>
+      <Text style={styles.sectionLabel}>{t('teacher.date')}</Text>
       <TouchableOpacity style={styles.dateBtn} onPress={() => setShowCal(v => !v)} activeOpacity={0.7}>
         <Text style={styles.dateBtnText}>{displayDate}</Text>
         <ChevronRight size={14} color={colors.textMuted} style={{ transform: [{ rotate: showCal ? '90deg' : '0deg' }] }} />
@@ -153,8 +156,8 @@ export default function TeacherAttendanceScreen() {
             </TouchableOpacity>
           </View>
           <View style={styles.calDayRow}>
-            {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(d => (
-              <Text key={d} style={styles.calDayLabel}>{d}</Text>
+            {calDays.map((d, di) => (
+              <Text key={di} style={styles.calDayLabel}>{d}</Text>
             ))}
           </View>
           {Array.from({ length: calCells.length / 7 }, (_, row) => (
@@ -184,14 +187,14 @@ export default function TeacherAttendanceScreen() {
       {students.length > 0 && (
         <View style={styles.statsRow}>
           <View style={[styles.statPill, { backgroundColor: colors.successLight }]}>
-            <Text style={[styles.statText, { color: colors.success }]}>{present} present</Text>
+            <Text style={[styles.statText, { color: colors.success }]}>{t('teacher.n_present', { count: present })}</Text>
           </View>
           <View style={[styles.statPill, { backgroundColor: colors.dangerLight }]}>
-            <Text style={[styles.statText, { color: colors.danger }]}>{absent} absent</Text>
+            <Text style={[styles.statText, { color: colors.danger }]}>{t('teacher.n_absent', { count: absent })}</Text>
           </View>
           {late > 0 && (
             <View style={[styles.statPill, { backgroundColor: colors.warningLight }]}>
-              <Text style={[styles.statText, { color: colors.warning }]}>{late} late</Text>
+              <Text style={[styles.statText, { color: colors.warning }]}>{t('teacher.n_late', { count: late })}</Text>
             </View>
           )}
         </View>
@@ -202,22 +205,22 @@ export default function TeacherAttendanceScreen() {
         <View style={styles.markAllRow}>
           <TouchableOpacity style={[styles.markAllBtn, { borderColor: colors.success }]} onPress={() => setAllStatus('present')}>
             <CheckCircle size={14} color={colors.success} />
-            <Text style={[styles.markAllText, { color: colors.success }]}>All Present</Text>
+            <Text style={[styles.markAllText, { color: colors.success }]}>{t('teacher.all_present')}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.markAllBtn, { borderColor: colors.danger }]} onPress={() => setAllStatus('absent')}>
             <XCircle size={14} color={colors.danger} />
-            <Text style={[styles.markAllText, { color: colors.danger }]}>All Absent</Text>
+            <Text style={[styles.markAllText, { color: colors.danger }]}>{t('teacher.all_absent')}</Text>
           </TouchableOpacity>
         </View>
       )}
 
       {/* Student list */}
-      <Text style={styles.sectionLabel}>Students</Text>
+      <Text style={styles.sectionLabel}>{t('nav.students')}</Text>
       {loading ? (
         <CardListSkeleton count={5} />
       ) : students.length === 0 ? (
         <View style={styles.emptyCard}>
-          <Text style={styles.emptyText}>No students in this class.</Text>
+          <Text style={styles.emptyText}>{t('teacher.no_students_in_class')}</Text>
         </View>
       ) : (
         students.map(student => {
@@ -240,7 +243,7 @@ export default function TeacherAttendanceScreen() {
                       onPress={() => setStudentStatus(student.id, s)}
                     >
                       <Text style={[styles.statusBtnText, active && { color: '#fff' }]}>
-                        {s.charAt(0).toUpperCase() + s.slice(1)}
+                        {t(`teacher.att_${s}`)}
                       </Text>
                     </TouchableOpacity>
                   );
@@ -258,7 +261,7 @@ export default function TeacherAttendanceScreen() {
             ? <ActivityIndicator color="#fff" size="small" />
             : <>
                 <Save size={18} color="#fff" />
-                <Text style={styles.saveBtnText}>Save Attendance</Text>
+                <Text style={styles.saveBtnText}>{t('teacher.save_attendance')}</Text>
               </>
           }
         </TouchableOpacity>

@@ -4,6 +4,7 @@ import {
   TouchableOpacity, TextInput, RefreshControl, Modal, Image, ActivityIndicator,
 } from 'react-native';
 import { CardListSkeleton } from '../../components/Skeleton';
+import { useTranslation } from 'react-i18next';
 import { Search, User, X, FileText, Star } from 'lucide-react-native';
 import { teacherApi } from '../../services/api';
 import { useColors, useIsDark } from '../../store/themeStore';
@@ -36,6 +37,7 @@ function totalMarks(marks?: MarkRow[] | null): number {
 }
 
 export default function TeacherStudentsScreen() {
+  const { t } = useTranslation();
   const colors = useColors();
   const isDark = useIsDark();
   const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
@@ -85,14 +87,14 @@ export default function TeacherStudentsScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.bg }]}>
       <View style={[styles.header, { paddingTop: spacing.md }]}>
-        <Text style={styles.title}>Students</Text>
+        <Text style={styles.title}>{t('nav.students')}</Text>
 
         {/* Search */}
         <View style={styles.searchBar}>
           <Search size={16} color={colors.textMuted} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search students..."
+            placeholder={t('driver.search_students')}
             placeholderTextColor={colors.textMuted}
             value={search}
             onChangeText={setSearch}
@@ -103,7 +105,7 @@ export default function TeacherStudentsScreen() {
         {/* Class filter */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: spacing.sm }}>
           <TouchableOpacity style={[styles.chip, !selectedClass && styles.chipActive]} onPress={() => setSelectedClass('')}>
-            <Text style={[styles.chipText, !selectedClass && styles.chipTextActive]}>All</Text>
+            <Text style={[styles.chipText, !selectedClass && styles.chipTextActive]}>{t('teacher.all')}</Text>
           </TouchableOpacity>
           {classes.map(c => (
             <TouchableOpacity key={c.id} style={[styles.chip, selectedClass === c.id && styles.chipActive]} onPress={() => setSelectedClass(c.id)}>
@@ -123,7 +125,7 @@ export default function TeacherStudentsScreen() {
         ) : students.length === 0 ? (
           <View style={styles.empty}>
             <User size={36} color={colors.textMuted} />
-            <Text style={styles.emptyText}>No students found.</Text>
+            <Text style={styles.emptyText}>{t('teacher.no_students_found')}</Text>
           </View>
         ) : (
           students.map(s => (
@@ -167,19 +169,19 @@ export default function TeacherStudentsScreen() {
                 <View style={styles.infoCard}>
                   {brief.student.phoneNumber ? (
                     <View style={styles.infoRow}>
-                      <Text style={styles.infoLabel}>Phone</Text>
+                      <Text style={styles.infoLabel}>{t('bus.phone')}</Text>
                       <Text style={styles.infoValue}>{brief.student.phoneNumber}</Text>
                     </View>
                   ) : null}
                   {brief.student.emergencyContact ? (
                     <View style={styles.infoRow}>
-                      <Text style={styles.infoLabel}>Emergency</Text>
+                      <Text style={styles.infoLabel}>{t('teacher.emergency')}</Text>
                       <Text style={styles.infoValue}>{brief.student.emergencyContact}</Text>
                     </View>
                   ) : null}
                   {brief.student.homeAddress ? (
                     <View style={styles.infoRow}>
-                      <Text style={styles.infoLabel}>Address</Text>
+                      <Text style={styles.infoLabel}>{t('common.address')}</Text>
                       <Text style={styles.infoValue}>{brief.student.homeAddress}</Text>
                     </View>
                   ) : null}
@@ -188,11 +190,11 @@ export default function TeacherStudentsScreen() {
                 {/* Grades — this teacher's only */}
                 <View style={styles.sectionHeader}>
                   <Star size={14} color={colors.primary} />
-                  <Text style={styles.sectionTitle}>Grades</Text>
+                  <Text style={styles.sectionTitle}>{t('nav.grades')}</Text>
                   <Text style={styles.sectionCount}>({brief.grades.length})</Text>
                 </View>
                 {brief.grades.length === 0 ? (
-                  <Text style={styles.emptyMini}>No grades recorded.</Text>
+                  <Text style={styles.emptyMini}>{t('past_records.no_grades')}</Text>
                 ) : (
                   brief.grades.map(g => {
                     const tot = totalMarks(g.marks);
@@ -222,11 +224,11 @@ export default function TeacherStudentsScreen() {
                 {/* Reports — this teacher's only */}
                 <View style={[styles.sectionHeader, { marginTop: spacing.md }]}>
                   <FileText size={14} color={colors.primary} />
-                  <Text style={styles.sectionTitle}>Reports</Text>
+                  <Text style={styles.sectionTitle}>{t('nav.reports')}</Text>
                   <Text style={styles.sectionCount}>({brief.reports.length})</Text>
                 </View>
                 {brief.reports.length === 0 ? (
-                  <Text style={styles.emptyMini}>No reports submitted.</Text>
+                  <Text style={styles.emptyMini}>{t('teacher.no_reports_submitted')}</Text>
                 ) : (
                   brief.reports.map(r => (
                     <View key={r.id} style={styles.recordCard}>
@@ -243,8 +245,8 @@ export default function TeacherStudentsScreen() {
                           ))}
                         </View>
                       )}
-                      {r.attendanceNotes ? <Text style={styles.noteRow}><Text style={styles.noteLabel}>Attendance: </Text>{r.attendanceNotes}</Text> : null}
-                      {r.behaviorNotes ? <Text style={styles.noteRow}><Text style={styles.noteLabel}>Behavior: </Text>{r.behaviorNotes}</Text> : null}
+                      {r.attendanceNotes ? <Text style={styles.noteRow}><Text style={styles.noteLabel}>{t('teacher.note_attendance')}</Text>{r.attendanceNotes}</Text> : null}
+                      {r.behaviorNotes ? <Text style={styles.noteRow}><Text style={styles.noteLabel}>{t('teacher.note_behavior')}</Text>{r.behaviorNotes}</Text> : null}
                       {r.teacherNotes ? <Text style={styles.noteRow}>{r.teacherNotes}</Text> : null}
                     </View>
                   ))
