@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate } from 'react-router-dom';
 import { BookOpen, Paperclip, Calendar, ArrowLeft } from 'lucide-react';
 import { parentApi } from '../../services/api';
@@ -11,6 +12,7 @@ import type { Homework } from '../../types';
 import { format, parseISO, isPast } from 'date-fns';
 
 export default function HomeworkDetailPage() {
+  const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [homework, setHomework] = useState<Homework | null>(null);
@@ -21,15 +23,15 @@ export default function HomeworkDetailPage() {
     parentApi.getHomeworkById(id).then(r => setHomework(r.data || null)).finally(() => setLoading(false));
   }, [id]);
 
-  if (loading) return <PageLayout title="Homework"><LoadingSpinner /></PageLayout>;
-  if (!homework) return <PageLayout title="Homework"><p className="text-gray-500">Homework not found.</p></PageLayout>;
+  if (loading) return <PageLayout title={t('homework.title')}><LoadingSpinner /></PageLayout>;
+  if (!homework) return <PageLayout title={t('homework.title')}><p className="text-gray-500">{t('homework.not_found')}</p></PageLayout>;
 
   const overdue = homework.dueDate ? isPast(parseISO(homework.dueDate)) : false;
 
   return (
-    <PageLayout title="Homework Details">
+    <PageLayout title={t('homework.details_title')}>
       <div className="max-w-2xl space-y-4">
-        <Button variant="ghost" size="sm" icon={<ArrowLeft className="w-4 h-4" />} onClick={() => navigate('/parent/homework')}>Back</Button>
+        <Button variant="ghost" size="sm" icon={<ArrowLeft className="w-4 h-4" />} onClick={() => navigate('/parent/homework')}>{t('common.back')}</Button>
         <Card>
           <div className="flex items-start gap-3 mb-4">
             <div className="p-3 bg-blue-50 rounded-xl flex-shrink-0">
@@ -40,7 +42,7 @@ export default function HomeworkDetailPage() {
               <div className="flex flex-wrap items-center gap-2 mt-1">
                 {homework.subject && <Badge color="primary">{homework.subject}</Badge>}
                 {homework.classes?.name && <Badge color="secondary">{homework.classes.name}</Badge>}
-                {overdue && <Badge color="red">Overdue</Badge>}
+                {overdue && <Badge color="red">{t('common.overdue')}</Badge>}
               </div>
             </div>
           </div>
@@ -48,13 +50,13 @@ export default function HomeworkDetailPage() {
           {homework.dueDate && (
             <div className="flex items-center gap-2 text-sm text-gray-600 mb-4 p-3 bg-gray-50 rounded-xl">
               <Calendar className="w-4 h-4 text-gray-400" />
-              <span>Due: <span className={`font-semibold ${overdue ? 'text-red-500' : 'text-gray-900'}`}>{format(parseISO(homework.dueDate), 'EEEE, MMMM d, yyyy')}</span></span>
+              <span>{t('homework.due_label')} <span className={`font-semibold ${overdue ? 'text-red-500' : 'text-gray-900'}`}>{format(parseISO(homework.dueDate), 'EEEE, MMMM d, yyyy')}</span></span>
             </div>
           )}
 
           {homework.description && (
             <div className="mb-4">
-              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Description</h2>
+              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">{t('common.description')}</h2>
               <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">{homework.description}</p>
             </div>
           )}
@@ -65,13 +67,13 @@ export default function HomeworkDetailPage() {
             const isPdf = ext === 'pdf';
             return (
               <div>
-                <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Attachment</h2>
+                <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">{t('common.attachment')}</h2>
                 {isImage ? (
                   <div className="space-y-2">
-                    <img src={homework.attachmentUrl} alt="Attachment" className="w-full max-h-72 object-contain rounded-xl border border-gray-200 bg-gray-50" />
+                    <img src={homework.attachmentUrl} alt="" className="w-full max-h-72 object-contain rounded-xl border border-gray-200 bg-gray-50" />
                     <a href={homework.attachmentUrl} download target="_blank" rel="noopener noreferrer"
                       className="inline-flex items-center gap-2 px-4 py-2 bg-primary-50 text-primary-700 rounded-xl hover:bg-primary-100 transition-colors font-medium text-sm">
-                      <Paperclip className="w-4 h-4" /> Download
+                      <Paperclip className="w-4 h-4" /> {t('common.download')}
                     </a>
                   </div>
                 ) : isPdf ? (
@@ -79,20 +81,20 @@ export default function HomeworkDetailPage() {
                     <iframe src={homework.attachmentUrl} className="w-full h-96 rounded-xl border border-gray-200" title="PDF Preview" />
                     <a href={homework.attachmentUrl} download target="_blank" rel="noopener noreferrer"
                       className="inline-flex items-center gap-2 px-4 py-2 bg-primary-50 text-primary-700 rounded-xl hover:bg-primary-100 transition-colors font-medium text-sm">
-                      <Paperclip className="w-4 h-4" /> Download PDF
+                      <Paperclip className="w-4 h-4" /> {t('common.download_pdf')}
                     </a>
                   </div>
                 ) : (
                   <a href={homework.attachmentUrl} download target="_blank" rel="noopener noreferrer"
                     className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary-50 text-primary-700 rounded-xl hover:bg-primary-100 transition-colors font-medium text-sm">
-                    <Paperclip className="w-4 h-4" /> Download Attachment
+                    <Paperclip className="w-4 h-4" /> {t('common.download_attachment')}
                   </a>
                 )}
               </div>
             );
           })()}
 
-          <p className="text-xs text-gray-400 mt-4">Posted {format(parseISO(homework.createdAt), 'MMM d, yyyy')}</p>
+          <p className="text-xs text-gray-400 mt-4">{t('common.posted', { date: format(parseISO(homework.createdAt), 'MMM d, yyyy') })}</p>
         </Card>
       </div>
     </PageLayout>

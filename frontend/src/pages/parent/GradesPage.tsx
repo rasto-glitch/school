@@ -58,7 +58,7 @@ export default function GradesPage() {
         {children.length > 1 && (
           <div className="w-full sm:w-56">
             <Select
-              label="Child"
+              label={t('common.child')}
               options={children.map(c => ({ value: c.id, label: c.fullName }))}
               value={selectedChild}
               onChange={e => setSelectedChild(e.target.value)}

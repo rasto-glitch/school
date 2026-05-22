@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Megaphone, ArrowLeft, Paperclip, ExternalLink, Heart, MessageCircle, Send, CornerDownRight, X, Trash2 } from 'lucide-react';
 import { announcementApi, parentApi } from '../../services/api';
@@ -37,6 +38,7 @@ interface CommentRowProps {
 }
 
 function CommentRow({ c, isReply, canDelete, displayName, onLike, onReply, onDelete }: CommentRowProps) {
+  const { t } = useTranslation();
   const avatarUrl = c.users?.profile_picture;
   return (
     <div className={`flex items-start gap-3 p-3 bg-gray-50 rounded-xl ${isReply ? 'ml-10' : ''}`}>
@@ -66,7 +68,7 @@ function CommentRow({ c, isReply, canDelete, displayName, onLike, onReply, onDel
             className="flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-primary-600"
           >
             <CornerDownRight className="w-3.5 h-3.5" />
-            Reply
+            {t('announcements.reply')}
           </button>
         </div>
       </div>
@@ -80,6 +82,7 @@ function CommentRow({ c, isReply, canDelete, displayName, onLike, onReply, onDel
 }
 
 export default function AnnouncementDetailPage() {
+  const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user, school } = useAuthStore();
@@ -157,7 +160,7 @@ export default function AnnouncementDetailPage() {
       setReplyTo(null);
       setAnnouncement({ ...announcement, comments_count: (announcement.comments_count ?? 0) + 1 });
     } catch {
-      toast.error('Failed to post comment');
+      toast.error(t('announcements.post_failed'));
     } finally {
       setPosting(false);
     }
@@ -178,24 +181,24 @@ export default function AnnouncementDetailPage() {
   };
 
   const handleDeleteComment = async (commentId: string) => {
-    if (!confirm('Delete this comment?')) return;
+    if (!confirm(t('announcements.delete_confirm'))) return;
     try {
       await announcementApi.deleteComment(commentId);
       const removed = comments.filter(c => c.id === commentId || c.parent_id === commentId).length;
       setComments(prev => prev.filter(c => c.id !== commentId && c.parent_id !== commentId));
       if (announcement) setAnnouncement({ ...announcement, comments_count: Math.max(0, (announcement.comments_count ?? removed) - removed) });
     } catch {
-      toast.error('Failed to delete comment');
+      toast.error(t('announcements.delete_failed'));
     }
   };
 
-  if (loading) return <PageLayout title="Announcement"><LoadingSpinner /></PageLayout>;
-  if (!announcement) return <PageLayout title="Announcement"><p className="text-gray-500">Announcement not found.</p></PageLayout>;
+  if (loading) return <PageLayout title={t('announcements.detail_title')}><LoadingSpinner /></PageLayout>;
+  if (!announcement) return <PageLayout title={t('announcements.detail_title')}><p className="text-gray-500">{t('announcements.not_found')}</p></PageLayout>;
 
   return (
-    <PageLayout title="Announcement">
+    <PageLayout title={t('announcements.detail_title')}>
       <div className="max-w-2xl space-y-4">
-        <Button variant="ghost" size="sm" icon={<ArrowLeft className="w-4 h-4" />} onClick={() => navigate(-1)}>Back</Button>
+        <Button variant="ghost" size="sm" icon={<ArrowLeft className="w-4 h-4" />} onClick={() => navigate(-1)}>{t('common.back')}</Button>
 
         <article className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="p-6">
@@ -251,7 +254,7 @@ export default function AnnouncementDetailPage() {
               ) : (
                 <a href={announcement.linkUrl} target="_blank" rel="noopener noreferrer"
                   className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary-50 text-primary-700 rounded-xl hover:bg-primary-100 transition-colors font-medium text-sm">
-                  <ExternalLink className="w-4 h-4" /> Open Link
+                  <ExternalLink className="w-4 h-4" /> {t('announcements.open_link')}
                 </a>
               )}
             </div>
@@ -270,7 +273,7 @@ export default function AnnouncementDetailPage() {
                 ) : null}
                 <a href={announcement.attachmentUrl} download target="_blank" rel="noopener noreferrer"
                   className="inline-flex items-center gap-2 px-4 py-2 bg-primary-50 text-primary-700 rounded-xl hover:bg-primary-100 transition-colors font-medium text-sm">
-                  <Paperclip className="w-4 h-4" /> Download
+                  <Paperclip className="w-4 h-4" /> {t('common.download')}
                 </a>
               </div>
             );
@@ -292,12 +295,12 @@ export default function AnnouncementDetailPage() {
         </article>
 
         <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-          <h2 className="text-sm font-semibold text-gray-700 mb-4">Comments ({announcement.comments_count ?? 0})</h2>
+          <h2 className="text-sm font-semibold text-gray-700 mb-4">{t('announcements.comments')} ({announcement.comments_count ?? 0})</h2>
           {replyTo && (
             <div className="flex items-center gap-2 mb-2 px-3 py-2 bg-primary-50 border border-primary-100 rounded-lg text-xs text-gray-600">
               <CornerDownRight className="w-3.5 h-3.5 text-gray-500" />
               <span className="flex-1 truncate">
-                Replying to <span className="font-semibold text-gray-800">{commenterName(replyTo)}</span>
+                {t('announcements.replying_to')} <span className="font-semibold text-gray-800">{commenterName(replyTo)}</span>
               </span>
               <button onClick={() => setReplyTo(null)} className="text-gray-500 hover:text-gray-800">
                 <X className="w-3.5 h-3.5" />
@@ -311,7 +314,7 @@ export default function AnnouncementDetailPage() {
               value={commentText}
               onChange={e => setCommentText(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && !posting) handlePostComment(); }}
-              placeholder={replyTo ? 'Write a reply...' : 'Write a comment...'}
+              placeholder={replyTo ? t('announcements.write_reply') : t('announcements.write_comment')}
               className="flex-1 border border-gray-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
             <button
@@ -323,7 +326,7 @@ export default function AnnouncementDetailPage() {
             </button>
           </div>
           {comments.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-6">No comments yet. Be the first.</p>
+            <p className="text-sm text-gray-400 text-center py-6">{t('announcements.no_comments')}</p>
           ) : (
             <ul className="space-y-3">
               {threaded.map(({ top, replies }) => (

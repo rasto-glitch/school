@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Archive, GraduationCap, ChevronLeft } from 'lucide-react';
 import { parentApi } from '../../services/api';
 import { fmtMoney } from '../../utils/money';
@@ -40,16 +41,14 @@ interface ArchivedChildDetail extends ArchivedChildSummary {
   paymentHistory: SnapshotPlan[];
 }
 
-const REASON_LABEL: Record<string, string> = {
-  graduated: 'Graduated', transferred: 'Transferred', withdrew: 'Withdrew',
-};
-
 function receiptNo(p: SnapshotPayment): string | null {
   if (!p.receiptYear || !p.receiptNumber) return null;
   return `RCP-${p.receiptYear}-${String(p.receiptNumber).padStart(5, '0')}`;
 }
 
 export default function ParentArchivePage() {
+  const { t } = useTranslation();
+  const reasonLabel = (reason: string) => t(`archive.reason.${reason}`, { defaultValue: reason });
   const [list, setList] = useState<ArchivedChildSummary[] | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<ArchivedChildDetail | null>(null);
@@ -85,15 +84,15 @@ export default function ParentArchivePage() {
   }, [detail]);
 
   if (list === null) {
-    return <PageLayout title="Past Records"><LoadingSpinner /></PageLayout>;
+    return <PageLayout title={t('archive.title')}><LoadingSpinner /></PageLayout>;
   }
 
   if (list.length === 0) {
     return (
-      <PageLayout title="Past Records" subtitle="Records of your children who have left or graduated">
+      <PageLayout title={t('archive.title')} subtitle={t('archive.subtitle')}>
         <EmptyState
-          title="No past records"
-          description="When a child graduates or leaves, their final record appears here."
+          title={t('archive.no_records_title')}
+          description={t('archive.no_records_desc')}
           icon={<Archive className="w-8 h-8 text-gray-400" />}
         />
       </PageLayout>
@@ -103,9 +102,9 @@ export default function ParentArchivePage() {
   // Detail view
   if (selectedId && detail) {
     return (
-      <PageLayout title={detail.fullName} subtitle={`${REASON_LABEL[detail.reason] || detail.reason}${detail.departureDate ? ` · ${detail.departureDate}` : ''}`}>
+      <PageLayout title={detail.fullName} subtitle={`${reasonLabel(detail.reason)}${detail.departureDate ? ` · ${detail.departureDate}` : ''}`}>
         <button onClick={() => setSelectedId(null)} className="inline-flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900 mb-4">
-          <ChevronLeft className="w-4 h-4" /> Back to all records
+          <ChevronLeft className="w-4 h-4" /> {t('archive.back_to_all')}
         </button>
 
         {detailLoading ? <LoadingSpinner /> : (
@@ -113,7 +112,7 @@ export default function ParentArchivePage() {
             {/* Classes attended */}
             {detail.classesAttended && detail.classesAttended.length > 0 && (
               <Card>
-                <h2 className="font-semibold text-gray-900 mb-3">Classes attended</h2>
+                <h2 className="font-semibold text-gray-900 mb-3">{t('archive.classes_attended')}</h2>
                 <div className="flex flex-wrap gap-2">
                   {detail.classesAttended.map((c, i) => (
                     <span key={i} className="text-xs bg-gray-100 text-gray-700 rounded-full px-3 py-1">
@@ -126,9 +125,9 @@ export default function ParentArchivePage() {
 
             {/* Grades report */}
             <Card>
-              <h2 className="font-semibold text-gray-900 mb-3">Grades</h2>
+              <h2 className="font-semibold text-gray-900 mb-3">{t('archive.grades')}</h2>
               {grouped.size === 0 ? (
-                <p className="text-sm text-gray-500">No grades recorded.</p>
+                <p className="text-sm text-gray-500">{t('archive.no_grades')}</p>
               ) : (
                 <div className="space-y-6">
                   {Array.from(grouped.entries()).map(([year, byTerm]) => (
@@ -144,9 +143,9 @@ export default function ParentArchivePage() {
                                 <table className="w-full text-sm">
                                   <thead>
                                     <tr className="text-left text-gray-500 border-b border-gray-200">
-                                      <th className="px-4 py-2 font-medium">Subject</th>
+                                      <th className="px-4 py-2 font-medium">{t('common.subject')}</th>
                                       {markNames.map(n => <th key={n} className="px-3 py-2 font-medium text-center">{n}</th>)}
-                                      <th className="px-3 py-2 font-medium text-center">Total</th>
+                                      <th className="px-3 py-2 font-medium text-center">{t('common.total')}</th>
                                     </tr>
                                   </thead>
                                   <tbody>
@@ -175,9 +174,9 @@ export default function ParentArchivePage() {
 
             {/* Tuition / payment history */}
             <Card>
-              <h2 className="font-semibold text-gray-900 mb-3">Tuition history</h2>
+              <h2 className="font-semibold text-gray-900 mb-3">{t('archive.tuition_history')}</h2>
               {(detail.paymentHistory ?? []).length === 0 ? (
-                <p className="text-sm text-gray-500">No tuition records.</p>
+                <p className="text-sm text-gray-500">{t('archive.no_tuition')}</p>
               ) : (
                 <div className="space-y-4">
                   {detail.paymentHistory.map((plan, i) => {
@@ -188,7 +187,7 @@ export default function ParentArchivePage() {
                         <div className="flex flex-wrap items-baseline justify-between gap-2 mb-2">
                           <div className="font-semibold text-gray-900">{plan.planName}{plan.academicYear ? ` · ${plan.academicYear}` : ''}</div>
                           <div className="text-sm text-gray-600">
-                            Paid {fmtMoney(paid, plan.currency)} / {fmtMoney(due, plan.currency)}
+                            {t('archive.paid_amount', { paid: fmtMoney(paid, plan.currency), due: fmtMoney(due, plan.currency) })}
                           </div>
                         </div>
                         {plan.payments.length > 0 && (
@@ -219,7 +218,7 @@ export default function ParentArchivePage() {
 
   // List view
   return (
-    <PageLayout title="Past Records" subtitle="Records of your children who have left or graduated">
+    <PageLayout title={t('archive.title')} subtitle={t('archive.subtitle')}>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {list.map(c => (
           <Card key={c.id} hover onClick={() => setSelectedId(c.id)}>
@@ -230,7 +229,7 @@ export default function ParentArchivePage() {
               <div className="min-w-0">
                 <p className="font-semibold text-gray-900 truncate">{c.fullName}</p>
                 <p className="text-xs text-gray-500">
-                  {REASON_LABEL[c.reason] || c.reason}{c.departureDate ? ` · ${c.departureDate}` : ''}
+                  {reasonLabel(c.reason)}{c.departureDate ? ` · ${c.departureDate}` : ''}
                 </p>
               </div>
             </div>

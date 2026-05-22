@@ -49,10 +49,10 @@ export default function ReportsPage() {
       <div className="space-y-4">
         <div className="flex flex-wrap gap-3">
           <div className="flex-1 min-w-36">
-            <Select options={children.map(c => ({ value: c.id, label: c.fullName }))} placeholder="All Children" value={selectedChild} onChange={e => setSelectedChild(e.target.value)} />
+            <Select options={children.map(c => ({ value: c.id, label: c.fullName }))} placeholder={t('common.all_children')} value={selectedChild} onChange={e => setSelectedChild(e.target.value)} />
           </div>
           <div className="flex-1 min-w-36">
-            <Select options={subjects.map(s => ({ value: s, label: s }))} placeholder="All Subjects" value={selectedSubject} onChange={e => setSelectedSubject(e.target.value)} />
+            <Select options={subjects.map(s => ({ value: s, label: s }))} placeholder={t('common.all_subjects')} value={selectedSubject} onChange={e => setSelectedSubject(e.target.value)} />
           </div>
         </div>
 
@@ -91,23 +91,23 @@ export default function ReportsPage() {
 
                   {r.attendanceNotes && (
                     <div className="mb-2">
-                      <span className="text-xs font-semibold text-gray-500 uppercase">Attendance: </span>
+                      <span className="text-xs font-semibold text-gray-500 uppercase">{t('reports.attendance')}: </span>
                       <span className="text-sm text-gray-700">{r.attendanceNotes}</span>
                     </div>
                   )}
                   {r.behaviorNotes && (
                     <div className="mb-2">
-                      <span className="text-xs font-semibold text-gray-500 uppercase">Behavior: </span>
+                      <span className="text-xs font-semibold text-gray-500 uppercase">{t('reports.behavior')}: </span>
                       <span className="text-sm text-gray-700">{r.behaviorNotes}</span>
                     </div>
                   )}
                   {r.teacherNotes && (
                     <div className="bg-gray-50 rounded-xl p-3 mt-2">
-                      <span className="text-xs font-semibold text-gray-500 uppercase block mb-1">Teacher Notes</span>
+                      <span className="text-xs font-semibold text-gray-500 uppercase block mb-1">{t('reports.teacher_notes')}</span>
                       <p className="text-sm text-gray-700">{r.teacherNotes}</p>
                     </div>
                   )}
-                  {r.teachers && <p className="text-xs text-gray-400 mt-2">By {r.teachers.fullName}</p>}
+                  {r.teachers && <p className="text-xs text-gray-400 mt-2">{t('common.by_name', { name: r.teachers.fullName })}</p>}
                 </Card>
               );
             })}

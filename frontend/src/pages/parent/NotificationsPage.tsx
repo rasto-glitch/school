@@ -90,7 +90,7 @@ export default function NotificationsPage() {
   const flat = entries.flatMap(([, items]) => items);
 
   return (
-    <PageLayout title={t('notifications.title')} subtitle={unreadCount > 0 ? `${unreadCount} unread` : 'All caught up!'}>
+    <PageLayout title={t('notifications.title')} subtitle={unreadCount > 0 ? t('notifications.unread', { count: unreadCount }) : t('notifications.all_caught_up')}>
       {loading ? <NotificationListSkeleton /> : error ? (
         <ErrorMessage onRetry={reload} />
       ) : notifications.length === 0 ? (
@@ -102,7 +102,7 @@ export default function NotificationsPage() {
           endReached={loadMore}
           components={{
             Footer: () => loadingMore
-              ? <p className="py-3 text-center text-sm text-gray-400">Loading…</p>
+              ? <p className="py-3 text-center text-sm text-gray-400">{t('common.loading_more')}</p>
               : null,
           }}
           groupContent={(index) => (
@@ -122,7 +122,7 @@ export default function NotificationsPage() {
                     <div className="flex items-start justify-between gap-2">
                       <p className={`text-sm ${!n.isRead ? 'font-semibold text-gray-900' : 'font-medium text-gray-700'}`}>{n.title}</p>
                       {!n.isRead && (
-                        <button onClick={(e) => { e.stopPropagation(); markRead(n.id); }} className="p-1 hover:bg-white rounded-lg flex-shrink-0" title="Mark as read">
+                        <button onClick={(e) => { e.stopPropagation(); markRead(n.id); }} className="p-1 hover:bg-white rounded-lg flex-shrink-0" title={t('notifications.mark_read')}>
                           <Check className="w-3 h-3 text-primary-600" />
                         </button>
                       )}

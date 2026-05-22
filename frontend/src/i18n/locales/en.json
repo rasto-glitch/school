@@ -67,7 +67,32 @@
     "absent": "Absent",
     "portal": "{{role}} Portal",
     "previous": "Previous",
-    "next": "Next"
+    "next": "Next",
+    "child": "Child",
+    "all_children": "All Children",
+    "all_subjects": "All Subjects",
+    "student": "Student",
+    "overdue": "Overdue",
+    "no_due_date": "No due date",
+    "description": "Description",
+    "attachment": "Attachment",
+    "download": "Download",
+    "download_pdf": "Download PDF",
+    "download_attachment": "Download Attachment",
+    "loading_more": "Loading…",
+    "see_more": "see more",
+    "total": "Total",
+    "posted": "Posted {{date}}",
+    "by_name": "By {{name}}",
+    "days": {
+      "sunday": "Sunday",
+      "monday": "Monday",
+      "tuesday": "Tuesday",
+      "wednesday": "Wednesday",
+      "thursday": "Thursday",
+      "friday": "Friday",
+      "saturday": "Saturday"
+    }
   },
   "audit": {
     "title": "Audit Log",
@@ -119,19 +144,40 @@
     "title": "Homework",
     "subtitle": "All homework assigned to your child",
     "no_homework": "No homework assigned yet.",
-    "due": "Due {{date}}"
+    "due": "Due {{date}}",
+    "details_title": "Homework Details",
+    "not_found": "Homework not found.",
+    "due_label": "Due:"
   },
   "assignments": {
     "title": "Assignments",
     "subtitle": "Assignments and grades for your child",
     "no_assignments": "No assignments yet.",
     "due": "Due {{date}}",
-    "graded": "Graded: {{grade}}"
+    "graded": "Graded: {{grade}}",
+    "details_title": "Assignment Details",
+    "not_found": "Assignment not found.",
+    "status_pending": "Pending",
+    "status_submitted": "Submitted",
+    "status_graded": "Graded"
   },
   "announcements": {
     "title": "Announcements",
     "subtitle": "School announcements",
-    "no_announcements": "No announcements yet."
+    "no_announcements": "No announcements yet.",
+    "badge": "Announcement",
+    "detail_title": "Announcement",
+    "not_found": "Announcement not found.",
+    "comments": "Comments",
+    "no_comments": "No comments yet. Be the first.",
+    "write_comment": "Write a comment...",
+    "write_reply": "Write a reply...",
+    "reply": "Reply",
+    "replying_to": "Replying to",
+    "open_link": "Open Link",
+    "delete_confirm": "Delete this comment?",
+    "post_failed": "Failed to post comment",
+    "delete_failed": "Failed to delete comment"
   },
   "grades": {
     "title": "Grades",
@@ -149,7 +195,14 @@
   "reports": {
     "title": "Reports",
     "subtitle": "Teacher reports for your child",
-    "no_reports": "No reports yet."
+    "no_reports": "No reports yet.",
+    "not_found": "Report not found.",
+    "student_report": "Student Report",
+    "marks": "Marks",
+    "notes": "Notes",
+    "attendance": "Attendance",
+    "behavior": "Behavior",
+    "teacher_notes": "Teacher Notes"
   },
   "bus": {
     "title": "Live Bus Tracking",
@@ -179,6 +232,7 @@
     "select_students": "Select Student(s)",
     "reason": "Reason",
     "reason_placeholder": "e.g. Academic performance discussion",
+    "reason_required": "Reason is required",
     "message": "Message (optional)",
     "message_placeholder": "Additional details...",
     "preferred_date": "Preferred Date",
@@ -198,11 +252,90 @@
     "title": "Notifications",
     "subtitle": "Alerts and messages from school",
     "no_notifications": "No notifications yet.",
-    "mark_read": "Mark as read"
+    "mark_read": "Mark as read",
+    "unread": "{{count}} unread",
+    "all_caught_up": "All caught up!"
   },
   "profile": {
     "title": "Profile",
-    "subtitle": "Your account information"
+    "subtitle": "Your account information",
+    "change_photo": "Change photo",
+    "uploading": "Uploading…",
+    "set_picture": "Set Profile Picture",
+    "username": "Username",
+    "role": "Role",
+    "change_password": "Change Password",
+    "current_password": "Current Password",
+    "new_password": "New Password",
+    "confirm_password": "Confirm New Password",
+    "new_password_ph": "Min 8 chars, 1 uppercase, 1 special character",
+    "update_password": "Update Password",
+    "passwords_no_match": "Passwords do not match",
+    "password_changed": "Password changed successfully!",
+    "password_change_failed": "Failed to change password",
+    "select_image": "Please select an image file",
+    "image_too_large": "Image must be under 5 MB",
+    "picture_updated": "Profile picture updated!",
+    "picture_upload_failed": "Failed to upload picture"
+  },
+  "schedule": {
+    "title": "Schedule",
+    "subtitle": "Your child's weekly classes",
+    "whole_week": "Whole week",
+    "no_students": "No students linked to this account.",
+    "no_classes_today": "No classes scheduled for {{day}}.",
+    "none_published": "No schedule has been published yet for your child's class.",
+    "day": "Day",
+    "period": "Period {{number}}"
+  },
+  "tuition": {
+    "title": "Tuition",
+    "subtitle": "Your tuition status and payment history",
+    "no_records_title": "No tuition records",
+    "no_records_desc": "There's nothing on file yet. The school will set up your tuition plan.",
+    "failed_load": "Failed to load tuition",
+    "failed": "Failed",
+    "family_total": "Family total",
+    "all_paid": "All paid",
+    "across_plans": "Across {{count}} plan(s)",
+    "paid": "Paid",
+    "remaining": "Remaining",
+    "statement": "Statement",
+    "paid_of": "{{paid}} of {{due}}",
+    "remaining_suffix": "{{amount}} remaining",
+    "installment": "Installment {{sequence}}",
+    "paid_status": "Paid",
+    "partial": "Partial",
+    "base": "base {{amount}}",
+    "due_on": "due {{date}}",
+    "payments": "Payments",
+    "recorded_by": "Recorded by",
+    "inst_short": "Inst. {{sequence}}",
+    "other": "Other",
+    "status": {
+      "paid_up": "Paid up",
+      "current": "On track",
+      "due_soon": "Due soon",
+      "overdue": "Overdue"
+    }
+  },
+  "archive": {
+    "title": "Past Records",
+    "subtitle": "Records of your children who have left or graduated",
+    "no_records_title": "No past records",
+    "no_records_desc": "When a child graduates or leaves, their final record appears here.",
+    "back_to_all": "Back to all records",
+    "classes_attended": "Classes attended",
+    "grades": "Grades",
+    "no_grades": "No grades recorded.",
+    "tuition_history": "Tuition history",
+    "no_tuition": "No tuition records.",
+    "paid_amount": "Paid {{paid}} / {{due}}",
+    "reason": {
+      "graduated": "Graduated",
+      "transferred": "Transferred",
+      "withdrew": "Withdrew"
+    }
   },
   "driver": {
     "dashboard_title": "Driver Dashboard",
@@ -229,6 +362,12 @@
     "no_students": "No students assigned",
     "parent_label": "Parent: {{name}}",
     "guardian": "Parent / Guardian",
-    "emergency": "Emergency Contact"
+    "emergency": "Emergency Contact",
+    "location_error": "Location error: {{message}}",
+    "geo_unsupported": "Geolocation is not supported by your browser",
+    "drive_started": "Drive started! GPS tracking is active.",
+    "drive_start_failed": "Failed to start drive",
+    "drive_ended": "Drive ended.",
+    "drive_stop_failed": "Failed to stop drive"
   }
 }

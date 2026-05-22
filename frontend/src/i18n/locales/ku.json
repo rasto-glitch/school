@@ -67,7 +67,32 @@
     "absent": "غایب",
     "portal": "دەرگای {{role}}",
     "previous": "پێشوو",
-    "next": "دواتر"
+    "next": "دواتر",
+    "child": "منداڵ",
+    "all_children": "هەموو منداڵان",
+    "all_subjects": "هەموو بابەتەکان",
+    "student": "خوێندکار",
+    "overdue": "دواکەوتوو",
+    "no_due_date": "بەروار نییە",
+    "description": "پێناسە",
+    "attachment": "هاوپێچ",
+    "download": "داگرتن",
+    "download_pdf": "داگرتنی PDF",
+    "download_attachment": "داگرتنی هاوپێچ",
+    "loading_more": "بارکردن…",
+    "see_more": "زیاتر ببینە",
+    "total": "کۆی گشتی",
+    "posted": "بڵاوکرایەوە {{date}}",
+    "by_name": "لەلایەن {{name}}",
+    "days": {
+      "sunday": "یەکشەممە",
+      "monday": "دووشەممە",
+      "tuesday": "سێشەممە",
+      "wednesday": "چوارشەممە",
+      "thursday": "پێنجشەممە",
+      "friday": "هەینی",
+      "saturday": "شەممە"
+    }
   },
   "audit": {
     "title": "تۆماری گۆڕانکارییەکان",
@@ -119,19 +144,40 @@
     "title": "ئەرکی ماڵەوە",
     "subtitle": "هەموو ئەرکی ماڵەوەی دیاریکراو بۆ منداڵەکەت",
     "no_homework": "هیچ ئەرکی ماڵەوەیەک نییە.",
-    "due": "کۆتا بەروار: {{date}}"
+    "due": "کۆتا بەروار: {{date}}",
+    "details_title": "وردەکاری ئەرکی ماڵەوە",
+    "not_found": "ئەرکی ماڵەوە نەدۆزرایەوە.",
+    "due_label": "کۆتا بەروار:"
   },
   "assignments": {
     "title": "ئەرکەکان",
     "subtitle": "ئەرک و نمرەکان بۆ منداڵەکەت",
     "no_assignments": "هیچ ئەرکێک نییە.",
     "due": "کۆتا بەروار: {{date}}",
-    "graded": "نمرە: {{grade}}"
+    "graded": "نمرە: {{grade}}",
+    "details_title": "وردەکاری ئەرک",
+    "not_found": "ئەرک نەدۆزرایەوە.",
+    "status_pending": "چاوەڕوان",
+    "status_submitted": "نێردراو",
+    "status_graded": "نمرەدراو"
   },
   "announcements": {
     "title": "ڕاگەیاندنەکان",
     "subtitle": "ڕاگەیاندنەکانی قوتابخانە",
-    "no_announcements": "هیچ ڕاگەیاندنێک نییە."
+    "no_announcements": "هیچ ڕاگەیاندنێک نییە.",
+    "badge": "ڕاگەیاندن",
+    "detail_title": "ڕاگەیاندن",
+    "not_found": "ڕاگەیاندن نەدۆزرایەوە.",
+    "comments": "لێدوانەکان",
+    "no_comments": "هێشتا هیچ لێدوانێک نییە. یەکەم کەس بە.",
+    "write_comment": "لێدوانێک بنووسە...",
+    "write_reply": "وەڵامێک بنووسە...",
+    "reply": "وەڵام",
+    "replying_to": "وەڵام بۆ",
+    "open_link": "کردنەوەی بەستەر",
+    "delete_confirm": "ئەم لێدوانە بسڕێتەوە؟",
+    "post_failed": "بڵاوکردنەوەی لێدوان سەرکەوتوو نەبوو",
+    "delete_failed": "سڕینەوەی لێدوان سەرکەوتوو نەبوو"
   },
   "grades": {
     "title": "نمرەکان",
@@ -149,7 +195,14 @@
   "reports": {
     "title": "ڕاپۆرتەکان",
     "subtitle": "ڕاپۆرتەکانی مامۆستا بۆ منداڵەکەت",
-    "no_reports": "هیچ ڕاپۆرتێک نییە."
+    "no_reports": "هیچ ڕاپۆرتێک نییە.",
+    "not_found": "ڕاپۆرت نەدۆزرایەوە.",
+    "student_report": "ڕاپۆرتی خوێندکار",
+    "marks": "نمرەکان",
+    "notes": "تێبینییەکان",
+    "attendance": "ئامادەبوون",
+    "behavior": "ڕەفتار",
+    "teacher_notes": "تێبینی مامۆستا"
   },
   "bus": {
     "title": "شوێنی پاس ڕاستەوخۆ",
@@ -179,6 +232,7 @@
     "select_students": "خوێندکار(ەکان) هەڵبژێرە",
     "reason": "هۆکار",
     "reason_placeholder": "نموونە: قسەکردن دەربارەی ئەکادیمی",
+    "reason_required": "هۆکار پێویستە",
     "message": "پەیام (ئارەزوومەندانە)",
     "message_placeholder": "وردەکاری زیاتر...",
     "preferred_date": "بەرواری پێشنیاز",
@@ -198,11 +252,90 @@
     "title": "ئاگادارکردنەوەکان",
     "subtitle": "پەیام و ئاگادارکردنەوەکانی قوتابخانە",
     "no_notifications": "هیچ ئاگادارکردنەوەیەک نییە.",
-    "mark_read": "نیشانکردن وەک خوێندراوە"
+    "mark_read": "نیشانکردن وەک خوێندراوە",
+    "unread": "{{count}} نەخوێندراوە",
+    "all_caught_up": "هەمووی خوێندراوەتەوە!"
   },
   "profile": {
     "title": "پرۆفایل",
-    "subtitle": "زانیارییەکانی ئەکاونتەکەت"
+    "subtitle": "زانیارییەکانی ئەکاونتەکەت",
+    "change_photo": "گۆڕینی وێنە",
+    "uploading": "بارکردن…",
+    "set_picture": "دانانی وێنەی پرۆفایل",
+    "username": "ناوی بەکارهێنەر",
+    "role": "ڕۆڵ",
+    "change_password": "گۆڕینی وشەی نهێنی",
+    "current_password": "وشەی نهێنی ئێستا",
+    "new_password": "وشەی نهێنی نوێ",
+    "confirm_password": "دڵنیاکردنەوەی وشەی نهێنی نوێ",
+    "new_password_ph": "لانیکەم ٨ پیت، یەک پیتی گەورە، یەک هێمای تایبەت",
+    "update_password": "نوێکردنەوەی وشەی نهێنی",
+    "passwords_no_match": "وشە نهێنییەکان وەک یەک نین",
+    "password_changed": "وشەی نهێنی بە سەرکەوتوویی گۆڕدرا!",
+    "password_change_failed": "گۆڕینی وشەی نهێنی سەرکەوتوو نەبوو",
+    "select_image": "تکایە فایلێکی وێنە هەڵبژێرە",
+    "image_too_large": "وێنەکە دەبێت کەمتر لە ٥ مێگابایت بێت",
+    "picture_updated": "وێنەی پرۆفایل نوێکرایەوە!",
+    "picture_upload_failed": "بارکردنی وێنە سەرکەوتوو نەبوو"
+  },
+  "schedule": {
+    "title": "خشتە",
+    "subtitle": "وانەکانی هەفتانەی منداڵەکەت",
+    "whole_week": "هەموو هەفتە",
+    "no_students": "هیچ خوێندکارێک بەم هەژمارەوە نەبەستراوەتەوە.",
+    "no_classes_today": "هیچ وانەیەک بۆ {{day}} دانەنراوە.",
+    "none_published": "هێشتا هیچ خشتەیەک بۆ پۆلی منداڵەکەت بڵاو نەکراوەتەوە.",
+    "day": "ڕۆژ",
+    "period": "وانە {{number}}"
+  },
+  "tuition": {
+    "title": "کرێی خوێندن",
+    "subtitle": "دۆخی کرێ و مێژووی پارەدانەکانت",
+    "no_records_title": "هیچ تۆماری کرێ نییە",
+    "no_records_desc": "هێشتا هیچ تۆمارێک نییە. قوتابخانە پلانی کرێیەکەت دادەنێت.",
+    "failed_load": "بارکردنی کرێ سەرکەوتوو نەبوو",
+    "failed": "سەرکەوتوو نەبوو",
+    "family_total": "کۆی خێزان",
+    "all_paid": "هەمووی دراوە",
+    "across_plans": "بەناو {{count}} پلان",
+    "paid": "دراو",
+    "remaining": "ماوە",
+    "statement": "ڕاپۆرت",
+    "paid_of": "{{paid}} لە {{due}}",
+    "remaining_suffix": "{{amount}} ماوە",
+    "installment": "قیست {{sequence}}",
+    "paid_status": "دراو",
+    "partial": "بەشێک",
+    "base": "بنەڕەت {{amount}}",
+    "due_on": "کاتی {{date}}",
+    "payments": "پارەدانەکان",
+    "recorded_by": "تۆمارکراوە لەلایەن",
+    "inst_short": "قیست {{sequence}}",
+    "other": "هیتر",
+    "status": {
+      "paid_up": "تەواو دراوە",
+      "current": "لەسەر ڕێگا",
+      "due_soon": "بەمزووانە",
+      "overdue": "دواکەوتوو"
+    }
+  },
+  "archive": {
+    "title": "تۆمارە کۆنەکان",
+    "subtitle": "تۆماری منداڵەکانت کە ڕۆیشتوون یان دەرچوون",
+    "no_records_title": "هیچ تۆماری کۆن نییە",
+    "no_records_desc": "کاتێک منداڵێک دەردەچێت یان دەڕوات، تۆمارە کۆتاییەکەی لێرە دەردەکەوێت.",
+    "back_to_all": "گەڕانەوە بۆ هەموو تۆمارەکان",
+    "classes_attended": "پۆلەکانی ئامادەبووە",
+    "grades": "نمرەکان",
+    "no_grades": "هیچ نمرەیەک تۆمار نەکراوە.",
+    "tuition_history": "مێژووی کرێ",
+    "no_tuition": "هیچ تۆماری کرێ نییە.",
+    "paid_amount": "دراو {{paid}} / {{due}}",
+    "reason": {
+      "graduated": "دەرچووە",
+      "transferred": "گواستراوەتەوە",
+      "withdrew": "کشایەوە"
+    }
   },
   "driver": {
     "dashboard_title": "داشبۆردی شۆفێر",
@@ -229,6 +362,12 @@
     "no_students": "هیچ خوێندکارێک دیاری نەکراوە",
     "parent_label": "باوک: {{name}}",
     "guardian": "باوک / مامۆستا",
-    "emergency": "پەیوەندی فریاگوزاری"
+    "emergency": "پەیوەندی فریاگوزاری",
+    "location_error": "هەڵەی شوێن: {{message}}",
+    "geo_unsupported": "وێبگەڕەکەت پشتگیری دیاریکردنی شوێن ناکات",
+    "drive_started": "گەشت دەستی پێکرد! شوێنکەوتنی GPS چالاکە.",
+    "drive_start_failed": "دەستپێکردنی لێخوڕین سەرکەوتوو نەبوو",
+    "drive_ended": "لێخوڕین کۆتایی هات.",
+    "drive_stop_failed": "وەستاندنی لێخوڕین سەرکەوتوو نەبوو"
   }
 }

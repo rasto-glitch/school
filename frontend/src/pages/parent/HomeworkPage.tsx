@@ -57,7 +57,7 @@ export default function HomeworkPage() {
           <div className="flex-1 min-w-36">
             <Select
               options={children.map(c => ({ value: c.id, label: c.fullName }))}
-              placeholder="All Children"
+              placeholder={t('common.all_children')}
               value={selectedChild}
               onChange={e => setSelectedChild(e.target.value)}
             />
@@ -65,7 +65,7 @@ export default function HomeworkPage() {
           <div className="flex-1 min-w-36">
             <Select
               options={subjects.map(s => ({ value: s, label: s }))}
-              placeholder="All Subjects"
+              placeholder={t('common.all_subjects')}
               value={selectedSubject}
               onChange={e => setSelectedSubject(e.target.value)}
             />
@@ -94,7 +94,7 @@ export default function HomeworkPage() {
                       {hw.attachmentUrl && (
                         <a href={hw.attachmentUrl} target="_blank" rel="noopener noreferrer"
                           className="inline-flex items-center gap-1 mt-2 text-xs text-secondary-600 hover:text-secondary-700 font-medium">
-                          <Paperclip className="w-3 h-3" /> Download attachment
+                          <Paperclip className="w-3 h-3" /> {t('common.download_attachment')}
                         </a>
                       )}
                     </div>
@@ -106,9 +106,9 @@ export default function HomeworkPage() {
                         <span className={isOverdue(hw.dueDate) ? 'text-red-500 font-medium' : ''}>
                           {format(parseISO(hw.dueDate), 'MMM d, yyyy')}
                         </span>
-                      ) : 'No due date'}
+                      ) : t('common.no_due_date')}
                     </div>
-                    {isOverdue(hw.dueDate) && <Badge color="red">Overdue</Badge>}
+                    {isOverdue(hw.dueDate) && <Badge color="red">{t('common.overdue')}</Badge>}
                     <p className="text-xs text-gray-400 mt-1">{hw.classes?.name}</p>
                   </div>
                 </div>

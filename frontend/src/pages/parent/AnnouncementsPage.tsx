@@ -70,7 +70,7 @@ export default function AnnouncementsPage() {
           endReached={loadMore}
           components={{
             Footer: () => loadingMore
-              ? <p className="py-3 text-center text-sm text-gray-400">Loading…</p>
+              ? <p className="py-3 text-center text-sm text-gray-400">{t('common.loading_more')}</p>
               : null,
           }}
           itemContent={(_index, ann) => {
@@ -99,7 +99,7 @@ export default function AnnouncementsPage() {
                       <p className="text-xs text-gray-400">{format(parseISO(ann.createdAt), 'MMM d, yyyy')}</p>
                     </div>
                     <span className="text-xs bg-purple-50 text-purple-700 px-2 py-0.5 rounded-full font-semibold">
-                      Announcement
+                      {t('announcements.badge')}
                     </span>
                   </div>
                   <h2 className="font-semibold text-gray-900 mb-2 line-clamp-2">{ann.title}</h2>
@@ -109,7 +109,7 @@ export default function AnnouncementsPage() {
                       {teaser.truncated && (
                         <>
                           <span>… </span>
-                          <span className="text-primary-600 font-semibold">see more</span>
+                          <span className="text-primary-600 font-semibold">{t('common.see_more')}</span>
                         </>
                       )}
                     </p>

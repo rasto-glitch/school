@@ -32,23 +32,23 @@ export default function StartDrivePage() {
           isDriving: true,
         }).catch(() => {});
       },
-      (err) => { toast.error(`Location error: ${err.message}`); }
+      (err) => { toast.error(t('driver.location_error', { message: err.message })); }
     );
   };
 
   const startDrive = async () => {
     if (!navigator.geolocation) {
-      toast.error('Geolocation is not supported by your browser');
+      toast.error(t('driver.geo_unsupported'));
       return;
     }
     try {
       await driverApi.startDrive([...excluded]);
       setIsDriving(true);
-      toast.success('Drive started! GPS tracking is active.');
+      toast.success(t('driver.drive_started'));
       sendLocation();
       intervalRef.current = setInterval(sendLocation, 20000);
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to start drive');
+      toast.error(err.response?.data?.error || t('driver.drive_start_failed'));
     }
   };
 
@@ -57,9 +57,9 @@ export default function StartDrivePage() {
       await driverApi.stopDrive();
       if (intervalRef.current) clearInterval(intervalRef.current);
       setIsDriving(false);
-      toast.success('Drive ended.');
+      toast.success(t('driver.drive_ended'));
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to stop drive');
+      toast.error(err.response?.data?.error || t('driver.drive_stop_failed'));
     }
   };
 

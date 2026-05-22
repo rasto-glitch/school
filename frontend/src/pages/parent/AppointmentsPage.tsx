@@ -81,7 +81,7 @@ export default function AppointmentsPage() {
                 </div>
               </div>
             )}
-            <Input label={t('appointments.reason')} placeholder={t('appointments.reason_placeholder')} error={errors.reason?.message} {...register('reason', { required: 'Reason is required' })} />
+            <Input label={t('appointments.reason')} placeholder={t('appointments.reason_placeholder')} error={errors.reason?.message} {...register('reason', { required: t('appointments.reason_required') })} />
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('appointments.message')}</label>
               <textarea className="input-field min-h-[100px] resize-none" placeholder={t('appointments.message_placeholder')} {...register('message')} />

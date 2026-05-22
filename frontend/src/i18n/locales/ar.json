@@ -67,7 +67,32 @@
     "absent": "غائب",
     "portal": "بوابة {{role}}",
     "previous": "السابق",
-    "next": "التالي"
+    "next": "التالي",
+    "child": "الطفل",
+    "all_children": "كل الأطفال",
+    "all_subjects": "كل المواد",
+    "student": "الطالب",
+    "overdue": "متأخر",
+    "no_due_date": "لا يوجد تاريخ استحقاق",
+    "description": "الوصف",
+    "attachment": "المرفق",
+    "download": "تنزيل",
+    "download_pdf": "تنزيل PDF",
+    "download_attachment": "تنزيل المرفق",
+    "loading_more": "جارٍ التحميل…",
+    "see_more": "عرض المزيد",
+    "total": "المجموع",
+    "posted": "نُشر {{date}}",
+    "by_name": "بواسطة {{name}}",
+    "days": {
+      "sunday": "الأحد",
+      "monday": "الإثنين",
+      "tuesday": "الثلاثاء",
+      "wednesday": "الأربعاء",
+      "thursday": "الخميس",
+      "friday": "الجمعة",
+      "saturday": "السبت"
+    }
   },
   "audit": {
     "title": "سجل التدقيق",
@@ -119,19 +144,40 @@
     "title": "الواجبات المنزلية",
     "subtitle": "جميع الواجبات المنزلية المخصصة لطفلك",
     "no_homework": "لا توجد واجبات منزلية حتى الآن.",
-    "due": "الموعد النهائي: {{date}}"
+    "due": "الموعد النهائي: {{date}}",
+    "details_title": "تفاصيل الواجب",
+    "not_found": "لم يتم العثور على الواجب.",
+    "due_label": "الاستحقاق:"
   },
   "assignments": {
     "title": "المهام",
     "subtitle": "المهام والدرجات لطفلك",
     "no_assignments": "لا توجد مهام حتى الآن.",
     "due": "الموعد النهائي: {{date}}",
-    "graded": "الدرجة: {{grade}}"
+    "graded": "الدرجة: {{grade}}",
+    "details_title": "تفاصيل المهمة",
+    "not_found": "لم يتم العثور على المهمة.",
+    "status_pending": "قيد الانتظار",
+    "status_submitted": "مُقدّم",
+    "status_graded": "مُقيّم"
   },
   "announcements": {
     "title": "الإعلانات",
     "subtitle": "إعلانات المدرسة",
-    "no_announcements": "لا توجد إعلانات حتى الآن."
+    "no_announcements": "لا توجد إعلانات حتى الآن.",
+    "badge": "إعلان",
+    "detail_title": "إعلان",
+    "not_found": "لم يتم العثور على الإعلان.",
+    "comments": "التعليقات",
+    "no_comments": "لا توجد تعليقات بعد. كن أول من يعلق.",
+    "write_comment": "اكتب تعليقاً...",
+    "write_reply": "اكتب رداً...",
+    "reply": "رد",
+    "replying_to": "رداً على",
+    "open_link": "فتح الرابط",
+    "delete_confirm": "حذف هذا التعليق؟",
+    "post_failed": "فشل نشر التعليق",
+    "delete_failed": "فشل حذف التعليق"
   },
   "grades": {
     "title": "الدرجات",
@@ -149,7 +195,14 @@
   "reports": {
     "title": "التقارير",
     "subtitle": "تقارير المعلمين لطفلك",
-    "no_reports": "لا توجد تقارير حتى الآن."
+    "no_reports": "لا توجد تقارير حتى الآن.",
+    "not_found": "لم يتم العثور على التقرير.",
+    "student_report": "تقرير الطالب",
+    "marks": "الدرجات",
+    "notes": "الملاحظات",
+    "attendance": "الحضور",
+    "behavior": "السلوك",
+    "teacher_notes": "ملاحظات المعلم"
   },
   "bus": {
     "title": "تتبع الحافلة المباشر",
@@ -179,6 +232,7 @@
     "select_students": "اختر الطالب(ين)",
     "reason": "السبب",
     "reason_placeholder": "مثال: مناقشة التحصيل الدراسي",
+    "reason_required": "السبب مطلوب",
     "message": "رسالة (اختياري)",
     "message_placeholder": "تفاصيل إضافية...",
     "preferred_date": "التاريخ المفضل",
@@ -198,11 +252,90 @@
     "title": "الإشعارات",
     "subtitle": "تنبيهات ورسائل من المدرسة",
     "no_notifications": "لا توجد إشعارات حتى الآن.",
-    "mark_read": "تحديد كمقروء"
+    "mark_read": "تحديد كمقروء",
+    "unread": "{{count}} غير مقروء",
+    "all_caught_up": "لا جديد!"
   },
   "profile": {
     "title": "الملف الشخصي",
-    "subtitle": "معلومات حسابك"
+    "subtitle": "معلومات حسابك",
+    "change_photo": "تغيير الصورة",
+    "uploading": "جارٍ الرفع…",
+    "set_picture": "تعيين صورة الملف الشخصي",
+    "username": "اسم المستخدم",
+    "role": "الدور",
+    "change_password": "تغيير كلمة المرور",
+    "current_password": "كلمة المرور الحالية",
+    "new_password": "كلمة المرور الجديدة",
+    "confirm_password": "تأكيد كلمة المرور الجديدة",
+    "new_password_ph": "8 أحرف على الأقل، حرف كبير واحد، رمز خاص واحد",
+    "update_password": "تحديث كلمة المرور",
+    "passwords_no_match": "كلمتا المرور غير متطابقتين",
+    "password_changed": "تم تغيير كلمة المرور بنجاح!",
+    "password_change_failed": "فشل تغيير كلمة المرور",
+    "select_image": "يرجى اختيار ملف صورة",
+    "image_too_large": "يجب أن تكون الصورة أقل من 5 ميغابايت",
+    "picture_updated": "تم تحديث صورة الملف الشخصي!",
+    "picture_upload_failed": "فشل رفع الصورة"
+  },
+  "schedule": {
+    "title": "الجدول",
+    "subtitle": "حصص طفلك الأسبوعية",
+    "whole_week": "الأسبوع كامل",
+    "no_students": "لا يوجد طلاب مرتبطون بهذا الحساب.",
+    "no_classes_today": "لا توجد حصص مجدولة ليوم {{day}}.",
+    "none_published": "لم يتم نشر أي جدول لصف طفلك بعد.",
+    "day": "اليوم",
+    "period": "الحصة {{number}}"
+  },
+  "tuition": {
+    "title": "الرسوم الدراسية",
+    "subtitle": "حالة رسومك وسجل المدفوعات",
+    "no_records_title": "لا توجد سجلات رسوم",
+    "no_records_desc": "لا يوجد شيء مسجل بعد. ستقوم المدرسة بإعداد خطة الرسوم الخاصة بك.",
+    "failed_load": "فشل تحميل الرسوم",
+    "failed": "فشل",
+    "family_total": "إجمالي العائلة",
+    "all_paid": "مدفوع بالكامل",
+    "across_plans": "عبر {{count}} خطة",
+    "paid": "المدفوع",
+    "remaining": "المتبقي",
+    "statement": "كشف الحساب",
+    "paid_of": "{{paid}} من {{due}}",
+    "remaining_suffix": "{{amount}} متبقي",
+    "installment": "القسط {{sequence}}",
+    "paid_status": "مدفوع",
+    "partial": "جزئي",
+    "base": "الأساس {{amount}}",
+    "due_on": "يستحق {{date}}",
+    "payments": "المدفوعات",
+    "recorded_by": "سُجّل بواسطة",
+    "inst_short": "قسط {{sequence}}",
+    "other": "أخرى",
+    "status": {
+      "paid_up": "مدفوع بالكامل",
+      "current": "على المسار",
+      "due_soon": "مستحق قريباً",
+      "overdue": "متأخر"
+    }
+  },
+  "archive": {
+    "title": "السجلات السابقة",
+    "subtitle": "سجلات أبنائك الذين غادروا أو تخرجوا",
+    "no_records_title": "لا توجد سجلات سابقة",
+    "no_records_desc": "عند تخرج الطفل أو مغادرته، يظهر سجله النهائي هنا.",
+    "back_to_all": "العودة إلى جميع السجلات",
+    "classes_attended": "الصفوف التي حضرها",
+    "grades": "الدرجات",
+    "no_grades": "لا توجد درجات مسجلة.",
+    "tuition_history": "سجل الرسوم",
+    "no_tuition": "لا توجد سجلات رسوم.",
+    "paid_amount": "مدفوع {{paid}} / {{due}}",
+    "reason": {
+      "graduated": "تخرج",
+      "transferred": "منقول",
+      "withdrew": "انسحب"
+    }
   },
   "driver": {
     "dashboard_title": "لوحة تحكم السائق",
@@ -229,6 +362,12 @@
     "no_students": "لا يوجد طلاب مخصصون",
     "parent_label": "الوالد: {{name}}",
     "guardian": "الوالد / الوصي",
-    "emergency": "جهة الاتصال في الطوارئ"
+    "emergency": "جهة الاتصال في الطوارئ",
+    "location_error": "خطأ في الموقع: {{message}}",
+    "geo_unsupported": "متصفحك لا يدعم تحديد الموقع",
+    "drive_started": "بدأت الرحلة! تتبع GPS نشط.",
+    "drive_start_failed": "فشل بدء الرحلة",
+    "drive_ended": "انتهت الرحلة.",
+    "drive_stop_failed": "فشل إيقاف الرحلة"
   }
 }

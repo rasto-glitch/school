@@ -56,10 +56,10 @@ export default function AssignmentsPage() {
       <div className="space-y-4">
         <div className="flex flex-wrap gap-3">
           <div className="flex-1 min-w-36">
-            <Select options={children.map(c => ({ value: c.id, label: c.fullName }))} placeholder="All Children" value={selectedChild} onChange={e => setSelectedChild(e.target.value)} />
+            <Select options={children.map(c => ({ value: c.id, label: c.fullName }))} placeholder={t('common.all_children')} value={selectedChild} onChange={e => setSelectedChild(e.target.value)} />
           </div>
           <div className="flex-1 min-w-36">
-            <Select options={subjects.map(s => ({ value: s, label: s }))} placeholder="All Subjects" value={selectedSubject} onChange={e => setSelectedSubject(e.target.value)} />
+            <Select options={subjects.map(s => ({ value: s, label: s }))} placeholder={t('common.all_subjects')} value={selectedSubject} onChange={e => setSelectedSubject(e.target.value)} />
           </div>
         </div>
 
@@ -80,10 +80,10 @@ export default function AssignmentsPage() {
                       <div className="flex items-center gap-2 flex-wrap">
                         <h3 className="font-semibold text-gray-900">{a.title}</h3>
                         {a.subject && <Badge color="secondary">{a.subject}</Badge>}
-                        <Badge color={statusColors[a.submissionStatus] || 'gray'}>{a.submissionStatus}</Badge>
+                        <Badge color={statusColors[a.submissionStatus] || 'gray'}>{t(`assignments.status_${a.submissionStatus}`, { defaultValue: a.submissionStatus })}</Badge>
                       </div>
                       <p className="text-sm text-gray-500 mt-1">{a.description}</p>
-                      {a.students && <p className="text-xs text-gray-400 mt-1">Student: {a.students.fullName}</p>}
+                      {a.students && <p className="text-xs text-gray-400 mt-1">{t('common.student')}: {a.students.fullName}</p>}
                     </div>
                   </div>
                   <div className="flex-shrink-0 text-right space-y-1">

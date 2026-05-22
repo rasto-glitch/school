@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Calendar } from 'lucide-react';
 import { parentApi } from '../../services/api';
 import PageLayout from '../../components/layout/PageLayout';
@@ -9,16 +10,14 @@ import type { Student } from '../../types';
 
 const DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
 const DAY_INDEX: Record<string, number> = Object.fromEntries(DAY_NAMES.map((d, i) => [d, i]));
-const DAY_LABEL: Record<string, string> = {
-  sunday: 'Sunday', monday: 'Monday', tuesday: 'Tuesday',
-  wednesday: 'Wednesday', thursday: 'Thursday', friday: 'Friday', saturday: 'Saturday',
-};
 
 interface Cell { id: string; dayOfWeek: number; periodIndex: number; teachers?: { id: string; fullName: string; subject?: string } }
 
 type View = 'week' | 'today';
 
 export default function ParentSchedulePage() {
+  const { t } = useTranslation();
+  const dayLabel = (day: string) => t(`common.days.${day}`);
   const [children, setChildren] = useState<Student[]>([]);
   const [selectedChild, setSelectedChild] = useState('');
   const [periodsPerDay, setPeriodsPerDay] = useState(6);
@@ -65,12 +64,12 @@ export default function ParentSchedulePage() {
   }, [cells]);
 
   return (
-    <PageLayout title="Schedule" subtitle="Your child's weekly classes">
+    <PageLayout title={t('schedule.title')} subtitle={t('schedule.subtitle')}>
       <div className="space-y-4">
         {children.length > 1 && (
           <div className="w-full sm:w-56">
             <Select
-              label="Child"
+              label={t('common.child')}
               options={children.map(c => ({ value: c.id, label: c.fullName }))}
               value={selectedChild}
               onChange={e => setSelectedChild(e.target.value)}
@@ -83,13 +82,13 @@ export default function ParentSchedulePage() {
             onClick={() => setView('week')}
             className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${view === 'week' ? 'bg-white text-primary-600 shadow-sm' : 'text-gray-600'}`}
           >
-            Whole week
+            {t('schedule.whole_week')}
           </button>
           <button
             onClick={() => setView('today')}
             className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${view === 'today' ? 'bg-white text-primary-600 shadow-sm' : 'text-gray-600'}`}
           >
-            Today
+            {t('common.today')}
           </button>
         </div>
 
@@ -97,19 +96,19 @@ export default function ParentSchedulePage() {
           <LoadingSpinner />
         ) : children.length === 0 ? (
           <Card>
-            <p className="text-sm text-gray-500 text-center py-6">No students linked to this account.</p>
+            <p className="text-sm text-gray-500 text-center py-6">{t('schedule.no_students')}</p>
           </Card>
         ) : view === 'today' && !todayIsScheduled ? (
           <Card>
             <div className="flex items-center gap-3 text-gray-500">
               <Calendar className="w-5 h-5" />
-              <p className="text-sm">No classes scheduled for {DAY_LABEL[todayName]}.</p>
+              <p className="text-sm">{t('schedule.no_classes_today', { day: dayLabel(todayName) })}</p>
             </div>
           </Card>
         ) : visibleDays.length === 0 || cells.length === 0 ? (
           <Card>
             <div className="text-center py-8 text-gray-400 text-sm">
-              No schedule has been published yet for your child's class.
+              {t('schedule.none_published')}
             </div>
           </Card>
         ) : (
@@ -119,14 +118,14 @@ export default function ParentSchedulePage() {
                 <thead>
                   <tr>
                     <th className="bg-gray-50 border-r border-b border-gray-200 px-3 py-2 text-left font-semibold text-gray-700 min-w-[120px]">
-                      Day
+                      {t('schedule.day')}
                     </th>
                     {Array.from({ length: periodsPerDay }, (_, i) => (
                       <th
                         key={i}
                         className="bg-blue-50 border-r border-b border-gray-200 px-3 py-2 text-center font-semibold text-gray-700"
                       >
-                        Period {i + 1}
+                        {t('schedule.period', { number: i + 1 })}
                       </th>
                     ))}
                   </tr>
@@ -137,7 +136,7 @@ export default function ParentSchedulePage() {
                     return (
                       <tr key={day} className="hover:bg-gray-50/50">
                         <td className="border-r border-b border-gray-200 px-3 py-2 font-bold text-gray-900 bg-yellow-50">
-                          {DAY_LABEL[day]}
+                          {dayLabel(day)}
                         </td>
                         {Array.from({ length: periodsPerDay }, (_, i) => {
                           const cell = cellMap.get(`${dayIdx}:${i + 1}`);
