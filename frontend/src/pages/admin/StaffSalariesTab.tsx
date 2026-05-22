@@ -352,7 +352,7 @@ export default function StaffSalariesTab() {
       insuranceTouched: false,
       taxAmount: '',
       taxLabel: '',
-      paymentAccountId: '',
+      paymentAccountId: accounts[0]?.id ?? '', // default to the primary account
     });
   };
 
@@ -361,6 +361,7 @@ export default function StaffSalariesTab() {
     const amt = Number(paymentForm.amount);
     if (isNaN(amt) || amt <= 0) { toast.error('Amount must be greater than 0'); return; }
     if (!paymentForm.paidOn) { toast.error('Payment date is required'); return; }
+    if (!paymentForm.paymentAccountId) { toast.error('Choose which account the salary is paid from'); return; }
 
     let insAmt: number | null = null;
     if (paymentForm.insuranceAmount.trim() !== '') {
@@ -388,7 +389,7 @@ export default function StaffSalariesTab() {
         insurancePercentage: insPct,
         taxAmount: Number(paymentForm.taxAmount) || 0,
         taxLabel: paymentForm.taxLabel.trim() || null,
-        paymentAccountId: paymentForm.paymentAccountId || null,
+        paymentAccountId: paymentForm.paymentAccountId,
       });
       toast.success('Payment recorded');
       setPaymentTarget(null);
@@ -953,22 +954,25 @@ export default function StaffSalariesTab() {
                 </div>
               </div>
 
-              {accounts.length > 0 && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Paid from</label>
-                  <select
-                    value={paymentForm.paymentAccountId}
-                    onChange={e => setPaymentForm({ ...paymentForm, paymentAccountId: e.target.value })}
-                    className="w-full border border-gray-300 rounded-xl px-4 py-2.5 bg-white min-h-[44px] focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  >
-                    <option value="">— No specific account —</option>
-                    {accounts.map(a => (
-                      <option key={a.id} value={a.id}>{a.name} ({a.kind} · {a.currency})</option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-gray-500 mt-1">Cash leaves this account's running balance when the payment is recorded.</p>
-                </div>
-              )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Paid from <span className="text-rose-500">*</span></label>
+                {accounts.length > 0 ? (
+                  <>
+                    <select
+                      value={paymentForm.paymentAccountId}
+                      onChange={e => setPaymentForm({ ...paymentForm, paymentAccountId: e.target.value })}
+                      className="w-full border border-gray-300 rounded-xl px-4 py-2.5 bg-white min-h-[44px] focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    >
+                      {accounts.map(a => (
+                        <option key={a.id} value={a.id}>{a.name} ({a.kind} · {a.currency})</option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">Cash leaves this account's running balance when the payment is recorded.</p>
+                  </>
+                ) : (
+                  <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2">No payment accounts yet — create one before paying salaries.</p>
+                )}
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <Input
                   label="Tax included (optional)"

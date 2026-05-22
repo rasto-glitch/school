@@ -13,6 +13,9 @@ import { nonEmptyStr, uuid, amount, positiveAmount, isoDate, currency } from './
 // id/uuid-ish optional field that also tolerates '' and null, because the
 // controllers normalize those to null themselves (`categoryId || null`).
 const optionalId = z.union([uuid, z.literal('')]).nullable().optional();
+// Required account reference — money in/out must name the cash/bank account it
+// touches, so GL cash never falls back to a phantom default.
+const requiredId = uuid;
 const optText = (max = 2000) => z.string().max(max).nullable().optional();
 const idParam = z.object({ id: uuid });
 
@@ -56,7 +59,7 @@ export const recordPaymentSchema = z.object({
   currency: currency.optional(),
   taxAmount: amount.optional(),
   taxLabel: optText(120),
-  paymentAccountId: optionalId,
+  paymentAccountId: requiredId,
   allocations: z.array(allocation).max(200).nullable().optional(),
 });
 export const refundPaymentSchema = z.object({
@@ -65,7 +68,7 @@ export const refundPaymentSchema = z.object({
   method: optText(120),
   reference: optText(200),
   notes: optText(),
-  paymentAccountId: optionalId,
+  paymentAccountId: requiredId,
 });
 export const reasonBody = z.object({ reason: z.string().max(1000).optional() });
 
@@ -108,7 +111,7 @@ const expenseBase = {
   notes: optText(),
   taxAmount: amount.optional(),
   taxLabel: optText(120),
-  paymentAccountId: optionalId,
+  paymentAccountId: requiredId,
 };
 export const createExpenseSchema = z.object(expenseBase);
 export const updateExpenseSchema = z.object(expenseBase).partial();
@@ -139,7 +142,7 @@ export const recordTemplateSchema = z.object({
   paymentMethod: optText(120),
   taxAmount: amount.optional(),
   taxLabel: optText(120),
-  paymentAccountId: optionalId,
+  paymentAccountId: requiredId,
 });
 
 // ── Staff ───────────────────────────────────────────────────────────────
@@ -167,7 +170,7 @@ export const recordStaffPaymentSchema = z.object({
   insurancePercentage: z.number().min(0).max(100).nullable().optional(),
   taxAmount: amount.optional(),
   taxLabel: optText(120),
-  paymentAccountId: optionalId,
+  paymentAccountId: requiredId,
 });
 
 export const insurancePayoutSchema = z.object({

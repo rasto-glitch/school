@@ -1194,12 +1194,12 @@ export async function refundPayment(req: AuthRequest, res: Response): Promise<vo
   const studentName = ((original as any).student_fees?.students?.full_name) as string | undefined;
   await logAudit({ req, entityType: 'fee_payment', entityId: refund.id, action: 'create', after: refund, label: studentName, reason: `Refund of ${id}` });
 
-  // GL: Dr Income(kind) / Cr Cash — reverses recognised revenue.
+  // GL: Dr Accounts Receivable / Cr Cash — restores the receivable (keeps AR in
+  // step with the tuition module), rather than reducing income.
   await postRefund({
     schoolId, refundId: refund.id,
     studentId: (original as any).student_fees?.student_id ?? null,
     amount, currency: (original as any).currency ?? 'USD',
-    feeKind: (original as any).student_fees?.fee_plans?.kind ?? 'tuition',
     paymentAccountId: paymentAccountId ?? null, entryDate: refundedOn, postedBy: userId,
   });
 

@@ -21,8 +21,12 @@ const ZERO_DECIMAL = new Set(['JPY', 'KRW', 'IQD', 'VND']);
 export function fmtMoney(amount: number, currency: string): string {
   const sym = SYMBOLS[currency];
   const fractionDigits = ZERO_DECIMAL.has(currency) ? 0 : 2;
-  const n = (Number(amount) || 0).toLocaleString('en-US', { minimumFractionDigits: fractionDigits, maximumFractionDigits: fractionDigits });
-  return sym ? `${sym}${n}` : `${currency} ${n}`;
+  const v = Number(amount) || 0;
+  // Format the magnitude, then put the minus sign in FRONT of the symbol
+  // (-$2,850.00, not $-2,850.00).
+  const n = Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: fractionDigits, maximumFractionDigits: fractionDigits });
+  const body = sym ? `${sym}${n}` : `${currency} ${n}`;
+  return v < 0 ? `-${body}` : body;
 }
 
 export function getCurrencySymbol(currency: string): string {

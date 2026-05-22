@@ -90,6 +90,7 @@ export default function AdminTuitionStudentDetailPage() {
   const [refundDate, setRefundDate] = useState(new Date().toISOString().slice(0, 10));
   const [refundMethod, setRefundMethod] = useState('cash');
   const [refundNotes, setRefundNotes] = useState('');
+  const [refundAccountId, setRefundAccountId] = useState<string>('');
   const [refundBusy, setRefundBusy] = useState(false);
 
   const load = async () => {
@@ -116,7 +117,13 @@ export default function AdminTuitionStudentDetailPage() {
   useEffect(() => {
     if (!studentId) return;
     load().catch((e: any) => toast.error(e.response?.data?.error || 'Failed to load'));
-    accountingApi.listPaymentAccounts().then(r => setAccounts(r.data.filter(a => a.isActive))).catch(() => {});
+    accountingApi.listPaymentAccounts().then(r => {
+      const active = r.data.filter(a => a.isActive);
+      setAccounts(active);
+      // Default both pickers to the primary (first) account so the required
+      // field is pre-filled and money lands in a real account by default.
+      if (active[0]) { setPayAccountId(active[0].id); setRefundAccountId(active[0].id); }
+    }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [studentId]);
 
@@ -172,6 +179,7 @@ export default function AdminTuitionStudentDetailPage() {
   const recordPayment = async () => {
     if (totalPay <= 0) { toast.error('Enter a positive amount'); return; }
     if (needsExtraNote && !extraNote.trim()) { toast.error('Please add a note explaining the other amount'); return; }
+    if (!payAccountId) { toast.error('Choose which account the payment goes into'); return; }
     setPaySaving(true);
     try {
       await feesApi.recordPayment(activePlan.studentFeeId, {
@@ -184,12 +192,12 @@ export default function AdminTuitionStudentDetailPage() {
         unallocatedNote: needsExtraNote ? extraNote.trim() : undefined,
         taxAmount: Number(payTaxAmount) || 0,
         taxLabel: payTaxLabel || undefined,
-        paymentAccountId: payAccountId || null,
+        paymentAccountId: payAccountId,
       });
       toast.success('Payment recorded');
       setShowPay(false);
       setAllocAmounts({}); setExtraAmount(''); setExtraNote(''); setPayRef(''); setPayNotes('');
-      setPayTaxAmount(''); setPayTaxLabel(''); setPayAccountId('');
+      setPayTaxAmount(''); setPayTaxLabel('');
       await load();
     } catch (e: any) {
       toast.error(e.response?.data?.error || 'Failed to record payment');
@@ -224,6 +232,7 @@ export default function AdminTuitionStudentDetailPage() {
     if (!refundOf) return;
     const amt = Number(refundAmount);
     if (!isFinite(amt) || amt <= 0) { toast.error('Enter a positive refund amount'); return; }
+    if (!refundAccountId) { toast.error('Choose which account the refund is paid from'); return; }
     setRefundBusy(true);
     try {
       await feesApi.refundPayment(refundOf.id, {
@@ -231,6 +240,7 @@ export default function AdminTuitionStudentDetailPage() {
         refundedOn: refundDate,
         method: refundMethod || undefined,
         notes: refundNotes || undefined,
+        paymentAccountId: refundAccountId,
       });
       toast.success('Refund recorded');
       setRefundOf(null);
@@ -560,15 +570,16 @@ export default function AdminTuitionStudentDetailPage() {
               </select>
             </div>
             <Input label="Reference (optional)" value={payRef} onChange={e => setPayRef(e.target.value)} placeholder="Receipt no., transfer ID…" />
-            {accounts.length > 0 && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Deposit into (optional)</label>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Deposit into <span className="text-rose-500">*</span></label>
+              {accounts.length > 0 ? (
                 <select value={payAccountId} onChange={e => setPayAccountId(e.target.value)} className="w-full border border-gray-300 rounded-xl px-4 py-2.5 bg-white min-h-[44px] focus:outline-none focus:ring-2 focus:ring-primary-500">
-                  <option value="">— No specific account —</option>
                   {accounts.map(a => <option key={a.id} value={a.id}>{a.name} ({a.kind} · {a.currency})</option>)}
                 </select>
-              </div>
-            )}
+              ) : (
+                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2">No payment accounts yet — create one under Payment accounts before recording payments.</p>
+              )}
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <Input label="Tax included (optional)" type="number" step="0.01" value={payTaxAmount} onChange={e => setPayTaxAmount(e.target.value)} placeholder="0.00" />
               <Input label="Tax label" value={payTaxLabel} onChange={e => setPayTaxLabel(e.target.value)} placeholder="VAT 5%, etc." />
@@ -579,7 +590,7 @@ export default function AdminTuitionStudentDetailPage() {
             </div>
             <div className="flex gap-2 justify-end pt-2">
               <Button variant="ghost" onClick={() => setShowPay(false)}>Cancel</Button>
-              <Button onClick={recordPayment} loading={paySaving} disabled={totalPay <= 0}>Record</Button>
+              <Button onClick={recordPayment} loading={paySaving} disabled={totalPay <= 0 || !payAccountId}>Record</Button>
             </div>
           </div>
         </Modal>
@@ -605,12 +616,22 @@ export default function AdminTuitionStudentDetailPage() {
               </select>
             </div>
             <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Paid from <span className="text-rose-500">*</span></label>
+              {accounts.length > 0 ? (
+                <select value={refundAccountId} onChange={e => setRefundAccountId(e.target.value)} className="w-full border border-gray-300 rounded-xl px-4 py-2.5 bg-white min-h-[44px] focus:outline-none focus:ring-2 focus:ring-primary-500">
+                  {accounts.map(a => <option key={a.id} value={a.id}>{a.name} ({a.kind} · {a.currency})</option>)}
+                </select>
+              ) : (
+                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2">No payment accounts yet — create one before issuing refunds.</p>
+              )}
+            </div>
+            <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Notes (optional)</label>
               <textarea rows={2} value={refundNotes} onChange={e => setRefundNotes(e.target.value)} className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="Why is this being refunded?" />
             </div>
             <div className="flex gap-2 justify-end pt-2">
               <Button variant="ghost" onClick={() => setRefundOf(null)} disabled={refundBusy}>Cancel</Button>
-              <Button onClick={submitRefund} loading={refundBusy} icon={<Undo2 className="w-4 h-4" />}>Refund</Button>
+              <Button onClick={submitRefund} loading={refundBusy} disabled={!refundAccountId} icon={<Undo2 className="w-4 h-4" />}>Refund</Button>
             </div>
           </div>
         </Modal>

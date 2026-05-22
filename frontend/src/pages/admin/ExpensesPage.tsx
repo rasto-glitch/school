@@ -341,11 +341,16 @@ function RecordTemplateForm({ template, onClose, onRecorded }: {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    accountingApi.listPaymentAccounts().then(r => setAccounts(r.data.filter(a => a.isActive))).catch(() => {});
+    accountingApi.listPaymentAccounts().then(r => {
+      const active = r.data.filter(a => a.isActive);
+      setAccounts(active);
+      setPaymentAccountId(prev => prev || active[0]?.id || '');
+    }).catch(() => {});
   }, []);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!paymentAccountId) { toast.error('Choose which account this was paid from'); return; }
     setSubmitting(true);
     try {
       const r = await expensesApi.recordTemplate(template.id, {
@@ -355,7 +360,7 @@ function RecordTemplateForm({ template, onClose, onRecorded }: {
         notes: notes.trim() || null,
         taxAmount: Number(taxAmount) || 0,
         taxLabel: taxLabel.trim() || null,
-        paymentAccountId: paymentAccountId || null,
+        paymentAccountId,
       });
       toast.success(`Recorded. Next due: ${r.data.nextDueDate}`);
       onRecorded();
@@ -375,9 +380,9 @@ function RecordTemplateForm({ template, onClose, onRecorded }: {
         <Input label="Amount" type="number" step="0.01" min="0" value={amount} onChange={e => setAmount(e.target.value)} required />
         <Input label="Payment method" value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)} placeholder="cash, bank transfer..." />
         <Select
-          label="Paid from (optional)"
+          label="Paid from *"
           options={accounts.map(a => ({ value: a.id, label: `${a.name} (${a.kind} · ${a.currency})` }))}
-          placeholder={accounts.length ? '— No specific account —' : '(Add payment accounts to track per-till balances)'}
+          placeholder={accounts.length ? undefined : '(Add a payment account first)'}
           value={paymentAccountId}
           onChange={e => setPaymentAccountId(e.target.value)}
         />
@@ -386,7 +391,7 @@ function RecordTemplateForm({ template, onClose, onRecorded }: {
         <Input label="Notes" value={notes} onChange={e => setNotes(e.target.value)} placeholder="(optional)" />
         <div className="md:col-span-2 flex gap-2 justify-end mt-2">
           <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" loading={submitting}>Record expense</Button>
+          <Button type="submit" loading={submitting} disabled={!paymentAccountId}>Record expense</Button>
         </div>
       </form>
     </Card>
@@ -593,7 +598,11 @@ function ExpenseForm({ expense, categories, onClose, onSaved }: {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    accountingApi.listPaymentAccounts().then(r => setAccounts(r.data.filter(a => a.isActive))).catch(() => {});
+    accountingApi.listPaymentAccounts().then(r => {
+      const active = r.data.filter(a => a.isActive);
+      setAccounts(active);
+      setPaymentAccountId(prev => prev || active[0]?.id || '');
+    }).catch(() => {});
   }, []);
 
   const submit = async (e: React.FormEvent) => {
@@ -601,6 +610,7 @@ function ExpenseForm({ expense, categories, onClose, onSaved }: {
     const amt = parseFloat(amount);
     if (!name.trim()) { toast.error('Name is required'); return; }
     if (!isFinite(amt) || amt < 0) { toast.error('Amount must be a non-negative number'); return; }
+    if (!paymentAccountId) { toast.error('Choose which account this was paid from'); return; }
     setSubmitting(true);
     const payload = {
       name: name.trim(),
@@ -613,7 +623,7 @@ function ExpenseForm({ expense, categories, onClose, onSaved }: {
       notes: notes.trim() || null,
       taxAmount: Number(taxAmount) || 0,
       taxLabel: taxLabel.trim() || null,
-      paymentAccountId: paymentAccountId || null,
+      paymentAccountId,
     };
     try {
       if (isEdit) await expensesApi.update(expense!.id, payload);
@@ -644,9 +654,9 @@ function ExpenseForm({ expense, categories, onClose, onSaved }: {
         <Input label="Vendor / payee" value={vendor} onChange={e => setVendor(e.target.value)} placeholder="(optional)" />
         <Input label="Payment method" value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)} placeholder="cash, transfer, card..." />
         <Select
-          label="Paid from (optional)"
+          label="Paid from *"
           options={accounts.map(a => ({ value: a.id, label: `${a.name} (${a.kind} · ${a.currency})` }))}
-          placeholder={accounts.length ? '— No specific account —' : '(Add payment accounts to track per-till balances)'}
+          placeholder={accounts.length ? undefined : '(Add a payment account first)'}
           value={paymentAccountId}
           onChange={e => setPaymentAccountId(e.target.value)}
         />
@@ -655,7 +665,7 @@ function ExpenseForm({ expense, categories, onClose, onSaved }: {
         <Input label="Notes" value={notes} onChange={e => setNotes(e.target.value)} placeholder="(optional)" />
         <div className="md:col-span-2 flex gap-2 justify-end mt-2">
           <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button type="submit" loading={submitting}>{isEdit ? 'Save changes' : 'Record expense'}</Button>
+          <Button type="submit" loading={submitting} disabled={!paymentAccountId}>{isEdit ? 'Save changes' : 'Record expense'}</Button>
         </div>
       </form>
     </Card>

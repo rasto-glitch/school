@@ -105,11 +105,17 @@ async function loadAccounts(schoolId: string): Promise<AccountLookup> {
     .eq('school_id', schoolId)
     .eq('is_active', true);
   const rows = (data ?? []) as Array<{ id: string; code: string; fee_kind: string | null; payment_account_id: string | null; expense_category_id: string | null }>;
+  // "Primary" cash = the first real payment account (lowest code, i.e. earliest
+  // created). Falls back to the system Cash on Hand (1000) only if the school
+  // has no payment accounts at all. This is the GL safety net behind the now-
+  // required paymentAccountId — cash never lands in the phantom 1000 account.
+  const linkedCash = rows.filter(r => r.payment_account_id).sort((a, b) => a.code.localeCompare(b.code));
+  const primaryCashId = linkedCash[0]?.id ?? rows.find(r => r.code === '1000')?.id;
   return {
     byCode: (code) => rows.find(r => r.code === code)?.id,
     byFeeKind: (kind) => rows.find(r => r.fee_kind === kind)?.id ?? rows.find(r => r.code === '4090')?.id,
     cashFor: (paId) =>
-      (paId ? rows.find(r => r.payment_account_id === paId)?.id : undefined) ?? rows.find(r => r.code === '1000')?.id,
+      (paId ? rows.find(r => r.payment_account_id === paId)?.id : undefined) ?? primaryCashId,
     expenseFor: (catId) =>
       (catId ? rows.find(r => r.expense_category_id === catId)?.id : undefined) ?? rows.find(r => r.code === '5090')?.id,
   };
@@ -169,28 +175,31 @@ export async function postTuitionPayment(o: {
   });
 }
 
-// Refund issued (reverses revenue, cash out): Dr Income(kind) / Cr Cash.
+// Refund issued: Dr Accounts Receivable / Cr Cash. Returning cash to a family
+// reverses the *collection*, so the receivable is restored (they owe it again)
+// — it does NOT reduce income, because in the accrual model the payment never
+// recognised income (billing did). This keeps the GL's AR in lockstep with the
+// tuition module's outstanding balance.
 export async function postRefund(o: {
   schoolId: string;
   refundId: string;
   studentId?: string | null;
   amount: number;
   currency: string;
-  feeKind?: string | null;
   paymentAccountId?: string | null;
   entryDate: string;
   postedBy?: string | null;
 }): Promise<void> {
   if (!(o.amount > 0)) return;
   const acc = await loadAccounts(o.schoolId);
-  const income = acc.byFeeKind(o.feeKind || 'tuition');
+  const ar = acc.byCode('1100');
   const cash = acc.cashFor(o.paymentAccountId);
-  if (!income || !cash) { console.error('[gl] refund skipped: income/cash account missing'); return; }
+  if (!ar || !cash) { console.error('[gl] refund skipped: AR/cash account missing'); return; }
   await postEntry({
     schoolId: o.schoolId, entryDate: o.entryDate, currency: o.currency,
     source: 'refund', sourceId: o.refundId, memo: 'Refund', postedBy: o.postedBy ?? null,
     lines: [
-      { accountId: income, debit: o.amount, studentId: o.studentId ?? null },
+      { accountId: ar, debit: o.amount, description: 'Refund — receivable restored', studentId: o.studentId ?? null },
       { accountId: cash, credit: o.amount, studentId: o.studentId ?? null },
     ],
   });
