@@ -1,7 +1,7 @@
 import PDFDocument from 'pdfkit';
 import * as XLSX from 'xlsx';
 import type { Writable } from 'stream';
-import { fmtMoney as fmt } from './currency';
+import { fmtMoneyPdf as fmt } from './currency';
 import { setupPdfFonts } from './pdfFont';
 import type {
   TBCurrency, PLCurrency, BSCurrency, JournalRow,

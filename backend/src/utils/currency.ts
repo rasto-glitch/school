@@ -32,3 +32,18 @@ export function fmtMoney(amount: number, currency: string): string {
 export function getCurrencySymbol(currency: string): string {
   return SYMBOLS[currency] ?? currency;
 }
+
+// PDF-safe money formatter. Several currency symbols are Arabic-script
+// (IQD ع.د, SAR ر.س, AED د.إ, KWD, QAR, BHD, OMR, JOD, LBP, EGP) and don't
+// render cleanly in a left-to-right financial PDF. For those we print the ISO
+// code instead ("IQD 1,000.00"); everything else keeps its symbol.
+const hasArabic = (s: string): boolean => /[؀-ۿﭐ-﷿ﹰ-﻿]/.test(s);
+
+export function fmtMoneyPdf(amount: number, currency: string): string {
+  const sym = SYMBOLS[currency];
+  if (sym && !hasArabic(sym)) return fmtMoney(amount, currency);
+  const v = Number(amount) || 0;
+  const digits = ZERO_DECIMAL.has(currency) ? 0 : 2;
+  const n = Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  return `${v < 0 ? '-' : ''}${currency} ${n}`;
+}

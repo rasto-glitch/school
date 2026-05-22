@@ -82,12 +82,7 @@ async function fetchLogoBuffer(url: string | null): Promise<Buffer | null> {
   }
 }
 
-function fmt(amount: number, currency: string): string {
-  const symbols: Record<string, string> = { USD: '$', EUR: '€', GBP: '£' };
-  const sym = symbols[currency] ?? '';
-  const num = amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  return sym ? `${sym}${num}` : `${currency} ${num}`;
-}
+import { fmtMoneyPdf as fmt } from './currency';
 
 function drawHeader(doc: PDFKit.PDFDocument, school: SchoolInfo, logoBuf: Buffer | null, subtitle: string) {
   const F = setupPdfFonts(doc);

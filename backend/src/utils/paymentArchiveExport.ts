@@ -56,12 +56,7 @@ async function fetchLogoBuffer(url: string | null): Promise<Buffer | null> {
   }
 }
 
-function fmt(amount: number, currency: string): string {
-  const symbols: Record<string, string> = { USD: '$', EUR: '€', GBP: '£' };
-  const sym = symbols[currency] ?? '';
-  const num = amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  return sym ? `${sym}${num}` : `${currency} ${num}`;
-}
+import { fmtMoneyPdf as fmt } from './currency';
 
 export async function streamArchivePaymentPdf(stream: Writable, data: ArchivePaymentExportData): Promise<void> {
   const doc = new PDFDocument({ margin: 40, size: 'A4' });
