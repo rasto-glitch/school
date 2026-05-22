@@ -34,7 +34,7 @@ export default function TeacherMeScreen() {
 
   const pickAndUpload = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) { Alert.alert('Permission required', 'Please allow photo access in settings.'); return; }
+    if (!perm.granted) { Alert.alert(t('profile.photo_perm_title'), t('profile.photo_perm_body')); return; }
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8, allowsEditing: true, aspect: [1, 1] });
     if (result.canceled || !result.assets[0]) return;
     const asset = result.assets[0];
@@ -43,7 +43,7 @@ export default function TeacherMeScreen() {
       const data = await authApi.uploadProfilePicture(asset.uri, asset.fileName || `avatar_${Date.now()}.jpg`, asset.mimeType || 'image/jpeg');
       setProfilePicture(data.profilePicture);
     } catch {
-      Alert.alert('Upload failed', 'Could not update profile picture.');
+      Alert.alert(t('profile.upload_failed_title'), t('profile.upload_failed_body'));
     } finally {
       setUploading(false);
     }
@@ -98,22 +98,22 @@ export default function TeacherMeScreen() {
 
       <View style={styles.infoCard}>
         <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>Full Name</Text>
+          <Text style={styles.infoLabel}>{t('profile.full_name')}</Text>
           <Text style={styles.infoValue}>{user?.firstName} {user?.lastName}</Text>
         </View>
         <View style={styles.divider} />
         <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>Username</Text>
+          <Text style={styles.infoLabel}>{t('profile.username')}</Text>
           <Text style={styles.infoValue}>@{user?.username}</Text>
         </View>
         <View style={styles.divider} />
         <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>Role</Text>
-          <Text style={styles.infoValue}>Teacher</Text>
+          <Text style={styles.infoLabel}>{t('profile.role')}</Text>
+          <Text style={styles.infoValue}>{t('nav.teacher')}</Text>
         </View>
         <View style={styles.divider} />
         <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>School</Text>
+          <Text style={styles.infoLabel}>{t('profile.school')}</Text>
           <Text style={styles.infoValue}>{school?.name ?? '—'}</Text>
         </View>
       </View>

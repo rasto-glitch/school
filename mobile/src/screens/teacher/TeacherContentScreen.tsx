@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { CardListSkeleton } from '../../components/Skeleton';
 import { TouchableOpacity } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { useRoute, RouteProp } from '@react-navigation/native';
 import { BookOpen, ClipboardList, Star, FileText, Clock, Megaphone } from 'lucide-react-native';
 import { teacherApi } from '../../services/api';
@@ -20,6 +21,7 @@ type TabKey = 'homework' | 'assignments' | 'grades' | 'reports' | 'weekly' | 'po
 interface ClassItem { id: string; name: string }
 
 export default function TeacherContentScreen() {
+  const { t } = useTranslation();
   const colors = useColors();
   const isDark = useIsDark();
   const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
@@ -30,16 +32,16 @@ export default function TeacherContentScreen() {
   const initialTab = (route.params as { initialTab?: TabKey } | undefined)?.initialTab;
 
   const ALL_TABS: { key: TabKey; label: string; icon: typeof BookOpen; feature?: string }[] = [
-    { key: 'homework',    label: 'Homework',    icon: BookOpen },
-    { key: 'assignments', label: 'Assignments', icon: ClipboardList },
-    { key: 'grades',      label: 'Grades',      icon: Star,      feature: 'grades' },
-    { key: 'reports',     label: 'Reports',     icon: FileText,  feature: 'reports' },
-    { key: 'weekly',      label: 'Weekly',      icon: Clock,     feature: 'weekly_summary' },
-    { key: 'posts',       label: 'Posts',       icon: Megaphone, feature: 'academic_portal' },
+    { key: 'homework',    label: t('nav.homework'),         icon: BookOpen },
+    { key: 'assignments', label: t('nav.assignments'),      icon: ClipboardList },
+    { key: 'grades',      label: t('nav.grades'),           icon: Star,      feature: 'grades' },
+    { key: 'reports',     label: t('nav.reports'),          icon: FileText,  feature: 'reports' },
+    { key: 'weekly',      label: t('teacher.tab_weekly'),   icon: Clock,     feature: 'weekly_summary' },
+    { key: 'posts',       label: t('learn.tab_posts'),      icon: Megaphone, feature: 'academic_portal' },
   ];
-  const TABS = ALL_TABS.filter(t => !t.feature || feat(t.feature));
+  const TABS = ALL_TABS.filter(tb => !tb.feature || feat(tb.feature));
 
-  const validInitial = initialTab && TABS.find(t => t.key === initialTab) ? initialTab : 'homework';
+  const validInitial = initialTab && TABS.find(tb => tb.key === initialTab) ? initialTab : 'homework';
   const [tab, setTab] = useState<TabKey>(validInitial);
 
   const [classes, setClasses] = useState<ClassItem[]>([]);
@@ -67,14 +69,14 @@ export default function TeacherContentScreen() {
 
   // Update tab if route params change (e.g. navigating from dashboard)
   useEffect(() => {
-    if (initialTab && TABS.find(t => t.key === initialTab)) setTab(initialTab);
+    if (initialTab && TABS.find(tb => tb.key === initialTab)) setTab(initialTab);
   }, [initialTab]);
 
   return (
     <View style={[styles.root, { backgroundColor: colors.bg }]}>
       {/* Fixed header */}
       <View style={[styles.header, { paddingTop: spacing.md }]}>
-        <Text style={styles.title}>Content</Text>
+        <Text style={styles.title}>{t('nav.content')}</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabBar}>
           {TABS.map(({ key, label, icon: Icon }) => {
             const active = tab === key;

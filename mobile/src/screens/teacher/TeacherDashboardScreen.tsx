@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, RefreshControl } from 'react-native';
 import { DashboardSkeleton } from '../../components/Skeleton';
+import { useTranslation } from 'react-i18next';
 import { useNavigation } from '@react-navigation/native';
 import { CalendarCheck, BookOpen, ClipboardList, Star, FileText, Clock, ChevronRight, Calendar } from 'lucide-react-native';
 import { teacherApi, announcementApi } from '../../services/api';
@@ -16,9 +17,10 @@ interface PeriodItem { id: string; weekStartDate: string; weekEndDate: string }
 interface ScheduleCell { id: string; dayOfWeek: number; periodIndex: number; classes?: { id: string; name: string } }
 
 const DAY_NAMES = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'] as const;
-const DAY_LABEL = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 
 export default function TeacherDashboardScreen() {
+  const { t } = useTranslation();
+  const dayLabel = (idx: number) => t(`common.days.${DAY_NAMES[idx]}`);
   const colors = useColors();
   const isDark = useIsDark();
   const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
@@ -73,12 +75,12 @@ export default function TeacherDashboardScreen() {
   const onRefresh = () => { setRefreshing(true); load().finally(() => setRefreshing(false)); };
 
   const actions = [
-    feat('attendance') && { label: 'Attendance', icon: CalendarCheck, tab: 'TeacherAttendance', color: '#10B981', bg: '#D1FAE5' },
-    { label: 'Homework', icon: BookOpen, tab: 'TeacherContent', params: { initialTab: 'homework' }, color: '#3B82F6', bg: '#EFF6FF' },
-    { label: 'Assignments', icon: ClipboardList, tab: 'TeacherContent', params: { initialTab: 'assignments' }, color: '#8B5CF6', bg: '#F5F3FF' },
-    feat('grades') && { label: 'Grades', icon: Star, tab: 'TeacherContent', params: { initialTab: 'grades' }, color: '#F59E0B', bg: '#FEF3C7' },
-    feat('reports') && { label: 'Reports', icon: FileText, tab: 'TeacherContent', params: { initialTab: 'reports' }, color: '#EF4444', bg: '#FEE2E2' },
-    feat('weekly_summary') && { label: 'Weekly Summary', icon: Clock, tab: 'TeacherContent', params: { initialTab: 'weekly' }, color: '#06B6D4', bg: '#ECFEFF' },
+    feat('attendance') && { label: t('nav.attendance'), icon: CalendarCheck, tab: 'TeacherAttendance', color: '#10B981', bg: '#D1FAE5' },
+    { label: t('nav.homework'), icon: BookOpen, tab: 'TeacherContent', params: { initialTab: 'homework' }, color: '#3B82F6', bg: '#EFF6FF' },
+    { label: t('nav.assignments'), icon: ClipboardList, tab: 'TeacherContent', params: { initialTab: 'assignments' }, color: '#8B5CF6', bg: '#F5F3FF' },
+    feat('grades') && { label: t('nav.grades'), icon: Star, tab: 'TeacherContent', params: { initialTab: 'grades' }, color: '#F59E0B', bg: '#FEF3C7' },
+    feat('reports') && { label: t('nav.reports'), icon: FileText, tab: 'TeacherContent', params: { initialTab: 'reports' }, color: '#EF4444', bg: '#FEE2E2' },
+    feat('weekly_summary') && { label: t('supervisor.weekly_summary'), icon: Clock, tab: 'TeacherContent', params: { initialTab: 'weekly' }, color: '#06B6D4', bg: '#ECFEFF' },
   ].filter(Boolean) as { label: string; icon: any; tab: string; params?: object; color: string; bg: string }[];
 
   return (
@@ -87,9 +89,9 @@ export default function TeacherDashboardScreen() {
       contentContainerStyle={styles.content}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
     >
-      <Text style={styles.title}>Dashboard</Text>
+      <Text style={styles.title}>{t('nav.dashboard')}</Text>
       <Text style={styles.subtitle}>{today}</Text>
-      <Text style={styles.greeting}>Welcome, {user?.firstName}</Text>
+      <Text style={styles.greeting}>{t('teacher.welcome', { name: user?.firstName })}</Text>
 
       {/* Classes row */}
       {classes.length > 0 && (
@@ -110,14 +112,17 @@ export default function TeacherDashboardScreen() {
         >
           <Clock size={16} color={colors.success} />
           <Text style={styles.periodText}>
-            Summary period open · {new Date(period.weekStartDate + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – {new Date(period.weekEndDate + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+            {t('teacher.summary_period_open', {
+              start: new Date(period.weekStartDate + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+              end: new Date(period.weekEndDate + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+            })}
           </Text>
           <ChevronRight size={14} color={colors.success} style={{ marginLeft: 'auto' }} />
         </TouchableOpacity>
       )}
 
       {/* Quick actions */}
-      <Text style={styles.sectionLabel}>Quick Actions</Text>
+      <Text style={styles.sectionLabel}>{t('teacher.quick_actions')}</Text>
       <View style={styles.actionsGrid}>
         {actions.map(({ label, icon: Icon, tab, params, color, bg }) => (
           <TouchableOpacity
@@ -146,22 +151,22 @@ export default function TeacherDashboardScreen() {
         return (
           <>
             <View style={styles.scheduleHeader}>
-              <Text style={styles.sectionLabel}>Today's Classes</Text>
+              <Text style={styles.sectionLabel}>{t('teacher.todays_classes')}</Text>
               <TouchableOpacity onPress={() => navigation.navigate('TeacherSchedule')} hitSlop={8}>
-                <Text style={styles.seeAllLink}>Full schedule →</Text>
+                <Text style={styles.seeAllLink}>{t('teacher.full_schedule')}</Text>
               </TouchableOpacity>
             </View>
             {!todayIsScheduled ? (
               <View style={styles.scheduleEmpty}>
                 <Calendar size={16} color={colors.textMuted} />
                 <Text style={styles.scheduleEmptyText}>
-                  No school today ({DAY_LABEL[todayIdx]}).
+                  {t('teacher.no_school_today', { day: dayLabel(todayIdx) })}
                 </Text>
               </View>
             ) : todayCells.length === 0 ? (
               <View style={styles.scheduleEmpty}>
                 <Calendar size={16} color={colors.textMuted} />
-                <Text style={styles.scheduleEmptyText}>No classes scheduled for today.</Text>
+                <Text style={styles.scheduleEmptyText}>{t('teacher.no_classes_today')}</Text>
               </View>
             ) : (
               <View style={styles.todayList}>
@@ -169,7 +174,7 @@ export default function TeacherDashboardScreen() {
                   const cell = todayCells.find(c => c.periodIndex === i + 1);
                   return (
                     <View key={i} style={styles.todayRow}>
-                      <Text style={styles.todayPeriod}>P{i + 1}</Text>
+                      <Text style={styles.todayPeriod}>{t('schedule.period_short', { n: i + 1 })}</Text>
                       {cell?.classes?.name ? (
                         <Text style={styles.todayClass}>{cell.classes.name}</Text>
                       ) : (
@@ -189,7 +194,7 @@ export default function TeacherDashboardScreen() {
         <DashboardSkeleton />
       ) : recentHw.length > 0 ? (
         <>
-          <Text style={[styles.sectionLabel, { marginTop: spacing.md }]}>Recent Homework</Text>
+          <Text style={[styles.sectionLabel, { marginTop: spacing.md }]}>{t('teacher.recent_homework')}</Text>
           {recentHw.map(hw => (
             <TouchableOpacity
               key={hw.id}
@@ -203,7 +208,7 @@ export default function TeacherDashboardScreen() {
                 <Text style={styles.hwTitle}>{hw.title}</Text>
                 <Text style={styles.hwMeta}>
                   {[hw.subject, hw.classes?.name].filter(Boolean).join(' · ')}
-                  {hw.dueDate ? ` · Due ${new Date(hw.dueDate).toLocaleDateString()}` : ''}
+                  {hw.dueDate ? ` · ${t('common.due')} ${new Date(hw.dueDate).toLocaleDateString()}` : ''}
                 </Text>
               </View>
               <ChevronRight size={14} color={colors.textMuted} />
@@ -215,7 +220,7 @@ export default function TeacherDashboardScreen() {
       {/* Announcements */}
       {announcements.length > 0 && (
         <>
-          <Text style={[styles.sectionLabel, { marginTop: spacing.md }]}>Announcements</Text>
+          <Text style={[styles.sectionLabel, { marginTop: spacing.md }]}>{t('nav.announcements')}</Text>
           {announcements.map(ann => (
             <AnnouncementCard
               key={ann.id}

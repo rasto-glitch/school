@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { CardListSkeleton } from '../../components/Skeleton';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 import * as DocumentPicker from 'expo-document-picker';
 import { BookOpen, Plus, Trash2, Paperclip, X, Send, ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { teacherApi } from '../../services/api';
@@ -18,6 +19,8 @@ interface HwItem { id: string; title: string; subject?: string; dueDate?: string
 interface Props { subject?: string; classes: ClassItem[]; subjects?: SubjectOpt[]; teaching?: TeachingEntry[] }
 
 export default function TeacherHomeworkScreen({ subject, classes, subjects, teaching }: Props) {
+  const { t } = useTranslation();
+  const calDays = t('teacher.weekday_short', { returnObjects: true }) as string[];
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -70,7 +73,7 @@ export default function TeacherHomeworkScreen({ subject, classes, subjects, teac
   };
 
   const handleSubmit = async () => {
-    if (!classId || !title.trim()) { Alert.alert('Required', 'Please select a class and enter a title.'); return; }
+    if (!classId || !title.trim()) { Alert.alert(t('teacher.required'), t('teacher.need_class_title')); return; }
     setSubmitting(true);
     try {
       await teacherApi.createHomework({ classId, title: title.trim(), description: description.trim() || undefined, dueDate: dueDate || undefined, subject: selectedSubject || subject || undefined, file: file || undefined });
@@ -78,19 +81,19 @@ export default function TeacherHomeworkScreen({ subject, classes, subjects, teac
       setShowForm(false);
       load();
     } catch {
-      Alert.alert('Error', 'Could not create homework.');
+      Alert.alert(t('common.error'), t('teacher.create_homework_failed'));
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleDelete = (item: HwItem) => {
-    Alert.alert('Delete Homework', `Delete "${item.title}"?`, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: async () => {
+    Alert.alert(t('teacher.delete_homework'), t('teacher.confirm_delete', { title: item.title }), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('common.delete'), style: 'destructive', onPress: async () => {
         setDeletingId(item.id);
         try { await teacherApi.deleteHomework(item.id); setHomework(prev => prev.filter(h => h.id !== item.id)); }
-        catch { Alert.alert('Error', 'Could not delete homework.'); }
+        catch { Alert.alert(t('common.error'), t('teacher.delete_homework_failed')); }
         finally { setDeletingId(null); }
       }},
     ]);
@@ -112,7 +115,7 @@ export default function TeacherHomeworkScreen({ subject, classes, subjects, teac
     <View style={{ flex: 1 }}>
       <TouchableOpacity style={styles.addBtn} onPress={() => setShowForm(true)}>
         <Plus size={18} color="#fff" />
-        <Text style={styles.addBtnText}>New Homework</Text>
+        <Text style={styles.addBtnText}>{t('teacher.new_homework')}</Text>
       </TouchableOpacity>
 
       {loading ? (
@@ -120,7 +123,7 @@ export default function TeacherHomeworkScreen({ subject, classes, subjects, teac
       ) : homework.length === 0 ? (
         <View style={styles.empty}>
           <BookOpen size={36} color={colors.textMuted} />
-          <Text style={styles.emptyText}>No homework posted yet.</Text>
+          <Text style={styles.emptyText}>{t('teacher.no_homework')}</Text>
         </View>
       ) : (
         <ScrollView contentContainerStyle={{ padding: spacing.md, paddingBottom: 20 }}>
@@ -129,7 +132,7 @@ export default function TeacherHomeworkScreen({ subject, classes, subjects, teac
               <View style={styles.cardLeft}>
                 <Text style={styles.cardTitle}>{hw.title}</Text>
                 <Text style={styles.cardMeta}>{[hw.subject, hw.classes?.name].filter(Boolean).join(' · ')}</Text>
-                {hw.dueDate && <Text style={styles.dueText}>Due {new Date(hw.dueDate).toLocaleDateString()}</Text>}
+                {hw.dueDate && <Text style={styles.dueText}>{t('common.due')} {new Date(hw.dueDate).toLocaleDateString()}</Text>}
               </View>
               <TouchableOpacity onPress={() => handleDelete(hw)} disabled={deletingId === hw.id} style={styles.deleteBtn}>
                 {deletingId === hw.id ? <ActivityIndicator size="small" color={colors.danger} /> : <Trash2 size={18} color={colors.danger} />}
@@ -143,11 +146,11 @@ export default function TeacherHomeworkScreen({ subject, classes, subjects, teac
       <Modal visible={showForm} animationType="slide" presentationStyle="pageSheet">
         <View style={[styles.modal, { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 24 }]}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>New Homework</Text>
+            <Text style={styles.modalTitle}>{t('teacher.new_homework')}</Text>
             <TouchableOpacity onPress={() => setShowForm(false)}><X size={22} color={colors.textMuted} /></TouchableOpacity>
           </View>
           <ScrollView showsVerticalScrollIndicator={false}>
-            <Text style={styles.fieldLabel}>Class</Text>
+            <Text style={styles.fieldLabel}>{t('teacher.class')}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing.md }}>
               {classes.map(c => (
                 <TouchableOpacity key={c.id} style={[styles.chip, classId === c.id && styles.chipActive]} onPress={() => setClassId(c.id)}>
@@ -157,12 +160,12 @@ export default function TeacherHomeworkScreen({ subject, classes, subjects, teac
             </ScrollView>
             {classId ? (subjectOptions.length === 0 ? (
               <>
-                <Text style={styles.fieldLabel}>Subject</Text>
-                <Text style={[styles.cardMeta, { color: colors.warning, marginBottom: spacing.sm }]}>You aren't assigned any subject for this class.</Text>
+                <Text style={styles.fieldLabel}>{t('common.subject')}</Text>
+                <Text style={[styles.cardMeta, { color: colors.warning, marginBottom: spacing.sm }]}>{t('teacher.no_subject_for_class')}</Text>
               </>
             ) : (
               <>
-                <Text style={styles.fieldLabel}>Subject</Text>
+                <Text style={styles.fieldLabel}>{t('common.subject')}</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing.md }}>
                   {subjectOptions.map(s => (
                     <TouchableOpacity key={s.id} style={[styles.chip, selectedSubject === s.name && styles.chipActive]} onPress={() => setSelectedSubject(s.name)}>
@@ -172,16 +175,16 @@ export default function TeacherHomeworkScreen({ subject, classes, subjects, teac
                 </ScrollView>
               </>
             )) : null}
-            <Text style={styles.fieldLabel}>Title *</Text>
-            <TextInput style={styles.input} placeholder="Homework title" placeholderTextColor={colors.textMuted} value={title} onChangeText={setTitle} />
-            <Text style={styles.fieldLabel}>Description</Text>
-            <TextInput style={[styles.input, styles.textarea]} placeholder="Description (optional)" placeholderTextColor={colors.textMuted} value={description} onChangeText={setDescription} multiline numberOfLines={3} />
+            <Text style={styles.fieldLabel}>{t('teacher.title_required')}</Text>
+            <TextInput style={styles.input} placeholder={t('teacher.homework_title_ph')} placeholderTextColor={colors.textMuted} value={title} onChangeText={setTitle} />
+            <Text style={styles.fieldLabel}>{t('teacher.description_label')}</Text>
+            <TextInput style={[styles.input, styles.textarea]} placeholder={t('teacher.description_ph')} placeholderTextColor={colors.textMuted} value={description} onChangeText={setDescription} multiline numberOfLines={3} />
 
             {/* Due Date with inline calendar */}
-            <Text style={styles.fieldLabel}>Due Date</Text>
+            <Text style={styles.fieldLabel}>{t('teacher.due_date_label')}</Text>
             <TouchableOpacity style={styles.dateBtn} onPress={() => setShowCal(v => !v)} activeOpacity={0.7}>
               <Text style={[styles.dateBtnText, !dueDate && { color: colors.textMuted }]}>
-                {displayDueDate || 'Select due date (optional)'}
+                {displayDueDate || t('teacher.select_due_date')}
               </Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 {dueDate ? (
@@ -205,8 +208,8 @@ export default function TeacherHomeworkScreen({ subject, classes, subjects, teac
                   </TouchableOpacity>
                 </View>
                 <View style={styles.calDayRow}>
-                  {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(d => (
-                    <Text key={d} style={styles.calDayLabel}>{d}</Text>
+                  {calDays.map((d, di) => (
+                    <Text key={di} style={styles.calDayLabel}>{d}</Text>
                   ))}
                 </View>
                 {Array.from({ length: calCells.length / 7 }, (_, row) => (
@@ -232,11 +235,11 @@ export default function TeacherHomeworkScreen({ subject, classes, subjects, teac
 
             <TouchableOpacity style={styles.fileBtn} onPress={pickFile}>
               <Paperclip size={16} color={colors.primary} />
-              <Text style={styles.fileBtnText}>{file ? file.name : 'Attach File (optional)'}</Text>
+              <Text style={styles.fileBtnText}>{file ? file.name : t('teacher.attach_file')}</Text>
               {file && <TouchableOpacity onPress={() => setFile(null)}><X size={14} color={colors.textMuted} /></TouchableOpacity>}
             </TouchableOpacity>
             <TouchableOpacity style={styles.submitBtn} onPress={handleSubmit} disabled={submitting}>
-              {submitting ? <ActivityIndicator color="#fff" size="small" /> : <><Send size={16} color="#fff" /><Text style={styles.submitText}>Post Homework</Text></>}
+              {submitting ? <ActivityIndicator color="#fff" size="small" /> : <><Send size={16} color="#fff" /><Text style={styles.submitText}>{t('teacher.post_homework')}</Text></>}
             </TouchableOpacity>
           </ScrollView>
         </View>

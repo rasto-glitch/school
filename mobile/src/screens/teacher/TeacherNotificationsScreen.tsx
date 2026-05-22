@@ -81,8 +81,8 @@ export default function TeacherNotificationsScreen() {
 
   const groupLabel = (dateStr: string) => {
     const d = parseISO(dateStr);
-    if (isToday(d)) return 'Today';
-    if (isYesterday(d)) return 'Yesterday';
+    if (isToday(d)) return t('common.today');
+    if (isYesterday(d)) return t('common.yesterday');
     return format(d, 'MMM d, yyyy');
   };
 
@@ -110,16 +110,16 @@ export default function TeacherNotificationsScreen() {
       ListHeaderComponent={
         <>
           <View style={styles.titleRow}>
-            <Text style={styles.title}>Notifications</Text>
+            <Text style={styles.title}>{t('nav.notifications')}</Text>
             {unreadCount > 0 && (
               <TouchableOpacity style={styles.markAllBtn} onPress={markAll} disabled={markingAll}>
                 {markingAll
                   ? <ActivityIndicator size="small" color={colors.primary} />
-                  : <Text style={styles.markAllText}>Mark all read</Text>}
+                  : <Text style={styles.markAllText}>{t('notifications.mark_all_read')}</Text>}
               </TouchableOpacity>
             )}
           </View>
-          {unreadCount > 0 && <Text style={styles.unreadLabel}>{unreadCount} unread</Text>}
+          {unreadCount > 0 && <Text style={styles.unreadLabel}>{t('notifications.unread', { count: unreadCount })}</Text>}
         </>
       }
       ListEmptyComponent={
@@ -128,7 +128,7 @@ export default function TeacherNotificationsScreen() {
           : (
             <View style={styles.empty}>
               <Bell size={36} color={colors.textMuted} />
-              <Text style={styles.emptyText}>No notifications yet.</Text>
+              <Text style={styles.emptyText}>{t('notifications.no_notifications')}</Text>
             </View>
           )
       }

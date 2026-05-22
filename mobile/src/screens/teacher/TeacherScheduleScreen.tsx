@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { Calendar } from 'lucide-react-native';
 import { teacherApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
@@ -7,15 +8,13 @@ import { spacing, radius, font, shadow } from '../../theme';
 
 const DAY_NAMES = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'] as const;
 const DAY_INDEX: Record<string, number> = Object.fromEntries(DAY_NAMES.map((d, i) => [d, i]));
-const DAY_LABEL: Record<string, string> = {
-  sunday: 'Sunday', monday: 'Monday', tuesday: 'Tuesday',
-  wednesday: 'Wednesday', thursday: 'Thursday', friday: 'Friday', saturday: 'Saturday',
-};
 
 interface Cell { id: string; dayOfWeek: number; periodIndex: number; classes?: { id: string; name: string } }
 type ViewMode = 'week' | 'today';
 
 export default function TeacherScheduleScreen() {
+  const { t } = useTranslation();
+  const dayLabel = (d: string) => t(`common.days.${d}`);
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
@@ -65,25 +64,25 @@ export default function TeacherScheduleScreen() {
           onPress={() => setView('week')}
           style={[styles.toggleBtn, view === 'week' && styles.toggleBtnActive]}
         >
-          <Text style={[styles.toggleText, view === 'week' && styles.toggleTextActive]}>Whole week</Text>
+          <Text style={[styles.toggleText, view === 'week' && styles.toggleTextActive]}>{t('schedule.whole_week')}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           onPress={() => setView('today')}
           style={[styles.toggleBtn, view === 'today' && styles.toggleBtnActive]}
         >
-          <Text style={[styles.toggleText, view === 'today' && styles.toggleTextActive]}>Today</Text>
+          <Text style={[styles.toggleText, view === 'today' && styles.toggleTextActive]}>{t('common.today')}</Text>
         </TouchableOpacity>
       </View>
 
       {view === 'today' && !todayIsScheduled ? (
         <View style={styles.empty}>
           <Calendar size={20} color={colors.textMuted} />
-          <Text style={styles.emptyText}>No classes scheduled for {DAY_LABEL[todayName]}.</Text>
+          <Text style={styles.emptyText}>{t('schedule.no_classes_today', { day: dayLabel(todayName) })}</Text>
         </View>
       ) : visibleDays.length === 0 || cells.length === 0 ? (
         <View style={styles.empty}>
           <Calendar size={20} color={colors.textMuted} />
-          <Text style={styles.emptyText}>No schedule has been set up yet.</Text>
+          <Text style={styles.emptyText}>{t('schedule.none_setup')}</Text>
         </View>
       ) : (
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -91,11 +90,11 @@ export default function TeacherScheduleScreen() {
             {/* Header row */}
             <View style={styles.row}>
               <View style={[styles.cell, styles.headerCell, styles.dayCol]}>
-                <Text style={styles.headerText}>Day</Text>
+                <Text style={styles.headerText}>{t('common.day')}</Text>
               </View>
               {Array.from({ length: periodsPerDay }, (_, i) => (
                 <View key={i} style={[styles.cell, styles.headerCell]}>
-                  <Text style={styles.headerText}>P{i + 1}</Text>
+                  <Text style={styles.headerText}>{t('schedule.period_short', { n: i + 1 })}</Text>
                 </View>
               ))}
             </View>
@@ -105,7 +104,7 @@ export default function TeacherScheduleScreen() {
               return (
                 <View key={day} style={styles.row}>
                   <View style={[styles.cell, styles.dayCell, styles.dayCol]}>
-                    <Text style={styles.dayText}>{DAY_LABEL[day]}</Text>
+                    <Text style={styles.dayText}>{dayLabel(day)}</Text>
                   </View>
                   {Array.from({ length: periodsPerDay }, (_, i) => {
                     const cell = cellMap.get(`${dayIdx}:${i + 1}`);
