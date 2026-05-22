@@ -41,6 +41,8 @@ const STATUS_ICON: Record<AttendanceStatus, any> = {
 export default function SupervisorAttendanceScreen() {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
+  const calDays = t('teacher.weekday_short', { returnObjects: true }) as string[];
+  const attLabel = (s: AttendanceStatus) => s === 'excused' ? t('supervisor.excused') : t(`common.${s}`);
   const colors = useColors();
   const isDark = useIsDark();
   const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
@@ -100,7 +102,7 @@ export default function SupervisorAttendanceScreen() {
   const handleSave = async () => {
     if (!modalStudent || !selectedClass) return;
     if (newStatus === 'excused' && !newNotes.trim()) {
-      Alert.alert('Reason required', 'Please enter the reason for excused absence.');
+      Alert.alert(t('supervisor.reason_required_title'), t('supervisor.reason_required_body'));
       return;
     }
     setSaving(true);
@@ -114,7 +116,7 @@ export default function SupervisorAttendanceScreen() {
       setModalRecord(null);
       fetchAttendance();
     } catch {
-      Alert.alert('Error', 'Could not save attendance record.');
+      Alert.alert(t('common.error'), t('supervisor.attendance_save_failed'));
     } finally {
       setSaving(false);
     }
@@ -151,7 +153,7 @@ export default function SupervisorAttendanceScreen() {
       <Text style={styles.title}>{t('nav.attendance', 'Attendance')}</Text>
 
       {/* Class selector */}
-      <Text style={styles.sectionLabel}>Class</Text>
+      <Text style={styles.sectionLabel}>{t('teacher.class')}</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing.md }}>
         {classes.map(c => (
           <TouchableOpacity
@@ -165,7 +167,7 @@ export default function SupervisorAttendanceScreen() {
       </ScrollView>
 
       {/* Date picker */}
-      <Text style={styles.sectionLabel}>Date</Text>
+      <Text style={styles.sectionLabel}>{t('teacher.date')}</Text>
       <TouchableOpacity style={styles.dateBtn} onPress={() => setShowCal(v => !v)} activeOpacity={0.7}>
         <Text style={styles.dateBtnText}>{displayDate}</Text>
         <ChevronRight size={14} color={colors.textMuted} style={{ transform: [{ rotate: showCal ? '90deg' : '0deg' }] }} />
@@ -183,8 +185,8 @@ export default function SupervisorAttendanceScreen() {
             </TouchableOpacity>
           </View>
           <View style={styles.calDayRow}>
-            {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(d => (
-              <Text key={d} style={styles.calDayLabel}>{d}</Text>
+            {calDays.map((d, di) => (
+              <Text key={di} style={styles.calDayLabel}>{d}</Text>
             ))}
           </View>
           {Array.from({ length: calCells.length / 7 }, (_, row) => (
@@ -215,19 +217,19 @@ export default function SupervisorAttendanceScreen() {
       {records.length > 0 && (
         <View style={styles.statsRow}>
           <View style={[styles.statPill, { backgroundColor: colors.successLight }]}>
-            <Text style={[styles.statText, { color: colors.success }]}>{present} present</Text>
+            <Text style={[styles.statText, { color: colors.success }]}>{t('teacher.n_present', { count: present })}</Text>
           </View>
           <View style={[styles.statPill, { backgroundColor: colors.dangerLight }]}>
-            <Text style={[styles.statText, { color: colors.danger }]}>{absent} absent</Text>
+            <Text style={[styles.statText, { color: colors.danger }]}>{t('teacher.n_absent', { count: absent })}</Text>
           </View>
           {late > 0 && (
             <View style={[styles.statPill, { backgroundColor: colors.warningLight }]}>
-              <Text style={[styles.statText, { color: colors.warning }]}>{late} late</Text>
+              <Text style={[styles.statText, { color: colors.warning }]}>{t('teacher.n_late', { count: late })}</Text>
             </View>
           )}
           {excused > 0 && (
             <View style={[styles.statPill, { backgroundColor: '#F3E8FF' }]}>
-              <Text style={[styles.statText, { color: '#8B5CF6' }]}>{excused} excused</Text>
+              <Text style={[styles.statText, { color: '#8B5CF6' }]}>{t('supervisor.n_excused', { count: excused })}</Text>
             </View>
           )}
         </View>
@@ -235,9 +237,9 @@ export default function SupervisorAttendanceScreen() {
 
       {/* Records */}
       <View style={styles.recordsHeader}>
-        <Text style={styles.sectionLabel}>Students</Text>
+        <Text style={styles.sectionLabel}>{t('nav.students')}</Text>
         {allStudents.length > 0 && (
-          <Text style={styles.recordedCount}>{recordedCount}/{allStudents.length} recorded</Text>
+          <Text style={styles.recordedCount}>{t('supervisor.n_recorded', { recorded: recordedCount, total: allStudents.length })}</Text>
         )}
       </View>
 
@@ -245,7 +247,7 @@ export default function SupervisorAttendanceScreen() {
         <CardListSkeleton count={5} />
       ) : allStudents.length === 0 ? (
         <View style={styles.emptyCard}>
-          <Text style={styles.emptyText}>No students in this class.</Text>
+          <Text style={styles.emptyText}>{t('teacher.no_students_in_class')}</Text>
         </View>
       ) : (
         studentRows.map(({ student, record }) => {
@@ -262,7 +264,7 @@ export default function SupervisorAttendanceScreen() {
               </View>
               <View style={[styles.statusBadge, { backgroundColor: color + '20' }]}>
                 <Text style={[styles.statusBadgeText, { color }]}>
-                  {displayStatus.charAt(0).toUpperCase() + displayStatus.slice(1)}
+                  {attLabel(displayStatus)}
                 </Text>
               </View>
               <TouchableOpacity
@@ -281,7 +283,7 @@ export default function SupervisorAttendanceScreen() {
         <View style={styles.modalOverlay}>
           <View style={[styles.modalBox, { backgroundColor: colors.card, paddingBottom: insets.bottom + spacing.md }]}>
             <Text style={styles.modalTitle}>
-              {modalRecord ? 'Override Attendance' : 'Mark Attendance'}
+              {modalRecord ? t('supervisor.override_attendance') : t('supervisor.mark_attendance')}
             </Text>
             <Text style={styles.modalSubtitle}>{modalStudent?.fullName}</Text>
 
@@ -297,7 +299,7 @@ export default function SupervisorAttendanceScreen() {
                     activeOpacity={0.7}
                   >
                     <Text style={[styles.statusOptionText, { color: selected ? col : colors.textMuted }]}>
-                      {s.charAt(0).toUpperCase() + s.slice(1)}
+                      {attLabel(s)}
                     </Text>
                   </TouchableOpacity>
                 );
@@ -305,11 +307,11 @@ export default function SupervisorAttendanceScreen() {
             </View>
 
             <Text style={styles.notesLabel}>
-              {newStatus === 'excused' ? 'Reason (required)' : 'Notes (optional)'}
+              {newStatus === 'excused' ? t('supervisor.reason_required_label') : t('supervisor.notes_optional')}
             </Text>
             <TextInput
               style={[styles.notesInput, newStatus === 'excused' && styles.notesInputRequired]}
-              placeholder={newStatus === 'excused' ? 'e.g. Sick, Family emergency...' : 'Additional notes...'}
+              placeholder={newStatus === 'excused' ? t('supervisor.reason_ph') : t('supervisor.notes_ph')}
               placeholderTextColor={colors.textMuted}
               value={newNotes}
               onChangeText={setNewNotes}
@@ -318,10 +320,10 @@ export default function SupervisorAttendanceScreen() {
             />
 
             <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={saving}>
-              {saving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.saveBtnText}>Save</Text>}
+              {saving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.saveBtnText}>{t('common.save')}</Text>}
             </TouchableOpacity>
             <TouchableOpacity style={styles.cancelBtn} onPress={() => setModalStudent(null)}>
-              <Text style={styles.cancelBtnText}>Cancel</Text>
+              <Text style={styles.cancelBtnText}>{t('common.cancel')}</Text>
             </TouchableOpacity>
           </View>
         </View>

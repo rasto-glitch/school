@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { CardListSkeleton } from '../../components/Skeleton';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 import { CheckCircle, XCircle, ChevronDown, ChevronUp, PlayCircle, StopCircle, ChevronLeft, ChevronRight, X } from 'lucide-react-native';
 import { supervisorApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
@@ -39,6 +40,8 @@ interface TeacherStatus {
 
 export default function SupervisorWeeklySummaryScreen({ embedded = false }: { embedded?: boolean }) {
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
+  const calDays = t('teacher.weekday_short', { returnObjects: true }) as string[];
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
@@ -83,8 +86,8 @@ export default function SupervisorWeeklySummaryScreen({ embedded = false }: { em
   const onRefresh = () => { setRefreshing(true); load(weekStr).finally(() => setRefreshing(false)); };
 
   const handleOpenPeriod = async () => {
-    if (!openStart || !openEnd) { Alert.alert('Missing dates', 'Enter both start and end dates (YYYY-MM-DD)'); return; }
-    if (openEnd < openStart) { Alert.alert('Invalid', 'End date must be after start date'); return; }
+    if (!openStart || !openEnd) { Alert.alert(t('supervisor.missing_dates'), t('supervisor.enter_both_dates')); return; }
+    if (openEnd < openStart) { Alert.alert(t('supervisor.invalid'), t('supervisor.end_after_start')); return; }
     setPeriodLoading(true);
     try {
       const res = await supervisorApi.openPeriod(openStart, openEnd);
@@ -94,23 +97,23 @@ export default function SupervisorWeeklySummaryScreen({ embedded = false }: { em
       setOpenStart('');
       setOpenEnd('');
     } catch {
-      Alert.alert('Error', 'Failed to open period');
+      Alert.alert(t('common.error'), t('supervisor.open_period_failed'));
     } finally {
       setPeriodLoading(false);
     }
   };
 
   const handleClosePeriod = () => {
-    Alert.alert('Close Period', 'Teachers will no longer be able to submit. Continue?', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('supervisor.close_period_title'), t('supervisor.close_period_body'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Close', style: 'destructive', onPress: async () => {
+        text: t('supervisor.close'), style: 'destructive', onPress: async () => {
           setPeriodLoading(true);
           try {
             await supervisorApi.closePeriod();
             setPeriod(null);
           } catch {
-            Alert.alert('Error', 'Failed to close period');
+            Alert.alert(t('common.error'), t('supervisor.close_period_failed'));
           } finally {
             setPeriodLoading(false);
           }
@@ -127,7 +130,7 @@ export default function SupervisorWeeklySummaryScreen({ embedded = false }: { em
     byClass[s.classId].rows.push(s);
   });
 
-  const submitted = statusList.filter(t => t.submitted).length;
+  const submitted = statusList.filter(s => s.submitted).length;
 
   return (
     <ScrollView
@@ -135,11 +138,11 @@ export default function SupervisorWeeklySummaryScreen({ embedded = false }: { em
       contentContainerStyle={[styles.content, { paddingTop: embedded ? spacing.md : insets.top + spacing.md }]}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
     >
-      {!embedded && <Text style={styles.title}>Weekly Summary</Text>}
+      {!embedded && <Text style={styles.title}>{t('supervisor.weekly_summary')}</Text>}
 
       {/* ── Active Period Card ── */}
       <View style={styles.periodCard}>
-        <Text style={styles.periodLabel}>Submission Period</Text>
+        <Text style={styles.periodLabel}>{t('supervisor.submission_period')}</Text>
         {period === undefined ? (
           <ActivityIndicator color={colors.primary} size="small" />
         ) : period ? (
@@ -147,27 +150,27 @@ export default function SupervisorWeeklySummaryScreen({ embedded = false }: { em
             <View style={{ flex: 1 }}>
               <View style={styles.openBadge}>
                 <View style={[styles.dot, { backgroundColor: colors.success }]} />
-                <Text style={[styles.openBadgeText, { color: colors.success }]}>Open</Text>
+                <Text style={[styles.openBadgeText, { color: colors.success }]}>{t('supervisor.status_open')}</Text>
               </View>
               <Text style={styles.periodDates}>
                 {format(parseISO(period.weekStartDate), 'MMM d')} — {format(parseISO(period.weekEndDate), 'MMM d, yyyy')}
               </Text>
-              <Text style={styles.periodSub}>Teachers can submit their weekly summary</Text>
+              <Text style={styles.periodSub}>{t('supervisor.teachers_can_submit')}</Text>
             </View>
             <TouchableOpacity onPress={handleClosePeriod} disabled={periodLoading} style={styles.closeBtn}>
               {periodLoading
                 ? <ActivityIndicator color={colors.danger} size="small" />
-                : <><StopCircle size={16} color={colors.danger} /><Text style={[styles.closeBtnText, { color: colors.danger }]}>Close</Text></>}
+                : <><StopCircle size={16} color={colors.danger} /><Text style={[styles.closeBtnText, { color: colors.danger }]}>{t('supervisor.close')}</Text></>}
             </TouchableOpacity>
           </View>
         ) : (
           <View>
-            <Text style={styles.noPeriodText}>No active period. Select dates to open one.</Text>
+            <Text style={styles.noPeriodText}>{t('supervisor.no_active_period_select')}</Text>
 
-            <Text style={styles.inputLabel}>Start Date</Text>
+            <Text style={styles.inputLabel}>{t('supervisor.start_date')}</Text>
             <TouchableOpacity style={styles.datePickerBtn} onPress={() => setShowStartCal(v => !v)} activeOpacity={0.7}>
               <Text style={[styles.datePickerText, !openStart && { color: colors.textMuted }]}>
-                {openStart ? new Date(openStart + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : 'Select start date'}
+                {openStart ? new Date(openStart + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : t('supervisor.select_start_date')}
               </Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 {openStart ? <TouchableOpacity onPress={() => { setOpenStart(''); setShowStartCal(false); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><X size={14} color={colors.textMuted} /></TouchableOpacity> : null}
@@ -187,7 +190,7 @@ export default function SupervisorWeeklySummaryScreen({ embedded = false }: { em
                     <Text style={styles.calMonthText}>{startCalView.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</Text>
                     <TouchableOpacity onPress={() => setStartCalView(new Date(yr, mo + 1, 1))} style={styles.calNav}><ChevronRight size={16} color={colors.text} /></TouchableOpacity>
                   </View>
-                  <View style={styles.calDayRow}>{['Su','Mo','Tu','We','Th','Fr','Sa'].map(d => <Text key={d} style={styles.calDayLabel}>{d}</Text>)}</View>
+                  <View style={styles.calDayRow}>{calDays.map((d, di) => <Text key={di} style={styles.calDayLabel}>{d}</Text>)}</View>
                   {Array.from({ length: cells.length / 7 }, (_, row) => (
                     <View key={row} style={styles.calWeekRow}>
                       {cells.slice(row * 7, row * 7 + 7).map((day, col) => {
@@ -206,10 +209,10 @@ export default function SupervisorWeeklySummaryScreen({ embedded = false }: { em
               );
             })()}
 
-            <Text style={[styles.inputLabel, { marginTop: spacing.sm }]}>End Date</Text>
+            <Text style={[styles.inputLabel, { marginTop: spacing.sm }]}>{t('supervisor.end_date')}</Text>
             <TouchableOpacity style={styles.datePickerBtn} onPress={() => setShowEndCal(v => !v)} activeOpacity={0.7}>
               <Text style={[styles.datePickerText, !openEnd && { color: colors.textMuted }]}>
-                {openEnd ? new Date(openEnd + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : 'Select end date'}
+                {openEnd ? new Date(openEnd + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : t('supervisor.select_end_date')}
               </Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 {openEnd ? <TouchableOpacity onPress={() => { setOpenEnd(''); setShowEndCal(false); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}><X size={14} color={colors.textMuted} /></TouchableOpacity> : null}
@@ -229,7 +232,7 @@ export default function SupervisorWeeklySummaryScreen({ embedded = false }: { em
                     <Text style={styles.calMonthText}>{endCalView.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</Text>
                     <TouchableOpacity onPress={() => setEndCalView(new Date(yr, mo + 1, 1))} style={styles.calNav}><ChevronRight size={16} color={colors.text} /></TouchableOpacity>
                   </View>
-                  <View style={styles.calDayRow}>{['Su','Mo','Tu','We','Th','Fr','Sa'].map(d => <Text key={d} style={styles.calDayLabel}>{d}</Text>)}</View>
+                  <View style={styles.calDayRow}>{calDays.map((d, di) => <Text key={di} style={styles.calDayLabel}>{d}</Text>)}</View>
                   {Array.from({ length: cells.length / 7 }, (_, row) => (
                     <View key={row} style={styles.calWeekRow}>
                       {cells.slice(row * 7, row * 7 + 7).map((day, col) => {
@@ -251,7 +254,7 @@ export default function SupervisorWeeklySummaryScreen({ embedded = false }: { em
             <TouchableOpacity onPress={handleOpenPeriod} disabled={periodLoading || !openStart || !openEnd} style={[styles.openPeriodBtn, { backgroundColor: (!openStart || !openEnd) ? colors.textMuted : colors.primary }]}>
               {periodLoading
                 ? <ActivityIndicator color="#fff" size="small" />
-                : <><PlayCircle size={16} color="#fff" /><Text style={styles.openBtnText}>Open Period</Text></>}
+                : <><PlayCircle size={16} color="#fff" /><Text style={styles.openBtnText}>{t('supervisor.open_period')}</Text></>}
             </TouchableOpacity>
           </View>
         )}
@@ -262,7 +265,7 @@ export default function SupervisorWeeklySummaryScreen({ embedded = false }: { em
         <TouchableOpacity onPress={() => setWeekStart((w: Date) => subWeeks(w, 1))} style={styles.weekBtn}>
           <ChevronDown size={18} color={colors.primary} />
         </TouchableOpacity>
-        <Text style={styles.weekLabel}>Week of {format(weekStart, 'MMM d, yyyy')}</Text>
+        <Text style={styles.weekLabel}>{t('supervisor.week_of', { date: format(weekStart, 'MMM d, yyyy') })}</Text>
         <TouchableOpacity onPress={() => setWeekStart((w: Date) => addWeeks(w, 1))} style={styles.weekBtn}>
           <ChevronUp size={18} color={colors.primary} />
         </TouchableOpacity>
@@ -272,18 +275,18 @@ export default function SupervisorWeeklySummaryScreen({ embedded = false }: { em
       {statusList.length > 0 && (
         <View style={styles.statusCard}>
           <View style={styles.statusHeader}>
-            <Text style={styles.statusTitle}>Submission Status</Text>
-            <Text style={styles.statusCount}>{submitted}/{statusList.length} submitted</Text>
+            <Text style={styles.statusTitle}>{t('supervisor.submission_status')}</Text>
+            <Text style={styles.statusCount}>{t('supervisor.n_submitted', { submitted, total: statusList.length })}</Text>
           </View>
-          {statusList.map(t => (
-            <View key={t.id} style={styles.statusRow}>
+          {statusList.map(st => (
+            <View key={st.id} style={styles.statusRow}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.teacherName}>{t.fullName}</Text>
-                {t.subject && <Text style={styles.teacherSubject}>{t.subject}</Text>}
+                <Text style={styles.teacherName}>{st.fullName}</Text>
+                {st.subject && <Text style={styles.teacherSubject}>{st.subject}</Text>}
               </View>
-              {t.submitted
-                ? <View style={styles.submittedBadge}><CheckCircle size={13} color={colors.success} /><Text style={[styles.badgeText, { color: colors.success }]}>Submitted</Text></View>
-                : <View style={styles.missingBadge}><XCircle size={13} color={colors.danger} /><Text style={[styles.badgeText, { color: colors.danger }]}>Missing</Text></View>
+              {st.submitted
+                ? <View style={styles.submittedBadge}><CheckCircle size={13} color={colors.success} /><Text style={[styles.badgeText, { color: colors.success }]}>{t('detail.status_submitted')}</Text></View>
+                : <View style={styles.missingBadge}><XCircle size={13} color={colors.danger} /><Text style={[styles.badgeText, { color: colors.danger }]}>{t('supervisor.missing')}</Text></View>
               }
             </View>
           ))}
@@ -295,7 +298,7 @@ export default function SupervisorWeeklySummaryScreen({ embedded = false }: { em
         <CardListSkeleton count={4} />
       ) : summaries.length === 0 ? (
         <View style={styles.emptyCard}>
-          <Text style={styles.emptyText}>No summaries submitted for this week.</Text>
+          <Text style={styles.emptyText}>{t('supervisor.no_summaries_week')}</Text>
         </View>
       ) : (
         Object.entries(byClass).map(([classId, { name, rows }]) => {
@@ -305,7 +308,7 @@ export default function SupervisorWeeklySummaryScreen({ embedded = false }: { em
               <TouchableOpacity style={styles.classHeader} onPress={() => setExpandedClass(expanded ? null : classId)}>
                 <Text style={styles.className}>{name}</Text>
                 <View style={styles.classHeaderRight}>
-                  <Text style={styles.rowCount}>{rows.length} subject{rows.length !== 1 ? 's' : ''}</Text>
+                  <Text style={styles.rowCount}>{t('supervisor.n_subjects', { count: rows.length })}</Text>
                   {expanded ? <ChevronUp size={16} color={colors.textMuted} /> : <ChevronDown size={16} color={colors.textMuted} />}
                 </View>
               </TouchableOpacity>
@@ -315,10 +318,10 @@ export default function SupervisorWeeklySummaryScreen({ embedded = false }: { em
                     <Text style={styles.subjectTagText}>{row.subject}</Text>
                   </View>
                   <View style={styles.summaryDetails}>
-                    {row.unit && <Text style={styles.detailText}><Text style={styles.detailLabel}>Unit: </Text>{row.unit}</Text>}
-                    {row.lesson && <Text style={styles.detailText}><Text style={styles.detailLabel}>Lesson: </Text>{row.lesson}</Text>}
-                    {row.pages && <Text style={styles.detailText}><Text style={styles.detailLabel}>Pages: </Text>{row.pages}</Text>}
-                    {row.homeworkReminder && <Text style={styles.detailText}><Text style={styles.detailLabel}>HW: </Text>{row.homeworkReminder}</Text>}
+                    {row.unit && <Text style={styles.detailText}><Text style={styles.detailLabel}>{t('supervisor.label_unit')}</Text>{row.unit}</Text>}
+                    {row.lesson && <Text style={styles.detailText}><Text style={styles.detailLabel}>{t('supervisor.label_lesson')}</Text>{row.lesson}</Text>}
+                    {row.pages && <Text style={styles.detailText}><Text style={styles.detailLabel}>{t('supervisor.label_pages')}</Text>{row.pages}</Text>}
+                    {row.homeworkReminder && <Text style={styles.detailText}><Text style={styles.detailLabel}>{t('supervisor.label_hw')}</Text>{row.homeworkReminder}</Text>}
                     {row.teachers?.fullName && <Text style={styles.teacherTag}>{row.teachers.fullName}</Text>}
                   </View>
                 </View>

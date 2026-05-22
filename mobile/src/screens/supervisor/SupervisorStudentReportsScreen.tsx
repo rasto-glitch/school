@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { CardListSkeleton } from '../../components/Skeleton';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 import { Search, FileText, ChevronDown, ChevronUp } from 'lucide-react-native';
 import { supervisorApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
@@ -40,6 +41,7 @@ interface Report {
 
 export default function SupervisorStudentReportsScreen({ embedded = false }: { embedded?: boolean }) {
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
@@ -76,7 +78,7 @@ export default function SupervisorStudentReportsScreen({ embedded = false }: { e
   const grades = brief?.grades || [];
   const byPeriod: Record<string, Grade[]> = {};
   grades.forEach(g => {
-    const p = g.gradingPeriod || 'Unknown';
+    const p = g.gradingPeriod || t('supervisor.unknown');
     if (!byPeriod[p]) byPeriod[p] = [];
     byPeriod[p].push(g);
   });
@@ -91,7 +93,7 @@ export default function SupervisorStudentReportsScreen({ embedded = false }: { e
       contentContainerStyle={[styles.content, { paddingTop: embedded ? spacing.md : insets.top + spacing.md }]}
       keyboardShouldPersistTaps="handled"
     >
-      {!embedded && <Text style={styles.title}>Student Reports</Text>}
+      {!embedded && <Text style={styles.title}>{t('supervisor.student_reports')}</Text>}
 
       {/* Search */}
       <View style={styles.searchWrapper}>
@@ -99,10 +101,10 @@ export default function SupervisorStudentReportsScreen({ embedded = false }: { e
           <Search size={16} color={colors.textMuted} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Type student name…"
+            placeholder={t('supervisor.type_student_name')}
             placeholderTextColor={colors.textMuted}
             value={query}
-            onChangeText={t => { setQuery(t); setShowDropdown(true); }}
+            onChangeText={txt => { setQuery(txt); setShowDropdown(true); }}
             onFocus={() => { if (query) setShowDropdown(true); }}
           />
           {query.length > 0 && (
@@ -131,7 +133,7 @@ export default function SupervisorStudentReportsScreen({ embedded = false }: { e
       {!selected && !loading && (
         <View style={styles.emptyCard}>
           <FileText size={36} color={colors.textMuted} />
-          <Text style={styles.emptyText}>Search for a student above</Text>
+          <Text style={styles.emptyText}>{t('supervisor.search_above')}</Text>
         </View>
       )}
 
@@ -157,16 +159,16 @@ export default function SupervisorStudentReportsScreen({ embedded = false }: { e
             style={styles.sectionHeader}
             onPress={() => setExpandedSection(expandedSection === 'grades' ? null : 'grades')}
           >
-            <Text style={styles.sectionTitle}>Grades</Text>
+            <Text style={styles.sectionTitle}>{t('nav.grades')}</Text>
             <View style={styles.sectionHeaderRight}>
-              <Text style={styles.sectionCount}>{grades.length} records</Text>
+              <Text style={styles.sectionCount}>{t('supervisor.n_records', { count: grades.length })}</Text>
               {expandedSection === 'grades' ? <ChevronUp size={16} color={colors.textMuted} /> : <ChevronDown size={16} color={colors.textMuted} />}
             </View>
           </TouchableOpacity>
 
           {expandedSection === 'grades' && (
             grades.length === 0 ? (
-              <View style={styles.emptySection}><Text style={styles.emptySectionText}>No grades recorded.</Text></View>
+              <View style={styles.emptySection}><Text style={styles.emptySectionText}>{t('past_records.no_grades')}</Text></View>
             ) : (
               periods.map(period => (
                 <View key={period} style={styles.periodCard}>
@@ -179,7 +181,7 @@ export default function SupervisorStudentReportsScreen({ embedded = false }: { e
                       <View key={subj} style={styles.gradeRow}>
                         <Text style={styles.gradeSubject}>{subj}</Text>
                         <View style={styles.gradeScores}>
-                          {([['D', g.dailyGrade], ['Q', g.quizGrade], ['M', g.monthlyExamGrade], ['T', g.termExamGrade]] as [string, number | undefined][]).map(([lbl, val]) => (
+                          {([[t('supervisor.abbr_daily'), g.dailyGrade], [t('supervisor.abbr_quiz'), g.quizGrade], [t('supervisor.abbr_monthly'), g.monthlyExamGrade], [t('supervisor.abbr_term'), g.termExamGrade]] as [string, number | undefined][]).map(([lbl, val]) => (
                             val != null ? (
                               <View key={lbl} style={styles.scoreBox}>
                                 <Text style={styles.scoreLabel}>{lbl}</Text>
@@ -188,7 +190,7 @@ export default function SupervisorStudentReportsScreen({ embedded = false }: { e
                             ) : null
                           ))}
                           <View style={[styles.scoreBox, { backgroundColor: colors.primaryLight }]}>
-                            <Text style={[styles.scoreLabel, { color: colors.primary }]}>Total</Text>
+                            <Text style={[styles.scoreLabel, { color: colors.primary }]}>{t('grades.total')}</Text>
                             <Text style={[styles.scoreValue, { color: colors.primary, fontWeight: '800' }]}>{total.toFixed(0)}</Text>
                           </View>
                         </View>
@@ -205,16 +207,16 @@ export default function SupervisorStudentReportsScreen({ embedded = false }: { e
             style={[styles.sectionHeader, { marginTop: spacing.sm }]}
             onPress={() => setExpandedSection(expandedSection === 'reports' ? null : 'reports')}
           >
-            <Text style={styles.sectionTitle}>Reports</Text>
+            <Text style={styles.sectionTitle}>{t('nav.reports')}</Text>
             <View style={styles.sectionHeaderRight}>
-              <Text style={styles.sectionCount}>{brief.reports.length} report{brief.reports.length !== 1 ? 's' : ''}</Text>
+              <Text style={styles.sectionCount}>{t('supervisor.n_reports', { count: brief.reports.length })}</Text>
               {expandedSection === 'reports' ? <ChevronUp size={16} color={colors.textMuted} /> : <ChevronDown size={16} color={colors.textMuted} />}
             </View>
           </TouchableOpacity>
 
           {expandedSection === 'reports' && (
             brief.reports.length === 0 ? (
-              <View style={styles.emptySection}><Text style={styles.emptySectionText}>No reports available.</Text></View>
+              <View style={styles.emptySection}><Text style={styles.emptySectionText}>{t('supervisor.no_reports_available')}</Text></View>
             ) : (
               brief.reports.map(r => (
                 <View key={r.id} style={styles.reportCard}>
@@ -222,25 +224,25 @@ export default function SupervisorStudentReportsScreen({ embedded = false }: { e
                     <Text style={styles.reportSubject}>{r.subject}</Text>
                     {r.reportDate && <Text style={styles.reportDate}>{new Date(r.reportDate).toLocaleDateString()}</Text>}
                   </View>
-                  {r.attendanceNotes && <Text style={styles.reportNote}><Text style={styles.noteLabel}>Attendance: </Text>{r.attendanceNotes}</Text>}
-                  {r.behaviorNotes && <Text style={styles.reportNote}><Text style={styles.noteLabel}>Behaviour: </Text>{r.behaviorNotes}</Text>}
+                  {r.attendanceNotes && <Text style={styles.reportNote}><Text style={styles.noteLabel}>{t('teacher.note_attendance')}</Text>{r.attendanceNotes}</Text>}
+                  {r.behaviorNotes && <Text style={styles.reportNote}><Text style={styles.noteLabel}>{t('teacher.note_behavior')}</Text>{r.behaviorNotes}</Text>}
                   <View style={styles.marksRow}>
                     {r.quizMarks != null && (
                       <View style={[styles.markBox, { backgroundColor: '#EFF6FF' }]}>
-                        <Text style={[styles.markLabel, { color: '#2563EB' }]}>Quiz</Text>
+                        <Text style={[styles.markLabel, { color: '#2563EB' }]}>{t('grades.quiz')}</Text>
                         <Text style={[styles.markValue, { color: '#2563EB' }]}>{r.quizMarks}</Text>
                       </View>
                     )}
                     {r.examMarks != null && (
                       <View style={[styles.markBox, { backgroundColor: '#F0FDF4' }]}>
-                        <Text style={[styles.markLabel, { color: '#16A34A' }]}>Exam</Text>
+                        <Text style={[styles.markLabel, { color: '#16A34A' }]}>{t('supervisor.exam')}</Text>
                         <Text style={[styles.markValue, { color: '#16A34A' }]}>{r.examMarks}</Text>
                       </View>
                     )}
                   </View>
                   {r.teacherNotes && (
                     <View style={styles.teacherNotesBox}>
-                      <Text style={styles.noteLabel}>Teacher's Notes</Text>
+                      <Text style={styles.noteLabel}>{t('reports.teacher_notes')}</Text>
                       <Text style={styles.reportNote}>{r.teacherNotes}</Text>
                     </View>
                   )}
