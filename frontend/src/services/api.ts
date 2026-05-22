@@ -842,6 +842,14 @@ export const glApi = {
     asOf?: string; currency: string; memo?: string | null;
     balances: { accountId: string; amount: number }[];
   }) => api.post<{ id: string }>('/accounting/gl/opening-balances', body),
+  // Exports
+  trialBalancePdf: (params?: { asOf?: string }) => api.get('/accounting/gl/trial-balance/export.pdf', { params, responseType: 'blob' }),
+  trialBalanceXlsx: (params?: { asOf?: string }) => api.get('/accounting/gl/trial-balance/export.xlsx', { params, responseType: 'blob' }),
+  incomeStatementPdf: (params?: { startDate?: string; endDate?: string }) => api.get('/accounting/gl/income-statement/export.pdf', { params, responseType: 'blob' }),
+  incomeStatementXlsx: (params?: { startDate?: string; endDate?: string }) => api.get('/accounting/gl/income-statement/export.xlsx', { params, responseType: 'blob' }),
+  balanceSheetPdf: (params?: { asOf?: string }) => api.get('/accounting/gl/balance-sheet/export.pdf', { params, responseType: 'blob' }),
+  balanceSheetXlsx: (params?: { asOf?: string }) => api.get('/accounting/gl/balance-sheet/export.xlsx', { params, responseType: 'blob' }),
+  journalXlsx: () => api.get('/accounting/gl/journal/export.xlsx', { responseType: 'blob' }),
 };
 
 export interface ArchiveListItem {

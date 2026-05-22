@@ -374,6 +374,14 @@ export function createRouter(io: SocketServer) {
   router.delete('/accounting/gl/accounts/:id', authenticate, authorize(...accountingRW), validate({ params: va.idParam }), (req, res) => gl.deleteAccount(req as AuthRequest, res));
   router.post('/accounting/gl/journal', authenticate, authorize(...accountingRW), validate({ body: va.manualJournalSchema }), (req, res) => gl.createJournalEntry(req as AuthRequest, res));
   router.post('/accounting/gl/opening-balances', authenticate, authorize(...accountingRW), validate({ body: va.openingBalancesSchema }), (req, res) => gl.postOpeningBalances(req as AuthRequest, res));
+  // GL report exports (PDF for statements, XLSX for all).
+  router.get('/accounting/gl/trial-balance/export.pdf', authenticate, authorize(...accountingRW), (req, res) => gl.exportTrialBalancePdf(req as AuthRequest, res));
+  router.get('/accounting/gl/trial-balance/export.xlsx', authenticate, authorize(...accountingRW), (req, res) => gl.exportTrialBalanceXlsx(req as AuthRequest, res));
+  router.get('/accounting/gl/income-statement/export.pdf', authenticate, authorize(...accountingRW), (req, res) => gl.exportIncomeStatementPdf(req as AuthRequest, res));
+  router.get('/accounting/gl/income-statement/export.xlsx', authenticate, authorize(...accountingRW), (req, res) => gl.exportIncomeStatementXlsx(req as AuthRequest, res));
+  router.get('/accounting/gl/balance-sheet/export.pdf', authenticate, authorize(...accountingRW), (req, res) => gl.exportBalanceSheetPdf(req as AuthRequest, res));
+  router.get('/accounting/gl/balance-sheet/export.xlsx', authenticate, authorize(...accountingRW), (req, res) => gl.exportBalanceSheetXlsx(req as AuthRequest, res));
+  router.get('/accounting/gl/journal/export.xlsx', authenticate, authorize(...accountingRW), (req, res) => gl.exportJournalXlsx(req as AuthRequest, res));
 
   // Refunds, late fees, period close, payment accounts, FX rates
   router.post('/accounting/payments/:id/refund', authenticate, authorize(...accountingRW), validate({ params: va.idParam, body: va.refundPaymentSchema }), (req, res) => fees.refundPayment(req as AuthRequest, res));

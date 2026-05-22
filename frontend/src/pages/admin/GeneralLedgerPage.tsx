@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { toast } from 'react-toastify';
-import { Scale, BookText, ListTree, CheckCircle2, AlertTriangle, TrendingUp, FileBarChart, Plus, Pencil, Trash2, Power, X } from 'lucide-react';
+import { Scale, BookText, ListTree, CheckCircle2, AlertTriangle, TrendingUp, FileBarChart, Plus, Pencil, Trash2, Power, X, FileText, FileSpreadsheet } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import {
   glApi,
@@ -24,6 +24,27 @@ function todayISO(): string {
 }
 function firstOfYearISO(): string {
   return new Date(Date.UTC(new Date().getUTCFullYear(), 0, 1)).toISOString().slice(0, 10);
+}
+
+function saveBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function doExport(fn: () => Promise<{ data: unknown }>, filename: string) {
+  try { const r = await fn(); saveBlob(r.data as Blob, filename); }
+  catch (e: any) { toast.error(e.response?.data?.error || 'Export failed'); }
+}
+
+function ExportButtons({ onPdf, onXlsx }: { onPdf?: () => void; onXlsx: () => void }) {
+  return (
+    <div className="flex items-center gap-2">
+      {onPdf && <Button size="sm" variant="ghost" icon={<FileText className="w-4 h-4" />} onClick={onPdf}>PDF</Button>}
+      <Button size="sm" variant="ghost" icon={<FileSpreadsheet className="w-4 h-4" />} onClick={onXlsx}>Excel</Button>
+    </div>
+  );
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -197,10 +218,14 @@ export default function GeneralLedgerPage() {
       {tab === 'trial' && (
         <>
           <Card className="mb-4">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+            <div className="flex items-end gap-3 flex-wrap">
               <Input label="As of" type="date" value={asOf} onChange={e => setAsOf(e.target.value)} />
-              <div className="flex items-end">
-                <Button onClick={() => loadTrialBalance(asOf)} loading={tbLoading} fullWidth>Apply</Button>
+              <Button onClick={() => loadTrialBalance(asOf)} loading={tbLoading}>Apply</Button>
+              <div className="ml-auto">
+                <ExportButtons
+                  onPdf={() => doExport(() => glApi.trialBalancePdf({ asOf: asOf || undefined }), `trial-balance-${asOf || 'today'}.pdf`)}
+                  onXlsx={() => doExport(() => glApi.trialBalanceXlsx({ asOf: asOf || undefined }), `trial-balance-${asOf || 'today'}.xlsx`)}
+                />
               </div>
             </div>
           </Card>
@@ -250,11 +275,15 @@ export default function GeneralLedgerPage() {
       {tab === 'pl' && (
         <>
           <Card className="mb-4">
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+            <div className="flex items-end gap-3 flex-wrap">
               <Input label="From" type="date" value={plStart} onChange={e => setPlStart(e.target.value)} />
               <Input label="To" type="date" value={plEnd} onChange={e => setPlEnd(e.target.value)} />
-              <div className="flex items-end">
-                <Button onClick={() => loadPl(plStart, plEnd)} loading={plLoading} fullWidth>Apply</Button>
+              <Button onClick={() => loadPl(plStart, plEnd)} loading={plLoading}>Apply</Button>
+              <div className="ml-auto">
+                <ExportButtons
+                  onPdf={() => doExport(() => glApi.incomeStatementPdf({ startDate: plStart || undefined, endDate: plEnd || undefined }), `income-statement-${plStart}-to-${plEnd}.pdf`)}
+                  onXlsx={() => doExport(() => glApi.incomeStatementXlsx({ startDate: plStart || undefined, endDate: plEnd || undefined }), `income-statement-${plStart}-to-${plEnd}.xlsx`)}
+                />
               </div>
             </div>
           </Card>
@@ -279,10 +308,14 @@ export default function GeneralLedgerPage() {
       {tab === 'balance' && (
         <>
           <Card className="mb-4">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+            <div className="flex items-end gap-3 flex-wrap">
               <Input label="As of" type="date" value={bsAsOf} onChange={e => setBsAsOf(e.target.value)} />
-              <div className="flex items-end">
-                <Button onClick={() => loadBs(bsAsOf)} loading={bsLoading} fullWidth>Apply</Button>
+              <Button onClick={() => loadBs(bsAsOf)} loading={bsLoading}>Apply</Button>
+              <div className="ml-auto">
+                <ExportButtons
+                  onPdf={() => doExport(() => glApi.balanceSheetPdf({ asOf: bsAsOf || undefined }), `balance-sheet-${bsAsOf || 'today'}.pdf`)}
+                  onXlsx={() => doExport(() => glApi.balanceSheetXlsx({ asOf: bsAsOf || undefined }), `balance-sheet-${bsAsOf || 'today'}.xlsx`)}
+                />
               </div>
             </div>
           </Card>
@@ -366,9 +399,12 @@ export default function GeneralLedgerPage() {
       {/* ── Journal ── */}
       {tab === 'journal' && (
         <Card>
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
             <h3 className="font-semibold text-gray-900">Journal</h3>
-            <Button size="sm" icon={<Plus className="w-4 h-4" />} onClick={() => { if (accounts === null) loadAccounts(); setShowEntry(true); }}>New entry</Button>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="ghost" icon={<FileSpreadsheet className="w-4 h-4" />} onClick={() => doExport(() => glApi.journalXlsx(), `journal-${todayISO()}.xlsx`)}>Excel</Button>
+              <Button size="sm" icon={<Plus className="w-4 h-4" />} onClick={() => { if (accounts === null) loadAccounts(); setShowEntry(true); }}>New entry</Button>
+            </div>
           </div>
           {journal === null ? <LoadingSpinner /> : journal.length === 0 ? (
             <EmptyState title="No journal entries yet" description="Entries are posted automatically as money moves." icon={<BookText className="w-8 h-8 text-gray-400" />} />

@@ -6,6 +6,15 @@ import { toCC } from '../utils/transform';
 import { ensureChartSeeded } from '../utils/glSeed';
 import { postEntryResult, type PostLine } from '../utils/glPosting';
 import { assertPeriodOpen } from '../utils/period';
+import {
+  streamTrialBalancePdf, streamIncomeStatementPdf, streamBalanceSheetPdf,
+  buildTrialBalanceXlsx, buildIncomeStatementXlsx, buildBalanceSheetXlsx, buildJournalXlsx,
+} from '../utils/glExport';
+
+async function getSchoolMeta(schoolId: string): Promise<{ name: string; logoUrl: string | null }> {
+  const { data } = await supabase.from('schools').select('name, logo_url').eq('id', schoolId).single();
+  return { name: (data as any)?.name ?? 'School', logoUrl: (data as any)?.logo_url ?? null };
+}
 
 // GL is part of the accounting module — gated by the same premium flag.
 async function ensurePremium(schoolId: string): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
@@ -36,7 +45,7 @@ export async function listAccounts(req: AuthRequest, res: Response): Promise<voi
 // Ending balance per account, split into debit/credit columns and grouped by
 // currency. Each currency block balances (total debit = total credit) because
 // every entry balances. `asOf` (inclusive) optionally cuts off by entry_date.
-interface TBAccount {
+export interface TBAccount {
   accountId: string;
   code: string;
   name: string;
@@ -44,7 +53,7 @@ interface TBAccount {
   debit: number;   // ending balance shown in the debit column
   credit: number;  // ending balance shown in the credit column
 }
-interface TBCurrency {
+export interface TBCurrency {
   currency: string;
   accounts: TBAccount[];
   totalDebit: number;
@@ -54,41 +63,11 @@ interface TBCurrency {
 
 const round2 = (n: number): number => Math.round((n + Number.EPSILON) * 100) / 100;
 
-export async function getTrialBalance(req: AuthRequest, res: Response): Promise<void> {
-  const { schoolId } = req.user!;
-  const guard = await ensurePremium(schoolId);
-  if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
-  await ensureChartSeeded(schoolId);
-
-  const asOf = typeof req.query.asOf === 'string' && req.query.asOf ? req.query.asOf : null;
-
-  let q = supabase
-    .from('journal_lines')
-    .select('debit, credit, currency, account_id, chart_of_accounts!inner(code, name, type), journal_entries!inner(entry_date)')
-    .eq('school_id', schoolId);
-  if (asOf) q = q.lte('journal_entries.entry_date', asOf);
-  const { data, error } = await q;
-  if (error) { res.status(500).json({ error: error.message }); return; }
-
-  // Aggregate per (currency, account): net = sum(debit) - sum(credit).
-  const key = (cur: string, acc: string) => `${cur}|${acc}`;
-  const agg = new Map<string, { currency: string; accountId: string; code: string; name: string; type: string; net: number }>();
-  for (const row of (data ?? []) as any[]) {
-    const cur = row.currency as string;
-    const acc = row.account_id as string;
-    const coa = row.chart_of_accounts ?? {};
-    const k = key(cur, acc);
-    let a = agg.get(k);
-    if (!a) {
-      a = { currency: cur, accountId: acc, code: coa.code ?? '', name: coa.name ?? '', type: coa.type ?? '', net: 0 };
-      agg.set(k, a);
-    }
-    a.net += (Number(row.debit) || 0) - (Number(row.credit) || 0);
-  }
-
+export async function computeTrialBalance(schoolId: string, asOf: string | null): Promise<TBCurrency[]> {
+  const agg = await aggregateLines(schoolId, { endDate: asOf });
   const byCurrency = new Map<string, TBCurrency>();
-  for (const a of agg.values()) {
-    const net = round2(a.net);
+  for (const a of agg) {
+    const net = round2(a.debit - a.credit);
     if (net === 0) continue; // hide fully-settled accounts from the trial balance
     let block = byCurrency.get(a.currency);
     if (!block) {
@@ -101,32 +80,41 @@ export async function getTrialBalance(req: AuthRequest, res: Response): Promise<
     block.totalDebit = round2(block.totalDebit + debit);
     block.totalCredit = round2(block.totalCredit + credit);
   }
-
   const currencies = Array.from(byCurrency.values()).sort((x, y) => x.currency.localeCompare(y.currency));
   for (const block of currencies) {
     block.accounts.sort((x, y) => x.code.localeCompare(y.code));
     block.balanced = block.totalDebit === block.totalCredit;
   }
-
-  res.json({ asOf, currencies });
+  return currencies;
 }
 
-// ── Journal (recent entries with their lines) ───────────────────────────────
-const JOURNAL_PAGE = 50;
-
-export async function listJournal(req: AuthRequest, res: Response): Promise<void> {
+export async function getTrialBalance(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
   const guard = await ensurePremium(schoolId);
   if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
+  await ensureChartSeeded(schoolId);
+  const asOf = typeof req.query.asOf === 'string' && req.query.asOf ? req.query.asOf : null;
+  try { res.json({ asOf, currencies: await computeTrialBalance(schoolId, asOf) }); }
+  catch (e) { res.status(500).json({ error: (e as Error).message }); }
+}
 
-  const limit = Math.min(Number(req.query.limit) || JOURNAL_PAGE, 200);
+// ── Journal (entries with their lines) ──────────────────────────────────────
+const JOURNAL_PAGE = 50;
+
+export interface JournalRow {
+  id: string; entryNo: number; entryDate: string; currency: string;
+  memo: string | null; source: string; sourceId: string | null; isReversal: boolean;
+  lines: { accountId: string; code: string; name: string; debit: number; credit: number; currency: string; description: string | null }[];
+}
+
+export async function computeJournal(schoolId: string, limit: number): Promise<JournalRow[]> {
   const { data: entries, error } = await supabase
     .from('journal_entries')
     .select('id, entry_no, entry_date, currency, memo, source, source_id, is_reversal')
     .eq('school_id', schoolId)
     .order('entry_no', { ascending: false })
     .limit(limit);
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) throw new Error(error.message);
 
   const ids = (entries ?? []).map(e => (e as any).id);
   const { data: lines } = ids.length
@@ -137,7 +125,7 @@ export async function listJournal(req: AuthRequest, res: Response): Promise<void
         .in('entry_id', ids)
     : { data: [] as any[] };
 
-  const linesByEntry = new Map<string, any[]>();
+  const linesByEntry = new Map<string, JournalRow['lines']>();
   for (const l of (lines ?? []) as any[]) {
     const arr = linesByEntry.get(l.entry_id) ?? [];
     arr.push({
@@ -152,22 +140,23 @@ export async function listJournal(req: AuthRequest, res: Response): Promise<void
     linesByEntry.set(l.entry_id, arr);
   }
 
-  const rows = (entries ?? []).map(e => {
+  return (entries ?? []).map(e => {
     const entry = e as any;
     const ls = (linesByEntry.get(entry.id) ?? []).sort((a, b) => (b.debit - a.debit) || a.code.localeCompare(b.code));
     return {
-      id: entry.id,
-      entryNo: entry.entry_no,
-      entryDate: entry.entry_date,
-      currency: entry.currency,
-      memo: entry.memo,
-      source: entry.source,
-      sourceId: entry.source_id,
-      isReversal: entry.is_reversal,
-      lines: ls,
+      id: entry.id, entryNo: entry.entry_no, entryDate: entry.entry_date, currency: entry.currency,
+      memo: entry.memo, source: entry.source, sourceId: entry.source_id, isReversal: entry.is_reversal, lines: ls,
     };
   });
-  res.json(rows);
+}
+
+export async function listJournal(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const guard = await ensurePremium(schoolId);
+  if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
+  const limit = Math.min(Number(req.query.limit) || JOURNAL_PAGE, 200);
+  try { res.json(await computeJournal(schoolId, limit)); }
+  catch (e) { res.status(500).json({ error: (e as Error).message }); }
 }
 
 // ── Shared aggregation: sum debit/credit per (currency, account) over a date
@@ -200,23 +189,13 @@ async function aggregateLines(schoolId: string, opts: { startDate?: string | nul
 }
 
 // ── Income Statement (P&L) over [startDate, endDate] ─────────────────────────
-interface PLAccount { code: string; name: string; amount: number; }
-export async function getIncomeStatement(req: AuthRequest, res: Response): Promise<void> {
-  const { schoolId } = req.user!;
-  const guard = await ensurePremium(schoolId);
-  if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
-  await ensureChartSeeded(schoolId);
+export interface PLAccount { code: string; name: string; amount: number; }
+export interface PLCurrency { currency: string; income: PLAccount[]; expense: PLAccount[]; totalIncome: number; totalExpense: number; netIncome: number; }
 
-  const startDate = typeof req.query.startDate === 'string' && req.query.startDate ? req.query.startDate : null;
-  const endDate = typeof req.query.endDate === 'string' && req.query.endDate ? req.query.endDate : null;
-
-  let agg: AggAccount[];
-  try { agg = await aggregateLines(schoolId, { startDate, endDate }); }
-  catch (e) { res.status(500).json({ error: (e as Error).message }); return; }
-
-  interface PLBlock { currency: string; income: PLAccount[]; expense: PLAccount[]; totalIncome: number; totalExpense: number; netIncome: number; }
-  const byCur = new Map<string, PLBlock>();
-  const block = (cur: string): PLBlock => {
+export async function computeIncomeStatement(schoolId: string, startDate: string | null, endDate: string | null): Promise<PLCurrency[]> {
+  const agg = await aggregateLines(schoolId, { startDate, endDate });
+  const byCur = new Map<string, PLCurrency>();
+  const block = (cur: string): PLCurrency => {
     let b = byCur.get(cur);
     if (!b) { b = { currency: cur, income: [], expense: [], totalIncome: 0, totalExpense: 0, netIncome: 0 }; byCur.set(cur, b); }
     return b;
@@ -242,34 +221,36 @@ export async function getIncomeStatement(req: AuthRequest, res: Response): Promi
     b.expense.sort((x, y) => x.code.localeCompare(y.code));
     b.netIncome = round2(b.totalIncome - b.totalExpense);
   }
-  res.json({ startDate, endDate, currencies });
+  return currencies;
+}
+
+export async function getIncomeStatement(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const guard = await ensurePremium(schoolId);
+  if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
+  await ensureChartSeeded(schoolId);
+  const startDate = typeof req.query.startDate === 'string' && req.query.startDate ? req.query.startDate : null;
+  const endDate = typeof req.query.endDate === 'string' && req.query.endDate ? req.query.endDate : null;
+  try { res.json({ startDate, endDate, currencies: await computeIncomeStatement(schoolId, startDate, endDate) }); }
+  catch (e) { res.status(500).json({ error: (e as Error).message }); }
 }
 
 // ── Balance Sheet as of a date. Equity section includes a synthetic
 // "Current period earnings" line (= cumulative income − expense), without
 // which Assets = Liabilities + Equity would not hold (no period-close entries
 // roll P&L into retained earnings yet). ─────────────────────────────────────
-export async function getBalanceSheet(req: AuthRequest, res: Response): Promise<void> {
-  const { schoolId } = req.user!;
-  const guard = await ensurePremium(schoolId);
-  if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
-  await ensureChartSeeded(schoolId);
+export interface BSAccount { code: string; name: string; amount: number; }
+export interface BSCurrency {
+  currency: string;
+  assets: BSAccount[]; liabilities: BSAccount[]; equity: BSAccount[];
+  currentEarnings: number;
+  totalAssets: number; totalLiabilities: number; totalEquity: number; balanced: boolean;
+}
 
-  const asOf = typeof req.query.asOf === 'string' && req.query.asOf ? req.query.asOf : null;
-
-  let agg: AggAccount[];
-  try { agg = await aggregateLines(schoolId, { endDate: asOf }); }
-  catch (e) { res.status(500).json({ error: (e as Error).message }); return; }
-
-  interface BSAccount { code: string; name: string; amount: number; }
-  interface BSBlock {
-    currency: string;
-    assets: BSAccount[]; liabilities: BSAccount[]; equity: BSAccount[];
-    currentEarnings: number;
-    totalAssets: number; totalLiabilities: number; totalEquity: number; balanced: boolean;
-  }
-  const byCur = new Map<string, BSBlock>();
-  const block = (cur: string): BSBlock => {
+export async function computeBalanceSheet(schoolId: string, asOf: string | null): Promise<BSCurrency[]> {
+  const agg = await aggregateLines(schoolId, { endDate: asOf });
+  const byCur = new Map<string, BSCurrency>();
+  const block = (cur: string): BSCurrency => {
     let b = byCur.get(cur);
     if (!b) { b = { currency: cur, assets: [], liabilities: [], equity: [], currentEarnings: 0, totalAssets: 0, totalLiabilities: 0, totalEquity: 0, balanced: true }; byCur.set(cur, b); }
     return b;
@@ -299,7 +280,17 @@ export async function getBalanceSheet(req: AuthRequest, res: Response): Promise<
     b.totalEquity = round2(b.totalEquity + b.currentEarnings); // fold earnings into equity total
     b.balanced = b.totalAssets === round2(b.totalLiabilities + b.totalEquity);
   }
-  res.json({ asOf, currencies });
+  return currencies;
+}
+
+export async function getBalanceSheet(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const guard = await ensurePremium(schoolId);
+  if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
+  await ensureChartSeeded(schoolId);
+  const asOf = typeof req.query.asOf === 'string' && req.query.asOf ? req.query.asOf : null;
+  try { res.json({ asOf, currencies: await computeBalanceSheet(schoolId, asOf) }); }
+  catch (e) { res.status(500).json({ error: (e as Error).message }); }
 }
 
 // ── Account drill-down: every line for one account over a window, with a
@@ -547,4 +538,91 @@ export async function postOpeningBalances(req: AuthRequest, res: Response): Prom
   });
   if (!result.ok) { res.status(400).json({ error: result.error }); return; }
   res.status(201).json({ id: result.entryId });
+}
+
+// ── Exports (Phase 4): PDF for the statements, XLSX for everything ──────────
+const qstr = (req: AuthRequest, k: string): string | null => (typeof req.query[k] === 'string' && req.query[k] ? String(req.query[k]) : null);
+
+export async function exportTrialBalancePdf(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const guard = await ensurePremium(schoolId);
+  if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
+  await ensureChartSeeded(schoolId);
+  const asOf = qstr(req, 'asOf');
+  const [meta, currencies] = await Promise.all([getSchoolMeta(schoolId), computeTrialBalance(schoolId, asOf)]);
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="trial-balance-${asOf ?? 'today'}.pdf"`);
+  await streamTrialBalancePdf(res, { schoolName: meta.name, logoUrl: meta.logoUrl, asOf, currencies });
+}
+
+export async function exportTrialBalanceXlsx(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const guard = await ensurePremium(schoolId);
+  if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
+  await ensureChartSeeded(schoolId);
+  const asOf = qstr(req, 'asOf');
+  const buf = buildTrialBalanceXlsx({ currencies: await computeTrialBalance(schoolId, asOf) });
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="trial-balance-${asOf ?? 'today'}.xlsx"`);
+  res.send(buf);
+}
+
+export async function exportIncomeStatementPdf(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const guard = await ensurePremium(schoolId);
+  if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
+  await ensureChartSeeded(schoolId);
+  const startDate = qstr(req, 'startDate'); const endDate = qstr(req, 'endDate');
+  const [meta, currencies] = await Promise.all([getSchoolMeta(schoolId), computeIncomeStatement(schoolId, startDate, endDate)]);
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="income-statement-${startDate ?? 'all'}-to-${endDate ?? 'now'}.pdf"`);
+  await streamIncomeStatementPdf(res, { schoolName: meta.name, logoUrl: meta.logoUrl, startDate, endDate, currencies });
+}
+
+export async function exportIncomeStatementXlsx(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const guard = await ensurePremium(schoolId);
+  if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
+  await ensureChartSeeded(schoolId);
+  const startDate = qstr(req, 'startDate'); const endDate = qstr(req, 'endDate');
+  const buf = buildIncomeStatementXlsx({ currencies: await computeIncomeStatement(schoolId, startDate, endDate) });
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="income-statement-${startDate ?? 'all'}-to-${endDate ?? 'now'}.xlsx"`);
+  res.send(buf);
+}
+
+export async function exportBalanceSheetPdf(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const guard = await ensurePremium(schoolId);
+  if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
+  await ensureChartSeeded(schoolId);
+  const asOf = qstr(req, 'asOf');
+  const [meta, currencies] = await Promise.all([getSchoolMeta(schoolId), computeBalanceSheet(schoolId, asOf)]);
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="balance-sheet-${asOf ?? 'today'}.pdf"`);
+  await streamBalanceSheetPdf(res, { schoolName: meta.name, logoUrl: meta.logoUrl, asOf, currencies });
+}
+
+export async function exportBalanceSheetXlsx(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const guard = await ensurePremium(schoolId);
+  if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
+  await ensureChartSeeded(schoolId);
+  const asOf = qstr(req, 'asOf');
+  const buf = buildBalanceSheetXlsx({ currencies: await computeBalanceSheet(schoolId, asOf) });
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="balance-sheet-${asOf ?? 'today'}.xlsx"`);
+  res.send(buf);
+}
+
+export async function exportJournalXlsx(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const guard = await ensurePremium(schoolId);
+  if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
+  // Export the full journal (capped high), not just the on-screen page.
+  const entries = await computeJournal(schoolId, 100000);
+  const buf = buildJournalXlsx({ entries });
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="journal-${new Date().toISOString().split('T')[0]}.xlsx"`);
+  res.send(buf);
 }
