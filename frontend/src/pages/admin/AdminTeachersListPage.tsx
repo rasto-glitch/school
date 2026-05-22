@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { Search, Users, ArrowLeft } from 'lucide-react';
 import { adminApi } from '../../services/api';
@@ -12,6 +13,7 @@ import Badge from '../../components/common/Badge';
 import type { Teacher } from '../../types';
 
 export default function AdminTeachersListPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [search, setSearch] = useState('');
@@ -34,17 +36,17 @@ export default function AdminTeachersListPage() {
     : teachers;
 
   return (
-    <PageLayout title="All Teachers" subtitle={`${teachers.length} teachers total`}>
+    <PageLayout title={t('admin.all_teachers_title')} subtitle={t('admin.teachers_total', { count: teachers.length })}>
       <div className="space-y-4">
         <div className="flex flex-wrap gap-3 items-center">
-          <Button variant="ghost" size="sm" icon={<ArrowLeft className="w-4 h-4" />} onClick={() => navigate('/admin/dashboard')}>Back</Button>
-          <Button variant="primary" size="sm" onClick={() => navigate('/admin/employees')}>+ Add / Edit Teachers</Button>
+          <Button variant="ghost" size="sm" icon={<ArrowLeft className="w-4 h-4" />} onClick={() => navigate('/admin/dashboard')}>{t('common.back')}</Button>
+          <Button variant="primary" size="sm" onClick={() => navigate('/admin/employees')}>{t('admin.add_edit_teachers')}</Button>
         </div>
 
-        <Input placeholder="Search by name or subject..." icon={<Search className="w-4 h-4" />} value={search} onChange={e => setSearch(e.target.value)} />
+        <Input placeholder={t('admin.search_name_subject')} icon={<Search className="w-4 h-4" />} value={search} onChange={e => setSearch(e.target.value)} />
 
         {loading ? <LoadingSpinner /> : filtered.length === 0 ? (
-          <EmptyState title="No teachers found" icon={<Users className="w-8 h-8 text-gray-400" />} />
+          <EmptyState title={t('admin.no_teachers_found')} icon={<Users className="w-8 h-8 text-gray-400" />} />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {filtered.map(t => (

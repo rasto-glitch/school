@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
 import { Search, GraduationCap, Users, Bus, ArrowRight } from 'lucide-react';
 import { adminApi } from '../../services/api';
@@ -8,6 +9,7 @@ import Card from '../../components/common/Card';
 import Input from '../../components/common/Input';
 
 export default function AdminDashboard() {
+  const { t } = useTranslation();
   const { user } = useAuthStore();
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
@@ -23,23 +25,23 @@ export default function AdminDashboard() {
   }, []);
 
   const cards = [
-    { to: '/admin/list/students', icon: GraduationCap, label: 'Students', count: stats.students, light: 'bg-blue-50 text-blue-600' },
-    { to: '/admin/list/teachers', icon: Users, label: 'Teachers', count: stats.teachers, light: 'bg-green-50 text-green-600' },
-    { to: '/admin/list/drivers', icon: Bus, label: 'Drivers', count: stats.drivers, light: 'bg-amber-50 text-amber-600' },
+    { to: '/admin/list/students', icon: GraduationCap, label: t('admin.students'), count: stats.students, light: 'bg-blue-50 text-blue-600' },
+    { to: '/admin/list/teachers', icon: Users, label: t('admin.teachers'), count: stats.teachers, light: 'bg-green-50 text-green-600' },
+    { to: '/admin/list/drivers', icon: Bus, label: t('admin.drivers'), count: stats.drivers, light: 'bg-amber-50 text-amber-600' },
   ];
 
   const quickLinks = [
-    { to: '/admin/students', label: 'Manage Students', desc: 'Add, edit, remove or assign students' },
-    { to: '/admin/employees', label: 'Manage Employees', desc: 'Teachers, supervisors and administration' },
-    { to: '/admin/drivers', label: 'Manage Drivers', desc: 'Add, edit drivers and assign students' },
-    { to: '/admin/accounts', label: 'Create Account', desc: 'Create user accounts for all roles' },
-    { to: '/admin/appointments', label: 'Appointments', desc: 'View and respond to parent requests' },
-    { to: '/admin/classes', label: 'Classes', desc: 'Manage class structure and weekly summaries' },
-    { to: '/admin/announcements', label: 'Announcements', desc: 'Post announcements to parents and teachers' },
+    { to: '/admin/students', label: t('admin.manage_students'), desc: t('admin.manage_students_desc') },
+    { to: '/admin/employees', label: t('admin.manage_employees'), desc: t('admin.manage_employees_desc') },
+    { to: '/admin/drivers', label: t('admin.manage_drivers'), desc: t('admin.manage_drivers_desc') },
+    { to: '/admin/accounts', label: t('admin.create_account'), desc: t('admin.create_account_desc') },
+    { to: '/admin/appointments', label: t('nav.appointments'), desc: t('admin.appointments_desc') },
+    { to: '/admin/classes', label: t('admin.classes'), desc: t('admin.classes_desc') },
+    { to: '/admin/announcements', label: t('nav.announcements'), desc: t('admin.announcements_desc') },
   ];
 
   return (
-    <PageLayout title="Admin Dashboard" subtitle={`Welcome, ${user?.firstName}!`}>
+    <PageLayout title={t('admin.dashboard_title')} subtitle={t('admin.welcome', { name: user?.firstName })}>
       <div className="space-y-6">
         {/* Search — press Enter to search students */}
         <form
@@ -51,7 +53,7 @@ export default function AdminDashboard() {
         >
           <div className="flex-1">
             <Input
-              placeholder="Search students by name, address or phone… (press Enter)"
+              placeholder={t('admin.search_students_ph')}
               icon={<Search className="w-4 h-4" />}
               value={search}
               onChange={e => setSearch(e.target.value)}
@@ -62,7 +64,7 @@ export default function AdminDashboard() {
               type="submit"
               className="flex items-center gap-1 px-4 py-2 bg-primary-600 text-white text-sm font-semibold rounded-xl hover:bg-primary-700 transition-colors whitespace-nowrap"
             >
-              Search <ArrowRight className="w-4 h-4" />
+              {t('common.search')} <ArrowRight className="w-4 h-4" />
             </button>
           )}
         </form>
@@ -88,7 +90,7 @@ export default function AdminDashboard() {
 
         {/* Quick links */}
         <div>
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Management</h2>
+          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">{t('admin.management')}</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {quickLinks.map(({ to, label, desc }) => (
               <Link key={to} to={to}>

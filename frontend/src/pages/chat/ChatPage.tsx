@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import { ArrowLeft, MessageSquare } from 'lucide-react';
 import PageLayout from '../../components/layout/PageLayout';
@@ -20,13 +21,14 @@ function Avatar({ user, primaryColor }: { user: { firstName: string; lastName: s
   );
 }
 
-function roleLabel(role: string, subject?: string) {
-  if (role === 'teacher') return subject ? `Teacher · ${subject}` : 'Teacher';
-  if (role === 'supervisor') return 'Supervisor';
-  return 'Parent';
+function roleLabel(t: (k: string, o?: any) => string, role: string, subject?: string) {
+  if (role === 'teacher') return subject ? t('chat.teacher_with_subject', { subject }) : t('chat.role_teacher');
+  if (role === 'supervisor') return t('chat.role_supervisor');
+  return t('chat.role_parent');
 }
 
 export default function ChatPage() {
+  const { t } = useTranslation();
   const { school } = useAuthStore();
   const { setChatUnreadCount } = useNotificationStore();
   const primaryColor = school?.primaryColor || '#4F46E5';
@@ -63,7 +65,7 @@ export default function ChatPage() {
   };
 
   return (
-    <PageLayout title="Chat" raw>
+    <PageLayout title={t('chat.title')} raw>
       <div className="flex h-full">
         {/* Left panel — conversation list */}
         <div className={`
@@ -97,7 +99,7 @@ export default function ChatPage() {
                 <Avatar user={selected.otherUser} primaryColor={primaryColor} />
                 <div className="min-w-0 flex-1">
                   <p className="font-semibold text-gray-900 text-sm truncate">{selected.otherUser.fullName}</p>
-                  <p className="text-xs text-gray-500">{roleLabel(selected.otherUser.role, selected.otherUser.subject)}</p>
+                  <p className="text-xs text-gray-500">{roleLabel(t, selected.otherUser.role, selected.otherUser.subject)}</p>
                 </div>
               </div>
 
@@ -112,8 +114,8 @@ export default function ChatPage() {
             <div className="flex-1 flex flex-col items-center justify-center gap-4 text-gray-400">
               <MessageSquare className="w-14 h-14 opacity-20" />
               <div className="text-center">
-                <p className="font-medium text-gray-500">Select a conversation</p>
-                <p className="text-sm mt-1">or start a new one with the + button</p>
+                <p className="font-medium text-gray-500">{t('chat.select_conversation')}</p>
+                <p className="text-sm mt-1">{t('chat.select_hint')}</p>
               </div>
             </div>
           )}

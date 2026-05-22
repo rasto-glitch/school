@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Search, GraduationCap, ArrowLeft } from 'lucide-react';
 import { adminApi } from '../../services/api';
@@ -13,6 +14,7 @@ import EmptyState from '../../components/common/EmptyState';
 import type { Student, Class } from '../../types';
 
 export default function AdminStudentsListPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [students, setStudents] = useState<Student[]>([]);
@@ -39,24 +41,24 @@ export default function AdminStudentsListPage() {
   }, [debouncedSearch, classFilter, page]);
 
   return (
-    <PageLayout title="All Students" subtitle={`${total} students total`}>
+    <PageLayout title={t('admin.all_students_title')} subtitle={t('admin.students_total', { count: total })}>
       <div className="space-y-4">
         <div className="flex flex-wrap gap-3 items-center">
-          <Button variant="ghost" size="sm" icon={<ArrowLeft className="w-4 h-4" />} onClick={() => navigate('/admin/dashboard')}>Back</Button>
-          <Button variant="primary" size="sm" onClick={() => navigate('/admin/students')}>+ Add / Edit Students</Button>
+          <Button variant="ghost" size="sm" icon={<ArrowLeft className="w-4 h-4" />} onClick={() => navigate('/admin/dashboard')}>{t('common.back')}</Button>
+          <Button variant="primary" size="sm" onClick={() => navigate('/admin/students')}>{t('admin.add_edit_students')}</Button>
         </div>
 
         <div className="flex flex-wrap gap-3">
           <div className="flex-1 min-w-48">
-            <Input placeholder="Search by name..." icon={<Search className="w-4 h-4" />} value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
+            <Input placeholder={t('admin.search_by_name')} icon={<Search className="w-4 h-4" />} value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
           </div>
           <div className="w-48">
-            <Select options={classes.map(c => ({ value: c.id, label: c.name }))} placeholder="All Classes" value={classFilter} onChange={e => { setClassFilter(e.target.value); setPage(1); }} />
+            <Select options={classes.map(c => ({ value: c.id, label: c.name }))} placeholder={t('common.all_classes')} value={classFilter} onChange={e => { setClassFilter(e.target.value); setPage(1); }} />
           </div>
         </div>
 
         {loading ? <LoadingSpinner /> : students.length === 0 ? (
-          <EmptyState title="No students found" icon={<GraduationCap className="w-8 h-8 text-gray-400" />} />
+          <EmptyState title={t('admin.no_students_found')} icon={<GraduationCap className="w-8 h-8 text-gray-400" />} />
         ) : (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -68,7 +70,7 @@ export default function AdminStudentsListPage() {
                     </div>
                     <div className="min-w-0">
                       <p className="font-semibold text-gray-900 truncate">{s.fullName}</p>
-                      <p className="text-xs text-gray-500">{(s as any).classes?.name || 'No class'}</p>
+                      <p className="text-xs text-gray-500">{(s as any).classes?.name || t('common.no_class')}</p>
                       <p className="text-xs text-gray-400">{(s as any).parents?.fullName || (s as any).parents?.full_name || ''}</p>
                     </div>
                   </div>
@@ -77,9 +79,9 @@ export default function AdminStudentsListPage() {
             </div>
             {total > limit && (
               <div className="flex justify-center gap-2">
-                <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage(p => p - 1)}>Previous</Button>
-                <span className="px-3 py-2 text-sm text-gray-600">Page {page} of {Math.ceil(total / limit)}</span>
-                <Button variant="outline" size="sm" disabled={page >= Math.ceil(total / limit)} onClick={() => setPage(p => p + 1)}>Next</Button>
+                <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage(p => p - 1)}>{t('common.previous')}</Button>
+                <span className="px-3 py-2 text-sm text-gray-600">{t('admin.page_of', { page, total: Math.ceil(total / limit) })}</span>
+                <Button variant="outline" size="sm" disabled={page >= Math.ceil(total / limit)} onClick={() => setPage(p => p + 1)}>{t('common.next')}</Button>
               </div>
             )}
           </>

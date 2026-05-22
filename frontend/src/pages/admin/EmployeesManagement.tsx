@@ -1,4 +1,5 @@
 import { useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import PageLayout from '../../components/layout/PageLayout';
 import { useAuthStore } from '../../store/authStore';
 import TeacherEmployeesTab from './employees/TeacherEmployeesTab';
@@ -16,16 +17,17 @@ import StaffEmployeesTab from './employees/StaffEmployeesTab';
 type EmpTab = 'teacher' | 'supervisor' | 'admin' | 'staff';
 
 export default function EmployeesManagement() {
+  const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
   // Staff is backed by the accounting-premium staff_members table; hide the
   // sub-tab entirely when the accounting module is off.
   const staffEnabled = useAuthStore(s => s.school?.features?.tuition_fees === true);
 
   const TABS: { key: EmpTab; label: string }[] = [
-    { key: 'teacher', label: 'Teachers' },
-    { key: 'supervisor', label: 'Supervisors' },
-    { key: 'admin', label: 'Administration' },
-    ...(staffEnabled ? [{ key: 'staff' as const, label: 'Staff' }] : []),
+    { key: 'teacher', label: t('admin.tab_teachers') },
+    { key: 'supervisor', label: t('admin.tab_supervisors') },
+    { key: 'admin', label: t('admin.tab_administration') },
+    ...(staffEnabled ? [{ key: 'staff' as const, label: t('admin.tab_staff') }] : []),
   ];
 
   const raw = (searchParams.get('tab') || 'teacher') as EmpTab;
@@ -38,7 +40,7 @@ export default function EmployeesManagement() {
   };
 
   return (
-    <PageLayout title="Employees" subtitle="Add, manage and archive every employee">
+    <PageLayout title={t('nav.employees')} subtitle={t('admin.employees_subtitle')}>
       <div className="space-y-6">
         <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
           {TABS.map(t => (
@@ -53,8 +55,8 @@ export default function EmployeesManagement() {
         </div>
 
         {active === 'teacher' && <TeacherEmployeesTab />}
-        {active === 'supervisor' && <AccountEmployeesTab role="supervisor" singular="Supervisor" />}
-        {active === 'admin' && <AccountEmployeesTab role="admin" singular="Administrator" />}
+        {active === 'supervisor' && <AccountEmployeesTab role="supervisor" singular={t('admin.singular_supervisor')} />}
+        {active === 'admin' && <AccountEmployeesTab role="admin" singular={t('admin.singular_administrator')} />}
         {active === 'staff' && staffEnabled && <StaffEmployeesTab />}
       </div>
     </PageLayout>

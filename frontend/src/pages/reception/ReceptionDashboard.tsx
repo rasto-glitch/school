@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { Calendar, Clock } from 'lucide-react';
 import { receptionApi } from '../../services/api';
@@ -6,6 +7,7 @@ import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
 
 export default function ReceptionDashboard() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [pendingCount, setPendingCount] = useState<number | null>(null);
 
@@ -16,7 +18,7 @@ export default function ReceptionDashboard() {
   }, []);
 
   return (
-    <PageLayout title="Reception Dashboard" subtitle="Manage parent appointment requests">
+    <PageLayout title={t('reception.dashboard_title')} subtitle={t('reception.dashboard_subtitle')}>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl">
         <Card
           className="cursor-pointer hover:shadow-md transition-shadow"
@@ -27,11 +29,11 @@ export default function ReceptionDashboard() {
               <Calendar className="w-6 h-6 text-primary-600" />
             </div>
             <div>
-              <p className="text-sm text-gray-500 font-medium">Appointments</p>
+              <p className="text-sm text-gray-500 font-medium">{t('nav.appointments')}</p>
               <p className="text-2xl font-bold text-gray-900">
                 {pendingCount === null ? '—' : pendingCount}
               </p>
-              <p className="text-xs text-amber-600 font-medium mt-0.5">pending</p>
+              <p className="text-xs text-amber-600 font-medium mt-0.5">{t('reception.pending')}</p>
             </div>
           </div>
         </Card>
@@ -45,8 +47,8 @@ export default function ReceptionDashboard() {
               <Clock className="w-6 h-6 text-amber-600" />
             </div>
             <div>
-              <p className="text-sm text-gray-500 font-medium">Awaiting Response</p>
-              <p className="text-xs text-gray-400 mt-1">Click to view all requests</p>
+              <p className="text-sm text-gray-500 font-medium">{t('reception.awaiting_response')}</p>
+              <p className="text-xs text-gray-400 mt-1">{t('reception.click_view')}</p>
             </div>
           </div>
         </Card>

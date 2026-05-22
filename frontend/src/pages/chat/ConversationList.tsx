@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { formatDistanceToNow } from 'date-fns';
 import { Search, Plus, X, Loader2, MessageSquare } from 'lucide-react';
 import { chatApi } from '../../services/api';
@@ -54,13 +55,14 @@ function Avatar({ user, primaryColor, size = 'md' }: { user: { firstName: string
   );
 }
 
-function roleLabel(role: string, subject?: string) {
-  if (role === 'teacher') return subject ? `Teacher · ${subject}` : 'Teacher';
-  if (role === 'supervisor') return 'Supervisor';
-  return 'Parent';
+function roleLabel(t: (k: string, o?: any) => string, role: string, subject?: string) {
+  if (role === 'teacher') return subject ? t('chat.teacher_with_subject', { subject }) : t('chat.role_teacher');
+  if (role === 'supervisor') return t('chat.role_supervisor');
+  return t('chat.role_parent');
 }
 
 export default function ConversationList({ selected, onSelect, onNewConversation, onUnreadChange }: Props) {
+  const { t } = useTranslation();
   const { user, school } = useAuthStore();
   const { socket } = useSocketStore();
   const primaryColor = school?.primaryColor || '#4F46E5';
@@ -94,7 +96,7 @@ export default function ConversationList({ selected, onSelect, onNewConversation
         const existing = prev.find(c => c.id === data.conversationId);
         const isCurrentSelected = data.conversationId === selected;
         const isMine = data.senderId === user.id;
-        const preview = data.type === 'text' ? (data.content || '') : data.type === 'image' ? '📷 Photo' : `📎 ${data.attachmentName || 'File'}`;
+        const preview = data.type === 'text' ? (data.content || '') : data.type === 'image' ? t('chat.photo_preview') : t('chat.file_preview', { name: data.attachmentName || t('chat.file') });
 
         if (existing) {
           return prev.map(c => c.id === data.conversationId
@@ -155,11 +157,11 @@ export default function ConversationList({ selected, onSelect, onNewConversation
       {/* Header */}
       <div className="px-4 py-4 border-b border-gray-100">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="font-bold text-gray-900 text-base">Messages</h2>
+          <h2 className="font-bold text-gray-900 text-base">{t('chat.messages')}</h2>
           <button
             onClick={openNewModal}
             className="p-1.5 rounded-xl hover:bg-indigo-50 text-indigo-600 transition-colors"
-            title="New conversation"
+            title={t('chat.new_conversation')}
           >
             <Plus className="w-5 h-5" />
           </button>
@@ -169,7 +171,7 @@ export default function ConversationList({ selected, onSelect, onNewConversation
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search…"
+            placeholder={t('chat.search')}
             className="w-full pl-8 pr-3 py-2 text-sm bg-gray-50 rounded-xl border border-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-transparent"
           />
         </div>
@@ -186,7 +188,7 @@ export default function ConversationList({ selected, onSelect, onNewConversation
         {!loading && filteredConvs.length === 0 && (
           <div className="flex flex-col items-center gap-2 py-12 text-gray-400 px-4 text-center">
             <MessageSquare className="w-8 h-8 opacity-30" />
-            <p className="text-sm">No conversations yet.<br />Start a new one!</p>
+            <p className="text-sm">{t('chat.no_conversations')}<br />{t('chat.start_new')}</p>
           </div>
         )}
 
@@ -205,7 +207,7 @@ export default function ConversationList({ selected, onSelect, onNewConversation
             <div className="min-w-0 flex-1">
               <div className="flex items-center justify-between gap-2">
                 <span className={`text-sm truncate ${conv.hasUnread ? 'font-bold text-gray-900' : 'font-medium text-gray-800'}`}>
-                  {conv.otherUser?.fullName || 'Unknown'}
+                  {conv.otherUser?.fullName || t('chat.unknown')}
                 </span>
                 {conv.lastMessageAt && (
                   <span className="text-[10px] text-gray-400 flex-shrink-0">
@@ -216,8 +218,8 @@ export default function ConversationList({ selected, onSelect, onNewConversation
               <div className="flex items-center justify-between gap-2 mt-0.5">
                 <p className={`text-xs truncate ${conv.hasUnread ? 'text-gray-700 font-medium' : 'text-gray-500'}`}>
                   {conv.lastMessagePreview
-                    ? (conv.lastMessageSenderId === user?.id ? `You: ${conv.lastMessagePreview}` : conv.lastMessagePreview)
-                    : <span className="italic text-gray-400">No messages yet</span>}
+                    ? (conv.lastMessageSenderId === user?.id ? t('chat.you_prefix', { preview: conv.lastMessagePreview }) : conv.lastMessagePreview)
+                    : <span className="italic text-gray-400">{t('chat.no_messages_preview')}</span>}
                 </p>
                 {conv.hasUnread && (
                   <span className="w-2 h-2 bg-indigo-600 rounded-full flex-shrink-0" />
@@ -233,7 +235,7 @@ export default function ConversationList({ selected, onSelect, onNewConversation
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm flex flex-col max-h-[70vh]">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-              <h3 className="font-bold text-gray-900">New Conversation</h3>
+              <h3 className="font-bold text-gray-900">{t('chat.new_conversation')}</h3>
               <button onClick={() => setShowNewModal(false)} className="p-1.5 hover:bg-gray-100 rounded-xl transition-colors">
                 <X className="w-4 h-4 text-gray-500" />
               </button>
@@ -244,7 +246,7 @@ export default function ConversationList({ selected, onSelect, onNewConversation
                 <input
                   value={contactSearch}
                   onChange={e => setContactSearch(e.target.value)}
-                  placeholder="Search contacts…"
+                  placeholder={t('chat.search_contacts')}
                   autoFocus
                   className="w-full pl-8 pr-3 py-2 text-sm bg-gray-50 rounded-xl border border-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-300"
                 />
@@ -257,7 +259,7 @@ export default function ConversationList({ selected, onSelect, onNewConversation
                 </div>
               )}
               {!loadingContacts && filteredContacts.length === 0 && (
-                <p className="text-sm text-gray-400 text-center py-8">No contacts found</p>
+                <p className="text-sm text-gray-400 text-center py-8">{t('chat.no_contacts')}</p>
               )}
               {filteredContacts.map(contact => (
                 <button
@@ -269,7 +271,7 @@ export default function ConversationList({ selected, onSelect, onNewConversation
                   <Avatar user={contact} primaryColor={primaryColor} size="sm" />
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-gray-900 truncate">{contact.fullName}</p>
-                    <p className="text-xs text-gray-500">{roleLabel(contact.role, contact.subject)}</p>
+                    <p className="text-xs text-gray-500">{roleLabel(t, contact.role, contact.subject)}</p>
                   </div>
                   {startingConv === contact.id && <Loader2 className="w-4 h-4 animate-spin text-gray-400" />}
                 </button>

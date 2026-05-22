@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { format, isToday, isYesterday, isSameDay } from 'date-fns';
 import { Loader2, MessageSquare } from 'lucide-react';
 import { chatApi } from '../../services/api';
@@ -24,8 +25,9 @@ interface Props {
 }
 
 function DateSeparator({ date }: { date: Date }) {
-  const label = isToday(date) ? 'Today'
-    : isYesterday(date) ? 'Yesterday'
+  const { t } = useTranslation();
+  const label = isToday(date) ? t('common.today')
+    : isYesterday(date) ? t('common.yesterday')
     : format(date, 'MMMM d, yyyy');
   return (
     <div className="flex items-center gap-3 my-4 px-4">
@@ -37,6 +39,7 @@ function DateSeparator({ date }: { date: Date }) {
 }
 
 export default function ChatWindow({ conversationId, otherUser, onMessageSent }: Props) {
+  const { t } = useTranslation();
   const { user, school } = useAuthStore();
   const { socket } = useSocketStore();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -74,11 +77,11 @@ export default function ChatWindow({ conversationId, otherUser, onMessageSent }:
   useEffect(() => {
     let alive = true;
     const check = () => chatApi.getChatWindow()
-      .then(r => { if (alive) setClosedMsg(r.data?.open ? null : (r.data?.message || 'Chat is currently closed by the school.')); })
+      .then(r => { if (alive) setClosedMsg(r.data?.open ? null : (r.data?.message || t('chat.chat_closed'))); })
       .catch(() => {});
     check();
-    const t = setInterval(check, 60_000);
-    return () => { alive = false; clearInterval(t); };
+    const timer = setInterval(check, 60_000);
+    return () => { alive = false; clearInterval(timer); };
   }, [conversationId]);
 
   // Scroll to bottom on first load
@@ -180,12 +183,12 @@ export default function ChatWindow({ conversationId, otherUser, onMessageSent }:
       const sent: Message = res.data;
       setMessages(prev => prev.find(m => m.id === sent.id) ? prev : [...prev, sent]);
       setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
-      const preview = data.type === 'text' ? (data.content || '') : data.type === 'image' ? '📷 Photo' : `📎 ${data.attachmentName || 'File'}`;
+      const preview = data.type === 'text' ? (data.content || '') : data.type === 'image' ? t('chat.photo_preview') : t('chat.file_preview', { name: data.attachmentName || t('chat.file') });
       onMessageSent(preview, data.type);
       setClosedMsg(null);
     } catch (e: any) {
       if (e?.response?.status === 423) {
-        setClosedMsg(e.response.data?.error || 'Chat is currently closed by the school.');
+        setClosedMsg(e.response.data?.error || t('chat.chat_closed'));
       }
     }
   };
@@ -198,7 +201,7 @@ export default function ChatWindow({ conversationId, otherUser, onMessageSent }:
   };
 
   const handleDelete = async (msgId: string) => {
-    if (!confirm('Delete this message?')) return;
+    if (!confirm(t('chat.delete_message_confirm'))) return;
     try {
       await chatApi.deleteMessage(msgId);
       setMessages(prev => prev.map(m => m.id === msgId ? { ...m, isDeleted: true, content: undefined } : m));
@@ -247,7 +250,7 @@ export default function ChatWindow({ conversationId, otherUser, onMessageSent }:
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full gap-3 text-gray-400 py-16">
             <MessageSquare className="w-10 h-10 opacity-30" />
-            <p className="text-sm">No messages yet. Say hello!</p>
+            <p className="text-sm">{t('chat.no_messages_yet')}</p>
           </div>
         )}
 

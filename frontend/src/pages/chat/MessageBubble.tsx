@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { format, isToday, isYesterday } from 'date-fns';
 import { Pencil, Trash2, Check, X, Download, FileText } from 'lucide-react';
 
@@ -25,10 +26,10 @@ interface Props {
   onDelete: (msgId: string) => void;
 }
 
-function formatTime(iso: string) {
+function formatTime(iso: string, yesterdayLabel: string) {
   const d = new Date(iso);
   if (isToday(d)) return format(d, 'HH:mm');
-  if (isYesterday(d)) return `Yesterday ${format(d, 'HH:mm')}`;
+  if (isYesterday(d)) return `${yesterdayLabel} ${format(d, 'HH:mm')}`;
   return format(d, 'MMM d, HH:mm');
 }
 
@@ -54,6 +55,7 @@ function isSafeAttachmentUrl(u: string | undefined): u is string {
 }
 
 export default function MessageBubble({ msg, isMine, showAvatar, avatarInitials, primaryColor, onEdit, onDelete }: Props) {
+  const { t } = useTranslation();
   const [hovered, setHovered] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [editVal, setEditVal] = useState(msg.content || '');
@@ -82,7 +84,7 @@ export default function MessageBubble({ msg, isMine, showAvatar, avatarInitials,
     return (
       <div className={`flex items-end gap-2 mb-1 ${isMine ? 'flex-row-reverse' : 'flex-row'}`}>
         <div className="w-7 flex-shrink-0" />
-        <span className="text-xs text-gray-400 italic px-3 py-1.5">Message deleted</span>
+        <span className="text-xs text-gray-400 italic px-3 py-1.5">{t('chat.message_deleted')}</span>
       </div>
     );
   }
@@ -153,7 +155,7 @@ export default function MessageBubble({ msg, isMine, showAvatar, avatarInitials,
                     <FileText className="w-5 h-5" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-medium truncate max-w-[180px]">{msg.attachmentName || 'File'}</p>
+                    <p className="text-sm font-medium truncate max-w-[180px]">{msg.attachmentName || t('chat.file')}</p>
                     {msg.attachmentSize != null && (
                       <p className={`text-xs ${isMine ? 'text-white/70' : 'text-gray-500'}`}>{humanSize(msg.attachmentSize)}</p>
                     )}
@@ -169,8 +171,8 @@ export default function MessageBubble({ msg, isMine, showAvatar, avatarInitials,
 
             {/* Timestamp + edited */}
             <div className={`flex items-center gap-1 mt-0.5 px-1 ${isMine ? 'flex-row-reverse' : ''}`}>
-              <span className="text-[10px] text-gray-400">{formatTime(msg.createdAt)}</span>
-              {msg.editedAt && <span className="text-[10px] text-gray-400 italic">edited</span>}
+              <span className="text-[10px] text-gray-400">{formatTime(msg.createdAt, t('common.yesterday'))}</span>
+              {msg.editedAt && <span className="text-[10px] text-gray-400 italic">{t('chat.edited')}</span>}
             </div>
           </>
         )}
@@ -183,7 +185,7 @@ export default function MessageBubble({ msg, isMine, showAvatar, avatarInitials,
             <button
               onClick={() => { setEditVal(msg.content || ''); setEditMode(true); }}
               className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors"
-              title="Edit"
+              title={t('chat.edit')}
             >
               <Pencil className="w-3.5 h-3.5" />
             </button>
@@ -191,7 +193,7 @@ export default function MessageBubble({ msg, isMine, showAvatar, avatarInitials,
           <button
             onClick={() => onDelete(msg.id)}
             className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
-            title="Delete"
+            title={t('chat.delete')}
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>

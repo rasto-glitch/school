@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { Search, Bus, ArrowLeft } from 'lucide-react';
 import { adminApi } from '../../services/api';
@@ -11,6 +12,7 @@ import EmptyState from '../../components/common/EmptyState';
 import type { Driver } from '../../types';
 
 export default function AdminDriversListPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [search, setSearch] = useState('');
@@ -33,17 +35,17 @@ export default function AdminDriversListPage() {
     : drivers;
 
   return (
-    <PageLayout title="All Drivers" subtitle={`${drivers.length} drivers total`}>
+    <PageLayout title={t('admin.all_drivers_title')} subtitle={t('admin.drivers_total', { count: drivers.length })}>
       <div className="space-y-4">
         <div className="flex flex-wrap gap-3 items-center">
-          <Button variant="ghost" size="sm" icon={<ArrowLeft className="w-4 h-4" />} onClick={() => navigate('/admin/dashboard')}>Back</Button>
-          <Button variant="primary" size="sm" onClick={() => navigate('/admin/drivers')}>+ Add / Edit Drivers</Button>
+          <Button variant="ghost" size="sm" icon={<ArrowLeft className="w-4 h-4" />} onClick={() => navigate('/admin/dashboard')}>{t('common.back')}</Button>
+          <Button variant="primary" size="sm" onClick={() => navigate('/admin/drivers')}>{t('admin.add_edit_drivers')}</Button>
         </div>
 
-        <Input placeholder="Search by name..." icon={<Search className="w-4 h-4" />} value={search} onChange={e => setSearch(e.target.value)} />
+        <Input placeholder={t('admin.search_by_name')} icon={<Search className="w-4 h-4" />} value={search} onChange={e => setSearch(e.target.value)} />
 
         {loading ? <LoadingSpinner /> : filtered.length === 0 ? (
-          <EmptyState title="No drivers found" icon={<Bus className="w-8 h-8 text-gray-400" />} />
+          <EmptyState title={t('admin.no_drivers_found')} icon={<Bus className="w-8 h-8 text-gray-400" />} />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {filtered.map(d => (
@@ -54,8 +56,8 @@ export default function AdminDriversListPage() {
                   </div>
                   <div className="min-w-0">
                     <p className="font-semibold text-gray-900">{d.fullName}</p>
-                    <p className="text-xs text-gray-500">Bus #{d.buses?.busNumber || 'N/A'}</p>
-                    <p className="text-xs text-gray-400">{d.phoneNumber || '—'} · License: {d.licenseNumber || '—'}</p>
+                    <p className="text-xs text-gray-500">{t('admin.bus_number', { number: d.buses?.busNumber || t('admin.na') })}</p>
+                    <p className="text-xs text-gray-400">{d.phoneNumber || '—'} · {t('admin.license')}: {d.licenseNumber || '—'}</p>
                   </div>
                 </div>
               </Card>

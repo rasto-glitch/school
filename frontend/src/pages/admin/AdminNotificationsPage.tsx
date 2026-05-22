@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Bell, Send } from 'lucide-react';
 import { adminApi } from '../../services/api';
 import PageLayout from '../../components/layout/PageLayout';
@@ -10,6 +11,7 @@ import EmptyState from '../../components/common/EmptyState';
 import { toast } from 'react-toastify';
 
 export default function AdminNotificationsPage() {
+  const { t } = useTranslation();
   const [filter, setFilter] = useState<'recent' | 'all'>('recent');
   const [sending, setSending] = useState(false);
 
@@ -20,60 +22,60 @@ export default function AdminNotificationsPage() {
 
 
   const sendNotification = async () => {
-    if (!title || !message) { toast.error('Title and message are required'); return; }
+    if (!title || !message) { toast.error(t('admin.title_message_required')); return; }
     setSending(true);
     try {
       // Get all users of target role and send notification to each
       // For simplicity, we call a broadcast endpoint
       await adminApi.sendNotification({ title, message, type: 'general', targetRole });
-      toast.success('Notification sent!');
+      toast.success(t('admin.notif_sent'));
       setTitle('');
       setMessage('');
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to send notification');
+      toast.error(err.response?.data?.error || t('admin.notif_send_failed'));
     } finally {
       setSending(false);
     }
   };
 
   return (
-    <PageLayout title="Notifications" subtitle="Send and manage school notifications">
+    <PageLayout title={t('nav.notifications')} subtitle={t('admin.notif_subtitle')}>
       <div className="space-y-6 max-w-2xl">
         {/* Send notification */}
         <Card>
           <div className="flex items-center gap-2 mb-4">
             <Send className="w-5 h-5 text-primary-600" />
-            <h2 className="font-semibold text-gray-900">Send Notification</h2>
+            <h2 className="font-semibold text-gray-900">{t('admin.send_notification')}</h2>
           </div>
           <div className="space-y-4">
             <Select
-              label="Send To"
+              label={t('admin.send_to')}
               value={targetRole}
               onChange={e => setTargetRole(e.target.value)}
               options={[
-                { value: 'all', label: 'Everyone' },
-                { value: 'parent', label: 'All Parents' },
-                { value: 'teacher', label: 'All Teachers' },
-                { value: 'driver', label: 'All Drivers' },
+                { value: 'all', label: t('admin.everyone') },
+                { value: 'parent', label: t('admin.all_parents') },
+                { value: 'teacher', label: t('admin.all_teachers') },
+                { value: 'driver', label: t('admin.all_drivers') },
               ]}
             />
             <Input
-              label="Title"
-              placeholder="Notification title"
+              label={t('admin.title_label')}
+              placeholder={t('admin.notif_title_ph')}
               value={title}
               onChange={e => setTitle(e.target.value)}
             />
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Message</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('admin.message')}</label>
               <textarea
                 className="input-field min-h-[100px] resize-none"
-                placeholder="Write your notification message..."
+                placeholder={t('admin.notif_message_ph')}
                 value={message}
                 onChange={e => setMessage(e.target.value)}
               />
             </div>
             <Button onClick={sendNotification} loading={sending} fullWidth icon={<Send className="w-4 h-4" />}>
-              Send Notification
+              {t('admin.send_notification')}
             </Button>
           </div>
         </Card>
@@ -81,12 +83,12 @@ export default function AdminNotificationsPage() {
         {/* Filter + recent notifications */}
         <div>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="font-semibold text-gray-900">Recent:</h2>
+            <h2 className="font-semibold text-gray-900">{t('admin.recent')}</h2>
             <div className="w-36">
               <Select
                 options={[
-                  { value: 'recent', label: 'Recent' },
-                  { value: 'all', label: 'All' },
+                  { value: 'recent', label: t('admin.filter_recent') },
+                  { value: 'all', label: t('admin.filter_all') },
                 ]}
                 value={filter}
                 onChange={e => setFilter(e.target.value as 'recent' | 'all')}
@@ -96,8 +98,8 @@ export default function AdminNotificationsPage() {
 
           <Card>
               <EmptyState
-                title="Notifications will appear here"
-                description="Notifications sent to users will be listed here once you start sending them."
+                title={t('admin.notif_empty_title')}
+                description={t('admin.notif_empty_desc')}
                 icon={<Bell className="w-8 h-8 text-gray-400" />}
               />
             </Card>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'react-toastify';
 import { Clock } from 'lucide-react';
 import { adminApi } from '../../services/api';
@@ -10,10 +11,6 @@ interface DayWindow { enabled: boolean; open: string; close: string; }
 type Days = Record<DayKey, DayWindow>;
 
 const DAY_ORDER: DayKey[] = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-const DAY_LABEL: Record<DayKey, string> = {
-  sunday: 'Sunday', monday: 'Monday', tuesday: 'Tuesday', wednesday: 'Wednesday',
-  thursday: 'Thursday', friday: 'Friday', saturday: 'Saturday',
-};
 
 // Curated list; the school's stored tz is prepended if it isn't here.
 const TIMEZONES = [
@@ -51,6 +48,8 @@ function hydrateDays(raw: any): Days {
 }
 
 export default function ChatScheduleCard() {
+  const { t } = useTranslation();
+  const dayLabel = (k: DayKey) => t(`common.days.${k}`);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [enabled, setEnabled] = useState(false);
@@ -78,16 +77,16 @@ export default function ChatScheduleCard() {
     for (const k of DAY_ORDER) {
       const d = days[k];
       if (enabled && d.enabled && d.close <= d.open) {
-        toast.error(`${DAY_LABEL[k]}: closing time must be after opening time.`);
+        toast.error(t('admin.close_after_open', { day: dayLabel(k) }));
         return;
       }
     }
     setSaving(true);
     try {
       await adminApi.updateSettings({ timezone, chatRestrictions: { enabled, days } });
-      toast.success('Chat schedule saved');
+      toast.success(t('admin.chat_schedule_saved'));
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to save chat schedule');
+      toast.error(err.response?.data?.error || t('admin.chat_schedule_save_failed'));
     } finally {
       setSaving(false);
     }
@@ -97,11 +96,10 @@ export default function ChatScheduleCard() {
     <Card>
       <div className="flex items-center gap-2 mb-1">
         <Clock className="w-5 h-5 text-violet-600" />
-        <h2 className="font-semibold text-gray-900">Chat Schedule</h2>
+        <h2 className="font-semibold text-gray-900">{t('admin.chat_schedule')}</h2>
       </div>
       <p className="text-sm text-gray-500 mb-4">
-        Restrict parent ↔ teacher/supervisor messaging to set days and hours. Outside the
-        window, both sides see the chat as closed and can't send (existing messages stay readable).
+        {t('admin.chat_schedule_desc')}
       </p>
 
       {loading ? (
@@ -112,7 +110,7 @@ export default function ChatScheduleCard() {
         <div className="space-y-4">
           {/* Master toggle */}
           <label className="flex items-center justify-between gap-3 px-3 py-2.5 bg-gray-50 rounded-xl cursor-pointer">
-            <span className="text-sm font-medium text-gray-800">Enforce a chat schedule</span>
+            <span className="text-sm font-medium text-gray-800">{t('admin.enforce_chat')}</span>
             <input
               type="checkbox"
               checked={enabled}
@@ -124,7 +122,7 @@ export default function ChatScheduleCard() {
           <div className={enabled ? '' : 'opacity-50 pointer-events-none'}>
             {/* Timezone */}
             <div className="mb-4">
-              <label className="block text-xs font-medium text-gray-600 mb-1">Timezone</label>
+              <label className="block text-xs font-medium text-gray-600 mb-1">{t('admin.timezone')}</label>
               <select
                 value={timezone}
                 onChange={e => setTimezone(e.target.value)}
@@ -132,7 +130,7 @@ export default function ChatScheduleCard() {
               >
                 {tzOptions.map(tz => <option key={tz} value={tz}>{tz}</option>)}
               </select>
-              <p className="text-xs text-gray-400 mt-1">Open/close times below are in this timezone.</p>
+              <p className="text-xs text-gray-400 mt-1">{t('admin.timezone_hint')}</p>
             </div>
 
             {/* Per-day rows */}
@@ -148,7 +146,7 @@ export default function ChatScheduleCard() {
                         onChange={e => setDay(k, { enabled: e.target.checked })}
                         className="h-4 w-4 accent-violet-600"
                       />
-                      <span className="text-sm font-medium text-gray-800">{DAY_LABEL[k]}</span>
+                      <span className="text-sm font-medium text-gray-800">{dayLabel(k)}</span>
                     </label>
                     <div className={`flex items-center gap-2 flex-1 ${d.enabled ? '' : 'opacity-40 pointer-events-none'}`}>
                       <input
@@ -157,7 +155,7 @@ export default function ChatScheduleCard() {
                         onChange={e => setDay(k, { open: e.target.value })}
                         className="input-field text-sm py-1.5"
                       />
-                      <span className="text-xs text-gray-400">to</span>
+                      <span className="text-xs text-gray-400">{t('admin.to')}</span>
                       <input
                         type="time"
                         value={d.close}
@@ -172,7 +170,7 @@ export default function ChatScheduleCard() {
           </div>
 
           <div className="text-right">
-            <Button onClick={save} loading={saving}>Save chat schedule</Button>
+            <Button onClick={save} loading={saving}>{t('admin.save_chat_schedule')}</Button>
           </div>
         </div>
       )}

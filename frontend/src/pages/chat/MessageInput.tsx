@@ -1,4 +1,5 @@
 import { useRef, useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Send, Paperclip, Image, X, Loader2 } from 'lucide-react';
 import { chatApi } from '../../services/api';
 
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export default function MessageInput({ onSend, onTyping, disabled }: Props) {
+  const { t } = useTranslation();
   const [text, setText] = useState('');
   const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState<{ url: string; name: string; size: number; type: 'image' | 'file' } | null>(null);
@@ -61,7 +63,7 @@ export default function MessageInput({ onSend, onTyping, disabled }: Props) {
     e.target.value = '';
 
     if (file.size > 10 * 1024 * 1024) {
-      alert('File size must be under 10 MB');
+      alert(t('chat.file_too_large'));
       return;
     }
 
@@ -71,7 +73,7 @@ export default function MessageInput({ onSend, onTyping, disabled }: Props) {
       const { url, name, size, type } = res.data;
       setPreview({ url, name, size, type: forceType ?? type });
     } catch {
-      alert('Upload failed. Please try again.');
+      alert(t('chat.upload_failed'));
     } finally {
       setUploading(false);
     }
@@ -108,7 +110,7 @@ export default function MessageInput({ onSend, onTyping, disabled }: Props) {
             onClick={() => imageInputRef.current?.click()}
             disabled={disabled || uploading}
             className="p-2 rounded-xl hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors disabled:opacity-40"
-            title="Send image"
+            title={t('chat.send_image')}
           >
             {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Image className="w-4 h-4" />}
           </button>
@@ -116,7 +118,7 @@ export default function MessageInput({ onSend, onTyping, disabled }: Props) {
             onClick={() => fileInputRef.current?.click()}
             disabled={disabled || uploading}
             className="p-2 rounded-xl hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors disabled:opacity-40"
-            title="Attach file"
+            title={t('chat.attach_file')}
           >
             <Paperclip className="w-4 h-4" />
           </button>
@@ -128,7 +130,7 @@ export default function MessageInput({ onSend, onTyping, disabled }: Props) {
           value={text}
           onChange={e => handleTyping(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Type a message… (Enter to send, Shift+Enter for new line)"
+          placeholder={t('chat.type_message')}
           disabled={disabled}
           rows={1}
           className="flex-1 resize-none rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent placeholder:text-gray-400 disabled:opacity-50 leading-relaxed"
