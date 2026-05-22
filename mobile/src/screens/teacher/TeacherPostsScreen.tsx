@@ -5,6 +5,7 @@ import {
   TextInput, ActivityIndicator, Alert, Modal, Image, Switch,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import * as ImagePicker from 'expo-image-picker';
 import { Plus, X, Send, Trash2, Image as ImageIcon, FileText } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -19,6 +20,7 @@ interface ClassItem { id: string; name: string }
 interface Props { subject?: string; classes: ClassItem[]; subjects?: SubjectOpt[]; teaching?: TeachingEntry[] }
 
 export default function TeacherPostsScreen({ subject, classes, subjects, teaching }: Props) {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const navigation = useNavigation<any>();
@@ -60,7 +62,7 @@ export default function TeacherPostsScreen({ subject, classes, subjects, teachin
 
   const pickImage = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) { Alert.alert('Permission required', 'Please allow photo access.'); return; }
+    if (!perm.granted) { Alert.alert(t('profile.photo_perm_title'), t('profile.photo_perm_body')); return; }
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 });
     if (!result.canceled && result.assets[0]) {
       const asset = result.assets[0];
@@ -74,7 +76,7 @@ export default function TeacherPostsScreen({ subject, classes, subjects, teachin
 
   const handleSubmit = async () => {
     if (!classId || !title.trim()) {
-      Alert.alert('Required', 'Please select a class and enter a title.');
+      Alert.alert(t('teacher.required'), t('teacher.need_class_title'));
       return;
     }
     setSubmitting(true);
@@ -100,21 +102,21 @@ export default function TeacherPostsScreen({ subject, classes, subjects, teachin
       setShowForm(false);
       reload();
     } catch {
-      Alert.alert('Error', 'Could not create post.');
+      Alert.alert(t('common.error'), t('teacher.create_post_failed'));
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleDelete = (post: AcademicPost) => {
-    Alert.alert('Delete post', `Delete "${post.title}"?`, [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('teacher.delete_post'), t('teacher.confirm_delete', { title: post.title }), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Delete', style: 'destructive', onPress: async () => {
+        text: t('common.delete'), style: 'destructive', onPress: async () => {
           try {
             await academicApi.deletePost(post.id);
             setPosts(prev => prev.filter(p => p.id !== post.id));
-          } catch { Alert.alert('Error', 'Could not delete post.'); }
+          } catch { Alert.alert(t('common.error'), t('teacher.delete_post_failed')); }
         },
       },
     ]);
@@ -134,7 +136,7 @@ export default function TeacherPostsScreen({ subject, classes, subjects, teachin
             : (
               <View style={styles.empty}>
                 <FileText size={40} color={colors.textMuted} />
-                <Text style={styles.emptyText}>No posts yet. Tap + to write one.</Text>
+                <Text style={styles.emptyText}>{t('teacher.no_posts_tap')}</Text>
               </View>
             )
         }
@@ -158,7 +160,7 @@ export default function TeacherPostsScreen({ subject, classes, subjects, teachin
                 )}
                 {!p.is_published && (
                   <View style={[styles.tag, { backgroundColor: '#FEF3C7' }]}>
-                    <Text style={[styles.tagText, { color: '#92400E' }]}>Draft</Text>
+                    <Text style={[styles.tagText, { color: '#92400E' }]}>{t('teacher.draft')}</Text>
                   </View>
                 )}
               </View>
@@ -189,7 +191,7 @@ export default function TeacherPostsScreen({ subject, classes, subjects, teachin
             <TouchableOpacity onPress={() => setShowForm(false)} hitSlop={8}>
               <X size={22} color={colors.text} />
             </TouchableOpacity>
-            <Text style={[styles.modalTitle, { color: colors.text }]}>New post</Text>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>{t('teacher.new_post')}</Text>
             <TouchableOpacity
               onPress={handleSubmit}
               disabled={submitting || uploadingImage || !title.trim() || !classId}
@@ -197,12 +199,12 @@ export default function TeacherPostsScreen({ subject, classes, subjects, teachin
             >
               {submitting || uploadingImage
                 ? <ActivityIndicator color="#fff" size="small" />
-                : <><Send size={14} color="#fff" /><Text style={styles.submitBtnText}>{isPublished ? 'Publish' : 'Save'}</Text></>}
+                : <><Send size={14} color="#fff" /><Text style={styles.submitBtnText}>{isPublished ? t('teacher.publish') : t('common.save')}</Text></>}
             </TouchableOpacity>
           </View>
 
           <ScrollView contentContainerStyle={{ padding: spacing.md, paddingBottom: 80 }}>
-            <Text style={[styles.label, { color: colors.textMuted }]}>Class</Text>
+            <Text style={[styles.label, { color: colors.textMuted }]}>{t('teacher.class')}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: spacing.sm }}>
               {classes.map(c => {
                 const active = c.id === classId;
@@ -222,10 +224,10 @@ export default function TeacherPostsScreen({ subject, classes, subjects, teachin
             </ScrollView>
 
             {classId ? (subjectOptions.length === 0 ? (
-              <Text style={[styles.label, { color: colors.warning, textTransform: 'none' }]}>You aren't assigned any subject for this class.</Text>
+              <Text style={[styles.label, { color: colors.warning, textTransform: 'none' }]}>{t('teacher.no_subject_for_class')}</Text>
             ) : (
               <>
-                <Text style={[styles.label, { color: colors.textMuted }]}>Subject</Text>
+                <Text style={[styles.label, { color: colors.textMuted }]}>{t('common.subject')}</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: spacing.sm }}>
                   {subjectOptions.map(s => {
                     const active = selectedSubject === s.name;
@@ -243,26 +245,26 @@ export default function TeacherPostsScreen({ subject, classes, subjects, teachin
               </>
             )) : null}
 
-            <Text style={[styles.label, { color: colors.textMuted }]}>Title</Text>
+            <Text style={[styles.label, { color: colors.textMuted }]}>{t('teacher.title')}</Text>
             <TextInput
               style={[styles.input, { backgroundColor: colors.card, color: colors.text, borderColor: colors.border }]}
               value={title}
               onChangeText={setTitle}
-              placeholder="Post title"
+              placeholder={t('teacher.post_title_ph')}
               placeholderTextColor={colors.textMuted}
             />
 
-            <Text style={[styles.label, { color: colors.textMuted }]}>Body</Text>
+            <Text style={[styles.label, { color: colors.textMuted }]}>{t('teacher.body')}</Text>
             <TextInput
               style={[styles.textarea, { backgroundColor: colors.card, color: colors.text, borderColor: colors.border }]}
               value={body}
               onChangeText={setBody}
-              placeholder="Write something..."
+              placeholder={t('teacher.write_something')}
               placeholderTextColor={colors.textMuted}
               multiline
             />
 
-            <Text style={[styles.label, { color: colors.textMuted }]}>Image (optional)</Text>
+            <Text style={[styles.label, { color: colors.textMuted }]}>{t('teacher.image_optional')}</Text>
             {image ? (
               <View style={styles.imagePreview}>
                 <Image source={{ uri: image.uri }} style={styles.imagePreviewImg} />
@@ -279,15 +281,15 @@ export default function TeacherPostsScreen({ subject, classes, subjects, teachin
                 style={[styles.imagePickBtn, { borderColor: colors.border, backgroundColor: colors.card }]}
               >
                 <ImageIcon size={20} color={colors.textMuted} />
-                <Text style={[styles.imagePickText, { color: colors.textMuted }]}>Pick an image</Text>
+                <Text style={[styles.imagePickText, { color: colors.textMuted }]}>{t('teacher.pick_image')}</Text>
               </TouchableOpacity>
             )}
 
             <View style={[styles.publishRow, { borderColor: colors.border }]}>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.publishLabel, { color: colors.text }]}>Publish now</Text>
+                <Text style={[styles.publishLabel, { color: colors.text }]}>{t('teacher.publish_now')}</Text>
                 <Text style={[styles.publishHelp, { color: colors.textMuted }]}>
-                  Off saves as a draft you can publish later.
+                  {t('teacher.publish_help')}
                 </Text>
               </View>
               <Switch

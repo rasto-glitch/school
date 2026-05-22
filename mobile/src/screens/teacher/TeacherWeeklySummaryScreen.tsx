@@ -4,6 +4,7 @@ import {
   TextInput, ActivityIndicator, Alert,
 } from 'react-native';
 import { CardListSkeleton } from '../../components/Skeleton';
+import { useTranslation } from 'react-i18next';
 import { Clock, Lock, Send } from 'lucide-react-native';
 import { teacherApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
@@ -16,6 +17,7 @@ interface PeriodItem { id: string; weekStartDate: string; weekEndDate: string }
 interface Props { subject?: string; classes: ClassItem[]; subjects?: SubjectOpt[]; teaching?: TeachingEntry[]; embedded?: boolean }
 
 export default function TeacherWeeklySummaryScreen({ subject, classes, subjects, teaching, embedded }: Props) {
+  const { t } = useTranslation();
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
@@ -75,9 +77,9 @@ export default function TeacherWeeklySummaryScreen({ subject, classes, subjects,
     setSaving(true);
     try {
       await teacherApi.upsertWeeklySummary({ classId: selectedClass, subject: selectedSubject || subject, unit: unit.trim() || undefined, lesson: lesson.trim() || undefined, pages: pages.trim() || undefined, homeworkReminder: homeworkReminder.trim() || undefined });
-      Alert.alert('Saved', 'Weekly summary saved.');
+      Alert.alert(t('teacher.saved'), t('teacher.weekly_saved'));
     } catch {
-      Alert.alert('Error', 'Could not save weekly summary.');
+      Alert.alert(t('common.error'), t('teacher.weekly_save_failed'));
     } finally {
       setSaving(false);
     }
@@ -95,17 +97,17 @@ export default function TeacherWeeklySummaryScreen({ subject, classes, subjects,
       ) : period ? (
         <View style={styles.periodBanner}>
           <Clock size={16} color={colors.success} />
-          <Text style={styles.periodText}>Period open · {periodLabel}</Text>
+          <Text style={styles.periodText}>{t('teacher.period_open', { range: periodLabel })}</Text>
         </View>
       ) : (
         <View style={styles.noPeriodBanner}>
           <Lock size={16} color={colors.warning} />
-          <Text style={styles.noPeriodText}>No active submission period. Contact your supervisor.</Text>
+          <Text style={styles.noPeriodText}>{t('teacher.no_active_period')}</Text>
         </View>
       )}
 
       {/* Class selector */}
-      <Text style={styles.label}>Class</Text>
+      <Text style={styles.label}>{t('teacher.class')}</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing.md }}>
         {classes.map(c => (
           <TouchableOpacity key={c.id} style={[styles.chip, selectedClass === c.id && styles.chipActive]} onPress={() => setSelectedClass(c.id)} disabled={!period}>
@@ -115,10 +117,10 @@ export default function TeacherWeeklySummaryScreen({ subject, classes, subjects,
       </ScrollView>
 
       {selectedClass ? (subjectOptions.length === 0 ? (
-        <Text style={[styles.label, { color: colors.warning, textTransform: 'none', marginBottom: spacing.md }]}>You aren't assigned any subject for this class.</Text>
+        <Text style={[styles.label, { color: colors.warning, textTransform: 'none', marginBottom: spacing.md }]}>{t('teacher.no_subject_for_class')}</Text>
       ) : (
         <>
-          <Text style={styles.label}>Subject</Text>
+          <Text style={styles.label}>{t('common.subject')}</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing.md }}>
             {subjectOptions.map(s => (
               <TouchableOpacity key={s.id} style={[styles.chip, selectedSubject === s.name && styles.chipActive]} onPress={() => setSelectedSubject(s.name)}>
@@ -133,20 +135,20 @@ export default function TeacherWeeklySummaryScreen({ subject, classes, subjects,
         <CardListSkeleton count={4} hasIcon={false} />
       ) : (
         <>
-          <Text style={styles.label}>Unit</Text>
-          <TextInput style={styles.input} placeholder="Unit name or number" placeholderTextColor={colors.textMuted} value={unit} onChangeText={setUnit} editable={!!period} />
+          <Text style={styles.label}>{t('teacher.unit')}</Text>
+          <TextInput style={styles.input} placeholder={t('teacher.unit_ph')} placeholderTextColor={colors.textMuted} value={unit} onChangeText={setUnit} editable={!!period} />
 
-          <Text style={styles.label}>Lessons Covered</Text>
-          <TextInput style={styles.input} placeholder="Lesson numbers/titles" placeholderTextColor={colors.textMuted} value={lesson} onChangeText={setLesson} editable={!!period} />
+          <Text style={styles.label}>{t('teacher.lessons_covered')}</Text>
+          <TextInput style={styles.input} placeholder={t('teacher.lessons_ph')} placeholderTextColor={colors.textMuted} value={lesson} onChangeText={setLesson} editable={!!period} />
 
-          <Text style={styles.label}>Pages</Text>
-          <TextInput style={styles.input} placeholder="Page numbers covered" placeholderTextColor={colors.textMuted} value={pages} onChangeText={setPages} editable={!!period} />
+          <Text style={styles.label}>{t('teacher.pages')}</Text>
+          <TextInput style={styles.input} placeholder={t('teacher.pages_ph')} placeholderTextColor={colors.textMuted} value={pages} onChangeText={setPages} editable={!!period} />
 
-          <Text style={styles.label}>Homework Reminder</Text>
-          <TextInput style={[styles.input, styles.textarea]} placeholder="Any homework or reminders..." placeholderTextColor={colors.textMuted} value={homeworkReminder} onChangeText={setHomeworkReminder} multiline numberOfLines={3} editable={!!period} />
+          <Text style={styles.label}>{t('teacher.homework_reminder')}</Text>
+          <TextInput style={[styles.input, styles.textarea]} placeholder={t('teacher.homework_reminder_ph')} placeholderTextColor={colors.textMuted} value={homeworkReminder} onChangeText={setHomeworkReminder} multiline numberOfLines={3} editable={!!period} />
 
           <TouchableOpacity style={[styles.saveBtn, !period && styles.saveBtnDisabled]} onPress={handleSave} disabled={saving || !period}>
-            {saving ? <ActivityIndicator color="#fff" size="small" /> : <><Send size={16} color="#fff" /><Text style={styles.saveBtnText}>Save Summary</Text></>}
+            {saving ? <ActivityIndicator color="#fff" size="small" /> : <><Send size={16} color="#fff" /><Text style={styles.saveBtnText}>{t('teacher.save_summary')}</Text></>}
           </TouchableOpacity>
         </>
       )}
