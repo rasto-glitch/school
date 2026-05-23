@@ -25,6 +25,9 @@ export default function DriversManagement() {
   const [selectedDriverId, setSelectedDriverId] = useState('');
   const [addSubmitting, setAddSubmitting] = useState(false);
   const [editSubmitting, setEditSubmitting] = useState(false);
+  // Two-phase Add: id of the just-created driver → reveals the photo field in
+  // place and turns the button into "Save". The driver exists regardless.
+  const [createdId, setCreatedId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [classFilter, setClassFilter] = useState('');
 
@@ -127,13 +130,42 @@ export default function DriversManagement() {
       });
       const tempPw = res.data?.tempPassword || 'Driver@123';
       toast.success(`Driver added! Login: ${res.data?.username} / Password: ${tempPw}`);
+      // Enter the photo phase — keep the form filled (incl. student assignment).
+      setCreatedId(res.data?.id ?? null);
+      load();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to add driver');
+    } finally {
+      setAddSubmitting(false);
+    }
+  };
+
+  // Save phase: persist edits to the just-created driver (works with or
+  // without a photo), then reset to a blank Add form.
+  const onSave = async (data: any) => {
+    if (!createdId) return;
+    setAddSubmitting(true);
+    try {
+      await adminApi.updateDriver(createdId, {
+        ...hrPayload(data),
+        fullName: data.fullName,
+        phoneNumber: data.phoneNumber,
+        emergencyContact: data.emergencyContact,
+        licenseNumber: data.licenseNumber,
+        busNumber: data.busNumber,
+        age: data.age || undefined,
+        vehicleType: data.vehicleType || 'bus',
+        studentIds: addStudentIds,
+      });
+      toast.success('Driver saved');
       addForm.reset();
       setAddStudentIds([]);
       setPrevArchiveId(null);
       setPrevArchiveLabel('');
+      setCreatedId(null);
       load();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to add driver');
+      toast.error(err.response?.data?.error || 'Failed to save driver');
     } finally {
       setAddSubmitting(false);
     }
@@ -254,13 +286,42 @@ export default function DriversManagement() {
         )}
       </Card>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Add Driver */}
+      <div className="space-y-6">
+        {/* Add Driver — full width, two-phase (Add → attach photo → Save) */}
         <Card>
           <h2 className="font-semibold text-gray-900 mb-4">Add Driver</h2>
-          <form onSubmit={addForm.handleSubmit(onAdd)} className="space-y-3">
-            <Input placeholder="Full Name" {...addForm.register('fullName', { required: true })} />
-            {inactiveMatches.length > 0 && (
+          <form onSubmit={addForm.handleSubmit(createdId ? onSave : onAdd)} className="space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Full Name</label>
+                <Input placeholder="Full Name" {...addForm.register('fullName', { required: true })} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Primary Phone Number</label>
+                <Input placeholder="Primary Phone Number" {...addForm.register('phoneNumber')} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Emergency Contact</label>
+                <Input placeholder="Emergency Contact" {...addForm.register('emergencyContact')} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Licence Number</label>
+                <Input placeholder="Licence Number" {...addForm.register('licenseNumber')} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Vehicle Type</label>
+                <Select options={[{ value: 'bus', label: 'Bus' }, { value: 'taxi', label: 'Taxi' }]} placeholder="Vehicle Type" {...addForm.register('vehicleType')} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Vehicle / Bus Number</label>
+                <Input placeholder="Vehicle / Bus Number" {...addForm.register('busNumber')} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Age</label>
+                <Input type="number" placeholder="Age" {...addForm.register('age')} />
+              </div>
+            </div>
+            {!createdId && inactiveMatches.length > 0 && (
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
                 <div className="flex items-center gap-2 text-sm text-amber-900 font-medium mb-2">
                   <History className="w-4 h-4" /> Previously deactivated match{inactiveMatches.length > 1 ? 'es' : ''}
@@ -282,28 +343,20 @@ export default function DriversManagement() {
                 <div className="text-xs text-amber-700 mt-2">If this is a returning driver, click their record to reactivate. Otherwise just continue filling in the form for a new driver.</div>
               </div>
             )}
-            <ReturningEmployeeSearch
-              role="driver"
-              nameQuery={watchedAddName}
-              linkedId={prevArchiveId}
-              linkedLabel={prevArchiveLabel}
-              onPick={(c: ReturningEmployeeCandidate) => {
-                addForm.setValue('fullName', c.fullName);
-                setPrevArchiveId(c.id);
-                setPrevArchiveLabel(`${c.fullName} · ${c.reason}${c.departureDate ? ` ${c.departureDate}` : ''}`);
-              }}
-              onClear={() => { setPrevArchiveId(null); setPrevArchiveLabel(''); }}
-            />
-            <Input placeholder="Primary Phone Number" {...addForm.register('phoneNumber')} />
-            <Input placeholder="Emergency Contact" {...addForm.register('emergencyContact')} />
-            <Input placeholder="Licence Number" {...addForm.register('licenseNumber')} />
-            <Select
-              options={[{ value: 'bus', label: 'Bus' }, { value: 'taxi', label: 'Taxi' }]}
-              placeholder="Vehicle Type"
-              {...addForm.register('vehicleType')}
-            />
-            <Input placeholder="Vehicle / Bus Number" {...addForm.register('busNumber')} />
-            <Input type="number" placeholder="Age" {...addForm.register('age')} />
+            {!createdId && (
+              <ReturningEmployeeSearch
+                role="driver"
+                nameQuery={watchedAddName}
+                linkedId={prevArchiveId}
+                linkedLabel={prevArchiveLabel}
+                onPick={(c: ReturningEmployeeCandidate) => {
+                  addForm.setValue('fullName', c.fullName);
+                  setPrevArchiveId(c.id);
+                  setPrevArchiveLabel(`${c.fullName} · ${c.reason}${c.departureDate ? ` ${c.departureDate}` : ''}`);
+                }}
+                onClear={() => { setPrevArchiveId(null); setPrevArchiveLabel(''); }}
+              />
+            )}
             <div>
               <div className="flex items-center justify-between mb-2">
                 <p className="text-sm font-medium text-gray-700">Assign Students</p>
@@ -368,14 +421,37 @@ export default function DriversManagement() {
                 })()}
               </div>
             </div>
-            <Input placeholder="Username (optional)" {...addForm.register('username')} />
-            <Input type="password" placeholder="Password (default: Driver@123 — or min 8 chars, 1 uppercase, 1 special)" {...addForm.register('password')} />
+            {!createdId && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Username (optional)</label>
+                  <Input placeholder="Username (optional)" {...addForm.register('username')} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Password</label>
+                  <Input type="password" placeholder="Default: Driver@123" {...addForm.register('password')} />
+                </div>
+              </div>
+            )}
             <EmployeeHRFields register={addForm.register} />
-            <Button type="submit" loading={addSubmitting} fullWidth>Send</Button>
+            {createdId && (
+              <>
+                <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-sm text-green-800">
+                  Driver created. Attach a professional photo (optional), then click Save. They're already saved either way.
+                </div>
+                <ProfessionalPhotoField
+                  role="driver"
+                  employeeId={createdId}
+                  currentUrl={null}
+                  onUploaded={() => load()}
+                />
+              </>
+            )}
+            <Button type="submit" loading={addSubmitting} fullWidth>{createdId ? 'Save' : 'Add'}</Button>
           </form>
         </Card>
 
-        {/* Edit Driver */}
+        {/* Edit Driver — full width, stacked below Add */}
         <Card>
           <h2 className="font-semibold text-gray-900 mb-4">Edit Driver</h2>
           <form onSubmit={editForm.handleSubmit(onEdit)} className="space-y-3">

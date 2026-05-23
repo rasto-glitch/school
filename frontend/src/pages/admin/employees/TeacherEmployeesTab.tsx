@@ -26,6 +26,9 @@ export default function TeacherEmployeesTab() {
   const [selectedTeacherId, setSelectedTeacherId] = useState('');
   const [addSubmitting, setAddSubmitting] = useState(false);
   const [editSubmitting, setEditSubmitting] = useState(false);
+  // Two-phase Add: id of the just-created teacher → reveals the photo field
+  // in place and turns the button into "Save". The teacher exists regardless.
+  const [createdId, setCreatedId] = useState<string | null>(null);
 
   const addForm = useForm<{ fullName: string; phoneNumber: string; emergencyContact: string; classId: string; username: string; password: string } & EmployeeHRFormFields>();
   const editForm = useForm<{ fullName: string; phoneNumber: string; emergencyContact: string; classId: string; remove: boolean } & EmployeeHRFormFields>();
@@ -121,13 +124,38 @@ export default function TeacherEmployeesTab() {
       });
       const tempPw = res.data?.tempPassword || 'Teacher@123';
       toast.success(`Teacher added! Login: ${res.data?.username} / Password: ${tempPw}. Assign their subjects in Class Management → Curriculum.`, { autoClose: 9000 });
+      // Enter the photo phase — keep the form filled (incl. class assignment).
+      setCreatedId(res.data?.id ?? null);
+      load();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to add teacher');
+    } finally {
+      setAddSubmitting(false);
+    }
+  };
+
+  // Save phase: persist edits to the just-created teacher (works with or
+  // without a photo), then reset to a blank Add form.
+  const onSave = async (data: any) => {
+    if (!createdId) return;
+    setAddSubmitting(true);
+    try {
+      await adminApi.updateTeacher(createdId, {
+        ...hrPayload(data),
+        fullName: data.fullName,
+        phoneNumber: data.phoneNumber,
+        emergencyContact: data.emergencyContact,
+        classIds: addClassIds,
+      });
+      toast.success('Teacher saved');
       addForm.reset();
       setAddClassIds([]);
       setPrevArchiveId(null);
       setPrevArchiveLabel('');
+      setCreatedId(null);
       load();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to add teacher');
+      toast.error(err.response?.data?.error || 'Failed to save teacher');
     } finally {
       setAddSubmitting(false);
     }
@@ -179,14 +207,38 @@ export default function TeacherEmployeesTab() {
 
   return (
     <>
-      <div className="space-y-8">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Add Teacher */}
+      <div className="space-y-6">
+          {/* Add Teacher — full width, two-phase (Add → attach photo → Save) */}
           <Card>
             <h2 className="font-semibold text-gray-900 mb-4">Add Teacher</h2>
-            <form onSubmit={addForm.handleSubmit(onAdd)} className="space-y-3">
-              <Input placeholder="Full Name" {...addForm.register('fullName', { required: true })} />
-              {inactiveMatches.length > 0 && (
+            <form onSubmit={addForm.handleSubmit(createdId ? onSave : onAdd)} className="space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Full Name</label>
+                  <Input placeholder="Full Name" {...addForm.register('fullName', { required: true })} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Primary Phone Number</label>
+                  <Input placeholder="Primary Phone Number" {...addForm.register('phoneNumber')} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Emergency Contact</label>
+                  <Input placeholder="Emergency Contact" {...addForm.register('emergencyContact')} />
+                </div>
+                {!createdId && (
+                  <>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">Username (optional)</label>
+                      <Input placeholder="Username (optional)" {...addForm.register('username')} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-1">Password</label>
+                      <Input type="password" placeholder="Default: Teacher@123" {...addForm.register('password')} />
+                    </div>
+                  </>
+                )}
+              </div>
+              {!createdId && inactiveMatches.length > 0 && (
                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
                   <div className="flex items-center gap-2 text-sm text-amber-900 font-medium mb-2">
                     <History className="w-4 h-4" /> Previously deactivated match{inactiveMatches.length > 1 ? 'es' : ''}
@@ -208,20 +260,20 @@ export default function TeacherEmployeesTab() {
                   <div className="text-xs text-amber-700 mt-2">If this is a returning teacher, click their record to reactivate. Otherwise just continue filling in the form for a new teacher.</div>
                 </div>
               )}
-              <ReturningEmployeeSearch
-                role="teacher"
-                nameQuery={watchedAddName}
-                linkedId={prevArchiveId}
-                linkedLabel={prevArchiveLabel}
-                onPick={(c: ReturningEmployeeCandidate) => {
-                  addForm.setValue('fullName', c.fullName);
-                  setPrevArchiveId(c.id);
-                  setPrevArchiveLabel(`${c.fullName} · ${c.reason}${c.departureDate ? ` ${c.departureDate}` : ''}`);
-                }}
-                onClear={() => { setPrevArchiveId(null); setPrevArchiveLabel(''); }}
-              />
-              <Input placeholder="Primary Phone Number" {...addForm.register('phoneNumber')} />
-              <Input placeholder="Emergency Contact" {...addForm.register('emergencyContact')} />
+              {!createdId && (
+                <ReturningEmployeeSearch
+                  role="teacher"
+                  nameQuery={watchedAddName}
+                  linkedId={prevArchiveId}
+                  linkedLabel={prevArchiveLabel}
+                  onPick={(c: ReturningEmployeeCandidate) => {
+                    addForm.setValue('fullName', c.fullName);
+                    setPrevArchiveId(c.id);
+                    setPrevArchiveLabel(`${c.fullName} · ${c.reason}${c.departureDate ? ` ${c.departureDate}` : ''}`);
+                  }}
+                  onClear={() => { setPrevArchiveId(null); setPrevArchiveLabel(''); }}
+                />
+              )}
               <div>
                 <p className="text-sm font-medium text-gray-700 mb-2">Assign Class(es)</p>
                 <div className="max-h-32 overflow-y-auto border border-gray-200 rounded-xl p-2 space-y-1">
@@ -234,10 +286,21 @@ export default function TeacherEmployeesTab() {
                 </div>
                 <p className="text-xs text-gray-400 mt-1">Subjects are assigned per class in Class Management → Curriculum.</p>
               </div>
-              <Input placeholder="Username (optional)" {...addForm.register('username')} />
-              <Input type="password" placeholder="Password (default: Teacher@123 — or min 8 chars, 1 uppercase, 1 special)" {...addForm.register('password')} />
               <EmployeeHRFields register={addForm.register} />
-              <Button type="submit" loading={addSubmitting} fullWidth>Send</Button>
+              {createdId && (
+                <>
+                  <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-sm text-green-800">
+                    Teacher created. Attach a professional photo (optional), then click Save. They're already saved either way.
+                  </div>
+                  <ProfessionalPhotoField
+                    role="teacher"
+                    employeeId={createdId}
+                    currentUrl={null}
+                    onUploaded={() => load()}
+                  />
+                </>
+              )}
+              <Button type="submit" loading={addSubmitting} fullWidth>{createdId ? 'Save' : 'Add'}</Button>
             </form>
           </Card>
 
@@ -289,7 +352,6 @@ export default function TeacherEmployeesTab() {
               </div>
             </form>
           </Card>
-        </div>
       </div>
       <ArchiveReasonModal
         isOpen={removeOpen}

@@ -55,10 +55,17 @@ export function hrPayload(data: Record<string, any>): Partial<EmployeeHRFormFiel
 
 export default function EmployeeHRFields({ register }: { register: UseFormRegister<any> }) {
   return (
-    <div className="space-y-3 border-t border-gray-100 pt-3">
-      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Employee details</p>
-      <Input placeholder="Address" {...register('address')} />
-      <div className="grid grid-cols-2 gap-3">
+    <div className="border-t border-gray-100 pt-3">
+      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Employee details</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="sm:col-span-2">
+          <label className="block text-xs font-medium text-gray-500 mb-1">Address</label>
+          <Input placeholder="Address" {...register('address')} />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">National / Civil ID</label>
+          <Input placeholder="National / Civil ID" {...register('nationalId')} />
+        </div>
         <div>
           <label className="block text-xs font-medium text-gray-500 mb-1">Date of birth</label>
           <Input type="date" {...register('dateOfBirth')} />
@@ -67,25 +74,37 @@ export default function EmployeeHRFields({ register }: { register: UseFormRegist
           <label className="block text-xs font-medium text-gray-500 mb-1">Date of hire</label>
           <Input type="date" {...register('hireDate')} />
         </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">Gender</label>
+          <Select options={GENDER} placeholder="Gender" {...register('gender')} />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">Marital status</label>
+          <Select options={MARITAL} placeholder="Marital status" {...register('maritalStatus')} />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">Employment type</label>
+          <Select options={EMPLOYMENT} placeholder="Employment type" {...register('employmentType')} />
+        </div>
+        <div className="sm:col-span-2 lg:col-span-3">
+          <label className="block text-xs font-medium text-gray-500 mb-1">Qualifications / education</label>
+          <textarea
+            placeholder="Qualifications / education"
+            rows={2}
+            {...register('qualifications')}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+          />
+        </div>
+        <div className="sm:col-span-2 lg:col-span-3">
+          <label className="block text-xs font-medium text-gray-500 mb-1">Notes</label>
+          <textarea
+            placeholder="Notes"
+            rows={2}
+            {...register('notes')}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+          />
+        </div>
       </div>
-      <Input placeholder="National / Civil ID" {...register('nationalId')} />
-      <div className="grid grid-cols-2 gap-3">
-        <Select options={GENDER} placeholder="Gender" {...register('gender')} />
-        <Select options={MARITAL} placeholder="Marital status" {...register('maritalStatus')} />
-      </div>
-      <Select options={EMPLOYMENT} placeholder="Employment type" {...register('employmentType')} />
-      <textarea
-        placeholder="Qualifications / education"
-        rows={2}
-        {...register('qualifications')}
-        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-      />
-      <textarea
-        placeholder="Notes"
-        rows={2}
-        {...register('notes')}
-        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-      />
     </div>
   );
 }

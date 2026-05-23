@@ -27,6 +27,9 @@ export default function StaffEmployeesTab() {
   const [selectedId, setSelectedId] = useState('');
   const [addSubmitting, setAddSubmitting] = useState(false);
   const [editSubmitting, setEditSubmitting] = useState(false);
+  // Two-phase Add: id of the just-created staff member → reveals the photo
+  // field in place and turns the button into "Save". Saved regardless.
+  const [createdId, setCreatedId] = useState<string | null>(null);
 
   const addForm = useForm<{ fullName: string; position: string; emergencyContact: string } & EmployeeHRFormFields>();
   const editForm = useForm<{ fullName: string; position: string; emergencyContact: string } & EmployeeHRFormFields>();
@@ -68,7 +71,7 @@ export default function StaffEmployeesTab() {
     setAddSubmitting(true);
     try {
       // Salary is a placeholder until the accountant sets it in Accounting.
-      await adminApi.createStaff({
+      const res = await adminApi.createStaff({
         ...hrPayload(data),
         fullName: data.fullName,
         position: data.position || null,
@@ -78,12 +81,36 @@ export default function StaffEmployeesTab() {
         previousArchiveId: prevArchiveId || undefined,
       });
       toast.success('Staff member added. Set their salary in the Accounting portal.', { autoClose: 8000 });
-      addForm.reset();
-      setPrevArchiveId(null);
-      setPrevArchiveLabel('');
+      // Enter the photo phase — keep the form filled.
+      setCreatedId(res.data?.id ?? null);
       load();
     } catch (err: any) {
       toast.error(err.response?.data?.error || 'Failed to add staff member');
+    } finally {
+      setAddSubmitting(false);
+    }
+  };
+
+  // Save phase: persist edits to the just-created staff member (works with or
+  // without a photo), then reset to a blank Add form.
+  const onSave = async (data: any) => {
+    if (!createdId) return;
+    setAddSubmitting(true);
+    try {
+      await adminApi.updateStaff(createdId, {
+        ...hrPayload(data),
+        fullName: data.fullName,
+        position: data.position || null,
+        emergencyContact: data.emergencyContact || null,
+      });
+      toast.success('Staff member saved');
+      addForm.reset();
+      setPrevArchiveId(null);
+      setPrevArchiveLabel('');
+      setCreatedId(null);
+      load();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Failed to save staff member');
     } finally {
       setAddSubmitting(false);
     }
@@ -140,32 +167,58 @@ export default function StaffEmployeesTab() {
           </span>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Add Staff */}
+        <div className="space-y-6">
+          {/* Add Staff — full width, two-phase (Add → attach photo → Save) */}
           <Card>
             <h2 className="font-semibold text-gray-900 mb-4">Add Staff</h2>
-            <form onSubmit={addForm.handleSubmit(onAdd)} className="space-y-3">
-              <Input placeholder="Full Name" {...addForm.register('fullName', { required: true })} />
-              <ReturningEmployeeSearch
-                role="staff"
-                nameQuery={watchedAddName}
-                linkedId={prevArchiveId}
-                linkedLabel={prevArchiveLabel}
-                onPick={(c: ReturningEmployeeCandidate) => {
-                  addForm.setValue('fullName', c.fullName);
-                  setPrevArchiveId(c.id);
-                  setPrevArchiveLabel(`${c.fullName} · ${c.reason}${c.departureDate ? ` ${c.departureDate}` : ''}`);
-                }}
-                onClear={() => { setPrevArchiveId(null); setPrevArchiveLabel(''); }}
-              />
-              <Input placeholder="Position (e.g. Janitor, Cook, Guard)" {...addForm.register('position')} />
-              <Input placeholder="Emergency Contact" {...addForm.register('emergencyContact')} />
+            <form onSubmit={addForm.handleSubmit(createdId ? onSave : onAdd)} className="space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Full Name</label>
+                  <Input placeholder="Full Name" {...addForm.register('fullName', { required: true })} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Position</label>
+                  <Input placeholder="Position (e.g. Janitor, Cook, Guard)" {...addForm.register('position')} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Emergency Contact</label>
+                  <Input placeholder="Emergency Contact" {...addForm.register('emergencyContact')} />
+                </div>
+              </div>
+              {!createdId && (
+                <ReturningEmployeeSearch
+                  role="staff"
+                  nameQuery={watchedAddName}
+                  linkedId={prevArchiveId}
+                  linkedLabel={prevArchiveLabel}
+                  onPick={(c: ReturningEmployeeCandidate) => {
+                    addForm.setValue('fullName', c.fullName);
+                    setPrevArchiveId(c.id);
+                    setPrevArchiveLabel(`${c.fullName} · ${c.reason}${c.departureDate ? ` ${c.departureDate}` : ''}`);
+                  }}
+                  onClear={() => { setPrevArchiveId(null); setPrevArchiveLabel(''); }}
+                />
+              )}
               <EmployeeHRFields register={addForm.register} />
-              <Button type="submit" loading={addSubmitting} fullWidth>Send</Button>
+              {createdId && (
+                <>
+                  <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-sm text-green-800">
+                    Staff member created. Attach a professional photo (optional), then click Save. They're already saved either way.
+                  </div>
+                  <ProfessionalPhotoField
+                    role="staff"
+                    employeeId={createdId}
+                    currentUrl={null}
+                    onUploaded={() => load()}
+                  />
+                </>
+              )}
+              <Button type="submit" loading={addSubmitting} fullWidth>{createdId ? 'Save' : 'Add'}</Button>
             </form>
           </Card>
 
-          {/* Edit Staff */}
+          {/* Edit Staff — full width, stacked below Add */}
           <Card>
             <h2 className="font-semibold text-gray-900 mb-4">Edit Staff</h2>
             <form onSubmit={editForm.handleSubmit(onEdit)} className="space-y-3">

@@ -63,6 +63,10 @@ export default function AccountEmployeesTab({ role, singular }: Props) {
   const [selectedId, setSelectedId] = useState('');
   const [addSubmitting, setAddSubmitting] = useState(false);
   const [editSubmitting, setEditSubmitting] = useState(false);
+  // Two-phase Add: after "Add" the record is created (committed) and we hold
+  // its id so the professional photo can be attached in place; the button
+  // becomes "Save". The employee exists whether or not Save is ever clicked.
+  const [createdId, setCreatedId] = useState<string | null>(null);
 
   const addForm = useForm<AddForm>();
   const editForm = useForm<EditForm>();
@@ -144,7 +148,7 @@ export default function AccountEmployeesTab({ role, singular }: Props) {
     }
     setAddSubmitting(true);
     try {
-      await adminApi.createAccount({
+      const res = await adminApi.createAccount({
         ...hrPayload(data),
         firstName: data.firstName,
         lastName: data.lastName,
@@ -156,10 +160,38 @@ export default function AccountEmployeesTab({ role, singular }: Props) {
         role,
       });
       toast.success(`${singular} added! Login: ${data.username}`, { autoClose: 8000 });
-      addForm.reset();
+      // Enter the photo phase — record is committed; keep the form filled so
+      // the admin can attach a photo and/or tweak details, then Save.
+      setCreatedId(res.data?.id ?? null);
       load();
     } catch (err: any) {
       toast.error(err.response?.data?.error || `Failed to add ${singular.toLowerCase()}`);
+    } finally {
+      setAddSubmitting(false);
+    }
+  };
+
+  // Save phase: persist any edits to the just-created record (works with or
+  // without a photo — the photo uploads on its own when picked), then reset
+  // back to a blank Add form for the next employee.
+  const onSave = async (data: any) => {
+    if (!createdId) return;
+    setAddSubmitting(true);
+    try {
+      await adminApi.updateAccount(createdId, {
+        ...hrPayload(data),
+        firstName: data.firstName,
+        lastName: data.lastName,
+        phone: data.phone || null,
+        email: data.email || null,
+        emergencyContact: data.emergencyContact || null,
+      });
+      toast.success(`${singular} saved`);
+      addForm.reset();
+      setCreatedId(null);
+      load();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || `Failed to save ${singular.toLowerCase()}`);
     } finally {
       setAddSubmitting(false);
     }
@@ -209,52 +241,89 @@ export default function AccountEmployeesTab({ role, singular }: Props) {
 
   return (
     <>
-      <div className="space-y-8">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Add */}
-          <Card>
-            <h2 className="font-semibold text-gray-900 mb-4">Add {singular}</h2>
-            <form onSubmit={addForm.handleSubmit(onAdd)} className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+      <div className="space-y-6">
+        {/* Add — full width, two-phase (Add → attach photo → Save) */}
+        <Card>
+          <h2 className="font-semibold text-gray-900 mb-4">Add {singular}</h2>
+          <form onSubmit={addForm.handleSubmit(createdId ? onSave : onAdd)} className="space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">First Name</label>
                 <Input placeholder="First Name" {...addForm.register('firstName', { required: true })} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Last Name</label>
                 <Input placeholder="Last Name" {...addForm.register('lastName', { required: true })} />
               </div>
-              {inactiveMatches.length > 0 && (
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-                  <div className="flex items-center gap-2 text-sm text-amber-900 font-medium mb-2">
-                    <History className="w-4 h-4" /> Previously deactivated match{inactiveMatches.length > 1 ? 'es' : ''}
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Phone Number</label>
+                <Input placeholder="Phone Number" {...addForm.register('phone')} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Emergency Contact</label>
+                <Input placeholder="Emergency Contact" {...addForm.register('emergencyContact')} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Email (optional)</label>
+                <Input placeholder="Email (optional)" {...addForm.register('email')} />
+              </div>
+              {!createdId && (
+                <>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Username</label>
+                    <Input placeholder="Username" {...addForm.register('username', { required: true })} />
                   </div>
-                  <div className="space-y-1.5">
-                    {inactiveMatches.map(u => (
-                      <button
-                        key={u.id}
-                        type="button"
-                        onClick={() => reactivateInactive(u)}
-                        disabled={reactivatingId === u.id}
-                        className="w-full text-left bg-white hover:bg-amber-100 border border-amber-200 rounded px-3 py-2 text-sm disabled:opacity-50"
-                      >
-                        <div className="font-medium text-gray-900">{u.firstName} {u.lastName}</div>
-                        <div className="text-xs text-gray-600">{u.username} · click to reactivate</div>
-                      </button>
-                    ))}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Password</label>
+                    <Input type="password" placeholder="Min 8 chars, 1 uppercase, 1 special" {...addForm.register('password', { required: true })} />
                   </div>
-                  <div className="text-xs text-amber-700 mt-2">If this is a returning {singular.toLowerCase()}, click their record to reactivate. Otherwise just continue filling in the form for a new one.</div>
-                </div>
+                </>
               )}
-              <Input placeholder="Phone Number" {...addForm.register('phone')} />
-              <Input placeholder="Emergency Contact" {...addForm.register('emergencyContact')} />
-              <Input placeholder="Email (optional)" {...addForm.register('email')} />
-              <Input placeholder="Username" {...addForm.register('username', { required: true })} />
-              <Input type="password" placeholder="Min 8 chars, 1 uppercase, 1 special character" {...addForm.register('password', { required: true })} />
-              <EmployeeHRFields register={addForm.register} />
-              <Button type="submit" loading={addSubmitting} fullWidth>Send</Button>
-            </form>
-          </Card>
+            </div>
+            {!createdId && inactiveMatches.length > 0 && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                <div className="flex items-center gap-2 text-sm text-amber-900 font-medium mb-2">
+                  <History className="w-4 h-4" /> Previously deactivated match{inactiveMatches.length > 1 ? 'es' : ''}
+                </div>
+                <div className="space-y-1.5">
+                  {inactiveMatches.map(u => (
+                    <button
+                      key={u.id}
+                      type="button"
+                      onClick={() => reactivateInactive(u)}
+                      disabled={reactivatingId === u.id}
+                      className="w-full text-left bg-white hover:bg-amber-100 border border-amber-200 rounded px-3 py-2 text-sm disabled:opacity-50"
+                    >
+                      <div className="font-medium text-gray-900">{u.firstName} {u.lastName}</div>
+                      <div className="text-xs text-gray-600">{u.username} · click to reactivate</div>
+                    </button>
+                  ))}
+                </div>
+                <div className="text-xs text-amber-700 mt-2">If this is a returning {singular.toLowerCase()}, click their record to reactivate. Otherwise just continue filling in the form for a new one.</div>
+              </div>
+            )}
+            <EmployeeHRFields register={addForm.register} />
+            {createdId && (
+              <>
+                <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-sm text-green-800">
+                  {singular} created. Attach a professional photo (optional), then click Save. They're already saved either way.
+                </div>
+                <ProfessionalPhotoField
+                  role={role}
+                  employeeId={createdId}
+                  currentUrl={null}
+                  onUploaded={() => load()}
+                />
+              </>
+            )}
+            <Button type="submit" loading={addSubmitting} fullWidth>{createdId ? 'Save' : 'Add'}</Button>
+          </form>
+        </Card>
 
-          {/* Edit */}
-          <Card>
-            <h2 className="font-semibold text-gray-900 mb-4">Edit {singular}</h2>
-            <form onSubmit={editForm.handleSubmit(onEdit)} className="space-y-3">
+        {/* Edit — full width, stacked below Add */}
+        <Card>
+          <h2 className="font-semibold text-gray-900 mb-4">Edit {singular}</h2>
+          <form onSubmit={editForm.handleSubmit(onEdit)} className="space-y-3">
               <Select
                 label={`Select ${singular}`}
                 options={accounts.map(a => ({ value: a.id, label: `${a.firstName} ${a.lastName}`.trim() || a.username }))}
@@ -291,7 +360,6 @@ export default function AccountEmployeesTab({ role, singular }: Props) {
               </div>
             </form>
           </Card>
-        </div>
       </div>
       <ArchiveReasonModal
         isOpen={removeOpen}
