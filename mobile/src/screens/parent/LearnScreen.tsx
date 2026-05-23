@@ -10,6 +10,7 @@ import { academicApi, parentApi } from '../../services/api';
 import { useRefreshOnFocus } from '../../hooks/useRefreshOnFocus';
 import { usePaginated } from '../../hooks/usePaginated';
 import { useColors, useIsDark } from '../../store/themeStore';
+import { useRTL } from '../../hooks/useRTL';
 import { useBadgeStore } from '../../store/badgeStore';
 import { spacing, radius, font } from '../../theme';
 import type { AcademicPost, Ebook, EbookProgress, Student } from '../../types';
@@ -193,6 +194,7 @@ export default function LearnScreen() {
   const { t } = useTranslation();
   const colors = useColors();
   const isDark = useIsDark();
+  const isRTL = useRTL();
   const navigation = useNavigation<any>();
   const { postCount, clearPost } = useBadgeStore();
   const [tab, setTab] = useState<Tab>('ebooks');
@@ -212,13 +214,17 @@ export default function LearnScreen() {
   useEffect(() => {
     if (!segmentedWidth) return;
     const idx = TABS.indexOf(tab);
+    // Under RTL the container's `direction: 'rtl'` flips the row so the first
+    // tab renders on the right, but `translateX` stays a physical left-anchored
+    // offset — so mirror the index to land the underline under the active tab.
+    const pos = isRTL ? TABS.length - 1 - idx : idx;
     Animated.spring(underlineX, {
-      toValue: idx * (segmentedWidth / TABS.length),
+      toValue: pos * (segmentedWidth / TABS.length),
       useNativeDriver: true,
       tension: 120,
       friction: 14,
     }).start();
-  }, [tab, segmentedWidth, underlineX]);
+  }, [tab, segmentedWidth, underlineX, isRTL]);
 
   // Posts come from the paginated hook (auto-load). The other tabs' data
   // (saved / ebooks / progress / children) are not paginated — fetched here.
