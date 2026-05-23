@@ -9,6 +9,8 @@ import Select from '../../../components/common/Select';
 import Button from '../../../components/common/Button';
 import ArchiveReasonModal from '../../../components/common/ArchiveReasonModal';
 import ReturningEmployeeSearch, { type ReturningEmployeeCandidate } from '../../../components/common/ReturningEmployeeSearch';
+import EmployeeHRFields, { hrPayload, type EmployeeHRFormFields } from '../../../components/admin/EmployeeHRFields';
+import ProfessionalPhotoField from '../../../components/admin/ProfessionalPhotoField';
 import type { StaffMember } from '../../../types';
 
 // Staff sub-tab of the Employees page. HR / identity only — full name,
@@ -26,8 +28,8 @@ export default function StaffEmployeesTab() {
   const [addSubmitting, setAddSubmitting] = useState(false);
   const [editSubmitting, setEditSubmitting] = useState(false);
 
-  const addForm = useForm<{ fullName: string; position: string }>();
-  const editForm = useForm<{ fullName: string; position: string }>();
+  const addForm = useForm<{ fullName: string; position: string; emergencyContact: string } & EmployeeHRFormFields>();
+  const editForm = useForm<{ fullName: string; position: string; emergencyContact: string } & EmployeeHRFormFields>();
 
   const watchedAddName = addForm.watch('fullName');
   const [prevArchiveId, setPrevArchiveId] = useState<string | null>(null);
@@ -47,8 +49,19 @@ export default function StaffEmployeesTab() {
 
   useEffect(() => {
     if (!selected) return;
+    const sm = selected as any;
     editForm.setValue('fullName', selected.fullName);
     editForm.setValue('position', selected.position || '');
+    editForm.setValue('emergencyContact', sm.emergencyContact || '');
+    editForm.setValue('address', sm.address || '');
+    editForm.setValue('hireDate', sm.hireDate || '');
+    editForm.setValue('nationalId', sm.nationalId || '');
+    editForm.setValue('dateOfBirth', sm.dateOfBirth || '');
+    editForm.setValue('maritalStatus', sm.maritalStatus || '');
+    editForm.setValue('gender', sm.gender || '');
+    editForm.setValue('employmentType', sm.employmentType || '');
+    editForm.setValue('qualifications', sm.qualifications || '');
+    editForm.setValue('notes', sm.notes || '');
   }, [selected]);
 
   const onAdd = async (data: any) => {
@@ -56,8 +69,10 @@ export default function StaffEmployeesTab() {
     try {
       // Salary is a placeholder until the accountant sets it in Accounting.
       await adminApi.createStaff({
+        ...hrPayload(data),
         fullName: data.fullName,
         position: data.position || null,
+        emergencyContact: data.emergencyContact || undefined,
         salaryAmount: 0,
         currency: 'USD',
         previousArchiveId: prevArchiveId || undefined,
@@ -79,8 +94,10 @@ export default function StaffEmployeesTab() {
     setEditSubmitting(true);
     try {
       await adminApi.updateStaff(selectedId, {
+        ...hrPayload(data),
         fullName: data.fullName,
         position: data.position || null,
+        emergencyContact: data.emergencyContact || null,
       });
       toast.success('Staff member updated');
       load();
@@ -142,6 +159,8 @@ export default function StaffEmployeesTab() {
                 onClear={() => { setPrevArchiveId(null); setPrevArchiveLabel(''); }}
               />
               <Input placeholder="Position (e.g. Janitor, Cook, Guard)" {...addForm.register('position')} />
+              <Input placeholder="Emergency Contact" {...addForm.register('emergencyContact')} />
+              <EmployeeHRFields register={addForm.register} />
               <Button type="submit" loading={addSubmitting} fullWidth>Send</Button>
             </form>
           </Card>
@@ -159,6 +178,16 @@ export default function StaffEmployeesTab() {
               />
               <Input placeholder="Full Name" {...editForm.register('fullName')} />
               <Input placeholder="Position" {...editForm.register('position')} />
+              <Input placeholder="Emergency Contact" {...editForm.register('emergencyContact')} />
+              {selected && <EmployeeHRFields register={editForm.register} />}
+              {selected && (
+                <ProfessionalPhotoField
+                  role="staff"
+                  employeeId={selected.id}
+                  currentUrl={(selected as any).officialPhoto ?? null}
+                  onUploaded={() => load()}
+                />
+              )}
               {selected && (selected.salaryAmount > 0 || selected.nextPaymentDate) && (
                 <div className="bg-gray-50 rounded-xl px-3 py-2 text-xs text-gray-500">
                   Salary is configured in the Accounting portal.

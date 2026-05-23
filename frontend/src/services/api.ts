@@ -283,6 +283,13 @@ export const adminApi = {
   createAccount: (data: object) => api.post('/admin/accounts', data),
   getAccounts: () => api.get('/admin/accounts'),
   updateAccount: (userId: string, data: object) => api.put(`/admin/accounts/${userId}`, data),
+  // Admin-uploaded professional photo for an employee record. `role` picks the
+  // table; `id` is the profile-table id (teacher/driver/staff) or users id.
+  uploadEmployeePhoto: (role: string, id: string, file: File) => {
+    const fd = new FormData();
+    fd.append('photo', file);
+    return api.post(`/admin/employees/${role}/${id}/photo`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
   deleteAccount: (userId: string, body?: { reason?: string; departureDate?: string }) =>
     api.delete(`/admin/accounts/${userId}`, { data: body ?? {} }),
   exportCredentialsPdf: (params: { role: 'parent' | 'teacher' | 'driver'; classId?: string; parentId?: string }) =>
@@ -299,9 +306,9 @@ export const adminApi = {
   // controller via admin-authorized routes.
   getStaff: (status?: 'active' | 'archived' | 'all') =>
     api.get('/admin/staff', { params: status ? { status } : {} }),
-  createStaff: (data: { fullName: string; position?: string | null; salaryAmount: number; currency: string; previousArchiveId?: string | null }) =>
+  createStaff: (data: { fullName: string; position?: string | null; salaryAmount: number; currency: string; previousArchiveId?: string | null } & Record<string, unknown>) =>
     api.post('/admin/staff', data),
-  updateStaff: (id: string, data: { fullName?: string; position?: string | null }) =>
+  updateStaff: (id: string, data: { fullName?: string; position?: string | null } & Record<string, unknown>) =>
     api.put(`/admin/staff/${id}`, data),
   archiveStaff: (id: string, body?: { reason?: string; departureDate?: string }) =>
     api.delete(`/admin/staff/${id}`, { data: body ?? {} }),

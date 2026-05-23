@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { UserPlus, Search, Trash2, KeyRound, Clock, CheckCircle2, X, Pencil, Shield, ExternalLink, Printer } from 'lucide-react';
 import { adminApi } from '../../services/api';
-import { useAuthStore } from '../../store/authStore';
 import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from '../../utils/passwordPolicy';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
@@ -28,8 +27,6 @@ type RoleFilter = typeof ROLE_FILTERS[number];
 
 export default function AccountsPage() {
   const navigate = useNavigate();
-  const { school } = useAuthStore();
-  const isAccountingPremium = school?.features?.tuition_fees === true;
   const [loading, setLoading] = useState(false);
   const { register, handleSubmit, reset } = useForm<{
     firstName: string; lastName: string; email: string; phone: string;
@@ -289,9 +286,6 @@ export default function AccountsPage() {
                 { value: 'teacher', label: 'Teacher' },
                 { value: 'driver', label: 'Driver' },
                 { value: 'supervisor', label: 'Supervisor' },
-                { value: 'reception', label: 'Reception' },
-                { value: 'admin', label: 'Admin' },
-                ...(isAccountingPremium ? [{ value: 'accountant', label: 'Accountant' }] : []),
               ]}
               placeholder="Select role"
               {...register('role', { required: true })}

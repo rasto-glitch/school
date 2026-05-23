@@ -10,6 +10,7 @@ import { logAudit } from '../utils/audit';
 import { postSalary, postInsurancePayout, reverseEntry, reinstateEntry } from '../utils/glPosting';
 import { assertPeriodOpen } from '../utils/period';
 import { hasArchiveFeature, normalizeArchiveReason, resolveEmployeeArchiveId } from '../utils/employeeArchive';
+import { hrColumns, hrSnapshot } from '../utils/employeeHr';
 import { parseCursorParams, buildPageWith, keysetAfter } from '../utils/pagination';
 
 // Snapshot a voided staff member into the unified archived_employees table
@@ -59,10 +60,13 @@ async function snapshotStaffArchive(
       email: (account?.email as string | null) ?? null,
       profile_picture: (account?.profile_picture as string | null) ?? null,
       position: staff.position ?? null,
-      hire_date: staff.created_at ? String(staff.created_at).split('T')[0] : null,
+      date_of_birth: (staff.date_of_birth as string | null) ?? null,
+      emergency_contact: (staff.emergency_contact as string | null) ?? null,
+      hire_date: (staff.hire_date as string | null) ?? (staff.created_at ? String(staff.created_at).split('T')[0] : null),
       departure_date: departureDate,
       reason: normalizeArchiveReason(rawReason),
-      account: account ?? {},
+      // HR snapshot (migration 024) — kept forever incl. the professional photo.
+      account: { ...(account ?? {}), hr: hrSnapshot(staff) },
       employment: {
         salaryAmount: staff.salary_amount,
         currency: staff.currency,
@@ -110,6 +114,17 @@ interface StaffBody {
   isActive?: boolean;
   insurancePercentage?: number | null;
   previousArchiveId?: string | null;
+  // HR fields (migration 024) — read generically via hrColumns().
+  address?: string | null;
+  hireDate?: string | null;
+  nationalId?: string | null;
+  dateOfBirth?: string | null;
+  maritalStatus?: string | null;
+  gender?: string | null;
+  employmentType?: string | null;
+  qualifications?: string | null;
+  notes?: string | null;
+  emergencyContact?: string | null;
 }
 
 interface PaymentBody {
@@ -163,7 +178,7 @@ function userIsActive(joined: RawStaffRow['users']): boolean | null {
 async function fetchStaffWithLastPayment(schoolId: string): Promise<{ active: unknown[]; archived: unknown[] }> {
   const { data: staff, error } = await supabase
     .from('staff_members')
-    .select('id, school_id, user_id, full_name, position, salary_amount, currency, next_payment_date, is_active, insurance_percentage, insurance_paid_out, insurance_paid_out_at, insurance_paid_out_amount, insurance_paid_out_currency, insurance_paid_out_notes, created_at, users!staff_members_user_id_fkey(is_active)')
+    .select('id, school_id, user_id, full_name, position, salary_amount, currency, next_payment_date, is_active, insurance_percentage, insurance_paid_out, insurance_paid_out_at, insurance_paid_out_amount, insurance_paid_out_currency, insurance_paid_out_notes, created_at, address, hire_date, national_id, date_of_birth, marital_status, gender, employment_type, qualifications, notes, emergency_contact, official_photo, users!staff_members_user_id_fkey(is_active)')
     .eq('school_id', schoolId)
     .is('voided_at', null)
     .order('is_active', { ascending: false })
@@ -356,6 +371,7 @@ export async function createStaff(req: AuthRequest, res: Response): Promise<void
     is_active: isActive ?? true,
     insurance_percentage: insurancePct,
     previous_archive_id: prevArchiveId,
+    ...hrColumns(req.body as Record<string, unknown>, { includeEmergency: true }),
   }).select().single();
 
   if (error) {
@@ -377,7 +393,7 @@ export async function updateStaff(req: AuthRequest, res: Response): Promise<void
   const { id } = req.params;
   const body = req.body as StaffBody;
 
-  const upd: Record<string, unknown> = {};
+  const upd: Record<string, unknown> = { ...hrColumns(req.body as Record<string, unknown>, { includeEmergency: true }) };
   if ('userId' in body) {
     if (body.userId) {
       const { data: u } = await supabase.from('users').select('id').eq('id', body.userId).eq('school_id', schoolId).single();

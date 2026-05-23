@@ -10,6 +10,8 @@ import Input from '../../../components/common/Input';
 import Select from '../../../components/common/Select';
 import Button from '../../../components/common/Button';
 import ArchiveReasonModal from '../../../components/common/ArchiveReasonModal';
+import EmployeeHRFields, { hrPayload, type EmployeeHRFormFields } from '../../../components/admin/EmployeeHRFields';
+import ProfessionalPhotoField from '../../../components/admin/ProfessionalPhotoField';
 
 // Shared sub-tab for the bare-users-row employee roles (Supervisor and
 // Administration). Both have NO profile table — they are just a `users` row
@@ -32,14 +34,29 @@ interface Account {
   phone: string | null;
   role: string;
   isActive: boolean;
+  // HR fields (migration 024)
+  emergencyContact?: string | null;
+  address?: string | null;
+  hireDate?: string | null;
+  nationalId?: string | null;
+  dateOfBirth?: string | null;
+  maritalStatus?: string | null;
+  gender?: string | null;
+  employmentType?: string | null;
+  qualifications?: string | null;
+  notes?: string | null;
+  officialPhoto?: string | null;
 }
 interface InactiveUser { id: string; firstName: string; lastName: string; username: string; role: string; }
 
 interface Props {
-  role: 'supervisor' | 'admin';
+  role: 'supervisor' | 'admin' | 'reception' | 'accountant';
   /** Singular noun, e.g. "Supervisor" / "Administrator". */
   singular: string;
 }
+
+type AddForm = { firstName: string; lastName: string; phone: string; email: string; emergencyContact: string; username: string; password: string } & EmployeeHRFormFields;
+type EditForm = { firstName: string; lastName: string; phone: string; email: string; emergencyContact: string } & EmployeeHRFormFields;
 
 export default function AccountEmployeesTab({ role, singular }: Props) {
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -47,8 +64,8 @@ export default function AccountEmployeesTab({ role, singular }: Props) {
   const [addSubmitting, setAddSubmitting] = useState(false);
   const [editSubmitting, setEditSubmitting] = useState(false);
 
-  const addForm = useForm<{ firstName: string; lastName: string; phone: string; email: string; username: string; password: string }>();
-  const editForm = useForm<{ firstName: string; lastName: string; phone: string; email: string }>();
+  const addForm = useForm<AddForm>();
+  const editForm = useForm<EditForm>();
 
   const watchedFirst = addForm.watch('firstName');
   const watchedLast = addForm.watch('lastName');
@@ -104,6 +121,16 @@ export default function AccountEmployeesTab({ role, singular }: Props) {
     editForm.setValue('lastName', selected.lastName || '');
     editForm.setValue('phone', selected.phone || '');
     editForm.setValue('email', selected.email || '');
+    editForm.setValue('emergencyContact', selected.emergencyContact || '');
+    editForm.setValue('address', selected.address || '');
+    editForm.setValue('hireDate', selected.hireDate || '');
+    editForm.setValue('nationalId', selected.nationalId || '');
+    editForm.setValue('dateOfBirth', selected.dateOfBirth || '');
+    editForm.setValue('maritalStatus', selected.maritalStatus || '');
+    editForm.setValue('gender', selected.gender || '');
+    editForm.setValue('employmentType', selected.employmentType || '');
+    editForm.setValue('qualifications', selected.qualifications || '');
+    editForm.setValue('notes', selected.notes || '');
   }, [selected]);
 
   const onAdd = async (data: any) => {
@@ -118,10 +145,12 @@ export default function AccountEmployeesTab({ role, singular }: Props) {
     setAddSubmitting(true);
     try {
       await adminApi.createAccount({
+        ...hrPayload(data),
         firstName: data.firstName,
         lastName: data.lastName,
         email: data.email || undefined,
         phone: data.phone || undefined,
+        emergencyContact: data.emergencyContact || undefined,
         username: data.username,
         password: data.password,
         role,
@@ -141,10 +170,12 @@ export default function AccountEmployeesTab({ role, singular }: Props) {
     setEditSubmitting(true);
     try {
       await adminApi.updateAccount(selectedId, {
+        ...hrPayload(data),
         firstName: data.firstName,
         lastName: data.lastName,
         phone: data.phone || null,
         email: data.email || null,
+        emergencyContact: data.emergencyContact || null,
       });
       toast.success(`${singular} updated!`);
       load();
@@ -211,9 +242,11 @@ export default function AccountEmployeesTab({ role, singular }: Props) {
                 </div>
               )}
               <Input placeholder="Phone Number" {...addForm.register('phone')} />
+              <Input placeholder="Emergency Contact" {...addForm.register('emergencyContact')} />
               <Input placeholder="Email (optional)" {...addForm.register('email')} />
               <Input placeholder="Username" {...addForm.register('username', { required: true })} />
               <Input type="password" placeholder="Min 8 chars, 1 uppercase, 1 special character" {...addForm.register('password', { required: true })} />
+              <EmployeeHRFields register={addForm.register} />
               <Button type="submit" loading={addSubmitting} fullWidth>Send</Button>
             </form>
           </Card>
@@ -234,7 +267,17 @@ export default function AccountEmployeesTab({ role, singular }: Props) {
                 <Input placeholder="Last Name" {...editForm.register('lastName')} />
               </div>
               <Input placeholder="Phone Number" {...editForm.register('phone')} />
+              <Input placeholder="Emergency Contact" {...editForm.register('emergencyContact')} />
               <Input placeholder="Email" {...editForm.register('email')} />
+              {selected && <EmployeeHRFields register={editForm.register} />}
+              {selected && (
+                <ProfessionalPhotoField
+                  role={role}
+                  employeeId={selected.id}
+                  currentUrl={selected.officialPhoto ?? null}
+                  onUploaded={() => load()}
+                />
+              )}
               {selected && (
                 <div className="bg-gray-50 rounded-xl px-3 py-2">
                   <p className="text-xs font-medium text-gray-500 mb-0.5">Login</p>

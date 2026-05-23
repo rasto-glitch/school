@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { nonEmptyStr, uuid } from './common';
+import { nonEmptyStr, uuid, hrFields } from './common';
 import { strongPasswordSchema } from '../utils/passwordPolicy';
 
 // User / account / role write schemas (Phase 1c) — the privilege- and
@@ -33,6 +33,8 @@ export const createAccountSchema = z.object({
   username,
   password,
   role,
+  emergencyContact: contactStr(120),
+  ...hrFields,
 });
 
 export const updateAccountSchema = z.object({
@@ -42,6 +44,15 @@ export const updateAccountSchema = z.object({
   phone: contactStr(40),
   username: username.optional(),
   isActive: z.boolean().optional(),
+  emergencyContact: contactStr(120),
+  ...hrFields,
+});
+
+// Employee professional-photo upload (migration 024). `id` is the
+// profile-table id for teacher/driver/staff, the users id for the bare roles.
+export const employeePhotoParams = z.object({
+  role: z.enum(['teacher', 'driver', 'staff', 'supervisor', 'admin', 'reception', 'accountant']),
+  id: uuid,
 });
 
 export const resetUserPasswordSchema = z.object({ newPassword: password });
@@ -60,6 +71,7 @@ export const createTeacherSchema = z.object({
   username: username.optional(),
   password: password.optional(),
   previousArchiveId: optionalId,
+  ...hrFields,
 });
 export const updateTeacherSchema = z.object({
   fullName: nonEmptyStr(200).optional(),
@@ -67,6 +79,7 @@ export const updateTeacherSchema = z.object({
   emergencyContact: contactStr(120),
   classIds: z.array(uuid).optional(),
   remove: z.boolean().optional(),
+  ...hrFields,
 });
 
 export const createDriverSchema = z.object({
@@ -83,6 +96,7 @@ export const createDriverSchema = z.object({
   studentIds: z.array(uuid).optional(),
   vehicleType: vehicleType.optional(),
   previousArchiveId: optionalId,
+  ...hrFields,
 });
 export const updateDriverSchema = z.object({
   fullName: nonEmptyStr(200).optional(),
@@ -95,6 +109,7 @@ export const updateDriverSchema = z.object({
   remove: z.boolean().optional(),
   studentIds: z.array(uuid).optional(),
   vehicleType: vehicleType.optional(),
+  ...hrFields,
 });
 
 export const updateParentSchema = z.object({

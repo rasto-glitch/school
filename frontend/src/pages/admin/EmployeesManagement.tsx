@@ -14,20 +14,23 @@ import StaffEmployeesTab from './employees/StaffEmployeesTab';
 // The active tab is mirrored to the ?tab= query param so deep links and the
 // /admin/teachers → /admin/employees redirect land on the right place.
 
-type EmpTab = 'teacher' | 'supervisor' | 'admin' | 'staff';
+type EmpTab = 'teacher' | 'supervisor' | 'admin' | 'reception' | 'accountant' | 'staff';
 
 export default function EmployeesManagement() {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
-  // Staff is backed by the accounting-premium staff_members table; hide the
-  // sub-tab entirely when the accounting module is off.
-  const staffEnabled = useAuthStore(s => s.school?.features?.tuition_fees === true);
+  // Staff and Accountant are backed by the accounting-premium feature; hide
+  // those sub-tabs entirely when the accounting module is off. (Accountant is
+  // a role only when accounting is enabled; Staff reads staff_members.)
+  const accountingEnabled = useAuthStore(s => s.school?.features?.tuition_fees === true);
 
   const TABS: { key: EmpTab; label: string }[] = [
     { key: 'teacher', label: t('admin.tab_teachers') },
     { key: 'supervisor', label: t('admin.tab_supervisors') },
     { key: 'admin', label: t('admin.tab_administration') },
-    ...(staffEnabled ? [{ key: 'staff' as const, label: t('admin.tab_staff') }] : []),
+    { key: 'reception', label: t('admin.tab_reception', 'Reception') },
+    ...(accountingEnabled ? [{ key: 'accountant' as const, label: t('admin.tab_accountant', 'Accountant') }] : []),
+    ...(accountingEnabled ? [{ key: 'staff' as const, label: t('admin.tab_staff') }] : []),
   ];
 
   const raw = (searchParams.get('tab') || 'teacher') as EmpTab;
@@ -57,7 +60,9 @@ export default function EmployeesManagement() {
         {active === 'teacher' && <TeacherEmployeesTab />}
         {active === 'supervisor' && <AccountEmployeesTab role="supervisor" singular={t('admin.singular_supervisor')} />}
         {active === 'admin' && <AccountEmployeesTab role="admin" singular={t('admin.singular_administrator')} />}
-        {active === 'staff' && staffEnabled && <StaffEmployeesTab />}
+        {active === 'reception' && <AccountEmployeesTab role="reception" singular={t('admin.singular_reception', 'Receptionist')} />}
+        {active === 'accountant' && accountingEnabled && <AccountEmployeesTab role="accountant" singular={t('admin.singular_accountant', 'Accountant')} />}
+        {active === 'staff' && accountingEnabled && <StaffEmployeesTab />}
       </div>
     </PageLayout>
   );

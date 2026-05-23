@@ -22,7 +22,9 @@ export type AuditEntityType =
   | 'teacher'
   | 'driver'
   | 'supervisor'
-  | 'admin';
+  | 'admin'
+  | 'reception'
+  | 'accountant';
 
 interface LogParams {
   req: AuthRequest;

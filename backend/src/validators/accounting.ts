@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { nonEmptyStr, uuid, amount, positiveAmount, isoDate, currency } from './common';
+import { nonEmptyStr, uuid, amount, positiveAmount, isoDate, currency, hrFields } from './common';
 
 // Money / accounting write schemas (Phase 1b).
 //
@@ -156,6 +156,8 @@ const staffBase = {
   isActive: z.boolean().optional(),
   insurancePercentage: z.number().min(0).max(100).nullable().optional(),
   previousArchiveId: optionalId,
+  emergencyContact: optText(120),
+  ...hrFields,
 };
 export const createStaffSchema = z.object(staffBase);
 export const updateStaffSchema = z.object(staffBase).partial();

@@ -157,6 +157,9 @@ export function createRouter(io: SocketServer) {
   router.put('/admin/accounts/:userId', authenticate, authorize('admin'), validate({ params: vu.userIdParam, body: vu.updateAccountSchema }), (req, res) => admin.updateAccount(req as AuthRequest, res));
   router.delete('/admin/accounts/:userId', authenticate, authorize('admin'), validate({ params: vu.userIdParam }), (req, res) => admin.deleteAccount(req as AuthRequest, res));
   router.get('/admin/accounts/credentials.pdf', authenticate, authorize('admin'), (req, res) => admin.exportCredentialsPdf(req as AuthRequest, res));
+  // Professional (official) employee photo — admin-uploaded, kept on the
+  // employee record; separate from the self-set app avatar.
+  router.post('/admin/employees/:role/:id/photo', authenticate, authorize('admin'), upload.single('photo'), validate({ params: vu.employeePhotoParams }), (req, res) => admin.uploadEmployeePhoto(req as AuthRequest, res));
   router.get('/admin/reset-requests', authenticate, authorize('admin'), (req, res) => admin.getResetRequests(req as AuthRequest, res));
   router.post('/admin/users/:userId/reset-password', authenticate, authorize('admin'), validate({ params: vu.userIdParam, body: vu.resetUserPasswordSchema }), (req, res) => admin.resetUserPassword(req as AuthRequest, res));
   router.get('/admin/users/inactive/search', authenticate, authorize('admin'), validate({ query: vq.listQuery }), (req, res) => admin.searchInactiveUsers(req as AuthRequest, res));

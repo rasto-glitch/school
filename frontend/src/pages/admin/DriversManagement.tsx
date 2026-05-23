@@ -12,6 +12,8 @@ import Select from '../../components/common/Select';
 import Button from '../../components/common/Button';
 import ArchiveReasonModal from '../../components/common/ArchiveReasonModal';
 import ReturningEmployeeSearch, { type ReturningEmployeeCandidate } from '../../components/common/ReturningEmployeeSearch';
+import EmployeeHRFields, { hrPayload, type EmployeeHRFormFields } from '../../components/admin/EmployeeHRFields';
+import ProfessionalPhotoField from '../../components/admin/ProfessionalPhotoField';
 import type { Class, Driver, Student } from '../../types';
 
 interface InactiveUser { id: string; firstName: string; lastName: string; username: string; role: string; }
@@ -26,8 +28,8 @@ export default function DriversManagement() {
   const [search, setSearch] = useState('');
   const [classFilter, setClassFilter] = useState('');
 
-  const addForm = useForm<{ fullName: string; phoneNumber: string; emergencyContact: string; licenseNumber: string; busNumber: string; age: string; username: string; password: string; vehicleType: string }>();
-  const editForm = useForm<{ fullName: string; phoneNumber: string; emergencyContact: string; licenseNumber: string; busNumber: string; age: string; remove: boolean; vehicleType: string }>();
+  const addForm = useForm<{ fullName: string; phoneNumber: string; emergencyContact: string; licenseNumber: string; busNumber: string; age: string; username: string; password: string; vehicleType: string } & EmployeeHRFormFields>();
+  const editForm = useForm<{ fullName: string; phoneNumber: string; emergencyContact: string; licenseNumber: string; busNumber: string; age: string; remove: boolean; vehicleType: string } & EmployeeHRFormFields>();
 
   const watchedAddName = addForm.watch('fullName');
   const debouncedAddName = useDebounce(watchedAddName ?? '', 350);
@@ -82,12 +84,22 @@ export default function DriversManagement() {
     if (!selectedDriverId) return;
     const d = drivers.find(d => d.id === selectedDriverId);
     if (!d) return;
+    const dd = d as any;
     editForm.setValue('fullName', d.fullName);
     editForm.setValue('phoneNumber', d.phoneNumber || '');
     editForm.setValue('emergencyContact', d.emergencyContact || '');
     editForm.setValue('licenseNumber', d.licenseNumber || '');
     editForm.setValue('busNumber', d.buses?.busNumber || '');
     editForm.setValue('vehicleType', d.vehicleType || 'bus');
+    editForm.setValue('address', dd.address || '');
+    editForm.setValue('hireDate', dd.hireDate || '');
+    editForm.setValue('nationalId', dd.nationalId || '');
+    editForm.setValue('dateOfBirth', dd.dateOfBirth || '');
+    editForm.setValue('maritalStatus', dd.maritalStatus || '');
+    editForm.setValue('gender', dd.gender || '');
+    editForm.setValue('employmentType', dd.employmentType || '');
+    editForm.setValue('qualifications', dd.qualifications || '');
+    editForm.setValue('notes', dd.notes || '');
     setEditStudentIds(students.filter(s => s.driverId === selectedDriverId).map(s => s.id));
     setEditStudentsDirty(false);
   }, [selectedDriverId, drivers, students]);
@@ -100,6 +112,7 @@ export default function DriversManagement() {
     setAddSubmitting(true);
     try {
       const res = await adminApi.createDriver({
+        ...hrPayload(data),
         fullName: data.fullName,
         phoneNumber: data.phoneNumber,
         emergencyContact: data.emergencyContact,
@@ -357,6 +370,7 @@ export default function DriversManagement() {
             </div>
             <Input placeholder="Username (optional)" {...addForm.register('username')} />
             <Input type="password" placeholder="Password (default: Driver@123 — or min 8 chars, 1 uppercase, 1 special)" {...addForm.register('password')} />
+            <EmployeeHRFields register={addForm.register} />
             <Button type="submit" loading={addSubmitting} fullWidth>Send</Button>
           </form>
         </Card>
@@ -462,6 +476,15 @@ export default function DriversManagement() {
                 <p className="text-xs text-amber-600 mt-1 font-medium">Student assignments changed — click Update to save</p>
               )}
             </div>
+            {selectedDriverId && <EmployeeHRFields register={editForm.register} />}
+            {selectedDriverId && (
+              <ProfessionalPhotoField
+                role="driver"
+                employeeId={selectedDriverId}
+                currentUrl={(drivers.find(d => d.id === selectedDriverId) as any)?.officialPhoto ?? null}
+                onUploaded={() => load()}
+              />
+            )}
             <div className="flex gap-2">
               <Button type="submit" loading={editSubmitting} fullWidth disabled={!selectedDriverId}>Update Driver</Button>
               <Button type="button" variant="danger" loading={removing} onClick={onRemove} disabled={!selectedDriverId}>Remove</Button>

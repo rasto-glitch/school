@@ -11,6 +11,8 @@ import Select from '../../../components/common/Select';
 import Button from '../../../components/common/Button';
 import ArchiveReasonModal from '../../../components/common/ArchiveReasonModal';
 import ReturningEmployeeSearch, { type ReturningEmployeeCandidate } from '../../../components/common/ReturningEmployeeSearch';
+import EmployeeHRFields, { hrPayload, type EmployeeHRFormFields } from '../../../components/admin/EmployeeHRFields';
+import ProfessionalPhotoField from '../../../components/admin/ProfessionalPhotoField';
 import type { Teacher, Class } from '../../../types';
 
 interface InactiveUser { id: string; firstName: string; lastName: string; username: string; role: string; }
@@ -25,8 +27,8 @@ export default function TeacherEmployeesTab() {
   const [addSubmitting, setAddSubmitting] = useState(false);
   const [editSubmitting, setEditSubmitting] = useState(false);
 
-  const addForm = useForm<{ fullName: string; phoneNumber: string; emergencyContact: string; classId: string; username: string; password: string }>();
-  const editForm = useForm<{ fullName: string; phoneNumber: string; emergencyContact: string; classId: string; remove: boolean }>();
+  const addForm = useForm<{ fullName: string; phoneNumber: string; emergencyContact: string; classId: string; username: string; password: string } & EmployeeHRFormFields>();
+  const editForm = useForm<{ fullName: string; phoneNumber: string; emergencyContact: string; classId: string; remove: boolean } & EmployeeHRFormFields>();
 
   const watchedAddName = addForm.watch('fullName');
   const debouncedAddName = useDebounce(watchedAddName ?? '', 350);
@@ -81,10 +83,20 @@ export default function TeacherEmployeesTab() {
   // Populate edit form when teacher is selected
   useEffect(() => {
     if (!selectedTeacher) return;
+    const st = selectedTeacher as any;
     editForm.setValue('fullName', selectedTeacher.fullName);
     editForm.setValue('phoneNumber', selectedTeacher.phoneNumber || '');
     editForm.setValue('emergencyContact', selectedTeacher.emergencyContact || '');
-    setEditClassIds(((selectedTeacher as any).teacherClasses || []).map((tc: any) => tc.classId));
+    editForm.setValue('address', st.address || '');
+    editForm.setValue('hireDate', st.hireDate || '');
+    editForm.setValue('nationalId', st.nationalId || '');
+    editForm.setValue('dateOfBirth', st.dateOfBirth || '');
+    editForm.setValue('maritalStatus', st.maritalStatus || '');
+    editForm.setValue('gender', st.gender || '');
+    editForm.setValue('employmentType', st.employmentType || '');
+    editForm.setValue('qualifications', st.qualifications || '');
+    editForm.setValue('notes', st.notes || '');
+    setEditClassIds((st.teacherClasses || []).map((tc: any) => tc.classId));
   }, [selectedTeacher]);
 
   const toggleClass = (id: string, list: string[], setter: (v: string[]) => void) =>
@@ -98,6 +110,7 @@ export default function TeacherEmployeesTab() {
     setAddSubmitting(true);
     try {
       const res = await adminApi.createTeacher({
+        ...hrPayload(data),
         fullName: data.fullName,
         phoneNumber: data.phoneNumber,
         emergencyContact: data.emergencyContact,
@@ -223,6 +236,7 @@ export default function TeacherEmployeesTab() {
               </div>
               <Input placeholder="Username (optional)" {...addForm.register('username')} />
               <Input type="password" placeholder="Password (default: Teacher@123 — or min 8 chars, 1 uppercase, 1 special)" {...addForm.register('password')} />
+              <EmployeeHRFields register={addForm.register} />
               <Button type="submit" loading={addSubmitting} fullWidth>Send</Button>
             </form>
           </Card>
@@ -260,6 +274,15 @@ export default function TeacherEmployeesTab() {
                 </div>
                 <p className="text-xs text-gray-400 mt-1">Removing a class also removes the subjects that teacher was teaching in it.</p>
               </div>
+              {selectedTeacher && <EmployeeHRFields register={editForm.register} />}
+              {selectedTeacher && (
+                <ProfessionalPhotoField
+                  role="teacher"
+                  employeeId={selectedTeacher.id}
+                  currentUrl={(selectedTeacher as any).officialPhoto ?? null}
+                  onUploaded={() => load()}
+                />
+              )}
               <div className="flex gap-2">
                 <Button type="submit" loading={editSubmitting} fullWidth disabled={!selectedTeacherId}>Update Teacher</Button>
                 <Button type="button" variant="danger" loading={removing} onClick={onRemove} disabled={!selectedTeacherId}>Remove</Button>

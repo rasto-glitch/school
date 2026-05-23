@@ -74,6 +74,22 @@ CREATE TABLE IF NOT EXISTS users (
 -- ALTER TABLE schools ADD COLUMN IF NOT EXISTS abbreviation TEXT UNIQUE;
 -- UPDATE schools SET abbreviation = UPPER(slug) WHERE abbreviation IS NULL;
 
+-- Employee HR fields (migration 024). Account-only roles (supervisor / admin /
+-- reception / accountant) have no profile table, so their HR record lives here.
+-- official_photo is the admin-uploaded professional photo, distinct from the
+-- self-set app avatar (profile_picture).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS address TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS hire_date DATE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS national_id TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS date_of_birth DATE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS marital_status TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS gender TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS employment_type TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS qualifications TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS notes TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS emergency_contact TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS official_photo TEXT;
+
 -- ============================================================
 -- BUSES
 -- ============================================================
@@ -148,6 +164,18 @@ CREATE TABLE IF NOT EXISTS teachers (
   profile_picture TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+-- Employee HR fields (migration 024). official_photo = admin-uploaded
+-- professional photo, distinct from the self-set avatar (profile_picture).
+ALTER TABLE teachers ADD COLUMN IF NOT EXISTS address TEXT;
+ALTER TABLE teachers ADD COLUMN IF NOT EXISTS hire_date DATE;
+ALTER TABLE teachers ADD COLUMN IF NOT EXISTS national_id TEXT;
+ALTER TABLE teachers ADD COLUMN IF NOT EXISTS date_of_birth DATE;
+ALTER TABLE teachers ADD COLUMN IF NOT EXISTS marital_status TEXT;
+ALTER TABLE teachers ADD COLUMN IF NOT EXISTS gender TEXT;
+ALTER TABLE teachers ADD COLUMN IF NOT EXISTS employment_type TEXT;
+ALTER TABLE teachers ADD COLUMN IF NOT EXISTS qualifications TEXT;
+ALTER TABLE teachers ADD COLUMN IF NOT EXISTS notes TEXT;
+ALTER TABLE teachers ADD COLUMN IF NOT EXISTS official_photo TEXT;
 
 CREATE TABLE IF NOT EXISTS teacher_classes (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -179,6 +207,19 @@ CREATE TABLE IF NOT EXISTS drivers (
 -- Run this if the table already exists:
 -- ALTER TABLE drivers ADD COLUMN IF NOT EXISTS excluded_student_ids UUID[] DEFAULT '{}';
 -- ALTER TABLE drivers ADD COLUMN IF NOT EXISTS vehicle_type TEXT CHECK (vehicle_type IN ('bus', 'taxi')) DEFAULT 'bus';
+
+-- Employee HR fields (migration 024). official_photo = admin-uploaded
+-- professional photo, distinct from the self-set avatar (profile_picture).
+ALTER TABLE drivers ADD COLUMN IF NOT EXISTS address TEXT;
+ALTER TABLE drivers ADD COLUMN IF NOT EXISTS hire_date DATE;
+ALTER TABLE drivers ADD COLUMN IF NOT EXISTS national_id TEXT;
+ALTER TABLE drivers ADD COLUMN IF NOT EXISTS date_of_birth DATE;
+ALTER TABLE drivers ADD COLUMN IF NOT EXISTS marital_status TEXT;
+ALTER TABLE drivers ADD COLUMN IF NOT EXISTS gender TEXT;
+ALTER TABLE drivers ADD COLUMN IF NOT EXISTS employment_type TEXT;
+ALTER TABLE drivers ADD COLUMN IF NOT EXISTS qualifications TEXT;
+ALTER TABLE drivers ADD COLUMN IF NOT EXISTS notes TEXT;
+ALTER TABLE drivers ADD COLUMN IF NOT EXISTS official_photo TEXT;
 
 -- ============================================================
 -- STUDENTS
@@ -689,7 +730,7 @@ CREATE TABLE IF NOT EXISTS archived_employees (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
   original_employee_id UUID,
-  role TEXT NOT NULL CHECK (role IN ('teacher', 'driver', 'supervisor', 'staff', 'admin')),
+  role TEXT NOT NULL CHECK (role IN ('teacher', 'driver', 'supervisor', 'staff', 'admin', 'reception', 'accountant')),
   full_name TEXT NOT NULL,
   date_of_birth DATE,
   age INTEGER,
@@ -716,6 +757,10 @@ CREATE TABLE IF NOT EXISTS archived_employees (
 );
 CREATE INDEX IF NOT EXISTS idx_archived_employees_school ON archived_employees(school_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_archived_employees_role ON archived_employees(school_id, role);
+-- Migration 024: allow reception + accountant (bare-users-row roles) to archive.
+ALTER TABLE archived_employees DROP CONSTRAINT IF EXISTS archived_employees_role_check;
+ALTER TABLE archived_employees ADD CONSTRAINT archived_employees_role_check
+  CHECK (role IN ('teacher', 'driver', 'supervisor', 'staff', 'admin', 'reception', 'accountant'));
 
 -- ============================================================
 -- ARCHIVE BACKUPS (migration 016 / finding F4)
@@ -1388,6 +1433,19 @@ ALTER TABLE staff_members ADD COLUMN IF NOT EXISTS insurance_paid_out_at DATE;
 ALTER TABLE staff_members ADD COLUMN IF NOT EXISTS insurance_paid_out_amount NUMERIC(12,2);
 ALTER TABLE staff_members ADD COLUMN IF NOT EXISTS insurance_paid_out_currency TEXT;
 ALTER TABLE staff_members ADD COLUMN IF NOT EXISTS insurance_paid_out_notes TEXT;
+-- Employee HR fields (migration 024). official_photo = admin-uploaded
+-- professional photo. emergency_contact added here for parity with teachers/drivers.
+ALTER TABLE staff_members ADD COLUMN IF NOT EXISTS address TEXT;
+ALTER TABLE staff_members ADD COLUMN IF NOT EXISTS hire_date DATE;
+ALTER TABLE staff_members ADD COLUMN IF NOT EXISTS national_id TEXT;
+ALTER TABLE staff_members ADD COLUMN IF NOT EXISTS date_of_birth DATE;
+ALTER TABLE staff_members ADD COLUMN IF NOT EXISTS marital_status TEXT;
+ALTER TABLE staff_members ADD COLUMN IF NOT EXISTS gender TEXT;
+ALTER TABLE staff_members ADD COLUMN IF NOT EXISTS employment_type TEXT;
+ALTER TABLE staff_members ADD COLUMN IF NOT EXISTS qualifications TEXT;
+ALTER TABLE staff_members ADD COLUMN IF NOT EXISTS notes TEXT;
+ALTER TABLE staff_members ADD COLUMN IF NOT EXISTS emergency_contact TEXT;
+ALTER TABLE staff_members ADD COLUMN IF NOT EXISTS official_photo TEXT;
 CREATE INDEX IF NOT EXISTS idx_staff_members_school ON staff_members(school_id, is_active);
 CREATE INDEX IF NOT EXISTS idx_staff_members_user ON staff_members(user_id) WHERE user_id IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_staff_members_school_user_unique ON staff_members(school_id, user_id) WHERE user_id IS NOT NULL;

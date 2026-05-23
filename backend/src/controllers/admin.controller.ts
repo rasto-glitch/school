@@ -19,6 +19,7 @@ import { loadEmployeeArchiveSnapshot, streamPdf as streamEmployeePdf, buildXlsx 
 import { streamCredentialsPdf, type CredentialEntry } from '../utils/credentialsPdf';
 import { logAudit } from '../utils/audit';
 import { hasArchiveFeature, normalizeArchiveReason, resolveEmployeeArchiveId } from '../utils/employeeArchive';
+import { hrColumns, hrSnapshot } from '../utils/employeeHr';
 import { isUrlSafeToFetch } from '../utils/urlSafety';
 import { logger } from '../utils/logger';
 import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from '../utils/passwordPolicy';
@@ -29,7 +30,7 @@ import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from '../utils/passwordPoli
 // row (cascading the teachers/drivers row) in one transaction.
 // hasArchiveFeature / normalizeArchiveReason are shared via utils/employeeArchive.
 
-type ArchiveEmployeeRole = 'teacher' | 'driver' | 'supervisor' | 'staff' | 'admin';
+type ArchiveEmployeeRole = 'teacher' | 'driver' | 'supervisor' | 'staff' | 'admin' | 'reception' | 'accountant';
 
 // Snapshot of the users row — never includes password_hash.
 async function loadAccountSnapshot(userId: string, schoolId: string): Promise<Record<string, unknown> | null> {
@@ -1634,6 +1635,7 @@ export async function createTeacher(req: AuthRequest, res: Response): Promise<vo
     emergency_contact: emergencyContact || null,
     subject: null, // populated from the curriculum (class ↔ subject ↔ teacher) once assigned
     previous_archive_id: prevArchiveId,
+    ...hrColumns(req.body),
   }).select().single();
 
   if (teacherErr) { res.status(safeDbErrorStatus(teacherErr)).json({ error: safeDbErrorMessage(teacherErr) }); return; }
@@ -1658,7 +1660,7 @@ export async function updateTeacher(req: AuthRequest, res: Response): Promise<vo
     return;
   }
 
-  const updateFields: Record<string, unknown> = {};
+  const updateFields: Record<string, unknown> = { ...hrColumns(req.body) };
   if (fullName) updateFields.full_name = fullName;
   if (phoneNumber !== undefined) updateFields.phone_number = phoneNumber || null;
   if (emergencyContact !== undefined) updateFields.emergency_contact = emergencyContact || null;
@@ -1773,6 +1775,7 @@ export async function createDriver(req: AuthRequest, res: Response): Promise<voi
     age: age ? parseInt(age) : null,
     vehicle_type: vehicleType || 'bus',
     previous_archive_id: prevArchiveId,
+    ...hrColumns(req.body),
   }).select().single();
 
   if (driverErr) { res.status(safeDbErrorStatus(driverErr)).json({ error: safeDbErrorMessage(driverErr) }); return; }
@@ -1815,6 +1818,7 @@ export async function updateDriver(req: AuthRequest, res: Response): Promise<voi
     emergency_contact: emergencyContact || null,
     license_number: licenseNumber || null,
     age: age ? parseInt(age) : null,
+    ...hrColumns(req.body),
   };
   if (busId) updateData.bus_id = busId;
   if (vehicleType) updateData.vehicle_type = vehicleType;
@@ -1844,6 +1848,7 @@ export async function createAccount(req: AuthRequest, res: Response): Promise<vo
   const { data: schoolData } = await supabase.from('schools').select('abbreviation, features').eq('id', schoolId).single();
 
   // Accountant role requires the premium tuition_fees feature.
+  // (HR fields stored below for roles with no profile table; see hrColumns.)
   if (role === 'accountant' && (schoolData?.features as Record<string, boolean> | null)?.tuition_fees !== true) {
     res.status(403).json({ error: 'Accounting module is not enabled for this school. Contact your provider to upgrade.' });
     return;
@@ -1864,6 +1869,7 @@ export async function createAccount(req: AuthRequest, res: Response): Promise<vo
     username: finalUsername,
     password_hash: passwordHash,
     role,
+    ...hrColumns(req.body, { includeEmergency: true }),
   }).select('id, school_id, username, email, phone, role, first_name, last_name, profile_picture, is_active, created_at, password_changed_at').single();
 
   if (error) {
@@ -3194,7 +3200,7 @@ export async function getAccounts(req: AuthRequest, res: Response): Promise<void
   const { schoolId } = req.user!;
   const { data, error } = await supabase
     .from('users')
-    .select('id, first_name, last_name, username, email, phone, role, is_active, created_at')
+    .select('id, first_name, last_name, username, email, phone, role, is_active, created_at, address, hire_date, national_id, date_of_birth, marital_status, gender, employment_type, qualifications, notes, emergency_contact, official_photo')
     .eq('school_id', schoolId)
     .order('role')
     .order('first_name');
@@ -3213,7 +3219,7 @@ export async function updateAccount(req: AuthRequest, res: Response): Promise<vo
     if (existing) { res.status(409).json({ error: `Username "${username}" is already taken.` }); return; }
   }
 
-  const updateFields: Record<string, unknown> = {};
+  const updateFields: Record<string, unknown> = { ...hrColumns(req.body, { includeEmergency: true }) };
   if (firstName !== undefined) updateFields.first_name = firstName;
   if (lastName !== undefined) updateFields.last_name = lastName;
   if (email !== undefined) updateFields.email = email || null;
@@ -3253,11 +3259,12 @@ export async function deleteAccount(req: AuthRequest, res: Response): Promise<vo
 
   const { data: user, error: findErr } = await supabase
     .from('users')
-    .select('id, role, username, email, first_name, last_name, phone, profile_picture, is_active, password_changed_at, created_at')
+    .select('id, role, username, email, first_name, last_name, phone, profile_picture, is_active, password_changed_at, created_at, address, hire_date, national_id, date_of_birth, marital_status, gender, employment_type, qualifications, notes, emergency_contact, official_photo')
     .eq('id', userId).eq('school_id', schoolId).single();
   if (findErr || !user) { res.status(404).json({ error: 'Account not found' }); return; }
 
-  if (user.role !== 'teacher' && user.role !== 'supervisor' && user.role !== 'admin') {
+  const ARCHIVABLE_ACCOUNT_ROLES = ['teacher', 'supervisor', 'admin', 'reception', 'accountant'];
+  if (!ARCHIVABLE_ACCOUNT_ROLES.includes(user.role)) {
     res.status(400).json({ error: `Use the dedicated delete endpoint for role "${user.role}"` }); return;
   }
 
@@ -3285,13 +3292,17 @@ export async function deleteAccount(req: AuthRequest, res: Response): Promise<vo
     firstName: user.first_name, lastName: user.last_name, phone: user.phone,
     profilePicture: user.profile_picture, isActive: user.is_active,
     passwordChangedAt: user.password_changed_at, createdAt: user.created_at,
+    // HR snapshot (migration 024) — kept forever for contracts / employee
+    // profile. For teachers the authoritative HR row is the teachers table,
+    // overridden in that branch below; for bare roles it's the users row.
+    hr: hrSnapshot(user),
   };
   const fullName = `${user.first_name ?? ''} ${user.last_name ?? ''}`.trim() || (user.username as string);
 
   if (user.role === 'teacher') {
     const { data: teacher } = await supabase
       .from('teachers')
-      .select('id, full_name, phone_number, subject, emergency_contact, profile_picture, created_at')
+      .select('id, full_name, phone_number, subject, emergency_contact, profile_picture, created_at, address, hire_date, national_id, date_of_birth, marital_status, gender, employment_type, qualifications, notes, official_photo')
       .eq('user_id', userId).eq('school_id', schoolId).single();
     if (teacher) {
       // Preserve authored content (orphan, don't destroy).
@@ -3304,13 +3315,16 @@ export async function deleteAccount(req: AuthRequest, res: Response): Promise<vo
 
       if (archiveOn) {
         const teaching = await buildTeacherTeachingSnapshot(teacher.id, schoolId);
+        // Teacher HR lives on the teachers row — override the user-derived snapshot.
+        const teacherAccount = { ...account, hr: hrSnapshot(teacher) };
         const r = await performEmployeeArchive({
           schoolId, userId, originalEmployeeId: teacher.id, role: 'teacher',
           fullName: teacher.full_name || fullName, phoneNumber: teacher.phone_number,
           subject: teacher.subject, emergencyContact: teacher.emergency_contact,
+          dateOfBirth: (teacher.date_of_birth as string | null) ?? null,
           profilePicture: teacher.profile_picture ?? (user.profile_picture as string | null),
-          hireDate: teacher.created_at ? String(teacher.created_at).split('T')[0] : null,
-          departureDate, reason, account, teaching,
+          hireDate: (teacher.hire_date as string | null) ?? (teacher.created_at ? String(teacher.created_at).split('T')[0] : null),
+          departureDate, reason, account: teacherAccount, teaching,
           actorId: req.user!.userId, actorName: req.user!.username, actorRole: req.user!.role,
         });
         if (!r.ok) { res.status(500).json({ error: r.error }); return; }
@@ -3321,14 +3335,16 @@ export async function deleteAccount(req: AuthRequest, res: Response): Promise<vo
       await supabase.from('teachers').delete().eq('id', teacher.id).eq('school_id', schoolId);
     }
   } else if (archiveOn) {
-    // Supervisor / admin — no profile table; the snapshot is the users row.
-    // (Authored artifacts have no owner column to attribute.)
-    const bareRole = user.role as 'supervisor' | 'admin';
+    // Supervisor / admin / reception / accountant — no profile table; the
+    // snapshot is the users row. (Authored artifacts have no owner column.)
+    const bareRole = user.role as 'supervisor' | 'admin' | 'reception' | 'accountant';
     const r = await performEmployeeArchive({
       schoolId, userId, originalEmployeeId: user.id, role: bareRole,
       fullName, email: user.email as string | null, phoneNumber: user.phone as string | null,
+      emergencyContact: (user.emergency_contact as string | null) ?? null,
+      dateOfBirth: (user.date_of_birth as string | null) ?? null,
       profilePicture: user.profile_picture as string | null,
-      hireDate: user.created_at ? String(user.created_at).split('T')[0] : null,
+      hireDate: (user.hire_date as string | null) ?? (user.created_at ? String(user.created_at).split('T')[0] : null),
       departureDate, reason, account,
       actorId: req.user!.userId, actorName: req.user!.username, actorRole: req.user!.role,
     });
@@ -3341,8 +3357,57 @@ export async function deleteAccount(req: AuthRequest, res: Response): Promise<vo
   // Archive feature off (or teacher row missing) — hard delete.
   const { error: delErr } = await supabase.from('users').delete().eq('id', userId);
   if (delErr) { res.status(safeDbErrorStatus(delErr)).json({ error: safeDbErrorMessage(delErr) }); return; }
-  await logAudit({ req, entityType: user.role as 'teacher' | 'supervisor' | 'admin', entityId: String(userId), action: 'delete', before: account, label: fullName, reason: 'Deleted (no archive)' });
+  await logAudit({ req, entityType: user.role as 'teacher' | 'supervisor' | 'admin' | 'reception' | 'accountant', entityId: String(userId), action: 'delete', before: account, label: fullName, reason: 'Deleted (no archive)' });
   res.json({ message: 'Account deleted' });
+}
+
+// Admin-uploaded professional photo (migration 024). Distinct from the
+// self-set app avatar (users.profile_picture, set via /auth/profile-picture):
+// this writes `official_photo` and never overrides what the employee chose
+// for themselves. `:id` is the profile-table id for teacher/driver/staff, or
+// the users id for the bare roles (supervisor/admin/reception/accountant).
+const EMPLOYEE_PHOTO_TABLE: Record<string, string> = {
+  teacher: 'teachers',
+  driver: 'drivers',
+  staff: 'staff_members',
+  supervisor: 'users',
+  admin: 'users',
+  reception: 'users',
+  accountant: 'users',
+};
+
+export async function uploadEmployeePhoto(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const role = String(req.params.role);
+  const id = String(req.params.id);
+  const table = EMPLOYEE_PHOTO_TABLE[role];
+  if (!table) { res.status(400).json({ error: 'Unknown employee role' }); return; }
+
+  const file = (req as any).file;
+  if (!file) { res.status(400).json({ error: 'No file uploaded' }); return; }
+
+  const ext = safeExt(file.originalname, '.jpg');
+  const storagePath = `employee-photos/${schoolId}/${role}-${id}${ext}`;
+  const bucket = process.env.SUPABASE_STORAGE_BUCKET || 'homework-attachments';
+
+  const { data: uploadData, error: uploadErr } = await supabase.storage
+    .from(bucket)
+    .upload(storagePath, file.buffer, { contentType: file.mimetype, upsert: true });
+  if (uploadErr || !uploadData) { res.status(500).json({ error: 'Upload failed' }); return; }
+
+  const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(uploadData.path);
+  const officialPhoto = urlData.publicUrl;
+
+  // school-scoped update; if no row matches (wrong tenant / id) → 404.
+  const { data: updated, error: updErr } = await supabase
+    .from(table)
+    .update({ official_photo: officialPhoto })
+    .eq('id', id).eq('school_id', schoolId)
+    .select('id').maybeSingle();
+  if (updErr) { res.status(safeDbErrorStatus(updErr)).json({ error: safeDbErrorMessage(updErr) }); return; }
+  if (!updated) { res.status(404).json({ error: 'Employee not found' }); return; }
+
+  res.json({ officialPhoto });
 }
 
 export async function getParents(req: AuthRequest, res: Response): Promise<void> {

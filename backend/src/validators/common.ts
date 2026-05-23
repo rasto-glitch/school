@@ -45,3 +45,25 @@ export const email = z.string().trim().toLowerCase()
 
 /** Keyset pagination cursor (opaque base64url) — optional everywhere. */
 export const cursor = z.string().max(512).optional();
+
+// ── Employee HR fields (migration 024) ────────────────────────────────────
+// Shared across every employee write schema (account / teacher / driver /
+// staff). All optional + nullable + tolerant of '' (the controller converts
+// '' → null). Date fields accept '' OR YYYY-MM-DD; enums accept '' too so an
+// unset dropdown is never a 400.
+const optDate = z.union([isoDate, z.literal('')]).nullable().optional();
+const optEnum = (...vals: [string, ...string[]]) =>
+  z.union([z.enum(vals), z.literal('')]).nullable().optional();
+
+/** Spread into a write schema to accept the common HR/identity fields. */
+export const hrFields = {
+  address: z.string().trim().max(300).nullable().optional(),
+  hireDate: optDate,
+  nationalId: z.string().trim().max(60).nullable().optional(),
+  dateOfBirth: optDate,
+  maritalStatus: optEnum('single', 'married', 'divorced', 'widowed'),
+  gender: optEnum('male', 'female'),
+  employmentType: optEnum('full_time', 'part_time', 'contract'),
+  qualifications: z.string().trim().max(2000).nullable().optional(),
+  notes: z.string().trim().max(2000).nullable().optional(),
+};
