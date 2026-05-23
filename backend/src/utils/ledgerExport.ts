@@ -17,6 +17,10 @@ export interface LedgerExportRow {
   amount: number;
   currency: string;
   reference: string | null;
+  // Optional — only the XLSX Entries sheet renders these (PDF ignores them).
+  method?: string | null;
+  remaining?: number | null;
+  dueDate?: string | null;
 }
 
 export interface LedgerExportTotal {
@@ -297,16 +301,23 @@ export function buildLedgerXlsx(data: LedgerExportData): Buffer {
 
   // ── Sheet 3: Entries (the full ledger as a table) ──────────────────
   const rows: (string | number)[][] = [
-    ['Date', 'Direction', 'Source', 'Category', 'Description', 'Reference', 'Amount', 'Currency'],
+    ['Date', 'Direction', 'Source', 'Category', 'Description', 'Reference', 'Payment method', 'Remaining', 'Due date', 'Amount', 'Currency'],
   ];
   for (const r of data.rows) {
+    // Reference no longer carries the payment method — it gets its own column.
+    const reference = (r.method && r.reference)
+      ? r.reference.split(' · ').filter(t => t !== r.method).join(' · ')
+      : (r.reference ?? '');
     rows.push([
       r.date,
       r.type === 'income' ? 'Income' : 'Expense',
       SOURCE_LABEL[r.source],
       r.category,
       r.description,
-      r.reference ?? '',
+      reference,
+      r.method ?? '',
+      r.remaining ?? '',   // blank for salary/expense rows
+      r.dueDate ?? '',     // blank when no schedule / fully paid
       r.amount,
       r.currency,
     ]);
@@ -317,13 +328,16 @@ export function buildLedgerXlsx(data: LedgerExportData): Buffer {
     { wch: 11 },  // Direction
     { wch: 11 },  // Source
     { wch: 22 },  // Category
-    { wch: 42 },  // Description
-    { wch: 26 },  // Reference
+    { wch: 40 },  // Description
+    { wch: 22 },  // Reference
+    { wch: 15 },  // Payment method
+    { wch: 13 },  // Remaining
+    { wch: 12 },  // Due date
     { wch: 14 },  // Amount
     { wch: 10 },  // Currency
   ];
   if (data.rows.length > 0) {
-    makeTable(entriesWs, rows.length, 'H');
+    makeTable(entriesWs, rows.length, 'K');
   }
   XLSX.utils.book_append_sheet(wb, entriesWs, 'Entries');
 

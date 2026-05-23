@@ -4,6 +4,7 @@ import { Response } from 'express';
 import { adminDb as supabase } from '../utils/db';
 import type { AuthRequest } from '../middleware/auth';
 import { streamLedgerPdf, buildLedgerXlsx } from '../utils/ledgerExport';
+import { buildStudentFeeRows } from './fees.controller';
 
 // Aggregate ledger across all financial entry sources:
 //   - fee_payments        → income  (Tuition)
@@ -21,6 +22,10 @@ interface LedgerRow {
   amount: number;
   currency: string;
   reference: string | null; // method / reference / vendor — secondary detail
+  method: string | null;    // payment method (split out of `reference`)
+  // Tuition-only (null for salary/expense rows):
+  remaining: number | null; // current outstanding balance on that student fee
+  dueDate: string | null;   // next unpaid installment's due date
 }
 
 interface CurrencyTotals {
@@ -77,6 +82,29 @@ async function buildLedger(
   const defaultCurrency = await getDefaultCurrency(schoolId);
   const rows: LedgerRow[] = [];
 
+  // For tuition rows we surface the student fee's current balance + next unpaid
+  // installment date. buildStudentFeeRows already computes the live balance
+  // (plan + adjustment + late fees − paid) and the installment schedule, so we
+  // reuse it and key by student_fee id rather than re-deriving AR here.
+  const feeInfo = new Map<string, { remaining: number; dueDate: string | null }>();
+  if (include('fee_payment')) {
+    const sfRows = await buildStudentFeeRows(schoolId);
+    for (const sf of sfRows) {
+      // Next unpaid installment = walk the schedule in due-date order, filling
+      // each from total paid; the first one not fully covered is "next due".
+      // Blank when there's no schedule or the fee is settled.
+      let nextDueDate: string | null = null;
+      const insts = [...sf.installments].sort((a, b) => (a.dueDate || '').localeCompare(b.dueDate || ''));
+      let remainingPaid = sf.paid;
+      for (const inst of insts) {
+        if (remainingPaid >= inst.effectiveAmount) { remainingPaid -= inst.effectiveAmount; continue; }
+        nextDueDate = inst.dueDate || null;
+        break;
+      }
+      feeInfo.set(sf.id, { remaining: sf.balance, dueDate: nextDueDate });
+    }
+  }
+
   // ── Tuition payments ──
   if (include('fee_payment')) {
     let q = supabase
@@ -106,6 +134,9 @@ async function buildLedger(
         amount: Number(p.amount) || 0,
         currency: p.currency || defaultCurrency,
         reference: [receipt, p.method, p.reference].filter(Boolean).join(' · ') || null,
+        method: p.method || null,
+        remaining: feeInfo.get(p.student_fee_id)?.remaining ?? null,
+        dueDate: feeInfo.get(p.student_fee_id)?.dueDate ?? null,
       });
     }
   }
@@ -137,6 +168,9 @@ async function buildLedger(
         amount: Number(p.amount) || 0,
         currency: p.currency || defaultCurrency,
         reference: ins > 0 ? `Insurance held: ${ins}` : null,
+        method: null,
+        remaining: null,
+        dueDate: null,
       });
     }
   }
@@ -163,6 +197,9 @@ async function buildLedger(
         amount: Number(e.amount) || 0,
         currency: e.currency || defaultCurrency,
         reference: [e.vendor, e.payment_method].filter(Boolean).join(' · ') || null,
+        method: e.payment_method || null,
+        remaining: null,
+        dueDate: null,
       });
     }
   }
@@ -284,6 +321,7 @@ export async function exportLedgerPdf(req: AuthRequest, res: Response): Promise<
     rows: result.data.rows.map(r => ({
       date: r.date, type: r.type, source: r.source, category: r.category,
       description: r.description, amount: r.amount, currency: r.currency, reference: r.reference,
+      method: r.method, remaining: r.remaining, dueDate: r.dueDate,
     })),
     totals: result.data.totals,
     categories: result.data.categories,
@@ -307,6 +345,7 @@ export async function exportLedgerXlsx(req: AuthRequest, res: Response): Promise
     rows: result.data.rows.map(r => ({
       date: r.date, type: r.type, source: r.source, category: r.category,
       description: r.description, amount: r.amount, currency: r.currency, reference: r.reference,
+      method: r.method, remaining: r.remaining, dueDate: r.dueDate,
     })),
     totals: result.data.totals,
     categories: result.data.categories,

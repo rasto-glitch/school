@@ -496,7 +496,7 @@ interface StudentFeeRow {
   kind?: string;
 }
 
-async function buildStudentFeeRows(schoolId: string): Promise<StudentFeeRow[]> {
+export async function buildStudentFeeRows(schoolId: string): Promise<StudentFeeRow[]> {
   const cfg = await getTuitionConfig(schoolId);
   const today = new Date().toISOString().split('T')[0];
 
