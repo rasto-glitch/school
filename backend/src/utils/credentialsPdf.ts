@@ -31,7 +31,7 @@ export function streamCredentialsPdf(
   doc.pipe(dest);
 
   // ---- Cover header on first page ----
-  doc.fontSize(20).fillColor('#111827').text(schoolName, { align: 'center' });
+  doc.fontSize(20).fillColor('#111827').font(F.pick(schoolName, { bold: true })).text(schoolName, { align: 'center' });
   doc.moveDown(0.2);
   doc.fontSize(13).fillColor('#374151').text(title, { align: 'center' });
   doc.moveDown(0.2);
@@ -106,7 +106,7 @@ function drawCard(
   let cy = y + padY;
 
   // School name
-  doc.fontSize(9).fillColor('#6B7280').text(schoolName, x + padX, cy, {
+  doc.fontSize(9).fillColor('#6B7280').font(F.pick(schoolName)).text(schoolName, x + padX, cy, {
     width: w - padX * 2, align: 'center', ellipsis: true,
   });
   cy += 14;
@@ -118,7 +118,7 @@ function drawCard(
   cy += 14;
 
   // Full name (bold, large)
-  doc.fontSize(13).fillColor('#111827').font(F.bold).text(entry.fullName, x + padX, cy, {
+  doc.fontSize(13).fillColor('#111827').font(F.pick(entry.fullName, { bold: true })).text(entry.fullName, x + padX, cy, {
     width: w - padX * 2, align: 'center', ellipsis: true,
   });
   cy += 18;
@@ -156,7 +156,7 @@ function drawCard(
     const visible = entry.children.slice(0, maxLines);
     for (const c of visible) {
       const line = c.className ? `${c.name}  ·  ${c.className}` : c.name;
-      doc.text(line, x + padX, cy, { width: w - padX * 2, ellipsis: true });
+      doc.font(F.pick(line)).text(line, x + padX, cy, { width: w - padX * 2, ellipsis: true });
       cy += lineH;
     }
     if (entry.children.length > visible.length) {

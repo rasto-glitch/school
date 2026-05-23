@@ -88,7 +88,7 @@ export function streamPdf(snapshot: EmployeeArchiveSnapshot, dest: NodeJS.Writab
   const F = setupPdfFonts(doc);
   doc.pipe(dest);
 
-  doc.fontSize(28).text(snapshot.schoolName, { align: 'left' });
+  doc.fontSize(28).font(F.pick(snapshot.schoolName, { bold: true })).text(snapshot.schoolName, { align: 'left' });
   doc.moveDown(0.4);
   doc.fontSize(20).text('Employee Archive Export', { align: 'left' });
   doc.moveDown(0.6);
@@ -120,19 +120,20 @@ export function streamPdf(snapshot: EmployeeArchiveSnapshot, dest: NodeJS.Writab
 }
 
 function writeEmployeeSection(doc: PDFKit.PDFDocument, e: ArchivedEmployeeRecord, isFirst: boolean): void {
+  const F = setupPdfFonts(doc);
   if (!isFirst) doc.addPage();
 
-  doc.fontSize(16).fillColor('black').text(e.fullName);
+  doc.fontSize(16).fillColor('black').font(F.pick(e.fullName, { bold: true })).text(e.fullName);
   doc.moveDown(0.3);
   doc.fontSize(10).fillColor('#374151');
-  if (e.position) doc.text(`Position: ${e.position}`);
+  if (e.position) doc.font(F.pick(e.position)).text(`Position: ${e.position}`);
   if (e.subject) doc.text(`Subject: ${e.subject}`);
   if (e.email) doc.text(`Email: ${e.email}`);
   if (e.phoneNumber) doc.text(`Phone: ${e.phoneNumber}`);
   if (e.emergencyContact) doc.text(`Emergency contact: ${e.emergencyContact}`);
   if (e.hireDate) doc.text(`Hired: ${e.hireDate}`);
   if (e.departureDate) doc.text(`Departed: ${e.departureDate}`);
-  if (e.reason) doc.text(`Reason: ${e.reason}`);
+  if (e.reason) doc.font(F.pick(e.reason)).text(`Reason: ${e.reason}`);
   const username = (e.account as any)?.username;
   if (username) doc.text(`Login: ${username}`);
 

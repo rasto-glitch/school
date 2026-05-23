@@ -174,7 +174,7 @@ export function streamPdf(snapshot: ArchiveSnapshot, dest: NodeJS.WritableStream
   doc.pipe(dest);
 
   // Cover
-  doc.fontSize(28).text(snapshot.schoolName, { align: 'left' });
+  doc.fontSize(28).font(F.pick(snapshot.schoolName, { bold: true })).text(snapshot.schoolName, { align: 'left' });
   doc.moveDown(0.4);
   doc.fontSize(20).text('Archive Export', { align: 'left' });
   doc.moveDown(0.6);
@@ -215,9 +215,10 @@ function writeStudentSection(
   kind: 'archived' | 'graduated',
   isFirst: boolean,
 ): void {
+  const F = setupPdfFonts(doc);
   if (!isFirst) doc.addPage();
 
-  doc.fontSize(16).fillColor('black').text(s.fullName);
+  doc.fontSize(16).fillColor('black').font(F.pick(s.fullName, { bold: true })).text(s.fullName);
   doc.moveDown(0.3);
 
   doc.fontSize(10).fillColor('#374151');
@@ -226,12 +227,12 @@ function writeStudentSection(
   if (kind === 'archived') {
     const a = s as ArchivedRecord;
     if (a.departureDate) doc.text(`Departed: ${a.departureDate}`);
-    if (a.reason) doc.text(`Reason: ${a.reason}`);
+    if (a.reason) doc.font(F.pick(a.reason)).text(`Reason: ${a.reason}`);
   } else {
     const g = s as GraduatedRecord;
-    if (g.className) doc.text(`Final class: ${g.className}`);
+    if (g.className) doc.font(F.pick(g.className)).text(`Final class: ${g.className}`);
   }
-  if (s.parentFullName) doc.text(`Parent: ${s.parentFullName}${s.parentPhone ? ` (${s.parentPhone})` : ''}`);
+  if (s.parentFullName) doc.font(F.pick(s.parentFullName)).text(`Parent: ${s.parentFullName}${s.parentPhone ? ` (${s.parentPhone})` : ''}`);
 
   // Classes attended
   if (s.classesAttended.length > 0) {
