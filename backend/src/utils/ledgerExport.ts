@@ -301,7 +301,7 @@ export function buildLedgerXlsx(data: LedgerExportData): Buffer {
 
   // ── Sheet 3: Entries (the full ledger as a table) ──────────────────
   const rows: (string | number)[][] = [
-    ['Date', 'Direction', 'Source', 'Category', 'Description', 'Reference', 'Payment method', 'Remaining', 'Due date', 'Amount', 'Currency'],
+    ['Date', 'Direction', 'Source', 'Category', 'Description', 'Reference', 'Payment method', 'Amount paid', 'Remaining', 'Due date', 'Currency'],
   ];
   for (const r of data.rows) {
     // Reference no longer carries the payment method — it gets its own column.
@@ -316,9 +316,9 @@ export function buildLedgerXlsx(data: LedgerExportData): Buffer {
       r.description,
       reference,
       r.method ?? '',
+      r.amount,
       r.remaining ?? '',   // blank for salary/expense rows
       r.dueDate ?? '',     // blank when no schedule / fully paid
-      r.amount,
       r.currency,
     ]);
   }
@@ -331,9 +331,9 @@ export function buildLedgerXlsx(data: LedgerExportData): Buffer {
     { wch: 40 },  // Description
     { wch: 22 },  // Reference
     { wch: 15 },  // Payment method
+    { wch: 14 },  // Amount paid
     { wch: 13 },  // Remaining
     { wch: 12 },  // Due date
-    { wch: 14 },  // Amount
     { wch: 10 },  // Currency
   ];
   if (data.rows.length > 0) {
