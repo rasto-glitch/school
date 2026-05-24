@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  TextInput, ActivityIndicator, Alert, Modal,
+  TextInput, ActivityIndicator, Alert, Modal, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { Plus, Trash2, Send, ChevronDown, Check } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
@@ -97,7 +97,8 @@ export default function TeacherReportScreen({ subject, classes, subjects, teachi
   };
 
   return (
-    <ScrollView contentContainerStyle={{ padding: spacing.md, paddingBottom: 40 }}>
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <ScrollView contentContainerStyle={{ padding: spacing.md, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
       <Text style={styles.label}>{t('teacher.class')}</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing.md }}>
         {classes.map(c => (
@@ -218,6 +219,7 @@ export default function TeacherReportScreen({ subject, classes, subjects, teachi
         </View>
       </Modal>
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 

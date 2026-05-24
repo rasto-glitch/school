@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  TextInput, ActivityIndicator, Alert,
+  TextInput, ActivityIndicator, Alert, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { CardListSkeleton } from '../../components/Skeleton';
 import { useTranslation } from 'react-i18next';
@@ -90,7 +90,8 @@ export default function TeacherWeeklySummaryScreen({ subject, classes, subjects,
     : null;
 
   return (
-    <ScrollView contentContainerStyle={{ padding: spacing.md, paddingBottom: 40 }}>
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <ScrollView contentContainerStyle={{ padding: spacing.md, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
       {/* Period banner */}
       {periodLoading ? (
         <CardListSkeleton count={1} hasIcon={false} />
@@ -153,6 +154,7 @@ export default function TeacherWeeklySummaryScreen({ subject, classes, subjects,
         </>
       )}
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 

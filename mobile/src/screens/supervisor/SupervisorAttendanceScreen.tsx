@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, ActivityIndicator,
-  TouchableOpacity, Alert, Modal, TextInput,
+  TouchableOpacity, Alert, Modal, TextInput, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { CardListSkeleton } from '../../components/Skeleton';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -280,7 +280,7 @@ export default function SupervisorAttendanceScreen() {
 
       {/* Attendance Modal */}
       <Modal visible={!!modalStudent} animationType="slide" presentationStyle="pageSheet" transparent>
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={[styles.modalBox, { backgroundColor: colors.card, paddingBottom: insets.bottom + spacing.md }]}>
             <Text style={styles.modalTitle}>
               {modalRecord ? t('supervisor.override_attendance') : t('supervisor.mark_attendance')}
@@ -326,7 +326,7 @@ export default function SupervisorAttendanceScreen() {
               <Text style={styles.cancelBtnText}>{t('common.cancel')}</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </ScrollView>
   );

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Alert, Switch, Modal, TextInput,
+  Alert, Switch, Modal, TextInput, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -244,7 +244,8 @@ export default function SupervisorSettingsScreen() {
             </TouchableOpacity>
           </View>
 
-          <ScrollView showsVerticalScrollIndicator={false}>
+          <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
             <Text style={styles.modalSection}>{t('settings.password_section_change')}</Text>
             <Text style={styles.fieldLabel}>{t('settings.current_password')}</Text>
             <TextInput
@@ -289,6 +290,7 @@ export default function SupervisorSettingsScreen() {
               </Text>
             </TouchableOpacity>
           </ScrollView>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
     </>

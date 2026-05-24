@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { usePaginated } from '../../hooks/usePaginated';
 import {
   View, Text, ScrollView, FlatList, StyleSheet, TouchableOpacity,
-  TextInput, ActivityIndicator, Alert, Modal, Image, Switch,
+  TextInput, ActivityIndicator, Alert, Modal, Image, Switch, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
@@ -203,7 +203,8 @@ export default function TeacherPostsScreen({ subject, classes, subjects, teachin
             </TouchableOpacity>
           </View>
 
-          <ScrollView contentContainerStyle={{ padding: spacing.md, paddingBottom: 80 }}>
+          <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <ScrollView contentContainerStyle={{ padding: spacing.md, paddingBottom: 80 }} keyboardShouldPersistTaps="handled">
             <Text style={[styles.label, { color: colors.textMuted }]}>{t('teacher.class')}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: spacing.sm }}>
               {classes.map(c => {
@@ -299,6 +300,7 @@ export default function TeacherPostsScreen({ subject, classes, subjects, teachin
               />
             </View>
           </ScrollView>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
     </View>

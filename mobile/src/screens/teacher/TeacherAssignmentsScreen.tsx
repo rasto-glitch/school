@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  TextInput, ActivityIndicator, Alert, Modal,
+  TextInput, ActivityIndicator, Alert, Modal, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { CardListSkeleton } from '../../components/Skeleton';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -167,7 +167,8 @@ export default function TeacherAssignmentsScreen({ subject, classes, subjects, t
             <Text style={styles.modalTitle}>{t('teacher.new_assignment')}</Text>
             <TouchableOpacity onPress={() => setShowForm(false)}><X size={22} color={colors.textMuted} /></TouchableOpacity>
           </View>
-          <ScrollView showsVerticalScrollIndicator={false}>
+          <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
             <Text style={styles.fieldLabel}>{t('teacher.class')}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing.md }}>
               {classes.map(c => (
@@ -275,6 +276,7 @@ export default function TeacherAssignmentsScreen({ subject, classes, subjects, t
               {submitting ? <ActivityIndicator color="#fff" size="small" /> : <><Send size={16} color="#fff" /><Text style={styles.submitText}>{t('teacher.post_assignment')}</Text></>}
             </TouchableOpacity>
           </ScrollView>
+          </KeyboardAvoidingView>
         </View>
       </Modal>
     </View>
