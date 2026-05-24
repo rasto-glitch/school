@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import {
   Bell, MapPin, Globe, Lock, LogOut, FileText, ShieldCheck,
   Moon, ChevronRight, CheckCircle, XCircle, AlertCircle, X, Bug, Mail,
@@ -16,7 +16,7 @@ import i18n, { changeLanguageAndApply } from '../../i18n';
 import { useAuthStore } from '../../store/authStore';
 import { useThemeStore, useColors } from '../../store/themeStore';
 import { getPushStatus, retryPushRegistration, type PushStatus } from '../../hooks/usePushNotifications';
-import { authApi } from '../../services/api';
+import { authApi, parentApi } from '../../services/api';
 import { isStrongPassword } from '../../utils/passwordPolicy';
 import { spacing, radius, font, shadow } from '../../theme';
 
@@ -37,6 +37,9 @@ export default function SettingsScreen() {
   const [lang, setLang] = useState(i18n.language || 'en');
   const [pushStatus, setPushStatus] = useState<PushStatus>(getPushStatus());
   const [retrying, setRetrying] = useState(false);
+  // Whether a pickup location is on file — drives the row icon color (green =
+  // set, amber = not set). Re-checked on focus so it updates after saving.
+  const [pickupSet, setPickupSet] = useState(false);
 
   // Email modal state
   const [showEmailModal, setShowEmailModal] = useState(false);
@@ -67,6 +70,18 @@ export default function SettingsScreen() {
       .catch(() => { /* non-fatal */ });
     return () => { cancelled = true; };
   }, [setEmailInStore]);
+
+  // Re-check whether a pickup location is set every time this screen is
+  // focused, so the icon turns green immediately after the user saves one.
+  useFocusEffect(
+    useMemo(() => () => {
+      let cancelled = false;
+      parentApi.getPickupLocation()
+        .then(r => { if (!cancelled) setPickupSet(!!(r.data?.latitude && r.data?.longitude)); })
+        .catch(() => { /* non-fatal — leave as not set */ });
+      return () => { cancelled = true; };
+    }, []),
+  );
 
   const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
 
@@ -184,8 +199,8 @@ export default function SettingsScreen() {
         {/* Location */}
         <Text style={styles.sectionTitle}>{t('settings.location_section')}</Text>
         <TouchableOpacity style={styles.row} onPress={() => navigation.navigate('SetPickupLocation')}>
-          <View style={[styles.iconBox, { backgroundColor: '#FFFBEB' }]}>
-            <MapPin size={18} color="#D97706" />
+          <View style={[styles.iconBox, { backgroundColor: pickupSet ? '#F0FDF4' : '#FFFBEB' }]}>
+            <MapPin size={18} color={pickupSet ? '#16A34A' : '#D97706'} />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.rowLabel}>{t('settings.pickup_label')}</Text>
