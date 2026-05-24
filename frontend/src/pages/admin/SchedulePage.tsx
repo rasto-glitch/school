@@ -136,103 +136,94 @@ export default function SchedulePage() {
           </p>
         </Card>
 
-        {/* Grid */}
-        <Card className="!p-0 overflow-hidden">
-          <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-            <h2 className="font-semibold text-gray-900">{t('admin.weekly_grid')}</h2>
-            <span className="text-xs text-gray-500">
-              {t('admin.grid_summary', { teachers: teachers.length, days: orderedDays.length, periods: periodsPerDay })}
-            </span>
-          </div>
-
-          {loading ? (
+        {/* Grid — one full-width table per day, stacked Sun→Sat */}
+        {loading ? (
+          <Card className="!p-0 overflow-hidden">
             <div className="p-12 text-center text-gray-400 text-sm">{t('common.loading_more')}</div>
-          ) : teachers.length === 0 ? (
+          </Card>
+        ) : teachers.length === 0 ? (
+          <Card className="!p-0 overflow-hidden">
             <div className="p-12 text-center text-gray-400 text-sm">
               {t('admin.no_teachers_schedule')}
             </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="border-collapse text-xs">
-                <thead>
-                  <tr>
-                    <th className="sticky left-0 z-20 bg-gray-50 border-r border-b border-gray-200 px-3 py-2 text-left font-semibold text-gray-700 min-w-[140px]">
-                      {t('supervisor.teacher_col')}
-                    </th>
-                    {orderedDays.map(day => (
-                      <th
-                        key={day}
-                        colSpan={periodsPerDay}
-                        className="bg-yellow-100 border-b border-r border-gray-200 px-2 py-1 text-center font-bold text-gray-800"
-                      >
-                        {dayLabel(day)}
-                      </th>
-                    ))}
-                  </tr>
-                  <tr>
-                    <th className="sticky left-0 z-20 bg-gray-50 border-r border-b border-gray-200 px-3 py-1"></th>
-                    {orderedDays.flatMap(day =>
-                      Array.from({ length: periodsPerDay }, (_, i) => (
-                        <th
-                          key={`${day}-${i + 1}`}
-                          className="bg-blue-50 border-b border-r border-gray-200 px-2 py-1 text-[11px] font-semibold text-gray-700 text-center min-w-[70px]"
-                        >
-                          {i + 1}
+          </Card>
+        ) : (
+          orderedDays.map(day => {
+            const dayIdx = DAY_INDEX[day];
+            return (
+              <Card key={day} className="!p-0 overflow-hidden">
+                <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-yellow-50">
+                  <h2 className="font-bold text-gray-800">{dayLabel(day)}</h2>
+                  <span className="text-xs text-gray-500">
+                    {t('admin.grid_summary', { teachers: teachers.length, days: 1, periods: periodsPerDay })}
+                  </span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse text-xs">
+                    <thead>
+                      <tr>
+                        <th className="bg-gray-50 border-r border-b border-gray-200 px-3 py-2 text-left font-semibold text-gray-700 w-48">
+                          {t('supervisor.teacher_col')}
                         </th>
-                      ))
-                    )}
-                  </tr>
-                </thead>
-                <tbody>
-                  {teachers.map(tch => (
-                    <tr key={tch.id} className="hover:bg-gray-50/50">
-                      <td className="sticky left-0 z-10 bg-white border-r border-b border-gray-200 px-3 py-2 font-medium text-gray-900">
-                        <div className="truncate max-w-[180px]" title={tch.fullName}>{tch.fullName}</div>
-                        {tch.subject && <div className="text-[10px] text-gray-500 truncate">{tch.subject}</div>}
-                      </td>
-                      {orderedDays.flatMap(day =>
-                        Array.from({ length: periodsPerDay }, (_, i) => {
-                          const dayIdx = DAY_INDEX[day];
-                          const periodIdx = i + 1;
-                          const cell = cellMap.get(`${tch.id}:${dayIdx}:${periodIdx}`);
-                          return (
-                            <td
-                              key={`${tch.id}-${day}-${periodIdx}`}
-                              className="border-b border-r border-gray-200 p-0.5 text-center"
-                            >
-                              <div className="flex items-center justify-center gap-0.5">
-                                <select
-                                  value={cell?.classId ?? ''}
-                                  onChange={e => setCellClass(tch.id, dayIdx, periodIdx, e.target.value || null)}
-                                  className="w-full px-1 py-1 text-[11px] border border-transparent hover:border-gray-200 focus:border-primary-400 rounded bg-transparent focus:outline-none cursor-pointer"
-                                >
-                                  <option value="">—</option>
-                                  {classes.map(c => (
-                                    <option key={c.id} value={c.id}>{c.name}</option>
-                                  ))}
-                                </select>
-                                {cell && (
-                                  <button
-                                    type="button"
-                                    onClick={() => setCellClass(tch.id, dayIdx, periodIdx, null)}
-                                    className="text-gray-300 hover:text-rose-500"
-                                    title={t('admin.clear')}
+                        {Array.from({ length: periodsPerDay }, (_, i) => (
+                          <th
+                            key={`${day}-h-${i + 1}`}
+                            className="bg-blue-50 border-b border-r border-gray-200 px-2 py-1 text-[11px] font-semibold text-gray-700 text-center"
+                          >
+                            {i + 1}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {teachers.map(tch => (
+                        <tr key={tch.id} className="hover:bg-gray-50/50">
+                          <td className="bg-white border-r border-b border-gray-200 px-3 py-2 font-medium text-gray-900 w-48">
+                            <div className="truncate" title={tch.fullName}>{tch.fullName}</div>
+                            {tch.subject && <div className="text-[10px] text-gray-500 truncate">{tch.subject}</div>}
+                          </td>
+                          {Array.from({ length: periodsPerDay }, (_, i) => {
+                            const periodIdx = i + 1;
+                            const cell = cellMap.get(`${tch.id}:${dayIdx}:${periodIdx}`);
+                            return (
+                              <td
+                                key={`${tch.id}-${day}-${periodIdx}`}
+                                className="border-b border-r border-gray-200 p-0.5 text-center"
+                              >
+                                <div className="flex items-center justify-center gap-0.5">
+                                  <select
+                                    value={cell?.classId ?? ''}
+                                    onChange={e => setCellClass(tch.id, dayIdx, periodIdx, e.target.value || null)}
+                                    className="w-full px-1 py-1 text-[11px] border border-transparent hover:border-gray-200 focus:border-primary-400 rounded bg-transparent focus:outline-none cursor-pointer"
                                   >
-                                    <X className="w-3 h-3" />
-                                  </button>
-                                )}
-                              </div>
-                            </td>
-                          );
-                        })
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Card>
+                                    <option value="">—</option>
+                                    {classes.map(c => (
+                                      <option key={c.id} value={c.id}>{c.name}</option>
+                                    ))}
+                                  </select>
+                                  {cell && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setCellClass(tch.id, dayIdx, periodIdx, null)}
+                                      className="text-gray-300 hover:text-rose-500"
+                                      title={t('admin.clear')}
+                                    >
+                                      <X className="w-3 h-3" />
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+            );
+          })
+        )}
       </div>
     </PageLayout>
   );
