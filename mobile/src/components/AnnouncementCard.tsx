@@ -48,8 +48,8 @@ export default function AnnouncementCard({ announcement, onPress, onPressComment
   const teaser = announcement.content ? bodyTeaser(announcement.content) : null;
   const announcerName = announcement.users?.role === 'admin'
     ? (school?.name || 'School')
-    : (`${announcement.users?.first_name ?? ''} ${announcement.users?.last_name ?? ''}`.trim() || 'School');
-  const avatarUrl = announcement.users?.profile_picture;
+    : (`${announcement.users?.firstName ?? ''} ${announcement.users?.lastName ?? ''}`.trim() || 'School');
+  const avatarUrl = announcement.users?.profilePicture;
 
   return (
     <TouchableOpacity onPress={onPress} activeOpacity={0.85} style={styles.card}>
@@ -99,17 +99,17 @@ export default function AnnouncementCard({ announcement, onPress, onPressComment
         <TouchableOpacity onPress={(e) => { e.stopPropagation(); onToggleLike(); }} style={styles.actionBtn} hitSlop={8}>
           <Heart
             size={18}
-            color={announcement.liked_by_me ? '#E11D48' : colors.textMuted}
-            fill={announcement.liked_by_me ? '#E11D48' : 'transparent'}
+            color={announcement.likedByMe ? '#E11D48' : colors.textMuted}
+            fill={announcement.likedByMe ? '#E11D48' : 'transparent'}
           />
-          <Text style={[styles.actionCount, { color: announcement.liked_by_me ? '#E11D48' : colors.textMuted }]}>
-            {announcement.likes_count ?? 0}
+          <Text style={[styles.actionCount, { color: announcement.likedByMe ? '#E11D48' : colors.textMuted }]}>
+            {announcement.likesCount ?? 0}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={(e) => { e.stopPropagation(); onPressComment(); }} style={styles.actionBtn} hitSlop={8}>
           <MessageCircle size={18} color={colors.textMuted} />
           <Text style={[styles.actionCount, { color: colors.textMuted }]}>
-            {announcement.comments_count ?? 0}
+            {announcement.commentsCount ?? 0}
           </Text>
         </TouchableOpacity>
       </View>

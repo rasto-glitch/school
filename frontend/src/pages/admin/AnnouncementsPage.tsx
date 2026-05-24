@@ -184,8 +184,8 @@ export default function AnnouncementsPage() {
               itemContent={(_index, ann) => {
                 const announcerName = ann.users?.role === 'admin'
                   ? (school?.name || 'School')
-                  : (`${ann.users?.first_name ?? ''} ${ann.users?.last_name ?? ''}`.trim() || 'School');
-                const avatar = ann.users?.profile_picture;
+                  : (`${ann.users?.firstName ?? ''} ${ann.users?.lastName ?? ''}`.trim() || 'School');
+                const avatar = ann.users?.profilePicture;
 
                 return (
                   <article className="bg-white border border-gray-100 rounded-2xl overflow-hidden mb-4">
@@ -221,10 +221,10 @@ export default function AnnouncementsPage() {
                     )}
                     <div className="flex items-center gap-4 px-4 py-3 border-t border-gray-100">
                       <span className="flex items-center gap-1 text-xs text-gray-500">
-                        <Heart className="w-4 h-4" /> {ann.likes_count ?? 0}
+                        <Heart className="w-4 h-4" /> {ann.likesCount ?? 0}
                       </span>
                       <span className="flex items-center gap-1 text-xs text-gray-500">
-                        <MessageCircle className="w-4 h-4" /> {ann.comments_count ?? 0}
+                        <MessageCircle className="w-4 h-4" /> {ann.commentsCount ?? 0}
                       </span>
                     </div>
                   </article>

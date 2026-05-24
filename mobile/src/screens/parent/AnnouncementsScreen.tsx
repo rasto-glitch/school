@@ -41,8 +41,8 @@ export default function AnnouncementsScreen() {
   const handleToggleLike = async (id: string) => {
     setItems(prev => prev.map(a => a.id === id ? {
       ...a,
-      liked_by_me: !a.liked_by_me,
-      likes_count: (a.likes_count ?? 0) + (a.liked_by_me ? -1 : 1),
+      likedByMe: !a.likedByMe,
+      likesCount: (a.likesCount ?? 0) + (a.likedByMe ? -1 : 1),
     } : a));
     try { await announcementApi.toggleLike(id); } catch {}
   };

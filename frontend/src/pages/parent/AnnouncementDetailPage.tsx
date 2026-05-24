@@ -129,9 +129,9 @@ export default function AnnouncementDetailPage() {
     if (!announcement) return '';
     return announcement.users?.role === 'admin'
       ? (school?.name || 'School')
-      : (`${announcement.users?.first_name ?? ''} ${announcement.users?.last_name ?? ''}`.trim() || 'School');
+      : (`${announcement.users?.firstName ?? ''} ${announcement.users?.lastName ?? ''}`.trim() || 'School');
   })();
-  const announcerAvatar = announcement?.users?.profile_picture;
+  const announcerAvatar = announcement?.users?.profilePicture;
 
   const commenterName = (c: AnnouncementComment) => {
     if (c.users?.role === 'admin') return school?.name || 'School';
@@ -144,8 +144,8 @@ export default function AnnouncementDetailPage() {
     if (!announcement) return;
     setAnnouncement({
       ...announcement,
-      liked_by_me: !announcement.liked_by_me,
-      likes_count: (announcement.likes_count ?? 0) + (announcement.liked_by_me ? -1 : 1),
+      likedByMe: !announcement.likedByMe,
+      likesCount: (announcement.likesCount ?? 0) + (announcement.likedByMe ? -1 : 1),
     });
     try { await announcementApi.toggleLike(announcement.id); } catch {}
   };
@@ -158,7 +158,7 @@ export default function AnnouncementDetailPage() {
       setComments(prev => [...prev, r.data]);
       setCommentText('');
       setReplyTo(null);
-      setAnnouncement({ ...announcement, comments_count: (announcement.comments_count ?? 0) + 1 });
+      setAnnouncement({ ...announcement, commentsCount: (announcement.commentsCount ?? 0) + 1 });
     } catch {
       toast.error(t('announcements.post_failed'));
     } finally {
@@ -186,7 +186,7 @@ export default function AnnouncementDetailPage() {
       await announcementApi.deleteComment(commentId);
       const removed = comments.filter(c => c.id === commentId || c.parent_id === commentId).length;
       setComments(prev => prev.filter(c => c.id !== commentId && c.parent_id !== commentId));
-      if (announcement) setAnnouncement({ ...announcement, comments_count: Math.max(0, (announcement.comments_count ?? removed) - removed) });
+      if (announcement) setAnnouncement({ ...announcement, commentsCount: Math.max(0, (announcement.commentsCount ?? removed) - removed) });
     } catch {
       toast.error(t('announcements.delete_failed'));
     }
@@ -282,20 +282,20 @@ export default function AnnouncementDetailPage() {
           <div className="px-6 py-4 border-t border-gray-100 flex items-center gap-5">
             <button
               onClick={handleToggleLike}
-              className={`flex items-center gap-1.5 text-sm font-medium ${announcement.liked_by_me ? 'text-rose-600' : 'text-gray-500 hover:text-rose-600'}`}
+              className={`flex items-center gap-1.5 text-sm font-medium ${announcement.likedByMe ? 'text-rose-600' : 'text-gray-500 hover:text-rose-600'}`}
             >
-              <Heart className={`w-5 h-5 ${announcement.liked_by_me ? 'fill-rose-600' : ''}`} />
-              {announcement.likes_count ?? 0}
+              <Heart className={`w-5 h-5 ${announcement.likedByMe ? 'fill-rose-600' : ''}`} />
+              {announcement.likesCount ?? 0}
             </button>
             <span className="flex items-center gap-1.5 text-sm text-gray-500">
               <MessageCircle className="w-5 h-5" />
-              {announcement.comments_count ?? 0}
+              {announcement.commentsCount ?? 0}
             </span>
           </div>
         </article>
 
         <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-          <h2 className="text-sm font-semibold text-gray-700 mb-4">{t('announcements.comments')} ({announcement.comments_count ?? 0})</h2>
+          <h2 className="text-sm font-semibold text-gray-700 mb-4">{t('announcements.comments')} ({announcement.commentsCount ?? 0})</h2>
           {replyTo && (
             <div className="flex items-center gap-2 mb-2 px-3 py-2 bg-primary-50 border border-primary-100 rounded-lg text-xs text-gray-600">
               <CornerDownRight className="w-3.5 h-3.5 text-gray-500" />

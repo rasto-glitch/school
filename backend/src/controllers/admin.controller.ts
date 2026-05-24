@@ -2021,7 +2021,7 @@ export async function decorateAnnouncements(rows: any[], viewerUserId: string): 
 const ANNOUNCEMENT_SELECT = '*, users:created_by(id, first_name, last_name, role, profile_picture)';
 
 export async function getAnnouncements(req: AuthRequest, res: Response): Promise<void> {
-  const { schoolId, userId } = req.user!;
+  const { schoolId, userId, role } = req.user!;
   const { limit, cursor } = parseCursorParams(req.query as Record<string, unknown>);
   const cutoff = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
 
@@ -2030,6 +2030,10 @@ export async function getAnnouncements(req: AuthRequest, res: Response): Promise
     .select(ANNOUNCEMENT_SELECT)
     .eq('school_id', schoolId)
     .gte('created_at', cutoff);
+  // Audience targeting. Admin and supervisor see everything (they manage /
+  // oversee the school); teachers see only announcements meant for them.
+  // (Parents have their own filtered endpoint in parent.controller.)
+  if (role === 'teacher') query = query.in('target_audience', ['all', 'teachers']);
   if (cursor) {
     query = query.or(
       `created_at.lt.${cursor.createdAt},and(created_at.eq.${cursor.createdAt},id.lt.${cursor.id})`,

@@ -149,7 +149,9 @@ export async function getAnnouncements(req: AuthRequest, res: Response): Promise
   let query = req.db!.from('announcements')
     .select('*, users:created_by(id, first_name, last_name, role, profile_picture)')
     .eq('school_id', schoolId)
-    .in('target_audience', ['all', 'parents'])
+    // Students don't log in — their parents represent them, so parents also
+    // see 'students'-targeted announcements.
+    .in('target_audience', ['all', 'parents', 'students'])
     .gte('created_at', cutoff);
   if (cursor) {
     query = query.or(

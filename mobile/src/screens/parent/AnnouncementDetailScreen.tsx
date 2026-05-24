@@ -105,8 +105,8 @@ export default function AnnouncementDetailScreen() {
     if (!announcement) return;
     setAnnouncement({
       ...announcement,
-      liked_by_me: !announcement.liked_by_me,
-      likes_count: (announcement.likes_count ?? 0) + (announcement.liked_by_me ? -1 : 1),
+      likedByMe: !announcement.likedByMe,
+      likesCount: (announcement.likesCount ?? 0) + (announcement.likedByMe ? -1 : 1),
     });
     try { await announcementApi.toggleLike(announcement.id); } catch {}
   };
@@ -119,7 +119,7 @@ export default function AnnouncementDetailScreen() {
       setComments(prev => [...prev, r.data]);
       setCommentText('');
       setReplyTo(null);
-      setAnnouncement({ ...announcement, comments_count: (announcement.comments_count ?? 0) + 1 });
+      setAnnouncement({ ...announcement, commentsCount: (announcement.commentsCount ?? 0) + 1 });
     } catch {
       Alert.alert(t('common.error', 'Error'), t('learn.comment_failed', 'Failed to post comment'));
     } finally {
@@ -155,7 +155,7 @@ export default function AnnouncementDetailScreen() {
               await announcementApi.deleteComment(commentId);
               const removed = comments.filter(c => c.id === commentId || c.parent_id === commentId).length;
               setComments(prev => prev.filter(c => c.id !== commentId && c.parent_id !== commentId));
-              if (announcement) setAnnouncement({ ...announcement, comments_count: Math.max(0, (announcement.comments_count ?? removed) - removed) });
+              if (announcement) setAnnouncement({ ...announcement, commentsCount: Math.max(0, (announcement.commentsCount ?? removed) - removed) });
             } catch {}
           },
         },
@@ -232,8 +232,8 @@ export default function AnnouncementDetailScreen() {
 
   const announcerName = announcement.users?.role === 'admin'
     ? (school?.name || t('common.school'))
-    : (`${announcement.users?.first_name ?? ''} ${announcement.users?.last_name ?? ''}`.trim() || t('common.school'));
-  const announcerAvatar = announcement.users?.profile_picture;
+    : (`${announcement.users?.firstName ?? ''} ${announcement.users?.lastName ?? ''}`.trim() || t('common.school'));
+  const announcerAvatar = announcement.users?.profilePicture;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={['bottom']}>
@@ -330,21 +330,21 @@ export default function AnnouncementDetailScreen() {
 
             <View style={[styles.actionRow, { borderTopColor: colors.border }]}>
               <TouchableOpacity onPress={handleToggleLike} style={styles.actionBtn} hitSlop={8}>
-                <Heart size={20} color={announcement.liked_by_me ? '#E11D48' : colors.textMuted} fill={announcement.liked_by_me ? '#E11D48' : 'transparent'} />
-                <Text style={[styles.actionCount, { color: announcement.liked_by_me ? '#E11D48' : colors.textMuted }]}>
-                  {announcement.likes_count ?? 0}
+                <Heart size={20} color={announcement.likedByMe ? '#E11D48' : colors.textMuted} fill={announcement.likedByMe ? '#E11D48' : 'transparent'} />
+                <Text style={[styles.actionCount, { color: announcement.likedByMe ? '#E11D48' : colors.textMuted }]}>
+                  {announcement.likesCount ?? 0}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={() => inputRef.current?.focus()} style={styles.actionBtn} hitSlop={8}>
                 <MessageCircle size={20} color={colors.textMuted} />
-                <Text style={[styles.actionCount, { color: colors.textMuted }]}>{announcement.comments_count ?? 0}</Text>
+                <Text style={[styles.actionCount, { color: colors.textMuted }]}>{announcement.commentsCount ?? 0}</Text>
               </TouchableOpacity>
             </View>
           </View>
 
           <View style={{ marginTop: spacing.md }}>
             <Text style={[styles.sectionLabel, { color: colors.text }]}>
-              {t('learn.comments', 'Comments')} ({announcement.comments_count ?? 0})
+              {t('learn.comments', 'Comments')} ({announcement.commentsCount ?? 0})
             </Text>
             {comments.length === 0 ? (
               <Text style={[styles.emptyText, { color: colors.textMuted }]}>

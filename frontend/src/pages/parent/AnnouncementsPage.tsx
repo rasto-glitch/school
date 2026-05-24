@@ -50,8 +50,8 @@ export default function AnnouncementsPage() {
     e.stopPropagation();
     setAnnouncements(prev => prev.map(a => a.id === id ? {
       ...a,
-      liked_by_me: !a.liked_by_me,
-      likes_count: (a.likes_count ?? 0) + (a.liked_by_me ? -1 : 1),
+      likedByMe: !a.likedByMe,
+      likesCount: (a.likesCount ?? 0) + (a.likedByMe ? -1 : 1),
     } : a));
     try { await announcementApi.toggleLike(id); } catch {}
   };
@@ -76,8 +76,8 @@ export default function AnnouncementsPage() {
           itemContent={(_index, ann) => {
             const announcerName = ann.users?.role === 'admin'
               ? (school?.name || 'School')
-              : (`${ann.users?.first_name ?? ''} ${ann.users?.last_name ?? ''}`.trim() || 'School');
-            const avatar = ann.users?.profile_picture;
+              : (`${ann.users?.firstName ?? ''} ${ann.users?.lastName ?? ''}`.trim() || 'School');
+            const avatar = ann.users?.profilePicture;
             const teaser = ann.content ? bodyTeaser(ann.content) : null;
 
             return (
@@ -123,14 +123,14 @@ export default function AnnouncementsPage() {
                 <div className="flex items-center gap-4 px-5 py-3 border-t border-gray-100">
                   <button
                     onClick={(e) => handleToggleLike(ann.id, e)}
-                    className={`flex items-center gap-1 text-xs ${ann.liked_by_me ? 'text-rose-600' : 'text-gray-500 hover:text-rose-600'}`}
+                    className={`flex items-center gap-1 text-xs ${ann.likedByMe ? 'text-rose-600' : 'text-gray-500 hover:text-rose-600'}`}
                   >
-                    <Heart className={`w-4 h-4 ${ann.liked_by_me ? 'fill-rose-600' : ''}`} />
-                    {ann.likes_count ?? 0}
+                    <Heart className={`w-4 h-4 ${ann.likedByMe ? 'fill-rose-600' : ''}`} />
+                    {ann.likesCount ?? 0}
                   </button>
                   <span className="flex items-center gap-1 text-xs text-gray-500">
                     <MessageCircle className="w-4 h-4" />
-                    {ann.comments_count ?? 0}
+                    {ann.commentsCount ?? 0}
                   </span>
                 </div>
               </article>

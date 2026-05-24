@@ -152,15 +152,17 @@ export interface Announcement {
   attachmentUrl?: string;
   linkUrl?: string;
   createdAt: string;
-  likes_count?: number;
-  comments_count?: number;
-  liked_by_me?: boolean;
+  // Announcement objects are camelCased by the backend's toCC(); comments are
+  // not (see AnnouncementComment below). Keep these in sync with the API shape.
+  likesCount?: number;
+  commentsCount?: number;
+  likedByMe?: boolean;
   users?: {
     id?: string;
-    first_name?: string;
-    last_name?: string;
+    firstName?: string;
+    lastName?: string;
     role?: string;
-    profile_picture?: string;
+    profilePicture?: string;
   };
 }
 
