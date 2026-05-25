@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'react-toastify';
 import { Star, Check, Send, StickyNote } from 'lucide-react';
@@ -9,7 +9,6 @@ import Button from '../../components/common/Button';
 import EmptyState from '../../components/common/EmptyState';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import type { PendingGrade } from '../../types';
-import { getMarkNames, gradeTotal } from '../../utils/marks';
 import { format, parseISO } from 'date-fns';
 
 // One pending grade row in the review queue. The admin can edit each mark
@@ -17,7 +16,6 @@ import { format, parseISO } from 'date-fns';
 // the grade (and any note) visible to the parent.
 function GradeCard({ grade, onReleased }: { grade: PendingGrade; onReleased: (id: string) => void }) {
   const { t } = useTranslation();
-  const markNames = useMemo(() => getMarkNames(grade), [grade]);
 
   const [marks, setMarks] = useState(() => grade.marks.map(m => ({ name: m.name, value: String(m.value ?? '') })));
   const [note, setNote] = useState(grade.adminNote ?? '');
