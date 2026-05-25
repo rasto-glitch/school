@@ -46,6 +46,15 @@ export const upsertGradeSchema = z.object({
   gradingPeriod: z.string().max(60).optional(),
   marks: marksArr.optional(),
 });
+// Admin grade review: edit marks and/or the parent-visible note.
+export const updateGradeSchema = z.object({
+  marks: marksArr.optional(),
+  adminNote: optText(2000),
+});
+// Admin grade review: release a batch of grades to parents.
+export const releaseGradesSchema = z.object({
+  ids: z.array(uuid).min(1).max(500),
+});
 export const upsertWeeklySummarySchema = z.object({
   classId: uuid,
   subject: nonEmptyStr(160),

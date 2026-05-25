@@ -50,6 +50,7 @@ import AdminNotificationsPage from './pages/admin/AdminNotificationsPage';
 import StudentBriefPage from './pages/admin/StudentBriefPage';
 import ParentProfilePage from './pages/admin/ParentProfilePage';
 import AnnouncementsPage from './pages/admin/AnnouncementsPage';
+import GradeReviewPage from './pages/admin/GradeReviewPage';
 import AdminStudentsListPage from './pages/admin/AdminStudentsListPage';
 import AdminTeachersListPage from './pages/admin/AdminTeachersListPage';
 import AdminDriversListPage from './pages/admin/AdminDriversListPage';
@@ -190,6 +191,7 @@ export default function App() {
         <Route path="/admin/students" element={<ProtectedRoute allowedRoles={['admin']}><StudentsManagement /></ProtectedRoute>} />
         <Route path="/admin/archive" element={<ProtectedRoute allowedRoles={['admin']}><ArchiveManagement /></ProtectedRoute>} />
         <Route path="/admin/classes" element={<ProtectedRoute allowedRoles={['admin']}><ClassesPage /></ProtectedRoute>} />
+        <Route path="/admin/grade-review" element={<ProtectedRoute allowedRoles={['admin']}><GradeReviewPage /></ProtectedRoute>} />
         <Route path="/admin/employees" element={<ProtectedRoute allowedRoles={['admin']}><EmployeesManagement /></ProtectedRoute>} />
         {/* Legacy path — keep bookmarks/links working */}
         <Route path="/admin/teachers" element={<Navigate to="/admin/employees" replace />} />

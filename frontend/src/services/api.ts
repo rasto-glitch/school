@@ -231,6 +231,11 @@ export const adminApi = {
     return api.post('/admin/students/bulk-upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
   },
   getStudentBrief: (id: string) => api.get(`/admin/students/${id}/brief`),
+  // Grade review & release gate
+  getPendingGrades: () => api.get('/admin/grades/pending'),
+  updateGrade: (id: string, data: { marks?: { name: string; value: number | string }[]; adminNote?: string | null }) =>
+    api.put(`/admin/grades/${id}`, data),
+  releaseGrades: (ids: string[]) => api.post('/admin/grades/release', { ids }),
   getGraduatedStudents: (search?: string) => api.get('/admin/students/graduated', { params: search ? { search } : {} }),
   archiveStudent: (id: string, data: { reason: string; departureDate: string }) => api.post(`/admin/students/${id}/archive`, data),
   getArchivedStudents: (params?: { search?: string; reason?: string }) =>

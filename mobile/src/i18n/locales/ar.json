@@ -172,7 +172,8 @@
     "monthly": "الشهري",
     "term": "الفصل",
     "total": "المجموع",
-    "subject": "المادة"
+    "subject": "المادة",
+    "school_note": "ملاحظة من المدرسة"
   },
   "reports": {
     "title": "التقارير",
@@ -475,6 +476,8 @@
     "select_term_title": "اختر الفصل",
     "save_grade": "حفظ الدرجة",
     "grade_history": "سجل الدرجات",
+    "grade_pending": "قيد المراجعة",
+    "grade_released": "تم الإطلاق",
     "saved": "تم الحفظ",
     "grade_saved": "تم حفظ الدرجة بنجاح.",
     "save_grade_failed": "تعذر حفظ الدرجة.",

@@ -173,6 +173,15 @@ export default function GradesScreen() {
 
           const tableWidth = SUBJECT_COL_WIDTH + markNames.length * MARK_COL_WIDTH + MARK_COL_WIDTH;
 
+          // Admin-written notes for this year, shown beneath the tables.
+          const notes: { term: string; subject: string; note: string }[] = [];
+          for (const term of terms) {
+            for (const subj of subjects) {
+              const g = byYear[yr][term][subj];
+              if (g?.adminNote && g.adminNote.trim()) notes.push({ term, subject: subj, note: g.adminNote.trim() });
+            }
+          }
+
           return (
             <View key={yr} style={styles.yearCard}>
               <View style={styles.yearHeader}>
@@ -235,6 +244,14 @@ export default function GradesScreen() {
                 </View>
               ))}
 
+              {/* Admin notes */}
+              {notes.map((n, i) => (
+                <View key={i} style={styles.noteBox}>
+                  <Text style={styles.noteLabel}>{t('grades.school_note')} · {n.subject} · {n.term}</Text>
+                  <Text style={styles.noteText}>{n.note}</Text>
+                </View>
+              ))}
+
               {/* Year average */}
               <View style={styles.yearAvgRow}>
                 <Text style={styles.yearAvgLabel}>{t('grades.year_average')}</Text>
@@ -285,4 +302,7 @@ const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').u
   avgLabel: { fontSize: font.xs, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.3, paddingRight: spacing.sm },
   yearAvgRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.md, paddingVertical: 10, backgroundColor: colors.bg, borderTopWidth: 2, borderTopColor: colors.border },
   yearAvgLabel: { fontSize: font.sm, fontWeight: '700', color: colors.textSecondary },
+  noteBox: { marginHorizontal: spacing.md, marginTop: spacing.sm, backgroundColor: colors.warningLight, borderRadius: radius.md, padding: spacing.sm },
+  noteLabel: { fontSize: font.xs, fontWeight: '700', color: colors.warning, marginBottom: 2 },
+  noteText: { fontSize: font.sm, color: colors.text },
 });

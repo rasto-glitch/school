@@ -54,6 +54,7 @@ const navItems: Record<Role, NavItem[]> = {
     { to: '/admin/students', icon: GraduationCap, label: 'Students' },
     { to: '/admin/archive', icon: Archive, label: 'Archive', feature: 'archive' },
     { to: '/admin/classes', icon: BookOpen, label: 'Classes' },
+    { to: '/admin/grade-review', icon: Star, label: 'Grade Review', feature: 'grades' },
     { to: '/admin/employees', icon: Users, label: 'Employees' },
     { to: '/admin/schedule', icon: Calendar, label: 'Schedule' },
     { to: '/admin/drivers', icon: Bus, label: 'Drivers', feature: 'bus_tracking' },

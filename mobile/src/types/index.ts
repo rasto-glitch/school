@@ -128,6 +128,11 @@ export interface Grade {
   termExamGrade?: number;
   gradingPeriod?: string;
   academicYear?: string;
+  // release gate
+  isReleased?: boolean;
+  releasedAt?: string | null;
+  // admin-only note; parents see it on release only when non-empty
+  adminNote?: string | null;
   createdAt: string;
 }
 

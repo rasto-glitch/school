@@ -15,7 +15,7 @@ interface StudentItem { id: string; fullName: string }
 interface MarkType { id: string; name: string }
 interface TermItem { id: string; name: string }
 interface Mark { name: string; value: string }
-interface GradeRecord { id: string; gradingPeriod?: string; academicYear?: string; marks: Mark[]; createdAt: string }
+interface GradeRecord { id: string; gradingPeriod?: string; academicYear?: string; marks: Mark[]; isReleased?: boolean; createdAt: string }
 
 interface Props { subject?: string; classes: ClassItem[]; subjects?: SubjectOpt[]; teaching?: TeachingEntry[]; academicYear?: string }
 
@@ -215,6 +215,11 @@ export default function TeacherGradingScreen({ subject, classes, subjects, teach
               <View style={styles.historyTop}>
                 <Text style={styles.historyPeriod}>{g.gradingPeriod || '—'}</Text>
                 {g.academicYear && <Text style={styles.historyYear}>{g.academicYear}</Text>}
+                <View style={[styles.statusPill, g.isReleased ? styles.statusReleased : styles.statusPending]}>
+                  <Text style={[styles.statusPillText, { color: g.isReleased ? colors.success : colors.warning }]}>
+                    {g.isReleased ? t('teacher.grade_released') : t('teacher.grade_pending')}
+                  </Text>
+                </View>
                 <Text style={styles.historyTotal}>{(g.marks || []).reduce((s: number, m: Mark) => s + (parseFloat(String(m.value)) || 0), 0).toFixed(1)}</Text>
               </View>
               <View style={styles.historyMarks}>
@@ -307,6 +312,10 @@ const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').u
   historyTop: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.xs },
   historyPeriod: { flex: 1, fontSize: font.sm, fontWeight: '700', color: colors.text },
   historyYear: { fontSize: font.xs, color: colors.textMuted, marginRight: spacing.sm },
+  statusPill: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: radius.full, marginRight: spacing.sm },
+  statusPending: { backgroundColor: colors.warningLight },
+  statusReleased: { backgroundColor: colors.successLight },
+  statusPillText: { fontSize: 10, fontWeight: '700' },
   historyTotal: { fontSize: font.lg, fontWeight: '800', color: colors.primary },
   historyMarks: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
   historyMark: { fontSize: font.xs, color: colors.textSecondary, backgroundColor: colors.bg, paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.full },

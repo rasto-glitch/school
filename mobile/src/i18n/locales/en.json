@@ -172,7 +172,8 @@
     "monthly": "Monthly",
     "term": "Term",
     "total": "Total",
-    "subject": "Subject"
+    "subject": "Subject",
+    "school_note": "Note from school"
   },
   "reports": {
     "title": "Reports",
@@ -475,6 +476,8 @@
     "select_term_title": "Select Term",
     "save_grade": "Save Grade",
     "grade_history": "Grade History",
+    "grade_pending": "Pending",
+    "grade_released": "Released",
     "saved": "Saved",
     "grade_saved": "Grade saved successfully.",
     "save_grade_failed": "Could not save grade.",

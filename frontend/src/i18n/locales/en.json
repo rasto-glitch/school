@@ -46,6 +46,7 @@
     "employees": "Employees",
     "archive": "Archive",
     "audit_log": "Audit Log",
+    "grade_review": "Grade Review",
     "logout": "Logout"
   },
   "common": {
@@ -200,7 +201,24 @@
     "monthly": "Monthly",
     "term": "Term",
     "total": "Total",
-    "subject": "Subject"
+    "subject": "Subject",
+    "school_note": "Note from school"
+  },
+  "grade_review": {
+    "title": "Grade Review",
+    "subtitle": "Review and release grades to parents",
+    "empty": "No grades are waiting for review.",
+    "pending_count": "{{count}} grade(s) awaiting review",
+    "release_all": "Release all",
+    "confirm_release_all": "Release all {{count}} grade(s) to parents?",
+    "released_all": "Released {{count}} grade(s).",
+    "released_one": "Released to parents.",
+    "saved": "Saved.",
+    "save": "Save",
+    "release": "Release",
+    "note_label": "Note for parents (optional)",
+    "note_ph": "Add a note parents will see with this grade…",
+    "no_marks": "No marks recorded."
   },
   "reports": {
     "title": "Reports",

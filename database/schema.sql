@@ -321,10 +321,25 @@ CREATE TABLE IF NOT EXISTS grades (
   marks JSONB DEFAULT '[]',
   grading_period TEXT,
   academic_year TEXT,
+  -- Release gate: teacher-entered grades are NOT visible to parents until an
+  -- admin releases them. Any teacher (re)write resets is_released to false, so
+  -- an edit of an already-released grade goes back through review.
+  is_released BOOLEAN NOT NULL DEFAULT false,
+  released_at TIMESTAMPTZ,
+  released_by UUID REFERENCES users(id),
+  -- Admin-only note. Written during review; visible to parents on release
+  -- (only when non-empty). Teachers do not see it.
+  admin_note TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 -- Run if table already exists:
 -- ALTER TABLE grades ADD COLUMN IF NOT EXISTS marks JSONB DEFAULT '[]';
+-- ALTER TABLE grades ADD COLUMN IF NOT EXISTS is_released BOOLEAN NOT NULL DEFAULT false;
+-- ALTER TABLE grades ADD COLUMN IF NOT EXISTS released_at TIMESTAMPTZ;
+-- ALTER TABLE grades ADD COLUMN IF NOT EXISTS released_by UUID REFERENCES users(id);
+-- ALTER TABLE grades ADD COLUMN IF NOT EXISTS admin_note TEXT;
+-- Don't retroactively hide grades parents already see:
+-- UPDATE grades SET is_released = true WHERE is_released = false;
 
 -- ============================================================
 -- REPORTS

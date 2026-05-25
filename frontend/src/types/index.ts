@@ -120,11 +120,25 @@ export interface Grade {
   gradingPeriod?: string;
   academicYear?: string;
   createdAt: string;
+  // release gate
+  isReleased?: boolean;
+  releasedAt?: string | null;
+  // admin-only note; parents see it on release only when non-empty
+  adminNote?: string | null;
   // legacy fields — present on old records
   dailyGrade?: number;
   quizGrade?: number;
   monthlyExamGrade?: number;
   termExamGrade?: number;
+}
+
+// A pending grade as shown in the admin review queue (with joined context).
+export interface PendingGrade extends Grade {
+  studentId: string;
+  classId?: string;
+  students?: { fullName: string };
+  classes?: { name: string };
+  teachers?: { fullName: string };
 }
 
 export interface Report {

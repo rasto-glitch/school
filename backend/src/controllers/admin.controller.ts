@@ -2452,6 +2452,88 @@ export async function getStudentBrief(req: AuthRequest, res: Response): Promise<
   });
 }
 
+// ============================================================
+// GRADE REVIEW & RELEASE (admin gate)
+// Teacher grades land unreleased; an admin reviews, optionally edits the
+// marks / writes a parent-visible note, then releases to parents.
+// ============================================================
+
+// All grades for the school that are still awaiting release, with the joined
+// context the review queue needs (student, class, teacher, subject).
+export async function listPendingGrades(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { data, error } = await supabase
+    .from('grades')
+    .select('id, subject, marks, grading_period, academic_year, admin_note, created_at, student_id, class_id, students(full_name), classes(name), teachers(full_name)')
+    .eq('school_id', schoolId)
+    .eq('is_released', false)
+    .order('created_at', { ascending: false });
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+  res.json(toCC(data));
+}
+
+// Admin edits a pending grade's marks and/or the parent-visible note.
+// Does NOT release — release is a separate, explicit action.
+export async function updateGrade(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { id } = req.params;
+  const { marks, adminNote } = req.body as { marks?: { name: string; value: unknown }[]; adminNote?: string | null };
+
+  const patch: Record<string, unknown> = {};
+  if (marks !== undefined) patch.marks = marks || [];
+  if (adminNote !== undefined) patch.admin_note = (typeof adminNote === 'string' && adminNote.trim()) ? adminNote.trim() : null;
+  if (Object.keys(patch).length === 0) { res.status(400).json({ error: 'Nothing to update' }); return; }
+
+  const { data, error } = await supabase
+    .from('grades')
+    .update(patch)
+    .eq('id', id)
+    .eq('school_id', schoolId)
+    .select()
+    .single();
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+  if (!data) { res.status(404).json({ error: 'Grade not found' }); return; }
+  res.json(toCC(data));
+}
+
+// Release one or more grades to parents. Stamps released_at/by and notifies
+// each affected student's parents.
+export async function releaseGrades(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId, userId } = req.user!;
+  const { ids } = req.body as { ids?: string[] };
+  if (!Array.isArray(ids) || ids.length === 0) { res.status(400).json({ error: 'ids required' }); return; }
+
+  const { data: released, error } = await supabase
+    .from('grades')
+    .update({ is_released: true, released_at: new Date().toISOString(), released_by: userId })
+    .eq('school_id', schoolId)
+    .in('id', ids)
+    .eq('is_released', false)
+    .select('id, subject, student_id, students(full_name, parents(user_id))');
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+
+  // Notify the parents of each affected student.
+  const payloads: { schoolId: string; userId: string; title: string; message: string; type: string }[] = [];
+  for (const g of (released || []) as any[]) {
+    const studentName = g.students?.full_name || 'your child';
+    const parents = Array.isArray(g.students?.parents)
+      ? g.students.parents
+      : g.students?.parents ? [g.students.parents] : [];
+    for (const p of parents) {
+      if (!p?.user_id) continue;
+      payloads.push({
+        schoolId, userId: p.user_id,
+        title: 'Grades Updated',
+        message: `Grades for ${studentName} in ${g.subject} have been released.`,
+        type: 'grade',
+      });
+    }
+  }
+  if (payloads.length > 0) notifyMany(payloads).catch(() => {});
+
+  res.json({ released: (released || []).length });
+}
+
 // ---- TEACHER DELETE ----
 export async function deleteTeacher(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;

@@ -92,6 +92,9 @@ export function createRouter(io: SocketServer) {
   router.delete('/admin/students/:id', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => admin.deleteStudent(req as AuthRequest, res));
   router.get('/admin/students/graduated', authenticate, authorize('admin'), (req, res) => admin.getGraduatedStudents(req as AuthRequest, res));
   router.get('/admin/students/:id/brief', authenticate, authorize('admin'), (req, res) => admin.getStudentBrief(req as AuthRequest, res));
+  router.get('/admin/grades/pending', authenticate, authorize('admin'), (req, res) => admin.listPendingGrades(req as AuthRequest, res));
+  router.put('/admin/grades/:id', authenticate, authorize('admin'), validate({ params: vp.idParam, body: vp.updateGradeSchema }), (req, res) => admin.updateGrade(req as AuthRequest, res));
+  router.post('/admin/grades/release', authenticate, authorize('admin'), validate({ body: vp.releaseGradesSchema }), (req, res) => admin.releaseGrades(req as AuthRequest, res));
   router.post('/admin/students/:id/archive', authenticate, authorize('admin'), validate({ params: vp.idParam, body: vp.archiveStudentSchema }), (req, res) => admin.archiveStudent(req as AuthRequest, res));
   router.get('/admin/archived-students', authenticate, authorize('admin'), (req, res) => admin.getArchivedStudents(req as AuthRequest, res));
   router.get('/admin/archived-students/search', authenticate, authorize('admin'), validate({ query: vq.listQuery }), (req, res) => admin.searchArchivedStudents(req as AuthRequest, res));

@@ -88,6 +88,16 @@ export default function GradesPage() {
             }
             const markNames = markNameSet.values();
 
+            // Admin-written notes for this year, shown beneath the table.
+            // Only grades the admin actually annotated appear here.
+            const notes: { term: string; subject: string; note: string }[] = [];
+            for (const term of terms) {
+              for (const subj of subjects) {
+                const g = byYear[yr][term][subj];
+                if (g?.adminNote && g.adminNote.trim()) notes.push({ term, subject: subj, note: g.adminNote.trim() });
+              }
+            }
+
             // Term averages
             const termAvgs = terms.map(term => termAverage(subjects, byYear[yr][term], markNames));
             const validTermAvgs = termAvgs.filter(a => a > 0);
@@ -154,6 +164,19 @@ export default function GradesPage() {
                     ))}
                   </div>
                 </div>
+
+                {notes.length > 0 && (
+                  <div className="border-t border-gray-200 px-4 py-3 space-y-2">
+                    {notes.map((n, i) => (
+                      <div key={i} className="bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                        <p className="text-xs font-semibold text-amber-700 mb-0.5">
+                          {t('grades.school_note')} · {n.subject} · {n.term}
+                        </p>
+                        <p className="text-sm text-gray-700 whitespace-pre-wrap">{n.note}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 <div className="border-t-2 border-gray-200 px-4 py-3 bg-gray-50 flex items-center justify-between">
                   <span className="text-sm font-semibold text-gray-700">{t('grades.year_average')}</span>

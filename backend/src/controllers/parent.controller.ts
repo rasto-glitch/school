@@ -260,11 +260,13 @@ export async function getGrades(req: AuthRequest, res: Response): Promise<void> 
   const lock = await isFeatureLocked(targetId, 'grades');
   if (lock.locked) { res.status(403).json({ error: 'feature_locked', feature: 'grades', reason: lock.reason }); return; }
 
+  // Release gate: parents only ever see grades an admin has released.
   const { data, error } = await req.db!
     .from('grades')
-    .select('id, subject, marks, daily_grade, quiz_grade, monthly_exam_grade, term_exam_grade, grading_period, academic_year, created_at')
+    .select('id, subject, marks, daily_grade, quiz_grade, monthly_exam_grade, term_exam_grade, grading_period, academic_year, admin_note, created_at')
     .eq('school_id', schoolId)
     .eq('student_id', targetId)
+    .eq('is_released', true)
     .order('academic_year', { ascending: false })
     .order('grading_period');
   if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }

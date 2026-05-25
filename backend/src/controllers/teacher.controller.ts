@@ -282,6 +282,10 @@ export async function upsertGrade(req: AuthRequest, res: Response): Promise<void
   }
   const academicYear = schoolRes.data?.current_academic_year || null;
 
+  // Grades are gated: a teacher write always lands UNRELEASED (pending admin
+  // review). This also means editing an already-released grade reverts it to
+  // pending. admin_note is intentionally NOT in the payload, so an admin's
+  // note survives a teacher re-edit.
   const { data, error } = await req.db!.from('grades').upsert({
     school_id: schoolId,
     teacher_id: teacherRes.data.id,
@@ -291,18 +295,27 @@ export async function upsertGrade(req: AuthRequest, res: Response): Promise<void
     marks: marks || [],
     grading_period: gradingPeriod,
     academic_year: academicYear,
+    is_released: false,
+    released_at: null,
+    released_by: null,
   }, { onConflict: 'student_id,subject,grading_period,academic_year' }).select().single();
 
   if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
-  // Notify parent of this student
+  // Notify admins that a grade is awaiting review (parents are notified only
+  // when an admin releases it — see admin.releaseGrades).
   const { data: gradedStudent } = await req.db!
-    .from('students').select('full_name, parents(user_id)').eq('id', studentId).single();
-  if (gradedStudent) {
-    const uids: string[] = Array.isArray((gradedStudent as any).parents)
-      ? (gradedStudent as any).parents.map((p: any) => p.user_id)
-      : (gradedStudent as any).parents?.user_id ? [(gradedStudent as any).parents.user_id] : [];
-    uids.forEach(uid => notify({ schoolId, userId: uid, title: 'Grades Updated', message: `Grades for ${(gradedStudent as any).full_name} in ${subject} have been submitted.`, type: 'grade' }).catch(() => {}));
+    .from('students').select('full_name').eq('id', studentId).single();
+  const { data: admins } = await req.db!
+    .from('users').select('id').eq('school_id', schoolId).eq('role', 'admin').eq('is_active', true);
+  if (admins && admins.length > 0) {
+    const studentName = (gradedStudent as any)?.full_name || 'a student';
+    notifyMany(admins.map((a: any) => ({
+      schoolId, userId: a.id,
+      title: 'Grades Pending Review',
+      message: `Grades for ${studentName} in ${subject} are awaiting your review.`,
+      type: 'grade_pending',
+    }))).catch(() => {});
   }
 
   res.json(toCC(data));
@@ -318,7 +331,7 @@ export async function getGrades(req: AuthRequest, res: Response): Promise<void> 
 
   // All grades this teacher recorded for the student (across whichever subjects they teach).
   const { data, error } = await req.db!.from('grades')
-    .select('id, subject, marks, grading_period, academic_year, created_at')
+    .select('id, subject, marks, grading_period, academic_year, is_released, released_at, created_at')
     .eq('school_id', schoolId)
     .eq('student_id', studentId)
     .eq('teacher_id', teacher.id)
