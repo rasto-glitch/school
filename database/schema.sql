@@ -843,6 +843,24 @@ BEGIN
   IF current_setting('app.allow_archive_purge', true) = 'on' THEN
     IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
   END IF;
+  -- Allow ONE narrow mutation: an FK cascade nulling the optional drill-down
+  -- dimension on a journal line when a referenced student/staff is deleted
+  -- (e.g. student archive). Every financial column must be unchanged, and the
+  -- only change permitted is student_id / staff_id going to NULL. The line's
+  -- amounts/accounts stay immutable, and the entry hash is unaffected
+  -- (lines_fingerprint = account:debit:credit:currency, excludes these dims).
+  IF TG_OP = 'UPDATE' AND TG_TABLE_NAME = 'journal_lines'
+     AND NEW.entry_id    IS NOT DISTINCT FROM OLD.entry_id
+     AND NEW.account_id  IS NOT DISTINCT FROM OLD.account_id
+     AND NEW.debit       IS NOT DISTINCT FROM OLD.debit
+     AND NEW.credit      IS NOT DISTINCT FROM OLD.credit
+     AND NEW.currency    IS NOT DISTINCT FROM OLD.currency
+     AND NEW.description  IS NOT DISTINCT FROM OLD.description
+     AND (NEW.student_id IS NULL OR NEW.student_id IS NOT DISTINCT FROM OLD.student_id)
+     AND (NEW.staff_id   IS NULL OR NEW.staff_id   IS NOT DISTINCT FROM OLD.staff_id)
+  THEN
+    RETURN NEW;
+  END IF;
   RAISE EXCEPTION '% is append-only — % is not permitted', TG_TABLE_NAME, TG_OP
     USING HINT = 'Archive/audit rows are immutable; deletion is only via the feature-off purge.';
 END;
