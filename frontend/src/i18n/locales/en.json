@@ -1221,6 +1221,37 @@
       "reopen_title": "Reopen {{start}} → {{end}}",
       "reason": "Reason",
       "reason_ph": "Required — what needs fixing?"
+    },
+    "pa": {
+      "load_failed": "Failed to load",
+      "name_required": "Name is required",
+      "saved": "Saved",
+      "save_failed": "Failed to save",
+      "deactivate_confirm": "Deactivate \"{{name}}\"? Historical entries remain linked.",
+      "deactivated": "Deactivated",
+      "failed": "Failed",
+      "title": "Payment accounts",
+      "subtitle": "Cash drawers, bank tills, mobile wallets — track where money is held",
+      "new_account": "New account",
+      "none_title": "No accounts yet",
+      "none_desc": "Add a cash drawer or bank account to start tracking balances.",
+      "kind_cash": "Cash",
+      "kind_bank": "Bank",
+      "kind_wallet": "Mobile wallet",
+      "kind_other": "Other",
+      "inactive": "inactive",
+      "opening": "Opening",
+      "current": "Current",
+      "edit_account": "Edit account",
+      "new_title": "New payment account",
+      "f_name": "Name",
+      "name_ph": "Main cash drawer, Bank — Trade Bank",
+      "f_kind": "Kind",
+      "f_currency": "Currency",
+      "f_opening": "Opening balance",
+      "f_notes": "Notes",
+      "optional": "Optional",
+      "active_hint": "Active (uncheck to hide from new-entry pickers)"
     }
   }
 }
