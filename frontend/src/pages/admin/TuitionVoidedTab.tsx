@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { feesApi, drainPages } from '../../services/api';
 import { toast } from 'react-toastify';
 import Card from '../../components/common/Card';
@@ -41,6 +42,7 @@ function formatVoidedAt(iso: string): string {
 }
 
 export default function TuitionVoidedTab() {
+  const { t } = useTranslation();
   const [plans, setPlans] = useState<VoidedPlan[] | null>(null);
   const [payments, setPayments] = useState<VoidedPayment[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -54,7 +56,7 @@ export default function TuitionVoidedTab() {
       setPlans(p);
       setPayments(q);
     } catch (e: any) {
-      toast.error(e.response?.data?.error || 'Failed to load voided records');
+      toast.error(e.response?.data?.error || t('accounting.voided.load_failed'));
       setPlans([]);
       setPayments([]);
     }
@@ -63,26 +65,26 @@ export default function TuitionVoidedTab() {
   useEffect(() => { reload(); }, []);
 
   const unvoidPlan = async (id: string) => {
-    if (!confirm('Restore this voided plan?')) return;
+    if (!confirm(t('accounting.voided.restore_plan_confirm'))) return;
     setBusy(id);
     try {
       await feesApi.unvoidPlan(id);
-      toast.success('Plan restored');
+      toast.success(t('accounting.voided.plan_restored'));
       await reload();
     } catch (e: any) {
-      toast.error(e.response?.data?.error || 'Failed to restore');
+      toast.error(e.response?.data?.error || t('accounting.voided.restore_failed'));
     } finally { setBusy(null); }
   };
 
   const unvoidPayment = async (id: string) => {
-    if (!confirm('Restore this voided payment? It will reappear in the student\'s payment history.')) return;
+    if (!confirm(t('accounting.voided.restore_payment_confirm'))) return;
     setBusy(id);
     try {
       await feesApi.unvoidPayment(id);
-      toast.success('Payment restored');
+      toast.success(t('accounting.voided.payment_restored'));
       await reload();
     } catch (e: any) {
-      toast.error(e.response?.data?.error || 'Failed to restore');
+      toast.error(e.response?.data?.error || t('accounting.voided.restore_failed'));
     } finally { setBusy(null); }
   };
 
@@ -93,20 +95,20 @@ export default function TuitionVoidedTab() {
   return (
     <div>
       <div className="mb-4 text-sm text-gray-600">
-        Voided records are kept for a recovery window before being permanently deleted. Click <span className="font-medium">Restore</span> to bring an item back.
+        {t('accounting.voided.intro')}
       </div>
 
       {empty ? (
         <EmptyState
-          title="Nothing voided"
-          description="Plans and payments you delete will appear here so you can recover them."
+          title={t('accounting.voided.none_title')}
+          description={t('accounting.voided.none_desc')}
           icon={<Archive className="w-8 h-8 text-gray-400" />}
         />
       ) : (
         <div className="space-y-6">
           {payments.length > 0 && (
             <div>
-              <h3 className="font-semibold text-gray-900 mb-2">Voided payments ({payments.length})</h3>
+              <h3 className="font-semibold text-gray-900 mb-2">{t('accounting.voided.payments_count', { count: payments.length })}</h3>
               <div className="space-y-2">
                 {payments.map(p => (
                   <Card key={p.id}>
@@ -118,12 +120,12 @@ export default function TuitionVoidedTab() {
                           {p.method && <span className="text-xs text-gray-500">· {p.method}</span>}
                         </div>
                         <div className="text-sm text-gray-700 mt-0.5">
-                          {p.studentName ?? '(unknown student)'}
+                          {p.studentName ?? t('accounting.voided.unknown_student')}
                           {p.planName && <span className="text-gray-500"> · {p.planName}</span>}
                         </div>
                         <div className="text-xs text-gray-500 mt-1">
-                          Voided {formatVoidedAt(p.voidedAt)}
-                          {p.voidedByName && <> by <span className="font-medium text-gray-700">{p.voidedByName}</span></>}
+                          {t('accounting.voided.voided_when', { when: formatVoidedAt(p.voidedAt) })}
+                          {p.voidedByName && <> {t('accounting.voided.by')} <span className="font-medium text-gray-700">{p.voidedByName}</span></>}
                         </div>
                         {p.voidReason && (
                           <div className="text-xs text-rose-700 italic mt-1">"{p.voidReason}"</div>
@@ -136,7 +138,7 @@ export default function TuitionVoidedTab() {
                         disabled={busy === p.id}
                         icon={<RotateCcw className="w-4 h-4" />}
                       >
-                        Restore
+                        {t('accounting.voided.restore')}
                       </Button>
                     </div>
                   </Card>
@@ -147,7 +149,7 @@ export default function TuitionVoidedTab() {
 
           {plans.length > 0 && (
             <div>
-              <h3 className="font-semibold text-gray-900 mb-2">Voided plans ({plans.length})</h3>
+              <h3 className="font-semibold text-gray-900 mb-2">{t('accounting.voided.plans_count', { count: plans.length })}</h3>
               <div className="space-y-2">
                 {plans.map(pl => (
                   <Card key={pl.id}>
@@ -159,8 +161,8 @@ export default function TuitionVoidedTab() {
                           <span className="text-sm text-gray-700">{fmt(pl.totalAmount, pl.currency)}</span>
                         </div>
                         <div className="text-xs text-gray-500 mt-1">
-                          Voided {formatVoidedAt(pl.voidedAt)}
-                          {pl.voidedByName && <> by <span className="font-medium text-gray-700">{pl.voidedByName}</span></>}
+                          {t('accounting.voided.voided_when', { when: formatVoidedAt(pl.voidedAt) })}
+                          {pl.voidedByName && <> {t('accounting.voided.by')} <span className="font-medium text-gray-700">{pl.voidedByName}</span></>}
                         </div>
                         {pl.voidReason && (
                           <div className="text-xs text-rose-700 italic mt-1">"{pl.voidReason}"</div>
@@ -173,7 +175,7 @@ export default function TuitionVoidedTab() {
                         disabled={busy === pl.id}
                         icon={<RotateCcw className="w-4 h-4" />}
                       >
-                        Restore
+                        {t('accounting.voided.restore')}
                       </Button>
                     </div>
                   </Card>

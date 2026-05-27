@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { feesApi, drainPages, type ArchiveListItem, type ArchiveDetail } from '../../services/api';
 import { toast } from 'react-toastify';
 import Input from '../../components/common/Input';
@@ -24,6 +25,7 @@ function safeFile(s: string) {
 }
 
 export default function TuitionArchiveTab() {
+  const { t } = useTranslation();
   const [items, setItems] = useState<ArchiveListItem[] | null>(null);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'archived' | 'graduated'>('all');
@@ -37,7 +39,7 @@ export default function TuitionArchiveTab() {
     // client-side search/filter keeps working unchanged.
     drainPages<ArchiveListItem>(c => feesApi.listArchive(undefined, c))
       .then(setItems)
-      .catch((e: any) => toast.error(e.response?.data?.error || 'Failed to load archive'));
+      .catch((e: any) => toast.error(e.response?.data?.error || t('accounting.archive.load_failed')));
   }, []);
 
   const filtered = useMemo(() => {
@@ -61,7 +63,7 @@ export default function TuitionArchiveTab() {
       const r = await feesApi.getArchiveDetail(item.kind, item.id);
       setDetail(r.data);
     } catch (e: any) {
-      toast.error(e.response?.data?.error || 'Failed to load record');
+      toast.error(e.response?.data?.error || t('accounting.archive.load_record_failed'));
       setDetailFor(null);
     } finally {
       setDetailLoading(false);
@@ -82,7 +84,7 @@ export default function TuitionArchiveTab() {
         : await feesApi.downloadArchiveXlsx(detailFor.kind, detailFor.id);
       downloadBlob(r.data, `payments-${safeFile(detail.studentName)}.${kind}`);
     } catch (e: any) {
-      toast.error(e.response?.data?.error || `Failed to export ${kind.toUpperCase()}`);
+      toast.error(e.response?.data?.error || t('accounting.archive.export_failed', { format: kind.toUpperCase() }));
     } finally {
       setExporting(null);
     }
@@ -97,7 +99,7 @@ export default function TuitionArchiveTab() {
           <Input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search student, parent, class…"
+            placeholder={t('accounting.tuition.search_ph')}
             icon={<Search className="w-4 h-4 text-gray-400" />}
           />
         </div>
@@ -108,7 +110,7 @@ export default function TuitionArchiveTab() {
               onClick={() => setFilter(k)}
               className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${filter === k ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
             >
-              {k === 'all' ? 'All' : k === 'archived' ? 'Archived' : 'Graduated'}
+              {k === 'all' ? t('accounting.tuition.all') : k === 'archived' ? t('accounting.archive.f_archived') : t('accounting.archive.f_graduated')}
             </button>
           ))}
         </div>
@@ -117,8 +119,8 @@ export default function TuitionArchiveTab() {
       {filtered && filtered.length === 0 ? (
         <EmptyState
           icon={<Archive className="w-10 h-10 text-gray-400" />}
-          title="No archived or graduated students"
-          description="Once students are archived or marked as graduated, their payment records appear here."
+          title={t('accounting.archive.none_title')}
+          description={t('accounting.archive.none_desc')}
         />
       ) : (
         <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
@@ -126,12 +128,12 @@ export default function TuitionArchiveTab() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-gray-500">
                 <tr>
-                  <th className="text-left px-4 py-3 font-medium">Student</th>
-                  <th className="text-left px-4 py-3 font-medium">Status</th>
-                  <th className="text-left px-4 py-3 font-medium">Parent</th>
-                  <th className="text-left px-4 py-3 font-medium">Class</th>
-                  <th className="text-right px-4 py-3 font-medium">Total paid</th>
-                  <th className="text-right px-4 py-3 font-medium">Balance</th>
+                  <th className="text-left px-4 py-3 font-medium">{t('accounting.archive.col_student')}</th>
+                  <th className="text-left px-4 py-3 font-medium">{t('accounting.archive.col_status')}</th>
+                  <th className="text-left px-4 py-3 font-medium">{t('accounting.archive.col_parent')}</th>
+                  <th className="text-left px-4 py-3 font-medium">{t('accounting.archive.col_class')}</th>
+                  <th className="text-right px-4 py-3 font-medium">{t('accounting.archive.col_total_paid')}</th>
+                  <th className="text-right px-4 py-3 font-medium">{t('accounting.archive.col_balance')}</th>
                   <th className="px-4 py-3"></th>
                 </tr>
               </thead>
@@ -142,11 +144,11 @@ export default function TuitionArchiveTab() {
                     <td className="px-4 py-3">
                       {item.kind === 'archived' ? (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-amber-50 text-amber-700 border border-amber-200">
-                          <Archive className="w-3 h-3" /> Archived{item.date ? ` · ${item.date}` : ''}
+                          <Archive className="w-3 h-3" /> {t('accounting.archive.f_archived')}{item.date ? ` · ${item.date}` : ''}
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
-                          <GraduationCap className="w-3 h-3" /> Graduated
+                          <GraduationCap className="w-3 h-3" /> {t('accounting.archive.f_graduated')}
                         </span>
                       )}
                     </td>
@@ -163,7 +165,7 @@ export default function TuitionArchiveTab() {
                         onClick={() => openDetail(item)}
                         className="text-sm font-medium text-indigo-600 hover:text-indigo-700"
                       >
-                        View
+                        {t('accounting.archive.view')}
                       </button>
                     </td>
                   </tr>
@@ -174,35 +176,35 @@ export default function TuitionArchiveTab() {
         </div>
       )}
 
-      <Modal isOpen={!!detailFor} onClose={closeDetail} title={detail?.studentName ?? 'Payment history'} size="lg">
+      <Modal isOpen={!!detailFor} onClose={closeDetail} title={detail?.studentName ?? t('accounting.archive.payment_history')} size="lg">
         {detailLoading || !detail ? (
           <LoadingSpinner />
         ) : (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div>
-                <div className="text-gray-500 text-xs uppercase tracking-wide">Status</div>
+                <div className="text-gray-500 text-xs uppercase tracking-wide">{t('accounting.archive.col_status')}</div>
                 <div className="text-gray-900 font-medium">
-                  {detail.status === 'archived' ? 'Archived' : 'Graduated'}
+                  {detail.status === 'archived' ? t('accounting.archive.f_archived') : t('accounting.archive.f_graduated')}
                   {detail.departureDate ? ` · ${detail.departureDate}` : ''}
                   {detail.reason ? ` · ${detail.reason}` : ''}
                 </div>
               </div>
               <div>
-                <div className="text-gray-500 text-xs uppercase tracking-wide">Parent</div>
+                <div className="text-gray-500 text-xs uppercase tracking-wide">{t('accounting.archive.col_parent')}</div>
                 <div className="text-gray-900 font-medium">
                   {detail.parentName ?? '—'}{detail.parentPhone ? ` · ${detail.parentPhone}` : ''}
                 </div>
               </div>
               <div>
-                <div className="text-gray-500 text-xs uppercase tracking-wide">Last class</div>
+                <div className="text-gray-500 text-xs uppercase tracking-wide">{t('accounting.archive.last_class')}</div>
                 <div className="text-gray-900 font-medium">{detail.className ?? '—'}</div>
               </div>
             </div>
 
             {detail.plans.length === 0 ? (
               <div className="bg-gray-50 border border-gray-200 rounded-xl p-6 text-center text-sm text-gray-600">
-                No tuition plans on record for this student.
+                {t('accounting.archive.no_plans')}
               </div>
             ) : (
               <div className="space-y-4">
@@ -218,28 +220,28 @@ export default function TuitionArchiveTab() {
                             {plan.planName}{plan.academicYear ? ` · ${plan.academicYear}` : ''}
                           </div>
                           <div className="text-xs text-gray-500 mt-0.5">
-                            Tuition {fmt(plan.totalAmount, plan.currency)}
-                            {plan.adjustment !== 0 ? ` · Adjustment ${fmt(plan.adjustment, plan.currency)}` : ''}
-                            {' · '}Due {fmt(due, plan.currency)}
+                            {t('accounting.archive.tuition')} {fmt(plan.totalAmount, plan.currency)}
+                            {plan.adjustment !== 0 ? ` · ${t('accounting.archive.adjustment')} ${fmt(plan.adjustment, plan.currency)}` : ''}
+                            {' · '}{t('accounting.archive.due')} {fmt(due, plan.currency)}
                           </div>
                         </div>
                         <div className="text-right">
-                          <div className="text-sm text-gray-700">Paid {fmt(paid, plan.currency)}</div>
+                          <div className="text-sm text-gray-700">{t('accounting.archive.paid')} {fmt(paid, plan.currency)}</div>
                           <div className={`text-sm font-medium ${balance > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
-                            {balance > 0 ? `Balance ${fmt(balance, plan.currency)}` : 'Paid in full'}
+                            {balance > 0 ? t('accounting.archive.balance_amount', { amount: fmt(balance, plan.currency) }) : t('accounting.tuition.paid_in_full')}
                           </div>
                         </div>
                       </div>
                       {plan.payments.length === 0 ? (
-                        <div className="px-4 py-3 text-sm text-gray-500">No payments recorded.</div>
+                        <div className="px-4 py-3 text-sm text-gray-500">{t('accounting.archive.no_payments')}</div>
                       ) : (
                         <table className="w-full text-sm">
                           <thead className="bg-white text-gray-500">
                             <tr>
-                              <th className="text-left px-4 py-2 font-medium text-xs uppercase tracking-wide">Date</th>
-                              <th className="text-left px-4 py-2 font-medium text-xs uppercase tracking-wide">Method</th>
-                              <th className="text-left px-4 py-2 font-medium text-xs uppercase tracking-wide">Reference</th>
-                              <th className="text-right px-4 py-2 font-medium text-xs uppercase tracking-wide">Amount</th>
+                              <th className="text-left px-4 py-2 font-medium text-xs uppercase tracking-wide">{t('accounting.archive.col_date')}</th>
+                              <th className="text-left px-4 py-2 font-medium text-xs uppercase tracking-wide">{t('accounting.archive.col_method')}</th>
+                              <th className="text-left px-4 py-2 font-medium text-xs uppercase tracking-wide">{t('accounting.archive.col_reference')}</th>
+                              <th className="text-right px-4 py-2 font-medium text-xs uppercase tracking-wide">{t('accounting.archive.col_amount')}</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-100">
@@ -267,7 +269,7 @@ export default function TuitionArchiveTab() {
                 className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
               >
                 <FileSpreadsheet className="w-4 h-4" />
-                {exporting === 'xlsx' ? 'Exporting…' : 'Excel'}
+                {exporting === 'xlsx' ? t('accounting.archive.exporting') : t('accounting.archive.excel')}
               </button>
               <button
                 onClick={() => exportFile('pdf')}
@@ -275,7 +277,7 @@ export default function TuitionArchiveTab() {
                 className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
               >
                 <FileText className="w-4 h-4" />
-                {exporting === 'pdf' ? 'Exporting…' : 'PDF'}
+                {exporting === 'pdf' ? t('accounting.archive.exporting') : t('accounting.archive.pdf')}
               </button>
             </div>
           </div>
