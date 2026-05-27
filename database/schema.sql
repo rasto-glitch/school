@@ -700,10 +700,10 @@ CREATE TABLE IF NOT EXISTS archived_students (
   classes_attended JSONB DEFAULT '[]',
   grades JSONB DEFAULT '[]',
   payment_history JSONB DEFAULT '[]',
-  archived_by UUID REFERENCES users(id) ON DELETE SET NULL,  -- actor; text copies below survive the actor's own deletion
+  archived_by UUID,  -- FK-less actor ref (append-only/hashed row): keeps its value when the user is deleted; text copies below stay readable
   archived_by_name TEXT,
   archived_by_role TEXT,
-  original_parent_id UUID REFERENCES parents(id) ON DELETE SET NULL,  -- links the snapshot back to the parent account (F6 parent read-only access)
+  original_parent_id UUID,  -- FK-less (append-only/hashed row): links back to the parent account; keeps its value if the parent is deleted
   snapshot_version INTEGER NOT NULL DEFAULT 1,  -- F10: snapshot JSONB shape version
   content_hash TEXT,  -- E-a: SHA-256 tamper-evidence (set by BEFORE INSERT trigger)
   created_at TIMESTAMPTZ DEFAULT NOW()
@@ -788,7 +788,7 @@ CREATE TABLE IF NOT EXISTS archived_employees (
   transport JSONB DEFAULT '{}',
   employment JSONB DEFAULT '{}',
   payment_history JSONB DEFAULT '[]',
-  archived_by UUID REFERENCES users(id) ON DELETE SET NULL,  -- actor; text copies below survive the actor's own deletion
+  archived_by UUID,  -- FK-less actor ref (append-only/hashed row): keeps its value when the user is deleted; text copies below stay readable
   archived_by_name TEXT,
   archived_by_role TEXT,
   snapshot_version INTEGER NOT NULL DEFAULT 1,  -- F10: snapshot JSONB shape version
@@ -842,24 +842,6 @@ LANGUAGE plpgsql AS $$
 BEGIN
   IF current_setting('app.allow_archive_purge', true) = 'on' THEN
     IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
-  END IF;
-  -- Allow ONE narrow mutation: an FK cascade nulling the optional drill-down
-  -- dimension on a journal line when a referenced student/staff is deleted
-  -- (e.g. student archive). Every financial column must be unchanged, and the
-  -- only change permitted is student_id / staff_id going to NULL. The line's
-  -- amounts/accounts stay immutable, and the entry hash is unaffected
-  -- (lines_fingerprint = account:debit:credit:currency, excludes these dims).
-  IF TG_OP = 'UPDATE' AND TG_TABLE_NAME = 'journal_lines'
-     AND NEW.entry_id    IS NOT DISTINCT FROM OLD.entry_id
-     AND NEW.account_id  IS NOT DISTINCT FROM OLD.account_id
-     AND NEW.debit       IS NOT DISTINCT FROM OLD.debit
-     AND NEW.credit      IS NOT DISTINCT FROM OLD.credit
-     AND NEW.currency    IS NOT DISTINCT FROM OLD.currency
-     AND NEW.description  IS NOT DISTINCT FROM OLD.description
-     AND (NEW.student_id IS NULL OR NEW.student_id IS NOT DISTINCT FROM OLD.student_id)
-     AND (NEW.staff_id   IS NULL OR NEW.staff_id   IS NOT DISTINCT FROM OLD.staff_id)
-  THEN
-    RETURN NEW;
   END IF;
   RAISE EXCEPTION '% is append-only — % is not permitted', TG_TABLE_NAME, TG_OP
     USING HINT = 'Archive/audit rows are immutable; deletion is only via the feature-off purge.';
@@ -1103,7 +1085,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   entity_id UUID NOT NULL,
   action TEXT NOT NULL CHECK (action IN ('create','update','delete')),
   changes JSONB NOT NULL DEFAULT '{}'::jsonb,
-  actor_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  actor_id UUID,  -- FK-less (append-only hash chain): keeps its value when the user is deleted; nulling it would break the chain
   actor_username TEXT,
   actor_role TEXT,
   label TEXT,
@@ -1815,7 +1797,7 @@ CREATE TABLE IF NOT EXISTS journal_entries (
   source_id UUID,                     -- FK-less pointer to the originating row (survives that row's deletion)
   is_reversal BOOLEAN NOT NULL DEFAULT FALSE,
   reverses_entry_id UUID REFERENCES journal_entries(id),
-  posted_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  posted_by UUID,  -- FK-less (append-only hash chain): keeps its value when the user is deleted; nulling it would break the chain
   lines_fingerprint TEXT,             -- sha256 of canonical lines, set by posting layer; folded into the hash chain
   -- Per-school tamper-evident hash chain (mirrors audit_logs / Phase E-a):
   chain_seq BIGINT,
@@ -1836,8 +1818,8 @@ CREATE TABLE IF NOT EXISTS journal_lines (
   credit NUMERIC(14,2) NOT NULL DEFAULT 0 CHECK (credit >= 0),
   currency TEXT NOT NULL,
   description TEXT,
-  student_id UUID REFERENCES students(id) ON DELETE SET NULL,   -- optional drill-down dimension
-  staff_id   UUID REFERENCES staff_members(id) ON DELETE SET NULL,
+  student_id UUID,   -- FK-less drill-down dimension (append-only): keeps its value when the student is deleted/archived
+  staff_id   UUID,   -- FK-less drill-down dimension (append-only): keeps its value when the staff member is deleted
   created_at TIMESTAMPTZ DEFAULT NOW(),
   CHECK (debit > 0 OR credit > 0),
   CHECK (NOT (debit > 0 AND credit > 0))
