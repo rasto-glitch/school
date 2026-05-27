@@ -3972,6 +3972,7 @@ export async function updateGradingConfig(req: AuthRequest, res: Response): Prom
         grade_point: Number(b.gradePoint),
         order_index: i,
       }));
+      // tenant-check-allow: every row sets school_id: schoolId (insert can't chain .eq)
       const { error } = await supabase.from('grade_scale_bands').insert(rows);
       if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
     }
