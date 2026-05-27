@@ -1252,6 +1252,25 @@
       "f_notes": "Notes",
       "optional": "Optional",
       "active_hint": "Active (uncheck to hide from new-entry pickers)"
+    },
+    "fx": {
+      "load_failed": "Failed",
+      "rate_positive": "Rate must be positive",
+      "currencies_differ": "From and to currencies must differ",
+      "rate_saved": "Rate saved",
+      "save_failed": "Failed to save",
+      "del_confirm": "Delete {{from}} → {{to}} @ {{date}}?",
+      "deleted": "Deleted",
+      "title": "FX rates",
+      "subtitle": "Multi-currency conversion rates for consolidated reports",
+      "add_title": "Add or update a rate",
+      "help": "1 unit of 'from' = rate units of 'to'. Reports pick the most recent rate effective on or before the report date.",
+      "f_rate": "Rate",
+      "f_effective": "Effective from",
+      "none_title": "No rates yet",
+      "none_desc": "Add a rate to enable consolidated currency reports.",
+      "col_pair": "Pair",
+      "col_rate": "Rate"
     }
   }
 }
