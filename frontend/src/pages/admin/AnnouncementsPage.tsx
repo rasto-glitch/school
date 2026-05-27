@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { useTranslation } from 'react-i18next';
 import { Virtuoso } from 'react-virtuoso';
 import { usePaginated } from '../../hooks/usePaginated';
 import { toast } from 'react-toastify';
@@ -17,6 +18,7 @@ import type { Announcement } from '../../types';
 import { format, parseISO } from 'date-fns';
 
 export default function AnnouncementsPage() {
+  const { t } = useTranslation();
   const { school } = useAuthStore();
   const {
     items: announcements, loading, loadingMore, reload, loadMore,
@@ -58,7 +60,7 @@ export default function AnnouncementsPage() {
       if (imageUrl) fd.append('imageUrl', imageUrl);
 
       await adminApi.createAnnouncement(fd);
-      toast.success('Announcement posted!');
+      toast.success(t('admin.announce.posted'));
       reset();
       setAttachedFile(null);
       onCoverChange(null);
@@ -66,7 +68,7 @@ export default function AnnouncementsPage() {
       if (imageRef.current) imageRef.current.value = '';
       reload();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed');
+      toast.error(err.response?.data?.error || t('admin.announce.failed'));
     } finally {
       setSubmitting(false);
       setUploadingCover(false);
@@ -74,36 +76,36 @@ export default function AnnouncementsPage() {
   };
 
   const onDelete = async (id: string) => {
-    if (!confirm('Delete this announcement?')) return;
+    if (!confirm(t('admin.announce.confirm_delete'))) return;
     await adminApi.deleteAnnouncement(id);
-    toast.success('Deleted');
+    toast.success(t('admin.announce.deleted'));
     reload();
   };
 
   return (
-    <PageLayout title="Announcements" subtitle="Post and manage school announcements">
+    <PageLayout title={t('admin.announce.title')} subtitle={t('admin.announce.subtitle')}>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Composer — styled like a post composer */}
         <Card>
           <div className="flex items-center gap-2 mb-4">
             <Megaphone className="w-5 h-5 text-primary-600" />
-            <h2 className="font-semibold text-gray-900">Post Announcement</h2>
+            <h2 className="font-semibold text-gray-900">{t('admin.announce.post_announcement')}</h2>
           </div>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            <Input label="Title" placeholder="Announcement title" {...register('title', { required: true })} />
+            <Input label={t('admin.announce.title_label')} placeholder={t('admin.announce.title_ph')} {...register('title', { required: true })} />
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Body</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('admin.announce.body')}</label>
               <textarea
                 className="input-field min-h-[140px] resize-none"
-                placeholder="Write the announcement here…"
+                placeholder={t('admin.announce.body_ph')}
                 {...register('content', { required: true })}
               />
             </div>
 
             {/* Cover image */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Cover image (optional)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('admin.announce.cover_image')}</label>
               <input ref={imageRef} type="file" accept="image/*" className="hidden" onChange={e => onCoverChange(e.target.files?.[0] || null)} />
               {coverPreview ? (
                 <div className="relative rounded-xl overflow-hidden border border-gray-200">
@@ -112,7 +114,7 @@ export default function AnnouncementsPage() {
                     type="button"
                     onClick={() => onCoverChange(null)}
                     className="absolute top-2 right-2 bg-white/90 hover:bg-white text-gray-700 rounded-full p-1.5 shadow"
-                    aria-label="Remove cover"
+                    aria-label={t('admin.announce.remove_cover')}
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -123,26 +125,26 @@ export default function AnnouncementsPage() {
                   onClick={() => imageRef.current?.click()}
                   className="flex items-center gap-2 px-3 py-2 border border-dashed border-gray-300 rounded-xl text-sm text-gray-500 hover:border-primary-400 hover:text-primary-600 transition-colors w-full"
                 >
-                  <ImageIcon className="w-4 h-4" /> Add cover image
+                  <ImageIcon className="w-4 h-4" /> {t('admin.announce.add_cover')}
                 </button>
               )}
             </div>
 
             <Select
-              label="Audience"
+              label={t('admin.announce.audience')}
               options={[
-                { value: 'all', label: 'Everyone' },
-                { value: 'parents', label: 'Parents Only' },
-                { value: 'teachers', label: 'Teachers Only' },
-                { value: 'students', label: 'Students Only' },
+                { value: 'all', label: t('admin.announce.aud_all') },
+                { value: 'parents', label: t('admin.announce.aud_parents_only') },
+                { value: 'teachers', label: t('admin.announce.aud_teachers_only') },
+                { value: 'students', label: t('admin.announce.aud_students_only') },
               ]}
               {...register('targetAudience')}
             />
-            <Input label="Link (optional)" placeholder="https://youtube.com/watch?v=… or any URL" {...register('linkUrl')} />
+            <Input label={t('admin.announce.link')} placeholder={t('admin.announce.link_ph')} {...register('linkUrl')} />
 
             {/* Attachment */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Attachment (optional)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('admin.announce.attachment')}</label>
               <input ref={fileRef} type="file" className="hidden" onChange={e => setAttachedFile(e.target.files?.[0] || null)} />
               {attachedFile ? (
                 <div className="flex items-center gap-2 p-2.5 bg-primary-50 border border-primary-200 rounded-xl text-sm">
@@ -155,22 +157,22 @@ export default function AnnouncementsPage() {
               ) : (
                 <button type="button" onClick={() => fileRef.current?.click()}
                   className="flex items-center gap-2 px-3 py-2 border border-dashed border-gray-300 rounded-xl text-sm text-gray-500 hover:border-primary-400 hover:text-primary-600 transition-colors w-full">
-                  <Paperclip className="w-4 h-4" /> Attach a file
+                  <Paperclip className="w-4 h-4" /> {t('admin.announce.attach_file')}
                 </button>
               )}
             </div>
 
             <Button type="submit" loading={submitting || uploadingCover} fullWidth icon={<Megaphone className="w-4 h-4" />}>
-              Post Announcement
+              {t('admin.announce.post_announcement')}
             </Button>
           </form>
         </Card>
 
         {/* Posted announcements — post-style cards */}
         <div>
-          <h2 className="font-semibold text-gray-900 mb-3">Posted Announcements ({announcements.length})</h2>
+          <h2 className="font-semibold text-gray-900 mb-3">{t('admin.announce.posted_count', { count: announcements.length })}</h2>
           {loading ? <LoadingSpinner /> : announcements.length === 0 ? (
-            <EmptyState title="No announcements yet" icon={<Megaphone className="w-8 h-8 text-gray-400" />} />
+            <EmptyState title={t('admin.announce.none_yet')} icon={<Megaphone className="w-8 h-8 text-gray-400" />} />
           ) : (
             <Virtuoso
               useWindowScroll
@@ -178,13 +180,13 @@ export default function AnnouncementsPage() {
               endReached={loadMore}
               components={{
                 Footer: () => loadingMore
-                  ? <p className="py-3 text-center text-sm text-gray-400">Loading…</p>
+                  ? <p className="py-3 text-center text-sm text-gray-400">{t('common.loading_more')}</p>
                   : null,
               }}
               itemContent={(_index, ann) => {
                 const announcerName = ann.users?.role === 'admin'
-                  ? (school?.name || 'School')
-                  : (`${ann.users?.firstName ?? ''} ${ann.users?.lastName ?? ''}`.trim() || 'School');
+                  ? (school?.name || t('admin.announce.school'))
+                  : (`${ann.users?.firstName ?? ''} ${ann.users?.lastName ?? ''}`.trim() || t('admin.announce.school'));
                 const avatar = ann.users?.profilePicture;
 
                 return (
@@ -203,12 +205,12 @@ export default function AnnouncementsPage() {
                           <p className="text-xs text-gray-400">{format(parseISO(ann.createdAt), 'MMM d, yyyy')}</p>
                         </div>
                         <span className="text-xs bg-purple-50 text-purple-700 px-2 py-0.5 rounded-full font-semibold">
-                          {ann.targetAudience === 'all' ? 'Everyone' : ann.targetAudience}
+                          {t(`admin.announce.aud_${ann.targetAudience}`, ann.targetAudience)}
                         </span>
                         <button
                           onClick={() => onDelete(ann.id)}
                           className="p-1.5 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0"
-                          title="Delete"
+                          title={t('admin.announce.delete')}
                         >
                           <Trash2 className="w-4 h-4 text-red-500" />
                         </button>

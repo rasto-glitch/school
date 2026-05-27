@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useSearchParams, Link } from 'react-router-dom';
 import { Search, User, History } from 'lucide-react';
 import { adminApi } from '../../services/api';
@@ -24,6 +25,7 @@ interface ArchivedSnapshot {
 }
 
 export default function StudentBriefPage() {
+  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const [students, setStudents] = useState<Student[]>([]);
   const [selectedStudentId, setSelectedStudentId] = useState(searchParams.get('id') || '');
@@ -154,7 +156,7 @@ export default function StudentBriefPage() {
   const picture = s?.profilePicture || s?.profile_picture;
 
   return (
-    <PageLayout title="Student Brief" subtitle="Search and view a student's full profile and academic reports">
+    <PageLayout title={t('admin.student_brief.title')} subtitle={t('admin.student_brief.subtitle')}>
       <div className="space-y-6">
         {/* Search — autocomplete */}
         <div className="relative max-w-md" ref={searchRef}>
@@ -162,7 +164,7 @@ export default function StudentBriefPage() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
             <input
               className="w-full border border-gray-300 rounded-xl pl-10 pr-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent min-h-[44px]"
-              placeholder="Type student name to search…"
+              placeholder={t('admin.student_brief.search_ph')}
               value={search}
               onChange={e => { setSearch(e.target.value); setShowDropdown(true); }}
               onFocus={() => { if (search) setShowDropdown(true); }}
@@ -193,15 +195,15 @@ export default function StudentBriefPage() {
           )}
           {showDropdown && search.trim() && matchingStudents.length === 0 && (
             <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-20 px-4 py-3">
-              <p className="text-sm text-gray-500">No students found for "{search}"</p>
+              <p className="text-sm text-gray-500">{t('admin.student_brief.no_students_found', { query: search })}</p>
             </div>
           )}
         </div>
 
         {!selectedStudentId && !loading && (
           <EmptyState
-            title="Search for a student"
-            description="Type a student's name above to load their full profile and academic report."
+            title={t('admin.student_brief.search_title')}
+            description={t('admin.student_brief.search_desc')}
             icon={<User className="w-8 h-8 text-gray-400" />}
           />
         )}
@@ -222,21 +224,21 @@ export default function StudentBriefPage() {
                 </div>
                 <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
                   <div>
-                    <span className="font-semibold text-gray-500 block text-xs uppercase">Name</span>
+                    <span className="font-semibold text-gray-500 block text-xs uppercase">{t('admin.student_brief.name')}</span>
                     <span className="text-gray-900 font-medium">{name}</span>
                   </div>
                   {age !== null && (
                     <div>
-                      <span className="font-semibold text-gray-500 block text-xs uppercase">Age</span>
-                      <span className="text-gray-900 font-medium">{age} years</span>
+                      <span className="font-semibold text-gray-500 block text-xs uppercase">{t('admin.student_brief.age')}</span>
+                      <span className="text-gray-900 font-medium">{t('admin.student_brief.years', { count: age })}</span>
                     </div>
                   )}
                   <div>
-                    <span className="font-semibold text-gray-500 block text-xs uppercase">Class</span>
+                    <span className="font-semibold text-gray-500 block text-xs uppercase">{t('admin.student_brief.class')}</span>
                     <span className="text-gray-900 font-medium">{className}</span>
                   </div>
                   <div>
-                    <span className="font-semibold text-gray-500 block text-xs uppercase">Parents</span>
+                    <span className="font-semibold text-gray-500 block text-xs uppercase">{t('admin.student_brief.parents')}</span>
                     {parentId ? (
                       <Link to={`/admin/parents/${parentId}`} className="text-primary-600 font-medium hover:underline">
                         {parentName}
@@ -246,15 +248,15 @@ export default function StudentBriefPage() {
                     )}
                   </div>
                   <div>
-                    <span className="font-semibold text-gray-500 block text-xs uppercase">Contact</span>
+                    <span className="font-semibold text-gray-500 block text-xs uppercase">{t('admin.student_brief.contact')}</span>
                     <span className="text-gray-900 font-medium">{parentPhone}</span>
                   </div>
                   <div>
-                    <span className="font-semibold text-gray-500 block text-xs uppercase">Address</span>
+                    <span className="font-semibold text-gray-500 block text-xs uppercase">{t('admin.student_brief.address')}</span>
                     <span className="text-gray-900 font-medium">{address}</span>
                   </div>
                   <div>
-                    <span className="font-semibold text-gray-500 block text-xs uppercase">Driver</span>
+                    <span className="font-semibold text-gray-500 block text-xs uppercase">{t('admin.student_brief.driver')}</span>
                     <span className="text-gray-900 font-medium">{driverName}</span>
                   </div>
                 </div>
@@ -268,18 +270,18 @@ export default function StudentBriefPage() {
                     <History className="w-4 h-4 text-amber-700" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-gray-900">Previous enrollment</div>
+                    <div className="font-semibold text-gray-900">{t('admin.student_brief.prev_enrollment')}</div>
                     <div className="text-sm text-gray-700 mt-0.5">
-                      {previousEnrollment.fullName} · {previousEnrollment.reason} on {previousEnrollment.departureDate}
+                      {t('admin.student_brief.prev_line', { name: previousEnrollment.fullName, reason: previousEnrollment.reason, date: previousEnrollment.departureDate })}
                       {previousEnrollment.classesAttended.length > 0 && (
-                        <> · last class: {previousEnrollment.classesAttended[previousEnrollment.classesAttended.length - 1].className}</>
+                        <> · {t('admin.student_brief.last_class', { name: previousEnrollment.classesAttended[previousEnrollment.classesAttended.length - 1].className })}</>
                       )}
                     </div>
                     <div className="text-xs text-gray-500 mt-0.5">
-                      {previousEnrollment.parentFullName && <>Parent on file: {previousEnrollment.parentFullName}{previousEnrollment.parentPhone && ` · ${previousEnrollment.parentPhone}`}</>}
+                      {previousEnrollment.parentFullName && <>{t('admin.student_brief.parent_on_file', { name: previousEnrollment.parentFullName })}{previousEnrollment.parentPhone && ` · ${previousEnrollment.parentPhone}`}</>}
                     </div>
                     <Link to={`/admin/archive?id=${previousEnrollment.id}`} className="inline-block mt-2 text-sm text-primary-600 font-medium hover:underline">
-                      View full archived record →
+                      {t('admin.student_brief.view_archived')}
                     </Link>
                   </div>
                 </div>
@@ -289,12 +291,12 @@ export default function StudentBriefPage() {
             {/* Grades */}
             <div>
               <div className="flex items-center justify-between mb-4">
-                <h2 className="font-semibold text-gray-900 text-lg">Grades</h2>
+                <h2 className="font-semibold text-gray-900 text-lg">{t('admin.student_brief.grades')}</h2>
                 {gradeYears.length > 1 && (
                   <div className="w-44">
                     <Select
                       options={gradeYears.map(y => ({ value: y, label: y }))}
-                      placeholder="All Years"
+                      placeholder={t('admin.student_brief.all_years')}
                       value={selectedYear}
                       onChange={e => setSelectedYear(e.target.value)}
                     />
@@ -304,7 +306,7 @@ export default function StudentBriefPage() {
 
               {filteredGrades.length === 0 ? (
                 <Card>
-                  <p className="text-sm text-gray-500 text-center py-4">No grades recorded for this student.</p>
+                  <p className="text-sm text-gray-500 text-center py-4">{t('admin.student_brief.no_grades')}</p>
                 </Card>
               ) : (
                 <Card>
@@ -316,11 +318,11 @@ export default function StudentBriefPage() {
                           <table className="w-full text-xs border-collapse">
                             <thead>
                               <tr className="bg-gray-50">
-                                <th className="text-left px-3 py-2 font-medium text-gray-500 border border-gray-200">Subject</th>
+                                <th className="text-left px-3 py-2 font-medium text-gray-500 border border-gray-200">{t('admin.student_brief.subject')}</th>
                                 {markNames.map(n => (
                                   <th key={n} className="text-center px-3 py-2 font-medium text-gray-500 border border-gray-200">{n}</th>
                                 ))}
-                                <th className="text-center px-3 py-2 font-medium text-gray-500 border border-gray-200">Total</th>
+                                <th className="text-center px-3 py-2 font-medium text-gray-500 border border-gray-200">{t('admin.student_brief.total')}</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -345,7 +347,7 @@ export default function StudentBriefPage() {
                             <tfoot>
                               <tr className="bg-gray-50 border-t-2 border-gray-200">
                                 <td className="px-3 py-2 border border-gray-200 text-xs font-semibold text-gray-700 uppercase tracking-wide" colSpan={markNames.length + 1}>
-                                  Average
+                                  {t('admin.student_brief.average')}
                                 </td>
                                 <td className="px-3 py-2 border border-gray-200 text-center font-bold text-indigo-600">
                                   {termAverages[period] > 0 ? termAverages[period].toFixed(1) : '—'}
@@ -361,9 +363,9 @@ export default function StudentBriefPage() {
                     {yearMark && (
                       <div className="flex items-center justify-between bg-indigo-50 rounded-xl px-4 py-3 mt-2">
                         <span className="text-sm text-gray-600">
-                          Full Year Mark
+                          {t('admin.student_brief.full_year_mark')}
                           {selectedYear && ` — ${selectedYear}`}
-                          {` (${gradePeriods.length} term${gradePeriods.length !== 1 ? 's' : ''})`}
+                          {` ${t('admin.student_brief.terms_paren', { count: gradePeriods.length })}`}
                         </span>
                         <span className="text-xl font-bold text-indigo-600">{yearMark}</span>
                       </div>
@@ -376,11 +378,11 @@ export default function StudentBriefPage() {
             {/* Reports */}
             <div>
               <div className="flex items-center justify-between mb-4">
-                <h2 className="font-semibold text-gray-900 text-lg">Reports</h2>
+                <h2 className="font-semibold text-gray-900 text-lg">{t('admin.student_brief.reports')}</h2>
                 <div className="w-48">
                   <Select
                     options={subjects.map(sub => ({ value: sub, label: sub }))}
-                    placeholder="All Subjects"
+                    placeholder={t('admin.student_brief.all_subjects')}
                     value={selectedSubject}
                     onChange={e => setSelectedSubject(e.target.value)}
                   />
@@ -389,7 +391,7 @@ export default function StudentBriefPage() {
 
               {filteredReports.length === 0 ? (
                 <Card>
-                  <p className="text-sm text-gray-500 text-center py-4">No reports available for this student.</p>
+                  <p className="text-sm text-gray-500 text-center py-4">{t('admin.student_brief.no_reports')}</p>
                 </Card>
               ) : (
                 <div className="space-y-4">
@@ -401,33 +403,33 @@ export default function StudentBriefPage() {
                       </div>
                       {r.attendanceNotes && (
                         <div className="mb-3">
-                          <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Attendance</p>
+                          <p className="text-xs font-semibold text-gray-500 uppercase mb-1">{t('admin.student_brief.attendance')}</p>
                           <p className="text-sm text-gray-700">{r.attendanceNotes}</p>
                         </div>
                       )}
                       {r.behaviorNotes && (
                         <div className="mb-3">
-                          <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Behaviour</p>
+                          <p className="text-xs font-semibold text-gray-500 uppercase mb-1">{t('admin.student_brief.behaviour')}</p>
                           <p className="text-sm text-gray-700">{r.behaviorNotes}</p>
                         </div>
                       )}
                       <div className="grid grid-cols-2 gap-3 mb-3">
                         {r.quizMarks != null && (
                           <div className="bg-blue-50 rounded-xl p-3">
-                            <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Quiz Marks</p>
+                            <p className="text-xs font-semibold text-gray-500 uppercase mb-1">{t('admin.student_brief.quiz_marks')}</p>
                             <p className="text-xl font-bold text-blue-600">{r.quizMarks}</p>
                           </div>
                         )}
                         {r.examMarks != null && (
                           <div className="bg-green-50 rounded-xl p-3">
-                            <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Exam Marks</p>
+                            <p className="text-xs font-semibold text-gray-500 uppercase mb-1">{t('admin.student_brief.exam_marks')}</p>
                             <p className="text-xl font-bold text-green-600">{r.examMarks}</p>
                           </div>
                         )}
                       </div>
                       {r.teacherNotes && (
                         <div className="bg-gray-50 rounded-xl p-3">
-                          <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Teacher's Notes</p>
+                          <p className="text-xs font-semibold text-gray-500 uppercase mb-1">{t('admin.student_brief.teacher_notes')}</p>
                           <p className="text-sm text-gray-700 leading-relaxed">{r.teacherNotes}</p>
                         </div>
                       )}

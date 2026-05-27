@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { History, X } from 'lucide-react';
 import { adminApi } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
@@ -37,6 +38,7 @@ interface Props {
 }
 
 export default function ReturningEmployeeSearch({ role, nameQuery, linkedId, linkedLabel, onPick, onClear }: Props) {
+  const { t } = useTranslation();
   const archiveEnabled = useAuthStore(s => s.school?.features?.archive === true);
   const debouncedName = useDebounce(nameQuery ?? '', 350);
   const [matches, setMatches] = useState<ReturningEmployeeCandidate[]>([]);
@@ -57,7 +59,7 @@ export default function ReturningEmployeeSearch({ role, nameQuery, linkedId, lin
       <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm">
         <History className="w-4 h-4 text-amber-700 flex-shrink-0 mt-0.5" />
         <div className="flex-1 min-w-0">
-          <div className="font-medium text-amber-900">Linking to previous tenure</div>
+          <div className="font-medium text-amber-900">{t('admin.returning_emp.linking')}</div>
           <div className="text-amber-800 truncate">{linkedLabel}</div>
         </div>
         <button type="button" onClick={onClear} className="p-1 text-amber-700 hover:bg-amber-100 rounded">
@@ -72,7 +74,7 @@ export default function ReturningEmployeeSearch({ role, nameQuery, linkedId, lin
   return (
     <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
       <div className="flex items-center gap-2 text-sm text-amber-900 font-medium mb-2">
-        <History className="w-4 h-4" /> Previously archived match{matches.length > 1 ? 'es' : ''}
+        <History className="w-4 h-4" /> {t('admin.returning_emp.matches', { count: matches.length })}
       </div>
       <div className="space-y-1.5">
         {matches.map(c => (
@@ -85,12 +87,12 @@ export default function ReturningEmployeeSearch({ role, nameQuery, linkedId, lin
             <div className="font-medium text-gray-900">{c.fullName}</div>
             <div className="text-xs text-gray-600">
               {(c.position || c.subject) && <>{c.position || c.subject} · </>}
-              {c.reason}{c.departureDate ? ` on ${c.departureDate}` : ''}
+              {c.reason}{c.departureDate ? ` ${t('admin.returning_emp.on_date', { date: c.departureDate })}` : ''}
             </div>
           </button>
         ))}
       </div>
-      <div className="text-xs text-amber-700 mt-2">Click a match if this is a returning employee. Otherwise just keep typing.</div>
+      <div className="text-xs text-amber-700 mt-2">{t('admin.returning_emp.click_hint')}</div>
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Search, GraduationCap, FileText } from 'lucide-react';
 import { adminApi } from '../../services/api';
 import { useDebounce } from '../../hooks/useDebounce';
@@ -24,6 +25,7 @@ function buildGradeMap(grades: any[]): Record<string, Record<string, Record<stri
 }
 
 export default function GraduatedStudentsTab() {
+  const { t } = useTranslation();
   const [students, setStudents] = useState<any[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
   const [classFilter, setClassFilter] = useState('');
@@ -71,7 +73,7 @@ export default function GraduatedStudentsTab() {
       <div className="flex flex-wrap gap-3 items-center">
         <div className="flex-1 min-w-48">
           <Input
-            placeholder="Search graduated students..."
+            placeholder={t('admin.grad_students.search_ph')}
             icon={<Search className="w-4 h-4" />}
             value={search}
             onChange={e => setSearch(e.target.value)}
@@ -80,14 +82,14 @@ export default function GraduatedStudentsTab() {
         <div className="w-48">
           <Select
             options={classes.map(c => ({ value: c.id, label: c.name }))}
-            placeholder="All Classes"
+            placeholder={t('admin.arch_students.all_classes')}
             value={classFilter}
             onChange={e => setClassFilter(e.target.value)}
           />
         </div>
         {!loading && (
           <span className="text-sm text-gray-400">
-            {filtered.length} student{filtered.length !== 1 ? 's' : ''}
+            {t('admin.grad_students.students_count', { count: filtered.length })}
           </span>
         )}
       </div>
@@ -99,9 +101,9 @@ export default function GraduatedStudentsTab() {
         <Card className="text-center py-16">
           <GraduationCap className="w-10 h-10 text-gray-300 mx-auto mb-2" />
           <p className="text-sm text-gray-500">
-            {classFilter ? 'No graduated students in this class' : 'No graduated students yet'}
+            {classFilter ? t('admin.grad_students.none_in_class') : t('admin.grad_students.none_yet')}
           </p>
-          <p className="text-xs text-gray-400 mt-1">Use "Assign Students" to mark a class as graduated</p>
+          <p className="text-xs text-gray-400 mt-1">{t('admin.grad_students.none_hint')}</p>
         </Card>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -114,9 +116,9 @@ export default function GraduatedStudentsTab() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-gray-900 truncate">{s.fullName}</p>
-                    <p className="text-xs text-gray-500">{s.classes?.name || 'No class recorded'}</p>
+                    <p className="text-xs text-gray-500">{s.classes?.name || t('admin.grad_students.no_class_recorded')}</p>
                     {s.parents?.fullName && (
-                      <p className="text-xs text-gray-400 truncate">Parent: {s.parents.fullName}</p>
+                      <p className="text-xs text-gray-400 truncate">{t('admin.grad_students.parent_label', { name: s.parents.fullName })}</p>
                     )}
                   </div>
                   <FileText className="w-4 h-4 text-gray-300 flex-shrink-0" />
@@ -131,7 +133,7 @@ export default function GraduatedStudentsTab() {
       <Modal
         isOpen={transcriptOpen}
         onClose={() => { setTranscriptOpen(false); setTranscript(null); }}
-        title="Student Transcript"
+        title={t('admin.grad_students.transcript_title')}
         size="lg"
       >
         {transcriptLoading ? (
@@ -147,16 +149,16 @@ export default function GraduatedStudentsTab() {
                 <p className="font-bold text-gray-900 text-lg">{transcript.student?.fullName}</p>
                 <p className="text-sm text-gray-500">{transcript.student?.classes?.name || '—'}</p>
                 {transcript.student?.parents?.fullName && (
-                  <p className="text-xs text-gray-400">Parent: {transcript.student.parents.fullName}</p>
+                  <p className="text-xs text-gray-400">{t('admin.grad_students.parent_label', { name: transcript.student.parents.fullName })}</p>
                 )}
               </div>
             </div>
 
             {/* Grades — grouped by academic year */}
             <div>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">Academic Grades</p>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">{t('admin.arch_students.academic_grades')}</p>
               {academicYears.length === 0 ? (
-                <p className="text-sm text-gray-400">No grades recorded</p>
+                <p className="text-sm text-gray-400">{t('admin.arch_students.no_grades')}</p>
               ) : (
                 <div className="space-y-8">
                   {academicYears.map(year => {
@@ -192,17 +194,17 @@ export default function GraduatedStudentsTab() {
                                   <table className="w-full text-xs border-collapse">
                                     <thead>
                                       <tr className="bg-gray-50">
-                                        <th className="text-left px-3 py-2 font-medium text-gray-500 border border-gray-200">Subject</th>
+                                        <th className="text-left px-3 py-2 font-medium text-gray-500 border border-gray-200">{t('admin.arch_students.subject')}</th>
                                         {markNames.map(n => (
                                           <th key={n} className="text-center px-3 py-2 font-medium text-gray-500 border border-gray-200">{n}</th>
                                         ))}
-                                        <th className="text-center px-3 py-2 font-semibold text-indigo-600 border border-gray-200">Total</th>
+                                        <th className="text-center px-3 py-2 font-semibold text-indigo-600 border border-gray-200">{t('admin.arch_students.total')}</th>
                                       </tr>
                                     </thead>
                                     <tbody>
                                       {subjectNames.length === 0 ? (
                                         <tr>
-                                          <td colSpan={Math.max(2, markNames.length + 2)} className="px-3 py-3 border border-gray-200 text-center text-gray-400">No grades</td>
+                                          <td colSpan={Math.max(2, markNames.length + 2)} className="px-3 py-3 border border-gray-200 text-center text-gray-400">{t('admin.arch_students.no_grades_row')}</td>
                                         </tr>
                                       ) : subjectNames.map(subjectName => {
                                         const g = termBySubject[subjectName] as GradeLike;
@@ -229,7 +231,7 @@ export default function GraduatedStudentsTab() {
 
                         <div className="mt-3 flex items-center justify-between bg-indigo-50 rounded-xl px-4 py-3">
                           <span className="text-sm text-gray-600">
-                            Full Year Mark — {year} ({periods.length} term{periods.length !== 1 ? 's' : ''})
+                            {t('admin.arch_students.full_year_mark', { year, count: periods.length })}
                           </span>
                           <span className="text-xl font-bold text-indigo-600">{yearMark}</span>
                         </div>

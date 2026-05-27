@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Search, Archive, FileText, Download, RotateCcw } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { toast } from 'react-toastify';
@@ -25,9 +26,10 @@ function buildGradeMap(grades: any[]): Record<string, Record<string, Record<stri
   return map;
 }
 
+// values are i18n keys, resolved with t() at render
 const REASON_LABEL: Record<string, string> = {
-  transferred: 'Transferred',
-  withdrew: 'Withdrew',
+  transferred: 'admin.arch_students.reason_transferred',
+  withdrew: 'admin.arch_students.reason_withdrew',
 };
 const REASON_COLOR: Record<string, string> = {
   transferred: 'bg-blue-100 text-blue-700',
@@ -35,6 +37,7 @@ const REASON_COLOR: Record<string, string> = {
 };
 
 export default function ArchivedStudentsTab() {
+  const { t } = useTranslation();
   const [students, setStudents]     = useState<any[]>([]);
   const [classes, setClasses]       = useState<Class[]>([]);
   const [classFilter, setClassFilter] = useState('');
@@ -90,22 +93,22 @@ export default function ArchivedStudentsTab() {
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (e: any) {
-      toast.error(e.response?.data?.error || 'Failed to export');
+      toast.error(e.response?.data?.error || t('admin.arch_students.failed_export'));
     }
   };
 
   const restore = async () => {
     if (!detail) return;
-    if (!confirm(`Restore ${detail.fullName} as a live student? The archived snapshot is kept; this creates a fresh student linked to it (no class/grades).`)) return;
+    if (!confirm(t('admin.arch_students.confirm_restore', { name: detail.fullName }))) return;
     setRestoring(true);
     try {
       const r = await adminApi.restoreArchivedStudent(detail.id);
-      toast.success(`${detail.fullName} restored${r.data?.parentRelinked ? ' (parent re-linked)' : ''}. Set their class in Students.`, { autoClose: 8000 });
+      toast.success(t('admin.arch_students.restored', { name: detail.fullName, relinked: r.data?.parentRelinked ? t('admin.arch_students.parent_relinked') : '' }), { autoClose: 8000 });
       setDetailOpen(false);
       setDetail(null);
       load();
     } catch (e: any) {
-      toast.error(e.response?.data?.error || 'Failed to restore');
+      toast.error(e.response?.data?.error || t('admin.arch_students.failed_restore'));
     } finally { setRestoring(false); }
   };
 
@@ -128,7 +131,7 @@ export default function ArchivedStudentsTab() {
       <div className="flex flex-wrap gap-3 items-center">
         <div className="flex-1 min-w-48">
           <Input
-            placeholder="Search archived students..."
+            placeholder={t('admin.arch_students.search_ph')}
             icon={<Search className="w-4 h-4" />}
             value={search}
             onChange={e => setSearch(e.target.value)}
@@ -137,7 +140,7 @@ export default function ArchivedStudentsTab() {
         <div className="w-48">
           <Select
             options={classes.map(c => ({ value: c.id, label: c.name }))}
-            placeholder="All Classes"
+            placeholder={t('admin.arch_students.all_classes')}
             value={classFilter}
             onChange={e => setClassFilter(e.target.value)}
           />
@@ -145,18 +148,18 @@ export default function ArchivedStudentsTab() {
         <div className="w-44">
           <Select
             options={[
-              { value: 'transferred', label: 'Transferred' },
-              { value: 'withdrew', label: 'Withdrew' },
-              { value: 'graduated', label: 'Graduated' },
+              { value: 'transferred', label: t('admin.arch_students.reason_transferred') },
+              { value: 'withdrew', label: t('admin.arch_students.reason_withdrew') },
+              { value: 'graduated', label: t('admin.arch_students.reason_graduated') },
             ]}
-            placeholder="All reasons"
+            placeholder={t('admin.arch_students.all_reasons')}
             value={reasonFilter}
             onChange={e => setReasonFilter(e.target.value)}
           />
         </div>
         {!loading && (
           <span className="text-sm text-gray-400">
-            {filtered.length} record{filtered.length !== 1 ? 's' : ''}
+            {t('admin.arch_students.records_count', { count: filtered.length })}
           </span>
         )}
       </div>
@@ -168,9 +171,9 @@ export default function ArchivedStudentsTab() {
         <Card className="text-center py-16">
           <Archive className="w-10 h-10 text-gray-300 mx-auto mb-2" />
           <p className="text-sm text-gray-500">
-            {classFilter ? 'No archived students attended this class' : 'No archived students'}
+            {classFilter ? t('admin.arch_students.none_in_class') : t('admin.arch_students.none')}
           </p>
-          <p className="text-xs text-gray-400 mt-1">Archived students appear here when removed via the Archive action</p>
+          <p className="text-xs text-gray-400 mt-1">{t('admin.arch_students.none_hint')}</p>
         </Card>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -185,10 +188,10 @@ export default function ArchivedStudentsTab() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-sm font-semibold text-gray-900 truncate">{s.fullName}</p>
                       <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${REASON_COLOR[s.reason] || 'bg-gray-100 text-gray-600'}`}>
-                        {REASON_LABEL[s.reason] || s.reason}
+                        {REASON_LABEL[s.reason] ? t(REASON_LABEL[s.reason]) : s.reason}
                       </span>
                     </div>
-                    <p className="text-xs text-gray-500 mt-0.5">Left: {fmt(s.departureDate)}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">{t('admin.arch_students.left')}: {fmt(s.departureDate)}</p>
                     {s.parentFullName && (
                       <p className="text-xs text-gray-400 truncate mt-0.5">
                         {s.parentFullName}{s.parentPhone ? ` · ${s.parentPhone}` : ''}
@@ -207,7 +210,7 @@ export default function ArchivedStudentsTab() {
       <Modal
         isOpen={detailOpen}
         onClose={() => { setDetailOpen(false); setDetail(null); }}
-        title="Archived Student Record"
+        title={t('admin.arch_students.record_title')}
         size="lg"
       >
         {detailLoading ? (
@@ -224,7 +227,7 @@ export default function ArchivedStudentsTab() {
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="font-bold text-gray-900 text-lg">{detail.fullName}</p>
                   <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${REASON_COLOR[detail.reason] || 'bg-gray-100 text-gray-600'}`}>
-                    {REASON_LABEL[detail.reason] || detail.reason}
+                    {REASON_LABEL[detail.reason] ? t(REASON_LABEL[detail.reason]) : detail.reason}
                   </span>
                 </div>
               </div>
@@ -234,22 +237,22 @@ export default function ArchivedStudentsTab() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               {/* Personal info */}
               <div>
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Personal Info</p>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">{t('admin.arch_students.personal_info')}</p>
                 <dl className="space-y-2">
-                  <InfoRow label="Date of Birth"   value={fmt(detail.dateOfBirth)} />
-                  <InfoRow label="Enrolled"         value={fmt(detail.enrollmentDate)} />
-                  <InfoRow label="Left School"      value={fmt(detail.departureDate)} />
-                  <InfoRow label="Parent / Guardian" value={detail.parentFullName || '—'} />
-                  <InfoRow label="Parent Phone"     value={detail.parentPhone || '—'} />
-                  <InfoRow label="Archived by"      value={detail.archivedByName ? `${detail.archivedByName}${detail.archivedByRole ? ` (${detail.archivedByRole})` : ''}` : '—'} />
+                  <InfoRow label={t('admin.arch_students.date_of_birth')}   value={fmt(detail.dateOfBirth)} />
+                  <InfoRow label={t('admin.arch_students.enrolled')}         value={fmt(detail.enrollmentDate)} />
+                  <InfoRow label={t('admin.arch_students.left_school')}      value={fmt(detail.departureDate)} />
+                  <InfoRow label={t('admin.arch_students.parent_guardian')} value={detail.parentFullName || '—'} />
+                  <InfoRow label={t('admin.arch_students.parent_phone')}     value={detail.parentPhone || '—'} />
+                  <InfoRow label={t('admin.arch_students.archived_by')}      value={detail.archivedByName ? `${detail.archivedByName}${detail.archivedByRole ? ` (${detail.archivedByRole})` : ''}` : '—'} />
                 </dl>
               </div>
 
               {/* Classes attended */}
               <div>
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Classes Attended</p>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">{t('admin.arch_students.classes_attended')}</p>
                 {classYears.length === 0 ? (
-                  <p className="text-sm text-gray-400">No attendance records</p>
+                  <p className="text-sm text-gray-400">{t('admin.arch_students.no_attendance')}</p>
                 ) : (
                   <div className="space-y-2">
                     {classYears.map(year => (
@@ -269,9 +272,9 @@ export default function ArchivedStudentsTab() {
 
             {/* Grades */}
             <div>
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">Academic Grades</p>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">{t('admin.arch_students.academic_grades')}</p>
               {academicYears.length === 0 ? (
-                <p className="text-sm text-gray-400">No grades recorded</p>
+                <p className="text-sm text-gray-400">{t('admin.arch_students.no_grades')}</p>
               ) : (
                 <div className="space-y-8">
                   {academicYears.map(year => {
@@ -306,17 +309,17 @@ export default function ArchivedStudentsTab() {
                                   <table className="w-full text-xs border-collapse">
                                     <thead>
                                       <tr className="bg-gray-50">
-                                        <th className="text-left px-3 py-2 font-medium text-gray-500 border border-gray-200">Subject</th>
+                                        <th className="text-left px-3 py-2 font-medium text-gray-500 border border-gray-200">{t('admin.arch_students.subject')}</th>
                                         {markNames.map(n => (
                                           <th key={n} className="text-center px-3 py-2 font-medium text-gray-500 border border-gray-200">{n}</th>
                                         ))}
-                                        <th className="text-center px-3 py-2 font-semibold text-indigo-600 border border-gray-200">Total</th>
+                                        <th className="text-center px-3 py-2 font-semibold text-indigo-600 border border-gray-200">{t('admin.arch_students.total')}</th>
                                       </tr>
                                     </thead>
                                     <tbody>
                                       {subjectNames.length === 0 ? (
                                         <tr>
-                                          <td colSpan={Math.max(2, markNames.length + 2)} className="px-3 py-3 border border-gray-200 text-center text-gray-400">No grades</td>
+                                          <td colSpan={Math.max(2, markNames.length + 2)} className="px-3 py-3 border border-gray-200 text-center text-gray-400">{t('admin.arch_students.no_grades_row')}</td>
                                         </tr>
                                       ) : subjectNames.map(subjectName => {
                                         const g = termBySubject[subjectName] as GradeLike;
@@ -342,7 +345,7 @@ export default function ArchivedStudentsTab() {
                         </div>
                         <div className="mt-3 flex items-center justify-between bg-indigo-50 rounded-xl px-4 py-3">
                           <span className="text-sm text-gray-600">
-                            Full Year Mark — {year} ({periods.length} term{periods.length !== 1 ? 's' : ''})
+                            {t('admin.arch_students.full_year_mark', { year, count: periods.length })}
                           </span>
                           <span className="text-xl font-bold text-indigo-600">{yearMark}</span>
                         </div>
@@ -358,14 +361,14 @@ export default function ArchivedStudentsTab() {
                 onClick={exportRecord}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"
               >
-                <Download className="w-4 h-4" /> Download JSON
+                <Download className="w-4 h-4" /> {t('admin.arch_students.download_json')}
               </button>
               <button
                 onClick={restore}
                 disabled={restoring}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-60"
               >
-                <RotateCcw className="w-4 h-4" /> {restoring ? 'Restoring…' : 'Restore'}
+                <RotateCcw className="w-4 h-4" /> {restoring ? t('admin.arch_students.restoring') : t('admin.arch_students.restore')}
               </button>
             </div>
           </div>

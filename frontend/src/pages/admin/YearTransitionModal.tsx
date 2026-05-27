@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation, Trans } from 'react-i18next';
 import {
   AlertTriangle, ArrowLeft, ArrowRight, ArrowRight as Arrow,
   CheckCircle, GraduationCap, Loader2, Search, X,
@@ -13,9 +14,11 @@ interface Props {
   onDone: (newYear: string) => void;
 }
 
-const STEPS = ['Review', 'Graduate', 'Promote', 'Confirm'];
+// i18n keys; resolved with t() at render.
+const STEPS = ['admin.year_transition.step_review', 'admin.year_transition.step_graduate', 'admin.year_transition.step_promote', 'admin.year_transition.step_confirm'];
 
 export default function YearTransitionModal({ currentYear, onClose, onDone }: Props) {
+  const { t } = useTranslation();
   const [step, setStep] = useState(1);
   const [students, setStudents] = useState<any[]>([]);
   const [classes, setClasses] = useState<any[]>([]);
@@ -115,7 +118,7 @@ export default function YearTransitionModal({ currentYear, onClose, onDone }: Pr
 
   // ── Confirm submit ──
   const confirm = async () => {
-    if (!newYear.trim()) { toast.error('Please enter the new academic year'); return; }
+    if (!newYear.trim()) { toast.error(t('admin.year_transition.enter_year')); return; }
     setSubmitting(true);
     try {
       // Build class assignments from promoSelected — each student's nextClassId
@@ -131,12 +134,12 @@ export default function YearTransitionModal({ currentYear, onClose, onDone }: Pr
       });
 
       const parts = [];
-      if (gradSelected.size) parts.push(`${gradSelected.size} graduated`);
-      if (classAssignments.length) parts.push(`${classAssignments.length} promoted`);
-      toast.success(`Transitioned to ${newYear.trim()}${parts.length ? ` · ${parts.join(', ')}` : ''}`);
+      if (gradSelected.size) parts.push(t('admin.year_transition.n_graduated', { count: gradSelected.size }));
+      if (classAssignments.length) parts.push(t('admin.year_transition.n_promoted', { count: classAssignments.length }));
+      toast.success(t('admin.year_transition.transitioned', { year: newYear.trim() }) + (parts.length ? ` · ${parts.join(', ')}` : ''));
       onDone(newYear.trim());
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Transition failed');
+      toast.error(err.response?.data?.error || t('admin.year_transition.failed'));
     } finally {
       setSubmitting(false);
     }
@@ -152,8 +155,8 @@ export default function YearTransitionModal({ currentYear, onClose, onDone }: Pr
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
           <div>
-            <h2 className="font-bold text-gray-900 text-lg">End-of-Year Transition</h2>
-            <p className="text-xs text-gray-400 mt-0.5">Step {step} of {STEPS.length}</p>
+            <h2 className="font-bold text-gray-900 text-lg">{t('admin.year_transition.title')}</h2>
+            <p className="text-xs text-gray-400 mt-0.5">{t('admin.year_transition.step_of', { step, total: STEPS.length })}</p>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
             <X className="w-5 h-5" />
@@ -171,7 +174,7 @@ export default function YearTransitionModal({ currentYear, onClose, onDone }: Pr
                 }`}>
                   {n < step ? <CheckCircle className="w-3.5 h-3.5" /> : n}
                 </div>
-                <span className={`text-xs whitespace-nowrap ${n === step ? 'text-gray-800 font-medium' : 'text-gray-400'}`}>{label}</span>
+                <span className={`text-xs whitespace-nowrap ${n === step ? 'text-gray-800 font-medium' : 'text-gray-400'}`}>{t(label)}</span>
                 {n < STEPS.length && <div className="w-5 h-px bg-gray-200 mx-1" />}
               </div>
             );
@@ -187,18 +190,18 @@ export default function YearTransitionModal({ currentYear, onClose, onDone }: Pr
               <div className="bg-primary-50 rounded-xl p-4 flex items-center gap-3">
                 <GraduationCap className="w-8 h-8 text-primary-600 flex-shrink-0" />
                 <div>
-                  <p className="text-xs text-primary-500 font-medium uppercase">Current Academic Year</p>
-                  <p className="text-xl font-bold text-primary-700">{currentYear || 'Not set'}</p>
+                  <p className="text-xs text-primary-500 font-medium uppercase">{t('admin.year_transition.current_year')}</p>
+                  <p className="text-xl font-bold text-primary-700">{currentYear || t('admin.year_transition.not_set')}</p>
                 </div>
               </div>
               <div>
-                <p className="text-sm font-semibold text-gray-700 mb-2">This wizard will</p>
+                <p className="text-sm font-semibold text-gray-700 mb-2">{t('admin.year_transition.wizard_will')}</p>
                 <ul className="space-y-2 text-sm text-gray-600">
                   {[
-                    'Graduate the students you select and permanently record their completing year',
-                    'Automatically promote passing students to their configured next class',
-                    'Clear all teacher reports — giving everyone a clean slate for next year',
-                    'Advance the school\'s academic year so new grades and reports are tagged correctly',
+                    t('admin.year_transition.will_graduate'),
+                    t('admin.year_transition.will_promote'),
+                    t('admin.year_transition.will_clear'),
+                    t('admin.year_transition.will_advance'),
                   ].map((item, i) => (
                     <li key={i} className="flex items-start gap-2">
                       <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
@@ -209,17 +212,17 @@ export default function YearTransitionModal({ currentYear, onClose, onDone }: Pr
               </div>
               {loading ? (
                 <div className="flex items-center gap-2 text-sm text-gray-400">
-                  <Loader2 className="w-4 h-4 animate-spin" /> Loading…
+                  <Loader2 className="w-4 h-4 animate-spin" /> {t('admin.year_transition.loading')}
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-3">
                   <div className="bg-gray-50 rounded-xl p-3 text-center">
                     <p className="text-2xl font-bold text-gray-800">{students.length}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">Active students</p>
+                    <p className="text-xs text-gray-500 mt-0.5">{t('admin.year_transition.active_students')}</p>
                   </div>
                   <div className="bg-orange-50 rounded-xl p-3 text-center">
                     <p className="text-2xl font-bold text-orange-500">{students.length}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">Reports will be cleared</p>
+                    <p className="text-xs text-gray-500 mt-0.5">{t('admin.year_transition.reports_cleared')}</p>
                   </div>
                 </div>
               )}
@@ -234,7 +237,7 @@ export default function YearTransitionModal({ currentYear, onClose, onDone }: Pr
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
                   <input
                     className="w-full border border-gray-300 rounded-xl pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    placeholder="Search students…"
+                    placeholder={t('admin.year_transition.search_students')}
                     value={gradSearch}
                     onChange={e => setGradSearch(e.target.value)}
                   />
@@ -244,25 +247,25 @@ export default function YearTransitionModal({ currentYear, onClose, onDone }: Pr
                   value={gradClassFilter}
                   onChange={e => setGradClassFilter(e.target.value)}
                 >
-                  <option value="">All classes</option>
+                  <option value="">{t('admin.year_transition.all_classes')}</option>
                   {classFilterOptions.map(name => <option key={name} value={name}>{name}</option>)}
                 </select>
               </div>
 
               <div className="flex items-center justify-between">
                 <p className="text-xs text-gray-500">
-                  {gradFiltered.length} shown
-                  {gradSelected.size > 0 && <span className="text-primary-600 font-medium"> · {gradSelected.size} selected for graduation</span>}
+                  {t('admin.year_transition.n_shown', { count: gradFiltered.length })}
+                  {gradSelected.size > 0 && <span className="text-primary-600 font-medium"> · {t('admin.year_transition.n_selected_grad', { count: gradSelected.size })}</span>}
                 </p>
                 <button onClick={toggleAllGrad} className="text-xs text-primary-600 hover:text-primary-700 font-medium">
-                  {gradVisibleAllChecked ? 'Deselect visible' : 'Select visible'}
+                  {gradVisibleAllChecked ? t('admin.year_transition.deselect_visible') : t('admin.year_transition.select_visible')}
                 </button>
               </div>
 
               {loading ? (
                 <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-primary-500" /></div>
               ) : gradFiltered.length === 0 ? (
-                <p className="text-sm text-gray-400 text-center py-6">No students match.</p>
+                <p className="text-sm text-gray-400 text-center py-6">{t('admin.year_transition.no_students_match')}</p>
               ) : (
                 <div className="space-y-1.5">
                   {gradFiltered.map(st => {
@@ -294,7 +297,7 @@ export default function YearTransitionModal({ currentYear, onClose, onDone }: Pr
           {step === 3 && (
             <div className="space-y-3">
               <p className="text-sm text-gray-600">
-                Select students who <span className="font-semibold text-gray-800">passed</span>. They will be automatically moved to their configured next class.
+                <Trans i18nKey="admin.year_transition.promote_intro" components={{ b: <span className="font-semibold text-gray-800" /> }} />
               </p>
 
               <div className="flex gap-2">
@@ -302,7 +305,7 @@ export default function YearTransitionModal({ currentYear, onClose, onDone }: Pr
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
                   <input
                     className="w-full border border-gray-300 rounded-xl pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    placeholder="Search students…"
+                    placeholder={t('admin.year_transition.search_students')}
                     value={promoSearch}
                     onChange={e => setPromoSearch(e.target.value)}
                   />
@@ -312,19 +315,19 @@ export default function YearTransitionModal({ currentYear, onClose, onDone }: Pr
                   value={promoClassFilter}
                   onChange={e => setPromoClassFilter(e.target.value)}
                 >
-                  <option value="">All classes</option>
+                  <option value="">{t('admin.year_transition.all_classes')}</option>
                   {classFilterOptions.map(name => <option key={name} value={name}>{name}</option>)}
                 </select>
               </div>
 
               <div className="flex items-center justify-between">
                 <p className="text-xs text-gray-500">
-                  {promoFiltered.length} shown
-                  {promoSelected.size > 0 && <span className="text-green-600 font-medium"> · {promoSelected.size} will be promoted</span>}
+                  {t('admin.year_transition.n_shown', { count: promoFiltered.length })}
+                  {promoSelected.size > 0 && <span className="text-green-600 font-medium"> · {t('admin.year_transition.n_promoted_will', { count: promoSelected.size })}</span>}
                 </p>
                 {visiblePromoHasNext.length > 0 && (
                   <button onClick={toggleAllPromo} className="text-xs text-primary-600 hover:text-primary-700 font-medium">
-                    {promoVisibleAllChecked ? 'Deselect visible' : 'Select visible'}
+                    {promoVisibleAllChecked ? t('admin.year_transition.deselect_visible') : t('admin.year_transition.select_visible')}
                   </button>
                 )}
               </div>
@@ -332,7 +335,7 @@ export default function YearTransitionModal({ currentYear, onClose, onDone }: Pr
               {loading ? (
                 <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-primary-500" /></div>
               ) : promoFiltered.length === 0 ? (
-                <p className="text-sm text-gray-400 text-center py-6">No continuing students match.</p>
+                <p className="text-sm text-gray-400 text-center py-6">{t('admin.year_transition.no_continuing_match')}</p>
               ) : (
                 <div className="space-y-1.5">
                   {promoFiltered.map(st => {
@@ -368,7 +371,7 @@ export default function YearTransitionModal({ currentYear, onClose, onDone }: Pr
                                 <span className="text-green-600 font-medium">{nextCls}</span>
                               </>
                             ) : (
-                              <span className="text-amber-500 font-medium">· No next class configured</span>
+                              <span className="text-amber-500 font-medium">· {t('admin.year_transition.no_next_class')}</span>
                             )}
                           </p>
                         </div>
@@ -380,7 +383,7 @@ export default function YearTransitionModal({ currentYear, onClose, onDone }: Pr
 
               {noNextClassStudents.length > 0 && !promoClassFilter && !promoSearch && (
                 <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
-                  {noNextClassStudents.length} student{noNextClassStudents.length !== 1 ? 's have' : ' has'} no next class configured. Set it in Class Management to include them.
+                  {t('admin.year_transition.no_next_warning', { count: noNextClassStudents.length })}
                 </p>
               )}
             </div>
@@ -390,7 +393,7 @@ export default function YearTransitionModal({ currentYear, onClose, onDone }: Pr
           {step === 4 && (
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">New Academic Year</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('admin.year_transition.new_year')}</label>
                 <input
                   className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                   placeholder="e.g. 2025-2026"
@@ -401,20 +404,19 @@ export default function YearTransitionModal({ currentYear, onClose, onDone }: Pr
               </div>
 
               <div className="bg-gray-50 rounded-xl p-4 space-y-2">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Summary of changes</p>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{t('admin.year_transition.summary')}</p>
                 <ul className="space-y-1.5 text-sm text-gray-700">
                   <li>
-                    <span className="font-semibold text-primary-600">{gradSelected.size}</span> student{gradSelected.size !== 1 ? 's' : ''} graduated
-                    {currentYear ? ` from ${currentYear}` : ''}
+                    <Trans i18nKey="admin.year_transition.sum_graduated" values={{ count: gradSelected.size, from: currentYear ? t('admin.year_transition.from_year', { year: currentYear }) : '' }} components={{ b: <span className="font-semibold text-primary-600" /> }} />
                   </li>
                   <li>
-                    <span className="font-semibold text-green-600">{promoSelected.size}</span> student{promoSelected.size !== 1 ? 's' : ''} promoted to their next class
+                    <Trans i18nKey="admin.year_transition.sum_promoted" values={{ count: promoSelected.size }} components={{ b: <span className="font-semibold text-green-600" /> }} />
                   </li>
                   <li>
-                    <span className="font-semibold text-orange-500">{continuingStudents.length}</span> continuing student{continuingStudents.length !== 1 ? 's\'' : '\'s'} reports cleared
+                    <Trans i18nKey="admin.year_transition.sum_cleared" values={{ count: continuingStudents.length }} components={{ b: <span className="font-semibold text-orange-500" /> }} />
                   </li>
                   <li>
-                    School year will advance to <span className="font-semibold text-gray-900">{newYear.trim() || '—'}</span>
+                    <Trans i18nKey="admin.year_transition.sum_advance" values={{ year: newYear.trim() || '—' }} components={{ b: <span className="font-semibold text-gray-900" /> }} />
                   </li>
                 </ul>
               </div>
@@ -422,16 +424,16 @@ export default function YearTransitionModal({ currentYear, onClose, onDone }: Pr
               <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl p-4">
                 <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
                 <div className="text-sm text-red-700 space-y-1.5">
-                  <p><span className="font-semibold">This action cannot be undone.</span></p>
+                  <p><span className="font-semibold">{t('admin.year_transition.cannot_undo')}</span></p>
                   <ul className="list-disc pl-5 space-y-1">
                     <li>
-                      <span className="font-semibold">Every report</span> for the {continuingStudents.length} continuing student{continuingStudents.length !== 1 ? 's' : ''} will be <span className="font-semibold">permanently deleted</span>. Grades and attendance are kept.
+                      <Trans i18nKey="admin.year_transition.warn_reports" values={{ count: continuingStudents.length }} components={{ b: <span className="font-semibold" /> }} />
                     </li>
                     <li>
-                      The {gradSelected.size} graduating student{gradSelected.size !== 1 ? 's' : ''} will leave the active roster — kept in the archive only if your school has the archive feature enabled.
+                      {t('admin.year_transition.warn_graduating', { count: gradSelected.size })}
                     </li>
                     <li>
-                      Class assignments update immediately; you cannot roll this back through the UI.
+                      {t('admin.year_transition.warn_classes')}
                     </li>
                   </ul>
                 </div>
@@ -447,11 +449,11 @@ export default function YearTransitionModal({ currentYear, onClose, onDone }: Pr
               onClick={() => setStep(s => s - 1)}
               className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 font-medium transition-colors"
             >
-              <ArrowLeft className="w-4 h-4" /> Back
+              <ArrowLeft className="w-4 h-4" /> {t('common.back')}
             </button>
           ) : (
             <button onClick={onClose} className="text-sm text-gray-500 hover:text-gray-700 font-medium transition-colors">
-              Cancel
+              {t('common.cancel')}
             </button>
           )}
 
@@ -461,7 +463,7 @@ export default function YearTransitionModal({ currentYear, onClose, onDone }: Pr
               icon={<ArrowRight className="w-4 h-4" />}
               disabled={step === 1 && loading}
             >
-              Next
+              {t('admin.year_transition.next')}
             </Button>
           ) : (
             <Button
@@ -469,7 +471,7 @@ export default function YearTransitionModal({ currentYear, onClose, onDone }: Pr
               loading={submitting}
               className="bg-red-600 hover:bg-red-700 focus:ring-red-500"
             >
-              Confirm &amp; Transition
+              {t('admin.year_transition.confirm_transition')}
             </Button>
           )}
         </div>

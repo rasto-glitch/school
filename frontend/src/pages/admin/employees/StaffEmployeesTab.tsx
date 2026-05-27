@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { useTranslation, Trans } from 'react-i18next';
 import { toast } from 'react-toastify';
 import { Info } from 'lucide-react';
 import { adminApi } from '../../../services/api';
@@ -23,6 +24,7 @@ import type { StaffMember } from '../../../types';
 // staff_members table the accounting roster reads.
 
 export default function StaffEmployeesTab() {
+  const { t } = useTranslation();
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [selectedId, setSelectedId] = useState('');
   const [addSubmitting, setAddSubmitting] = useState(false);
@@ -44,7 +46,7 @@ export default function StaffEmployeesTab() {
   const load = () => {
     adminApi.getStaff('active')
       .then(r => setStaff((r.data || []) as StaffMember[]))
-      .catch((e: any) => toast.error(e.response?.data?.error || 'Failed to load staff'));
+      .catch((e: any) => toast.error(e.response?.data?.error || t('admin.staff_emp.failed_load')));
   };
   useEffect(() => { load(); }, []);
 
@@ -80,12 +82,12 @@ export default function StaffEmployeesTab() {
         currency: 'USD',
         previousArchiveId: prevArchiveId || undefined,
       });
-      toast.success('Staff member added. Set their salary in the Accounting portal.', { autoClose: 8000 });
+      toast.success(t('admin.staff_emp.added'), { autoClose: 8000 });
       // Enter the photo phase — keep the form filled.
       setCreatedId(res.data?.id ?? null);
       load();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to add staff member');
+      toast.error(err.response?.data?.error || t('admin.staff_emp.failed_add'));
     } finally {
       setAddSubmitting(false);
     }
@@ -103,21 +105,21 @@ export default function StaffEmployeesTab() {
         position: data.position || null,
         emergencyContact: data.emergencyContact || null,
       });
-      toast.success('Staff member saved');
+      toast.success(t('admin.staff_emp.saved'));
       addForm.reset();
       setPrevArchiveId(null);
       setPrevArchiveLabel('');
       setCreatedId(null);
       load();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to save staff member');
+      toast.error(err.response?.data?.error || t('admin.staff_emp.failed_save'));
     } finally {
       setAddSubmitting(false);
     }
   };
 
   const onEdit = async (data: any) => {
-    if (!selectedId) { toast.error('Select a staff member first'); return; }
+    if (!selectedId) { toast.error(t('admin.staff_emp.select_first')); return; }
     setEditSubmitting(true);
     try {
       await adminApi.updateStaff(selectedId, {
@@ -126,17 +128,17 @@ export default function StaffEmployeesTab() {
         position: data.position || null,
         emergencyContact: data.emergencyContact || null,
       });
-      toast.success('Staff member updated');
+      toast.success(t('admin.staff_emp.updated'));
       load();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to update staff member');
+      toast.error(err.response?.data?.error || t('admin.staff_emp.failed_update'));
     } finally {
       setEditSubmitting(false);
     }
   };
 
   const onRemove = () => {
-    if (!selectedId) { toast.error('Select a staff member first'); return; }
+    if (!selectedId) { toast.error(t('admin.staff_emp.select_first')); return; }
     setRemoveOpen(true);
   };
 
@@ -144,13 +146,13 @@ export default function StaffEmployeesTab() {
     setRemoving(true);
     try {
       await adminApi.archiveStaff(selectedId, { reason, departureDate });
-      toast.success('Staff member archived');
+      toast.success(t('admin.staff_emp.archived'));
       setRemoveOpen(false);
       setSelectedId('');
       editForm.reset();
       load();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to archive staff member');
+      toast.error(err.response?.data?.error || t('admin.staff_emp.failed_archive'));
     } finally {
       setRemoving(false);
     }
@@ -162,28 +164,27 @@ export default function StaffEmployeesTab() {
         <div className="flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-900">
           <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
           <span>
-            Salary, insurance and payments are managed by the accountant in the <span className="font-medium">Accounting portal</span>.
-            New staff start with no salary set — add the figure there.
+            <Trans i18nKey="admin.staff_emp.finance_note" components={{ b: <span className="font-medium" /> }} />
           </span>
         </div>
 
         <div className="space-y-6">
           {/* Add Staff — full width, two-phase (Add → attach photo → Save) */}
           <Card>
-            <h2 className="font-semibold text-gray-900 mb-4">Add Staff</h2>
+            <h2 className="font-semibold text-gray-900 mb-4">{t('admin.staff_emp.add_staff')}</h2>
             <form onSubmit={addForm.handleSubmit(createdId ? onSave : onAdd)} className="space-y-3">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Full Name</label>
-                  <Input placeholder="Full Name" {...addForm.register('fullName', { required: true })} />
+                  <label className="block text-xs font-medium text-gray-500 mb-1">{t('admin.staff_emp.full_name')}</label>
+                  <Input placeholder={t('admin.staff_emp.full_name')} {...addForm.register('fullName', { required: true })} />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Position</label>
-                  <Input placeholder="Position (e.g. Janitor, Cook, Guard)" {...addForm.register('position')} />
+                  <label className="block text-xs font-medium text-gray-500 mb-1">{t('admin.staff_emp.position')}</label>
+                  <Input placeholder={t('admin.staff_emp.position_ph')} {...addForm.register('position')} />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Emergency Contact</label>
-                  <Input placeholder="Emergency Contact" {...addForm.register('emergencyContact')} />
+                  <label className="block text-xs font-medium text-gray-500 mb-1">{t('admin.staff_emp.emergency_contact')}</label>
+                  <Input placeholder={t('admin.staff_emp.emergency_contact')} {...addForm.register('emergencyContact')} />
                 </div>
               </div>
               {!createdId && (
@@ -204,7 +205,7 @@ export default function StaffEmployeesTab() {
               {createdId && (
                 <>
                   <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-sm text-green-800">
-                    Staff member created. Attach a professional photo (optional), then click Save. They're already saved either way.
+                    {t('admin.staff_emp.photo_phase_hint')}
                   </div>
                   <ProfessionalPhotoField
                     role="staff"
@@ -214,24 +215,24 @@ export default function StaffEmployeesTab() {
                   />
                 </>
               )}
-              <Button type="submit" loading={addSubmitting} fullWidth>{createdId ? 'Save' : 'Add'}</Button>
+              <Button type="submit" loading={addSubmitting} fullWidth>{createdId ? t('admin.staff_emp.save') : t('admin.staff_emp.add')}</Button>
             </form>
           </Card>
 
           {/* Edit Staff — full width, stacked below Add */}
           <Card>
-            <h2 className="font-semibold text-gray-900 mb-4">Edit Staff</h2>
+            <h2 className="font-semibold text-gray-900 mb-4">{t('admin.staff_emp.edit_staff')}</h2>
             <form onSubmit={editForm.handleSubmit(onEdit)} className="space-y-3">
               <Select
-                label="Select Staff"
-                options={staff.map(s => ({ value: s.id, label: s.fullName || '(Unnamed)' }))}
-                placeholder="Select Staff"
+                label={t('admin.staff_emp.select_staff')}
+                options={staff.map(s => ({ value: s.id, label: s.fullName || t('admin.staff_emp.unnamed') }))}
+                placeholder={t('admin.staff_emp.select_staff')}
                 value={selectedId}
                 onChange={e => setSelectedId(e.target.value)}
               />
-              <Input placeholder="Full Name" {...editForm.register('fullName')} />
-              <Input placeholder="Position" {...editForm.register('position')} />
-              <Input placeholder="Emergency Contact" {...editForm.register('emergencyContact')} />
+              <Input placeholder={t('admin.staff_emp.full_name')} {...editForm.register('fullName')} />
+              <Input placeholder={t('admin.staff_emp.position')} {...editForm.register('position')} />
+              <Input placeholder={t('admin.staff_emp.emergency_contact')} {...editForm.register('emergencyContact')} />
               {selected && <EmployeeHRFields register={editForm.register} />}
               {selected && (
                 <ProfessionalPhotoField
@@ -243,12 +244,12 @@ export default function StaffEmployeesTab() {
               )}
               {selected && (selected.salaryAmount > 0 || selected.nextPaymentDate) && (
                 <div className="bg-gray-50 rounded-xl px-3 py-2 text-xs text-gray-500">
-                  Salary is configured in the Accounting portal.
+                  {t('admin.staff_emp.salary_configured')}
                 </div>
               )}
               <div className="flex gap-2">
-                <Button type="submit" loading={editSubmitting} fullWidth disabled={!selectedId}>Update Staff</Button>
-                <Button type="button" variant="danger" loading={removing} onClick={onRemove} disabled={!selectedId}>Remove</Button>
+                <Button type="submit" loading={editSubmitting} fullWidth disabled={!selectedId}>{t('admin.staff_emp.update_staff')}</Button>
+                <Button type="button" variant="danger" loading={removing} onClick={onRemove} disabled={!selectedId}>{t('admin.staff_emp.remove')}</Button>
               </div>
             </form>
           </Card>
@@ -259,7 +260,7 @@ export default function StaffEmployeesTab() {
         onClose={() => setRemoveOpen(false)}
         onConfirm={doRemove}
         busy={removing}
-        entityLabel="staff member"
+        entityLabel={t('admin.staff_emp.entity')}
       />
     </>
   );

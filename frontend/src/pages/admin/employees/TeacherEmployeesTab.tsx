@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'react-toastify';
 import { History } from 'lucide-react';
 import { adminApi } from '../../../services/api';
@@ -21,6 +22,7 @@ interface InactiveUser { id: string; firstName: string; lastName: string; userna
 // standalone /admin/teachers page — only the outer PageLayout wrapper moved
 // up to EmployeesManagement.
 export default function TeacherEmployeesTab() {
+  const { t } = useTranslation();
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
   const [selectedTeacherId, setSelectedTeacherId] = useState('');
@@ -60,8 +62,8 @@ export default function TeacherEmployeesTab() {
   }, [debouncedAddName]);
 
   const reactivateInactive = async (u: InactiveUser) => {
-    if (!confirm(`Reactivate ${u.firstName} ${u.lastName} (${u.username})?`)) return;
-    const newPassword = prompt('Set a new password (or leave blank to keep the existing one):\n\n' + PASSWORD_POLICY_MESSAGE, '');
+    if (!confirm(t('admin.teacher_emp.confirm_reactivate', { name: `${u.firstName} ${u.lastName}`, username: u.username }))) return;
+    const newPassword = prompt(t('admin.teacher_emp.set_password_prompt') + '\n\n' + PASSWORD_POLICY_MESSAGE, '');
     if (newPassword === null) return; // cancelled
     const trimmed = newPassword.trim();
     if (trimmed && !isStrongPassword(trimmed)) {
@@ -71,17 +73,17 @@ export default function TeacherEmployeesTab() {
     setReactivatingId(u.id);
     try {
       const r = await adminApi.reactivateUser(u.id, trimmed || undefined);
-      const tail = r.data?.passwordReset ? ` New password: ${newPassword}` : '';
-      toast.success(`Teacher reactivated. Login: ${u.username}.${tail}`, { autoClose: 8000 });
+      const tail = r.data?.passwordReset ? ' ' + t('admin.teacher_emp.new_password_tail', { password: newPassword }) : '';
+      toast.success(t('admin.teacher_emp.reactivated', { username: u.username }) + tail, { autoClose: 8000 });
       addForm.reset();
       setInactiveMatches([]);
       load();
     } catch (e: any) {
-      toast.error(e.response?.data?.error || 'Failed to reactivate');
+      toast.error(e.response?.data?.error || t('admin.teacher_emp.failed_reactivate'));
     } finally { setReactivatingId(null); }
   };
 
-  const selectedTeacher = useMemo(() => teachers.find(t => t.id === selectedTeacherId) || null, [teachers, selectedTeacherId]);
+  const selectedTeacher = useMemo(() => teachers.find(tc => tc.id === selectedTeacherId) || null, [teachers, selectedTeacherId]);
 
   // Populate edit form when teacher is selected
   useEffect(() => {
@@ -123,12 +125,12 @@ export default function TeacherEmployeesTab() {
         previousArchiveId: prevArchiveId || undefined,
       });
       const tempPw = res.data?.tempPassword || 'Teacher@123';
-      toast.success(`Teacher added! Login: ${res.data?.username} / Password: ${tempPw}. Assign their subjects in Class Management → Curriculum.`, { autoClose: 9000 });
+      toast.success(t('admin.teacher_emp.added', { username: res.data?.username, password: tempPw }), { autoClose: 9000 });
       // Enter the photo phase — keep the form filled (incl. class assignment).
       setCreatedId(res.data?.id ?? null);
       load();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to add teacher');
+      toast.error(err.response?.data?.error || t('admin.teacher_emp.failed_add'));
     } finally {
       setAddSubmitting(false);
     }
@@ -147,7 +149,7 @@ export default function TeacherEmployeesTab() {
         emergencyContact: data.emergencyContact,
         classIds: addClassIds,
       });
-      toast.success('Teacher saved');
+      toast.success(t('admin.teacher_emp.saved'));
       addForm.reset();
       setAddClassIds([]);
       setPrevArchiveId(null);
@@ -155,28 +157,28 @@ export default function TeacherEmployeesTab() {
       setCreatedId(null);
       load();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to save teacher');
+      toast.error(err.response?.data?.error || t('admin.teacher_emp.failed_save'));
     } finally {
       setAddSubmitting(false);
     }
   };
 
   const onEdit = async (data: any) => {
-    if (!selectedTeacherId) { toast.error('Select a teacher first'); return; }
+    if (!selectedTeacherId) { toast.error(t('admin.teacher_emp.select_first')); return; }
     setEditSubmitting(true);
     try {
       await adminApi.updateTeacher(selectedTeacherId, { ...data, classIds: editClassIds });
-      toast.success('Teacher updated!');
+      toast.success(t('admin.teacher_emp.updated'));
       load();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to update teacher');
+      toast.error(err.response?.data?.error || t('admin.teacher_emp.failed_update'));
     } finally {
       setEditSubmitting(false);
     }
   };
 
   const onRemove = () => {
-    if (!selectedTeacherId) { toast.error('Select a teacher first'); return; }
+    if (!selectedTeacherId) { toast.error(t('admin.teacher_emp.select_first')); return; }
     setRemoveOpen(true);
   };
 
@@ -184,22 +186,22 @@ export default function TeacherEmployeesTab() {
     setRemoving(true);
     try {
       await adminApi.deleteTeacher(selectedTeacherId, { reason, departureDate });
-      toast.success('Teacher removed');
+      toast.success(t('admin.teacher_emp.removed'));
       setRemoveOpen(false);
       setSelectedTeacherId('');
       editForm.reset();
       setEditClassIds([]);
       load();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to remove teacher');
+      toast.error(err.response?.data?.error || t('admin.teacher_emp.failed_remove'));
     } finally {
       setRemoving(false);
     }
   };
 
-  const teachesSummary = (t: Teacher | null): string => {
-    if (!t?.subjects?.length) return 'No subjects assigned yet';
-    return t.subjects.map(s => {
+  const teachesSummary = (teacher: Teacher | null): string => {
+    if (!teacher?.subjects?.length) return t('admin.teacher_emp.no_subjects');
+    return teacher.subjects.map(s => {
       const cls = (s.classes || []).map(c => c.name).filter(Boolean);
       return cls.length ? `${s.name} (${cls.join(', ')})` : s.name;
     }).join('; ');
@@ -210,30 +212,30 @@ export default function TeacherEmployeesTab() {
       <div className="space-y-6">
           {/* Add Teacher — full width, two-phase (Add → attach photo → Save) */}
           <Card>
-            <h2 className="font-semibold text-gray-900 mb-4">Add Teacher</h2>
+            <h2 className="font-semibold text-gray-900 mb-4">{t('admin.teacher_emp.add_teacher')}</h2>
             <form onSubmit={addForm.handleSubmit(createdId ? onSave : onAdd)} className="space-y-3">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Full Name</label>
-                  <Input placeholder="Full Name" {...addForm.register('fullName', { required: true })} />
+                  <label className="block text-xs font-medium text-gray-500 mb-1">{t('admin.teacher_emp.full_name')}</label>
+                  <Input placeholder={t('admin.teacher_emp.full_name')} {...addForm.register('fullName', { required: true })} />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Primary Phone Number</label>
-                  <Input placeholder="Primary Phone Number" {...addForm.register('phoneNumber')} />
+                  <label className="block text-xs font-medium text-gray-500 mb-1">{t('admin.teacher_emp.primary_phone')}</label>
+                  <Input placeholder={t('admin.teacher_emp.primary_phone')} {...addForm.register('phoneNumber')} />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Emergency Contact</label>
-                  <Input placeholder="Emergency Contact" {...addForm.register('emergencyContact')} />
+                  <label className="block text-xs font-medium text-gray-500 mb-1">{t('admin.teacher_emp.emergency_contact')}</label>
+                  <Input placeholder={t('admin.teacher_emp.emergency_contact')} {...addForm.register('emergencyContact')} />
                 </div>
                 {!createdId && (
                   <>
                     <div>
-                      <label className="block text-xs font-medium text-gray-500 mb-1">Username (optional)</label>
-                      <Input placeholder="Username (optional)" {...addForm.register('username')} />
+                      <label className="block text-xs font-medium text-gray-500 mb-1">{t('admin.teacher_emp.username_optional')}</label>
+                      <Input placeholder={t('admin.teacher_emp.username_optional')} {...addForm.register('username')} />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-500 mb-1">Password</label>
-                      <Input type="password" placeholder="Default: Teacher@123" {...addForm.register('password')} />
+                      <label className="block text-xs font-medium text-gray-500 mb-1">{t('admin.teacher_emp.password')}</label>
+                      <Input type="password" placeholder={t('admin.teacher_emp.password_default')} {...addForm.register('password')} />
                     </div>
                   </>
                 )}
@@ -241,7 +243,7 @@ export default function TeacherEmployeesTab() {
               {!createdId && inactiveMatches.length > 0 && (
                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
                   <div className="flex items-center gap-2 text-sm text-amber-900 font-medium mb-2">
-                    <History className="w-4 h-4" /> Previously deactivated match{inactiveMatches.length > 1 ? 'es' : ''}
+                    <History className="w-4 h-4" /> {t('admin.teacher_emp.deactivated_matches', { count: inactiveMatches.length })}
                   </div>
                   <div className="space-y-1.5">
                     {inactiveMatches.map(u => (
@@ -253,11 +255,11 @@ export default function TeacherEmployeesTab() {
                         className="w-full text-left bg-white hover:bg-amber-100 border border-amber-200 rounded px-3 py-2 text-sm disabled:opacity-50"
                       >
                         <div className="font-medium text-gray-900">{u.firstName} {u.lastName}</div>
-                        <div className="text-xs text-gray-600">{u.username} · click to reactivate</div>
+                        <div className="text-xs text-gray-600">{u.username} · {t('admin.teacher_emp.click_reactivate')}</div>
                       </button>
                     ))}
                   </div>
-                  <div className="text-xs text-amber-700 mt-2">If this is a returning teacher, click their record to reactivate. Otherwise just continue filling in the form for a new teacher.</div>
+                  <div className="text-xs text-amber-700 mt-2">{t('admin.teacher_emp.returning_hint')}</div>
                 </div>
               )}
               {!createdId && (
@@ -275,7 +277,7 @@ export default function TeacherEmployeesTab() {
                 />
               )}
               <div>
-                <p className="text-sm font-medium text-gray-700 mb-2">Assign Class(es)</p>
+                <p className="text-sm font-medium text-gray-700 mb-2">{t('admin.teacher_emp.assign_classes')}</p>
                 <div className="max-h-32 overflow-y-auto border border-gray-200 rounded-xl p-2 space-y-1">
                   {classes.map(c => (
                     <label key={c.id} className="flex items-center gap-2 cursor-pointer p-1 hover:bg-gray-50 rounded-lg">
@@ -284,13 +286,13 @@ export default function TeacherEmployeesTab() {
                     </label>
                   ))}
                 </div>
-                <p className="text-xs text-gray-400 mt-1">Subjects are assigned per class in Class Management → Curriculum.</p>
+                <p className="text-xs text-gray-400 mt-1">{t('admin.teacher_emp.subjects_hint')}</p>
               </div>
               <EmployeeHRFields register={addForm.register} />
               {createdId && (
                 <>
                   <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-sm text-green-800">
-                    Teacher created. Attach a professional photo (optional), then click Save. They're already saved either way.
+                    {t('admin.teacher_emp.photo_phase_hint')}
                   </div>
                   <ProfessionalPhotoField
                     role="teacher"
@@ -300,33 +302,33 @@ export default function TeacherEmployeesTab() {
                   />
                 </>
               )}
-              <Button type="submit" loading={addSubmitting} fullWidth>{createdId ? 'Save' : 'Add'}</Button>
+              <Button type="submit" loading={addSubmitting} fullWidth>{createdId ? t('admin.teacher_emp.save') : t('admin.teacher_emp.add')}</Button>
             </form>
           </Card>
 
           {/* Edit Teacher */}
           <Card>
-            <h2 className="font-semibold text-gray-900 mb-4">Edit Teacher</h2>
+            <h2 className="font-semibold text-gray-900 mb-4">{t('admin.teacher_emp.edit_teacher')}</h2>
             <form onSubmit={editForm.handleSubmit(onEdit)} className="space-y-3">
               <Select
-                label="Select Teacher"
-                options={teachers.map(t => ({ value: t.id, label: t.fullName || '(Unnamed Teacher)' }))}
-                placeholder="Select Teacher"
+                label={t('admin.teacher_emp.select_teacher')}
+                options={teachers.map(tc => ({ value: tc.id, label: tc.fullName || t('admin.teacher_emp.unnamed') }))}
+                placeholder={t('admin.teacher_emp.select_teacher')}
                 value={selectedTeacherId}
                 onChange={e => setSelectedTeacherId(e.target.value)}
               />
-              <Input placeholder="Full Name" {...editForm.register('fullName')} />
-              <Input placeholder="Primary Phone Number" {...editForm.register('phoneNumber')} />
-              <Input placeholder="Emergency Contact" {...editForm.register('emergencyContact')} />
+              <Input placeholder={t('admin.teacher_emp.full_name')} {...editForm.register('fullName')} />
+              <Input placeholder={t('admin.teacher_emp.primary_phone')} {...editForm.register('phoneNumber')} />
+              <Input placeholder={t('admin.teacher_emp.emergency_contact')} {...editForm.register('emergencyContact')} />
               {selectedTeacher && (
                 <div className="bg-gray-50 rounded-xl px-3 py-2">
-                  <p className="text-xs font-medium text-gray-500 mb-0.5">Teaches</p>
+                  <p className="text-xs font-medium text-gray-500 mb-0.5">{t('admin.teacher_emp.teaches')}</p>
                   <p className="text-sm text-gray-800">{teachesSummary(selectedTeacher)}</p>
-                  <p className="text-xs text-gray-400 mt-1">Manage subjects per class in Class Management → Curriculum.</p>
+                  <p className="text-xs text-gray-400 mt-1">{t('admin.teacher_emp.manage_subjects_hint')}</p>
                 </div>
               )}
               <div>
-                <p className="text-sm font-medium text-gray-700 mb-2">Assign Class(es)</p>
+                <p className="text-sm font-medium text-gray-700 mb-2">{t('admin.teacher_emp.assign_classes')}</p>
                 <div className="max-h-32 overflow-y-auto border border-gray-200 rounded-xl p-2 space-y-1">
                   {classes.map(c => (
                     <label key={c.id} className="flex items-center gap-2 cursor-pointer p-1 hover:bg-gray-50 rounded-lg">
@@ -335,7 +337,7 @@ export default function TeacherEmployeesTab() {
                     </label>
                   ))}
                 </div>
-                <p className="text-xs text-gray-400 mt-1">Removing a class also removes the subjects that teacher was teaching in it.</p>
+                <p className="text-xs text-gray-400 mt-1">{t('admin.teacher_emp.remove_class_hint')}</p>
               </div>
               {selectedTeacher && <EmployeeHRFields register={editForm.register} />}
               {selectedTeacher && (
@@ -347,8 +349,8 @@ export default function TeacherEmployeesTab() {
                 />
               )}
               <div className="flex gap-2">
-                <Button type="submit" loading={editSubmitting} fullWidth disabled={!selectedTeacherId}>Update Teacher</Button>
-                <Button type="button" variant="danger" loading={removing} onClick={onRemove} disabled={!selectedTeacherId}>Remove</Button>
+                <Button type="submit" loading={editSubmitting} fullWidth disabled={!selectedTeacherId}>{t('admin.teacher_emp.update_teacher')}</Button>
+                <Button type="button" variant="danger" loading={removing} onClick={onRemove} disabled={!selectedTeacherId}>{t('admin.teacher_emp.remove')}</Button>
               </div>
             </form>
           </Card>
@@ -358,7 +360,7 @@ export default function TeacherEmployeesTab() {
         onClose={() => setRemoveOpen(false)}
         onConfirm={doRemove}
         busy={removing}
-        entityLabel="teacher"
+        entityLabel={t('admin.teacher_emp.entity')}
       />
     </>
   );

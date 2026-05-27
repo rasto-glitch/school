@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'react-toastify';
 import { History } from 'lucide-react';
 import { adminApi } from '../../../services/api';
@@ -59,6 +60,7 @@ type AddForm = { firstName: string; lastName: string; phone: string; email: stri
 type EditForm = { firstName: string; lastName: string; phone: string; email: string; emergencyContact: string } & EmployeeHRFormFields;
 
 export default function AccountEmployeesTab({ role, singular }: Props) {
+  const { t } = useTranslation();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [selectedId, setSelectedId] = useState('');
   const [addSubmitting, setAddSubmitting] = useState(false);
@@ -96,8 +98,8 @@ export default function AccountEmployeesTab({ role, singular }: Props) {
   }, [debouncedName, role]);
 
   const reactivateInactive = async (u: InactiveUser) => {
-    if (!confirm(`Reactivate ${u.firstName} ${u.lastName} (${u.username})?`)) return;
-    const newPassword = prompt('Set a new password (or leave blank to keep the existing one):\n\n' + PASSWORD_POLICY_MESSAGE, '');
+    if (!confirm(t('admin.acct_emp.confirm_reactivate', { name: `${u.firstName} ${u.lastName}`, username: u.username }))) return;
+    const newPassword = prompt(t('admin.acct_emp.set_password_prompt') + '\n\n' + PASSWORD_POLICY_MESSAGE, '');
     if (newPassword === null) return; // cancelled
     const trimmed = newPassword.trim();
     if (trimmed && !isStrongPassword(trimmed)) {
@@ -107,13 +109,13 @@ export default function AccountEmployeesTab({ role, singular }: Props) {
     setReactivatingId(u.id);
     try {
       const r = await adminApi.reactivateUser(u.id, trimmed || undefined);
-      const tail = r.data?.passwordReset ? ` New password: ${newPassword}` : '';
-      toast.success(`${singular} reactivated. Login: ${u.username}.${tail}`, { autoClose: 8000 });
+      const tail = r.data?.passwordReset ? ' ' + t('admin.acct_emp.new_password_tail', { password: newPassword }) : '';
+      toast.success(t('admin.acct_emp.reactivated', { role: singular, username: u.username }) + tail, { autoClose: 8000 });
       addForm.reset();
       setInactiveMatches([]);
       load();
     } catch (e: any) {
-      toast.error(e.response?.data?.error || 'Failed to reactivate');
+      toast.error(e.response?.data?.error || t('admin.acct_emp.failed_reactivate'));
     } finally { setReactivatingId(null); }
   };
 
@@ -139,7 +141,7 @@ export default function AccountEmployeesTab({ role, singular }: Props) {
 
   const onAdd = async (data: any) => {
     if (!data.username?.trim() || !data.password?.trim()) {
-      toast.error('Username and password are required');
+      toast.error(t('admin.acct_emp.username_password_required'));
       return;
     }
     if (!isStrongPassword(data.password)) {
@@ -159,13 +161,13 @@ export default function AccountEmployeesTab({ role, singular }: Props) {
         password: data.password,
         role,
       });
-      toast.success(`${singular} added! Login: ${data.username}`, { autoClose: 8000 });
+      toast.success(t('admin.acct_emp.added', { role: singular, username: data.username }), { autoClose: 8000 });
       // Enter the photo phase — record is committed; keep the form filled so
       // the admin can attach a photo and/or tweak details, then Save.
       setCreatedId(res.data?.id ?? null);
       load();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || `Failed to add ${singular.toLowerCase()}`);
+      toast.error(err.response?.data?.error || t('admin.acct_emp.failed_add', { role: singular }));
     } finally {
       setAddSubmitting(false);
     }
@@ -186,19 +188,19 @@ export default function AccountEmployeesTab({ role, singular }: Props) {
         email: data.email || null,
         emergencyContact: data.emergencyContact || null,
       });
-      toast.success(`${singular} saved`);
+      toast.success(t('admin.acct_emp.saved', { role: singular }));
       addForm.reset();
       setCreatedId(null);
       load();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || `Failed to save ${singular.toLowerCase()}`);
+      toast.error(err.response?.data?.error || t('admin.acct_emp.failed_save', { role: singular }));
     } finally {
       setAddSubmitting(false);
     }
   };
 
   const onEdit = async (data: any) => {
-    if (!selectedId) { toast.error(`Select a ${singular.toLowerCase()} first`); return; }
+    if (!selectedId) { toast.error(t('admin.acct_emp.select_first', { role: singular })); return; }
     setEditSubmitting(true);
     try {
       await adminApi.updateAccount(selectedId, {
@@ -209,17 +211,17 @@ export default function AccountEmployeesTab({ role, singular }: Props) {
         email: data.email || null,
         emergencyContact: data.emergencyContact || null,
       });
-      toast.success(`${singular} updated!`);
+      toast.success(t('admin.acct_emp.updated', { role: singular }));
       load();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || `Failed to update ${singular.toLowerCase()}`);
+      toast.error(err.response?.data?.error || t('admin.acct_emp.failed_update', { role: singular }));
     } finally {
       setEditSubmitting(false);
     }
   };
 
   const onRemove = () => {
-    if (!selectedId) { toast.error(`Select a ${singular.toLowerCase()} first`); return; }
+    if (!selectedId) { toast.error(t('admin.acct_emp.select_first', { role: singular })); return; }
     setRemoveOpen(true);
   };
 
@@ -227,13 +229,13 @@ export default function AccountEmployeesTab({ role, singular }: Props) {
     setRemoving(true);
     try {
       await adminApi.deleteAccount(selectedId, { reason, departureDate });
-      toast.success(`${singular} removed`);
+      toast.success(t('admin.acct_emp.removed', { role: singular }));
       setRemoveOpen(false);
       setSelectedId('');
       editForm.reset();
       load();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || `Failed to remove ${singular.toLowerCase()}`);
+      toast.error(err.response?.data?.error || t('admin.acct_emp.failed_remove', { role: singular }));
     } finally {
       setRemoving(false);
     }
@@ -244,38 +246,38 @@ export default function AccountEmployeesTab({ role, singular }: Props) {
       <div className="space-y-6">
         {/* Add — full width, two-phase (Add → attach photo → Save) */}
         <Card>
-          <h2 className="font-semibold text-gray-900 mb-4">Add {singular}</h2>
+          <h2 className="font-semibold text-gray-900 mb-4">{t('admin.acct_emp.add_title', { role: singular })}</h2>
           <form onSubmit={addForm.handleSubmit(createdId ? onSave : onAdd)} className="space-y-3">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">First Name</label>
-                <Input placeholder="First Name" {...addForm.register('firstName', { required: true })} />
+                <label className="block text-xs font-medium text-gray-500 mb-1">{t('admin.acct_emp.first_name')}</label>
+                <Input placeholder={t('admin.acct_emp.first_name')} {...addForm.register('firstName', { required: true })} />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Last Name</label>
-                <Input placeholder="Last Name" {...addForm.register('lastName', { required: true })} />
+                <label className="block text-xs font-medium text-gray-500 mb-1">{t('admin.acct_emp.last_name')}</label>
+                <Input placeholder={t('admin.acct_emp.last_name')} {...addForm.register('lastName', { required: true })} />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Phone Number</label>
-                <Input placeholder="Phone Number" {...addForm.register('phone')} />
+                <label className="block text-xs font-medium text-gray-500 mb-1">{t('admin.acct_emp.phone')}</label>
+                <Input placeholder={t('admin.acct_emp.phone')} {...addForm.register('phone')} />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Emergency Contact</label>
-                <Input placeholder="Emergency Contact" {...addForm.register('emergencyContact')} />
+                <label className="block text-xs font-medium text-gray-500 mb-1">{t('admin.acct_emp.emergency_contact')}</label>
+                <Input placeholder={t('admin.acct_emp.emergency_contact')} {...addForm.register('emergencyContact')} />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Email (optional)</label>
-                <Input placeholder="Email (optional)" {...addForm.register('email')} />
+                <label className="block text-xs font-medium text-gray-500 mb-1">{t('admin.acct_emp.email_optional')}</label>
+                <Input placeholder={t('admin.acct_emp.email_optional')} {...addForm.register('email')} />
               </div>
               {!createdId && (
                 <>
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">Username</label>
-                    <Input placeholder="Username" {...addForm.register('username', { required: true })} />
+                    <label className="block text-xs font-medium text-gray-500 mb-1">{t('admin.acct_emp.username')}</label>
+                    <Input placeholder={t('admin.acct_emp.username')} {...addForm.register('username', { required: true })} />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">Password</label>
-                    <Input type="password" placeholder="Min 8 chars, 1 uppercase, 1 special" {...addForm.register('password', { required: true })} />
+                    <label className="block text-xs font-medium text-gray-500 mb-1">{t('admin.acct_emp.password')}</label>
+                    <Input type="password" placeholder={t('admin.acct_emp.password_ph')} {...addForm.register('password', { required: true })} />
                   </div>
                 </>
               )}
@@ -283,7 +285,7 @@ export default function AccountEmployeesTab({ role, singular }: Props) {
             {!createdId && inactiveMatches.length > 0 && (
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
                 <div className="flex items-center gap-2 text-sm text-amber-900 font-medium mb-2">
-                  <History className="w-4 h-4" /> Previously deactivated match{inactiveMatches.length > 1 ? 'es' : ''}
+                  <History className="w-4 h-4" /> {t('admin.acct_emp.deactivated_matches', { count: inactiveMatches.length })}
                 </div>
                 <div className="space-y-1.5">
                   {inactiveMatches.map(u => (
@@ -295,18 +297,18 @@ export default function AccountEmployeesTab({ role, singular }: Props) {
                       className="w-full text-left bg-white hover:bg-amber-100 border border-amber-200 rounded px-3 py-2 text-sm disabled:opacity-50"
                     >
                       <div className="font-medium text-gray-900">{u.firstName} {u.lastName}</div>
-                      <div className="text-xs text-gray-600">{u.username} · click to reactivate</div>
+                      <div className="text-xs text-gray-600">{u.username} · {t('admin.acct_emp.click_reactivate')}</div>
                     </button>
                   ))}
                 </div>
-                <div className="text-xs text-amber-700 mt-2">If this is a returning {singular.toLowerCase()}, click their record to reactivate. Otherwise just continue filling in the form for a new one.</div>
+                <div className="text-xs text-amber-700 mt-2">{t('admin.acct_emp.returning_hint', { role: singular })}</div>
               </div>
             )}
             <EmployeeHRFields register={addForm.register} />
             {createdId && (
               <>
                 <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-sm text-green-800">
-                  {singular} created. Attach a professional photo (optional), then click Save. They're already saved either way.
+                  {t('admin.acct_emp.photo_phase_hint', { role: singular })}
                 </div>
                 <ProfessionalPhotoField
                   role={role}
@@ -316,28 +318,28 @@ export default function AccountEmployeesTab({ role, singular }: Props) {
                 />
               </>
             )}
-            <Button type="submit" loading={addSubmitting} fullWidth>{createdId ? 'Save' : 'Add'}</Button>
+            <Button type="submit" loading={addSubmitting} fullWidth>{createdId ? t('admin.acct_emp.save') : t('admin.acct_emp.add')}</Button>
           </form>
         </Card>
 
         {/* Edit — full width, stacked below Add */}
         <Card>
-          <h2 className="font-semibold text-gray-900 mb-4">Edit {singular}</h2>
+          <h2 className="font-semibold text-gray-900 mb-4">{t('admin.acct_emp.edit_title', { role: singular })}</h2>
           <form onSubmit={editForm.handleSubmit(onEdit)} className="space-y-3">
               <Select
-                label={`Select ${singular}`}
+                label={t('admin.acct_emp.select_role', { role: singular })}
                 options={accounts.map(a => ({ value: a.id, label: `${a.firstName} ${a.lastName}`.trim() || a.username }))}
-                placeholder={`Select ${singular}`}
+                placeholder={t('admin.acct_emp.select_role', { role: singular })}
                 value={selectedId}
                 onChange={e => setSelectedId(e.target.value)}
               />
               <div className="grid grid-cols-2 gap-3">
-                <Input placeholder="First Name" {...editForm.register('firstName')} />
-                <Input placeholder="Last Name" {...editForm.register('lastName')} />
+                <Input placeholder={t('admin.acct_emp.first_name')} {...editForm.register('firstName')} />
+                <Input placeholder={t('admin.acct_emp.last_name')} {...editForm.register('lastName')} />
               </div>
-              <Input placeholder="Phone Number" {...editForm.register('phone')} />
-              <Input placeholder="Emergency Contact" {...editForm.register('emergencyContact')} />
-              <Input placeholder="Email" {...editForm.register('email')} />
+              <Input placeholder={t('admin.acct_emp.phone')} {...editForm.register('phone')} />
+              <Input placeholder={t('admin.acct_emp.emergency_contact')} {...editForm.register('emergencyContact')} />
+              <Input placeholder={t('admin.acct_emp.email')} {...editForm.register('email')} />
               {selected && <EmployeeHRFields register={editForm.register} />}
               {selected && (
                 <ProfessionalPhotoField
@@ -349,14 +351,14 @@ export default function AccountEmployeesTab({ role, singular }: Props) {
               )}
               {selected && (
                 <div className="bg-gray-50 rounded-xl px-3 py-2">
-                  <p className="text-xs font-medium text-gray-500 mb-0.5">Login</p>
+                  <p className="text-xs font-medium text-gray-500 mb-0.5">{t('admin.acct_emp.login')}</p>
                   <p className="text-sm text-gray-800">{selected.username}</p>
-                  <p className="text-xs text-gray-400 mt-1">Reset the password from the Accounts page.</p>
+                  <p className="text-xs text-gray-400 mt-1">{t('admin.acct_emp.reset_hint')}</p>
                 </div>
               )}
               <div className="flex gap-2">
-                <Button type="submit" loading={editSubmitting} fullWidth disabled={!selectedId}>Update {singular}</Button>
-                <Button type="button" variant="danger" loading={removing} onClick={onRemove} disabled={!selectedId}>Remove</Button>
+                <Button type="submit" loading={editSubmitting} fullWidth disabled={!selectedId}>{t('admin.acct_emp.update_title', { role: singular })}</Button>
+                <Button type="button" variant="danger" loading={removing} onClick={onRemove} disabled={!selectedId}>{t('admin.acct_emp.remove')}</Button>
               </div>
             </form>
           </Card>
@@ -366,7 +368,7 @@ export default function AccountEmployeesTab({ role, singular }: Props) {
         onClose={() => setRemoveOpen(false)}
         onConfirm={doRemove}
         busy={removing}
-        entityLabel={singular.toLowerCase()}
+        entityLabel={singular}
       />
     </>
   );

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Clock, CheckCircle, XCircle } from 'lucide-react';
 import { adminApi } from '../../services/api';
 import PageLayout from '../../components/layout/PageLayout';
@@ -31,6 +32,7 @@ interface TeacherStatus {
 }
 
 export default function AdminWeeklySummaryPage() {
+  const { t } = useTranslation();
   const [summaries, setSummaries] = useState<Summary[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
   const [subjects, setSubjects] = useState<string[]>([]);
@@ -72,31 +74,31 @@ export default function AdminWeeklySummaryPage() {
   });
 
   return (
-    <PageLayout title="Weekly Summary" subtitle="All teacher weekly curriculum submissions">
+    <PageLayout title={t('admin.weekly.title')} subtitle={t('admin.weekly.subtitle')}>
       <div className="space-y-4">
         {/* Filters */}
         <div className="flex flex-wrap gap-3">
           <div className="w-48">
             <Select
-              label="Class / Grade"
+              label={t('admin.weekly.class_grade')}
               options={classes.map(c => ({ value: c.id, label: c.name }))}
-              placeholder="All Classes"
+              placeholder={t('admin.weekly.all_classes')}
               value={classFilter}
               onChange={e => setClassFilter(e.target.value)}
             />
           </div>
           <div className="w-44">
             <Select
-              label="Subject"
+              label={t('admin.weekly.subject')}
               options={subjects.map(s => ({ value: s, label: s }))}
-              placeholder="All Subjects"
+              placeholder={t('admin.weekly.all_subjects')}
               value={subjectFilter}
               onChange={e => setSubjectFilter(e.target.value)}
             />
           </div>
           <div className="w-44">
             <Input
-              label="Week Starting"
+              label={t('admin.weekly.week_starting')}
               type="date"
               value={weekFilter}
               onChange={e => setWeekFilter(e.target.value)}
@@ -108,21 +110,21 @@ export default function AdminWeeklySummaryPage() {
         {statusList.length > 0 && (
           <Card className="p-0 overflow-hidden">
             <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
-              <h2 className="font-semibold text-gray-900">Submission Status</h2>
+              <h2 className="font-semibold text-gray-900">{t('admin.weekly.submission_status')}</h2>
               <span className="text-xs text-gray-500">
-                {statusList.filter(t => t.submitted).length} / {statusList.length} submitted
+                {t('admin.weekly.submitted_ratio', { done: statusList.filter(ts => ts.submitted).length, total: statusList.length })}
               </span>
             </div>
             <div className="divide-y divide-gray-50">
-              {statusList.map(t => (
-                <div key={t.id} className="flex items-center justify-between px-4 py-2.5">
+              {statusList.map(ts => (
+                <div key={ts.id} className="flex items-center justify-between px-4 py-2.5">
                   <div>
-                    <p className="text-sm font-medium text-gray-900">{t.fullName}</p>
-                    {t.subject && <p className="text-xs text-gray-400">{t.subject}</p>}
+                    <p className="text-sm font-medium text-gray-900">{ts.fullName}</p>
+                    {ts.subject && <p className="text-xs text-gray-400">{ts.subject}</p>}
                   </div>
-                  {t.submitted
-                    ? <span className="flex items-center gap-1 text-xs font-medium text-green-600"><CheckCircle className="w-4 h-4" /> Submitted</span>
-                    : <span className="flex items-center gap-1 text-xs font-medium text-red-400"><XCircle className="w-4 h-4" /> Not submitted</span>
+                  {ts.submitted
+                    ? <span className="flex items-center gap-1 text-xs font-medium text-green-600"><CheckCircle className="w-4 h-4" /> {t('admin.weekly.submitted')}</span>
+                    : <span className="flex items-center gap-1 text-xs font-medium text-red-400"><XCircle className="w-4 h-4" /> {t('admin.weekly.not_submitted')}</span>
                   }
                 </div>
               ))}
@@ -132,8 +134,8 @@ export default function AdminWeeklySummaryPage() {
 
         {loading ? <LoadingSpinner /> : summaries.length === 0 ? (
           <EmptyState
-            title="No weekly summaries found"
-            description="Teachers haven't submitted summaries for the selected filters yet."
+            title={t('admin.weekly.none_title')}
+            description={t('admin.weekly.none_desc')}
             icon={<Clock className="w-8 h-8 text-gray-400" />}
           />
         ) : (
@@ -144,7 +146,7 @@ export default function AdminWeeklySummaryPage() {
                   <h2 className="font-semibold text-gray-900">{className}</h2>
                   {weekFilter && (
                     <p className="text-xs text-gray-500">
-                      Week of {format(parseISO(weekFilter), 'MMMM d, yyyy')}
+                      {t('admin.weekly.week_of', { date: format(parseISO(weekFilter), 'MMMM d, yyyy') })}
                     </p>
                   )}
                 </div>
@@ -152,7 +154,7 @@ export default function AdminWeeklySummaryPage() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-gray-100">
-                        {['Subject', 'Unit', 'Lessons', 'Pages', 'Homework Reminder', 'Teacher'].map(h => (
+                        {[t('admin.weekly.col_subject'), t('admin.weekly.col_unit'), t('admin.weekly.col_lessons'), t('admin.weekly.col_pages'), t('admin.weekly.col_homework'), t('admin.weekly.col_teacher')].map(h => (
                           <th key={h} className="text-left px-4 py-3 font-semibold text-gray-600 bg-white">{h}</th>
                         ))}
                       </tr>

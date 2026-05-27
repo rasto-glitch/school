@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'react-toastify';
 import { CalendarDays, Settings, Tag, Trash2, Plus, Layers, Image as ImageIcon, GraduationCap } from 'lucide-react';
 import { adminApi } from '../../services/api';
@@ -11,10 +12,11 @@ import YearTransitionModal from './YearTransitionModal';
 import ChatScheduleCard from './ChatScheduleCard';
 import type { MarkType, Term } from '../../types';
 
+// label holds an i18n key; resolved with t() at render.
 const APPLIES_OPTIONS = [
-  { value: 'both', label: 'Reports & Grades' },
-  { value: 'report', label: 'Reports only' },
-  { value: 'grade', label: 'Grades only' },
+  { value: 'both', label: 'admin.settings.applies_both' },
+  { value: 'report', label: 'admin.settings.applies_report' },
+  { value: 'grade', label: 'admin.settings.applies_grade' },
 ];
 
 function appliesLabel(v: string) {
@@ -28,6 +30,7 @@ function appliesBadgeColor(v: string) {
 }
 
 export default function SettingsPage() {
+  const { t } = useTranslation();
   const { school, setAuth, token, refreshToken, user, rememberMe } = useAuthStore() as any;
   const feat = (key: string) => school?.features?.[key] !== false;
 
@@ -51,9 +54,9 @@ export default function SettingsPage() {
       if (newLogoUrl && school && token && user) {
         setAuth(token, refreshToken, user, { ...school, logoUrl: newLogoUrl }, rememberMe);
       }
-      toast.success('Logo updated');
+      toast.success(t('admin.settings.logo_updated'));
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Upload failed');
+      toast.error(err.response?.data?.error || t('admin.settings.upload_failed'));
     } finally {
       setLogoUploading(false);
       if (logoInputRef.current) logoInputRef.current.value = '';
@@ -117,9 +120,9 @@ export default function SettingsPage() {
     try {
       await adminApi.updateSettings({ currentAcademicYear: editYear });
       setAcademicYear(editYear);
-      toast.success('Academic year updated');
+      toast.success(t('admin.settings.year_updated'));
     } catch {
-      toast.error('Failed to save');
+      toast.error(t('admin.settings.failed_save'));
     } finally {
       setSaving(false);
     }
@@ -134,7 +137,7 @@ export default function SettingsPage() {
       setNewName('');
       setNewMax('');
     } catch {
-      toast.error('Failed to add mark type');
+      toast.error(t('admin.settings.failed_add_mark'));
     } finally {
       setAddingMark(false);
     }
@@ -145,7 +148,7 @@ export default function SettingsPage() {
       await adminApi.deleteMarkType(id);
       setMarkTypes(prev => prev.filter(m => m.id !== id));
     } catch {
-      toast.error('Failed to delete');
+      toast.error(t('admin.settings.failed_delete'));
     }
   };
 
@@ -157,7 +160,7 @@ export default function SettingsPage() {
       setTerms(prev => [...prev, r.data]);
       setNewTermName('');
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to add term');
+      toast.error(err.response?.data?.error || t('admin.settings.failed_add_term'));
     } finally {
       setAddingTerm(false);
     }
@@ -168,7 +171,7 @@ export default function SettingsPage() {
       await adminApi.deleteTerm(id);
       setTerms(prev => prev.filter(t => t.id !== id));
     } catch {
-      toast.error('Failed to delete');
+      toast.error(t('admin.settings.failed_delete'));
     }
   };
 
@@ -180,7 +183,7 @@ export default function SettingsPage() {
       const r = await adminApi.updateMarkType(mt.id, { maxValue: next });
       setMarkTypes(prev => prev.map(m => m.id === mt.id ? r.data : m));
     } catch {
-      toast.error('Failed to update max');
+      toast.error(t('admin.settings.failed_update_max'));
     }
   };
 
@@ -204,14 +207,14 @@ export default function SettingsPage() {
         .map(b => ({ minPercent: Number(b.minPercent), letter: b.letter.trim(), gradePoint: Number(b.gradePoint) }))
         .sort((a, b) => b.minPercent - a.minPercent);
       if (gradingMode !== 'scale' && cleaned.length === 0) {
-        toast.error('Add at least one GPA band first.');
+        toast.error(t('admin.settings.add_gpa_band_first'));
         setSavingGrading(false);
         return;
       }
       await adminApi.updateGradingConfig({ mode: gradingMode, bands: cleaned });
-      toast.success('Grading settings saved');
+      toast.success(t('admin.settings.grading_saved'));
     } catch {
-      toast.error('Failed to save grading settings');
+      toast.error(t('admin.settings.failed_save_grading'));
     } finally {
       setSavingGrading(false);
     }
@@ -221,21 +224,21 @@ export default function SettingsPage() {
   const showTerms = feat('grades') || feat('reports');
 
   return (
-    <PageLayout title="Settings" subtitle="School-wide configuration">
+    <PageLayout title={t('admin.settings.title')} subtitle={t('admin.settings.subtitle')}>
       <div className="max-w-lg space-y-6">
 
         {/* School logo */}
         <Card>
           <div className="flex items-center gap-2 mb-1">
             <ImageIcon className="w-5 h-5 text-rose-600" />
-            <h2 className="font-semibold text-gray-900">School Logo</h2>
+            <h2 className="font-semibold text-gray-900">{t('admin.settings.school_logo')}</h2>
           </div>
           <p className="text-sm text-gray-500 mb-4">
-            Shown in the sidebar and on tuition receipts. Square images work best (PNG or JPG, up to 10 MB).
+            {t('admin.settings.logo_hint')}
           </p>
           <div className="flex items-center gap-4">
             {school?.logoUrl ? (
-              <img src={school.logoUrl} alt="School logo" className="w-16 h-16 rounded-xl object-cover border border-gray-200" />
+              <img src={school.logoUrl} alt={t('admin.settings.school_logo')} className="w-16 h-16 rounded-xl object-cover border border-gray-200" />
             ) : (
               <div className="w-16 h-16 rounded-xl bg-gray-100 border border-gray-200 flex items-center justify-center">
                 <ImageIcon className="w-6 h-6 text-gray-400" />
@@ -249,7 +252,7 @@ export default function SettingsPage() {
               onChange={onLogoChosen}
             />
             <Button onClick={onPickLogo} loading={logoUploading} variant="outline">
-              {school?.logoUrl ? 'Change logo' : 'Upload logo'}
+              {school?.logoUrl ? t('admin.settings.change_logo') : t('admin.settings.upload_logo')}
             </Button>
           </div>
         </Card>
@@ -258,10 +261,10 @@ export default function SettingsPage() {
         <Card>
           <div className="flex items-center gap-2 mb-1">
             <Settings className="w-5 h-5 text-primary-600" />
-            <h2 className="font-semibold text-gray-900">Academic Year</h2>
+            <h2 className="font-semibold text-gray-900">{t('admin.settings.academic_year')}</h2>
           </div>
           <p className="text-sm text-gray-500 mb-4">
-            Correct the label if it was entered incorrectly. To properly advance the year at the end of term, use the transition wizard below.
+            {t('admin.settings.year_hint')}
           </p>
           {loading ? (
             <div className="h-10 bg-gray-100 rounded-xl animate-pulse" />
@@ -279,7 +282,7 @@ export default function SettingsPage() {
                 loading={saving}
                 disabled={editYear === academicYear}
               >
-                Save
+                {t('admin.settings.save')}
               </Button>
             </div>
           )}
@@ -289,10 +292,10 @@ export default function SettingsPage() {
         <Card>
           <div className="flex items-center gap-2 mb-1">
             <CalendarDays className="w-5 h-5 text-indigo-600" />
-            <h2 className="font-semibold text-gray-900">End-of-Year Transition</h2>
+            <h2 className="font-semibold text-gray-900">{t('admin.settings.eoy_transition')}</h2>
           </div>
           <p className="text-sm text-gray-500 mb-4">
-            Run this once at the end of each school year. The wizard will walk you through graduating students, clearing reports, and advancing the academic year — all in one step.
+            {t('admin.settings.eoy_hint')}
           </p>
           <Button
             onClick={() => setShowWizard(true)}
@@ -300,7 +303,7 @@ export default function SettingsPage() {
             className="bg-indigo-600 hover:bg-indigo-700 focus:ring-indigo-500"
             icon={<CalendarDays className="w-4 h-4" />}
           >
-            Begin Year Transition
+            {t('admin.settings.begin_transition')}
           </Button>
         </Card>
 
@@ -312,17 +315,17 @@ export default function SettingsPage() {
           <Card>
             <div className="flex items-center gap-2 mb-1">
               <Layers className="w-5 h-5 text-sky-600" />
-              <h2 className="font-semibold text-gray-900">Terms</h2>
+              <h2 className="font-semibold text-gray-900">{t('admin.settings.terms')}</h2>
             </div>
             <p className="text-sm text-gray-500 mb-4">
-              Define the grading terms used by teachers when entering grades. Teachers select from this list as the grading period.
+              {t('admin.settings.terms_hint')}
             </p>
 
             {/* Add new */}
             <div className="flex gap-2 mb-4">
               <div className="flex-1">
                 <Input
-                  placeholder="e.g. Term 1, Mid-term, Q1…"
+                  placeholder={t('admin.settings.term_ph')}
                   value={newTermName}
                   onChange={e => setNewTermName(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') addTerm(); }}
@@ -334,7 +337,7 @@ export default function SettingsPage() {
                 disabled={!newTermName.trim()}
                 icon={<Plus className="w-4 h-4" />}
               >
-                Add
+                {t('admin.settings.add')}
               </Button>
             </div>
 
@@ -344,14 +347,14 @@ export default function SettingsPage() {
                 {[1, 2, 3].map(i => <div key={i} className="h-10 bg-gray-100 rounded-xl animate-pulse" />)}
               </div>
             ) : terms.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-4">No terms yet. Add one above.</p>
+              <p className="text-sm text-gray-400 text-center py-4">{t('admin.settings.no_terms')}</p>
             ) : (
               <div className="space-y-2">
-                {terms.map(t => (
-                  <div key={t.id} className="flex items-center justify-between gap-3 px-3 py-2.5 bg-gray-50 rounded-xl">
-                    <span className="text-sm font-medium text-gray-800">{t.name}</span>
+                {terms.map(term => (
+                  <div key={term.id} className="flex items-center justify-between gap-3 px-3 py-2.5 bg-gray-50 rounded-xl">
+                    <span className="text-sm font-medium text-gray-800">{term.name}</span>
                     <button
-                      onClick={() => deleteTerm(t.id)}
+                      onClick={() => deleteTerm(term.id)}
                       className="p-1 text-gray-400 hover:text-red-500 transition-colors"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -368,21 +371,21 @@ export default function SettingsPage() {
           <Card>
             <div className="flex items-center gap-2 mb-1">
               <Tag className="w-5 h-5 text-emerald-600" />
-              <h2 className="font-semibold text-gray-900">Mark Types</h2>
+              <h2 className="font-semibold text-gray-900">{t('admin.settings.mark_types')}</h2>
             </div>
             <p className="text-sm text-gray-500 mb-4">
-              Define the mark categories teachers can use when submitting reports and grades. Teachers select from this list when adding marks.
+              {t('admin.settings.mark_types_hint')}
             </p>
 
             <p className="text-xs text-gray-400 mb-3">
-              "Out of" is optional. Set it (e.g. Quiz / 20) to define each mark's maximum — required for accurate percentages and GPA. Leave blank to keep the current behavior.
+              {t('admin.settings.out_of_hint')}
             </p>
 
             {/* Add new */}
             <div className="flex flex-wrap gap-2 mb-4">
               <div className="flex-1 min-w-[140px]">
                 <Input
-                  placeholder="e.g. Quiz, Oral Exam, Project…"
+                  placeholder={t('admin.settings.mark_name_ph')}
                   value={newName}
                   onChange={e => setNewName(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') addMarkType(); }}
@@ -390,7 +393,7 @@ export default function SettingsPage() {
               </div>
               <input
                 type="number"
-                placeholder="Out of"
+                placeholder={t('admin.settings.out_of')}
                 value={newMax}
                 onChange={e => setNewMax(e.target.value)}
                 className="input-field w-24 text-sm"
@@ -401,7 +404,7 @@ export default function SettingsPage() {
                 className="input-field w-44 text-sm"
               >
                 {APPLIES_OPTIONS.map(o => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
+                  <option key={o.value} value={o.value}>{t(o.label)}</option>
                 ))}
               </select>
               <Button
@@ -410,7 +413,7 @@ export default function SettingsPage() {
                 disabled={!newName.trim()}
                 icon={<Plus className="w-4 h-4" />}
               >
-                Add
+                {t('admin.settings.add')}
               </Button>
             </div>
 
@@ -420,7 +423,7 @@ export default function SettingsPage() {
                 {[1, 2, 3].map(i => <div key={i} className="h-10 bg-gray-100 rounded-xl animate-pulse" />)}
               </div>
             ) : markTypes.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-4">No mark types yet. Add one above.</p>
+              <p className="text-sm text-gray-400 text-center py-4">{t('admin.settings.no_mark_types')}</p>
             ) : (
               <div className="space-y-2">
                 {markTypes.map(mt => (
@@ -438,7 +441,7 @@ export default function SettingsPage() {
                         />
                       </div>
                       <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${appliesBadgeColor(mt.appliesTo)}`}>
-                        {appliesLabel(mt.appliesTo)}
+                        {t(appliesLabel(mt.appliesTo))}
                       </span>
                       <button
                         onClick={() => deleteMarkType(mt.id)}
@@ -459,35 +462,35 @@ export default function SettingsPage() {
           <Card>
             <div className="flex items-center gap-2 mb-1">
               <GraduationCap className="w-5 h-5 text-violet-600" />
-              <h2 className="font-semibold text-gray-900">GPA Grading</h2>
+              <h2 className="font-semibold text-gray-900">{t('admin.settings.gpa_grading')}</h2>
             </div>
             <p className="text-sm text-gray-500 mb-4">
-              Choose how grades are shown to parents. GPA is derived from each subject's percentage using the bands below — teachers keep entering marks as usual.
+              {t('admin.settings.gpa_hint')}
             </p>
 
-            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Grading mode</label>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">{t('admin.settings.grading_mode')}</label>
             <select
               value={gradingMode}
               onChange={e => setGradingMode(e.target.value as any)}
               className="input-field w-full text-sm mb-4"
             >
-              <option value="scale">Scale only (percentages)</option>
-              <option value="gpa">GPA only</option>
-              <option value="both">Both (percentage + GPA)</option>
+              <option value="scale">{t('admin.settings.mode_scale')}</option>
+              <option value="gpa">{t('admin.settings.mode_gpa')}</option>
+              <option value="both">{t('admin.settings.mode_both')}</option>
             </select>
 
             {gradingMode !== 'scale' && (
               <div className="space-y-2 mb-4">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Grade bands</label>
+                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{t('admin.settings.grade_bands')}</label>
                   {bands.length === 0 && (
                     <button onClick={() => setBands(DEFAULT_BANDS)} className="text-xs font-semibold text-primary-600 hover:text-primary-700">
-                      Load 4.0 default
+                      {t('admin.settings.load_default')}
                     </button>
                   )}
                 </div>
                 <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 text-[11px] font-medium text-gray-400 uppercase">
-                  <span>Min %</span><span>Letter</span><span>Points</span><span />
+                  <span>{t('admin.settings.min_pct')}</span><span>{t('admin.settings.letter')}</span><span>{t('admin.settings.points')}</span><span />
                 </div>
                 {bands.map((b, i) => (
                   <div key={i} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-center">
@@ -498,12 +501,12 @@ export default function SettingsPage() {
                   </div>
                 ))}
                 <button onClick={addBand} className="flex items-center gap-1 text-sm font-semibold text-primary-600 hover:text-primary-700 mt-1">
-                  <Plus className="w-4 h-4" /> Add band
+                  <Plus className="w-4 h-4" /> {t('admin.settings.add_band')}
                 </button>
               </div>
             )}
 
-            <Button onClick={saveGrading} loading={savingGrading}>Save grading settings</Button>
+            <Button onClick={saveGrading} loading={savingGrading}>{t('admin.settings.save_grading')}</Button>
           </Card>
         )}
 

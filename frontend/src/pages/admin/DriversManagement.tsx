@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'react-toastify';
 import { Search, History } from 'lucide-react';
 import { adminApi } from '../../services/api';
@@ -19,6 +20,7 @@ import type { Class, Driver, Student } from '../../types';
 interface InactiveUser { id: string; firstName: string; lastName: string; username: string; role: string; }
 
 export default function DriversManagement() {
+  const { t } = useTranslation();
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
@@ -62,8 +64,8 @@ export default function DriversManagement() {
   }, [debouncedAddName]);
 
   const reactivateInactive = async (u: InactiveUser) => {
-    if (!confirm(`Reactivate ${u.firstName} ${u.lastName} (${u.username})?`)) return;
-    const newPassword = prompt('Set a new password (or leave blank to keep the existing one):\n\n' + PASSWORD_POLICY_MESSAGE, '');
+    if (!confirm(t('admin.drivers_mgmt.confirm_reactivate', { name: `${u.firstName} ${u.lastName}`, username: u.username }))) return;
+    const newPassword = prompt(t('admin.drivers_mgmt.set_new_password_prompt') + '\n\n' + PASSWORD_POLICY_MESSAGE, '');
     if (newPassword === null) return;
     const trimmed = newPassword.trim();
     if (trimmed && !isStrongPassword(trimmed)) {
@@ -73,13 +75,13 @@ export default function DriversManagement() {
     setReactivatingId(u.id);
     try {
       const r = await adminApi.reactivateUser(u.id, trimmed || undefined);
-      const tail = r.data?.passwordReset ? ` New password: ${newPassword}` : '';
-      toast.success(`Driver reactivated. Login: ${u.username}.${tail}`, { autoClose: 8000 });
+      const tail = r.data?.passwordReset ? ' ' + t('admin.drivers_mgmt.new_password_tail', { password: newPassword }) : '';
+      toast.success(t('admin.drivers_mgmt.driver_reactivated', { username: u.username }) + tail, { autoClose: 8000 });
       addForm.reset();
       setInactiveMatches([]);
       load();
     } catch (e: any) {
-      toast.error(e.response?.data?.error || 'Failed to reactivate');
+      toast.error(e.response?.data?.error || t('admin.drivers_mgmt.failed_reactivate'));
     } finally { setReactivatingId(null); }
   };
 
@@ -129,12 +131,12 @@ export default function DriversManagement() {
         previousArchiveId: prevArchiveId || undefined,
       });
       const tempPw = res.data?.tempPassword || 'Driver@123';
-      toast.success(`Driver added! Login: ${res.data?.username} / Password: ${tempPw}`);
+      toast.success(t('admin.drivers_mgmt.driver_added', { username: res.data?.username, password: tempPw }));
       // Enter the photo phase — keep the form filled (incl. student assignment).
       setCreatedId(res.data?.id ?? null);
       load();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to add driver');
+      toast.error(err.response?.data?.error || t('admin.drivers_mgmt.failed_add'));
     } finally {
       setAddSubmitting(false);
     }
@@ -157,7 +159,7 @@ export default function DriversManagement() {
         vehicleType: data.vehicleType || 'bus',
         studentIds: addStudentIds,
       });
-      toast.success('Driver saved');
+      toast.success(t('admin.drivers_mgmt.driver_saved'));
       addForm.reset();
       setAddStudentIds([]);
       setPrevArchiveId(null);
@@ -165,7 +167,7 @@ export default function DriversManagement() {
       setCreatedId(null);
       load();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to save driver');
+      toast.error(err.response?.data?.error || t('admin.drivers_mgmt.failed_save'));
     } finally {
       setAddSubmitting(false);
     }
@@ -177,24 +179,24 @@ export default function DriversManagement() {
   const [prevArchiveLabel, setPrevArchiveLabel] = useState('');
 
   const onEdit = async (data: any) => {
-    if (!selectedDriverId) { toast.error('Select a driver first'); return; }
+    if (!selectedDriverId) { toast.error(t('admin.drivers_mgmt.select_driver_first')); return; }
     setEditSubmitting(true);
     try {
       const payload: Record<string, unknown> = { ...data, vehicleType: data.vehicleType || 'bus' };
       if (editStudentsDirty) payload.studentIds = editStudentIds;
       await adminApi.updateDriver(selectedDriverId, payload);
-      toast.success('Driver updated!');
+      toast.success(t('admin.drivers_mgmt.driver_updated'));
       setEditStudentsDirty(false);
       load();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to update driver');
+      toast.error(err.response?.data?.error || t('admin.drivers_mgmt.failed_update'));
     } finally {
       setEditSubmitting(false);
     }
   };
 
   const onRemove = () => {
-    if (!selectedDriverId) { toast.error('Select a driver first'); return; }
+    if (!selectedDriverId) { toast.error(t('admin.drivers_mgmt.select_driver_first')); return; }
     setRemoveOpen(true);
   };
 
@@ -202,13 +204,13 @@ export default function DriversManagement() {
     setRemoving(true);
     try {
       await adminApi.deleteDriver(selectedDriverId, { reason, departureDate });
-      toast.success('Driver removed');
+      toast.success(t('admin.drivers_mgmt.driver_removed'));
       setRemoveOpen(false);
       setSelectedDriverId('');
       editForm.reset();
       load();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to remove driver');
+      toast.error(err.response?.data?.error || t('admin.drivers_mgmt.failed_remove'));
     } finally {
       setRemoving(false);
     }
@@ -236,13 +238,13 @@ export default function DriversManagement() {
   });
 
   return (
-    <PageLayout title="Drivers Management">
+    <PageLayout title={t('admin.drivers_mgmt.title')}>
       {/* Search & Filter */}
       <Card className="mb-6">
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="flex-1">
             <Input
-              placeholder="Search by name, bus number, or phone..."
+              placeholder={t('admin.drivers_mgmt.search_ph')}
               icon={<Search className="w-4 h-4" />}
               value={search}
               onChange={e => setSearch(e.target.value)}
@@ -251,7 +253,7 @@ export default function DriversManagement() {
           <div className="sm:w-52">
             <Select
               options={classes.map(c => ({ value: c.id, label: c.name }))}
-              placeholder="All Classes"
+              placeholder={t('admin.drivers_mgmt.all_classes')}
               value={classFilter}
               onChange={e => setClassFilter(e.target.value)}
             />
@@ -269,62 +271,62 @@ export default function DriversManagement() {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-gray-900 truncate">{d.fullName}</p>
                     <p className="text-xs text-gray-500">
-                      {d.buses?.busNumber ? `Bus ${d.buses.busNumber}` : 'No bus'}{d.phoneNumber ? ` · ${d.phoneNumber}` : ''}
+                      {d.buses?.busNumber ? t('admin.drivers_mgmt.bus_n', { number: d.buses.busNumber }) : t('admin.drivers_mgmt.no_bus')}{d.phoneNumber ? ` · ${d.phoneNumber}` : ''}
                     </p>
                     {assigned.length > 0 && (
                       <p className="text-xs text-gray-400 truncate">{assigned.map(s => s.fullName).join(', ')}</p>
                     )}
                   </div>
-                  <span className="text-xs text-gray-400 flex-shrink-0">{assigned.length} student{assigned.length !== 1 ? 's' : ''}</span>
+                  <span className="text-xs text-gray-400 flex-shrink-0">{t('admin.drivers_mgmt.students_count', { count: assigned.length })}</span>
                 </div>
               );
             })}
           </div>
         )}
         {(search || classFilter) && filteredDrivers.length === 0 && (
-          <p className="text-sm text-gray-400 text-center mt-3 py-2">No drivers match the current filter.</p>
+          <p className="text-sm text-gray-400 text-center mt-3 py-2">{t('admin.drivers_mgmt.no_drivers_match')}</p>
         )}
       </Card>
 
       <div className="space-y-6">
         {/* Add Driver — full width, two-phase (Add → attach photo → Save) */}
         <Card>
-          <h2 className="font-semibold text-gray-900 mb-4">Add Driver</h2>
+          <h2 className="font-semibold text-gray-900 mb-4">{t('admin.drivers_mgmt.add_driver')}</h2>
           <form onSubmit={addForm.handleSubmit(createdId ? onSave : onAdd)} className="space-y-3">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Full Name</label>
-                <Input placeholder="Full Name" {...addForm.register('fullName', { required: true })} />
+                <label className="block text-xs font-medium text-gray-500 mb-1">{t('admin.drivers_mgmt.full_name')}</label>
+                <Input placeholder={t('admin.drivers_mgmt.full_name')} {...addForm.register('fullName', { required: true })} />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Primary Phone Number</label>
-                <Input placeholder="Primary Phone Number" {...addForm.register('phoneNumber')} />
+                <label className="block text-xs font-medium text-gray-500 mb-1">{t('admin.drivers_mgmt.primary_phone')}</label>
+                <Input placeholder={t('admin.drivers_mgmt.primary_phone')} {...addForm.register('phoneNumber')} />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Emergency Contact</label>
-                <Input placeholder="Emergency Contact" {...addForm.register('emergencyContact')} />
+                <label className="block text-xs font-medium text-gray-500 mb-1">{t('admin.drivers_mgmt.emergency_contact')}</label>
+                <Input placeholder={t('admin.drivers_mgmt.emergency_contact')} {...addForm.register('emergencyContact')} />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Licence Number</label>
-                <Input placeholder="Licence Number" {...addForm.register('licenseNumber')} />
+                <label className="block text-xs font-medium text-gray-500 mb-1">{t('admin.drivers_mgmt.license_number')}</label>
+                <Input placeholder={t('admin.drivers_mgmt.license_number')} {...addForm.register('licenseNumber')} />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Vehicle Type</label>
-                <Select options={[{ value: 'bus', label: 'Bus' }, { value: 'taxi', label: 'Taxi' }]} placeholder="Vehicle Type" {...addForm.register('vehicleType')} />
+                <label className="block text-xs font-medium text-gray-500 mb-1">{t('admin.drivers_mgmt.vehicle_type')}</label>
+                <Select options={[{ value: 'bus', label: t('admin.drivers_mgmt.bus') }, { value: 'taxi', label: t('admin.drivers_mgmt.taxi') }]} placeholder={t('admin.drivers_mgmt.vehicle_type')} {...addForm.register('vehicleType')} />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Vehicle / Bus Number</label>
-                <Input placeholder="Vehicle / Bus Number" {...addForm.register('busNumber')} />
+                <label className="block text-xs font-medium text-gray-500 mb-1">{t('admin.drivers_mgmt.vehicle_number')}</label>
+                <Input placeholder={t('admin.drivers_mgmt.vehicle_number')} {...addForm.register('busNumber')} />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Age</label>
-                <Input type="number" placeholder="Age" {...addForm.register('age')} />
+                <label className="block text-xs font-medium text-gray-500 mb-1">{t('admin.drivers_mgmt.age')}</label>
+                <Input type="number" placeholder={t('admin.drivers_mgmt.age')} {...addForm.register('age')} />
               </div>
             </div>
             {!createdId && inactiveMatches.length > 0 && (
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
                 <div className="flex items-center gap-2 text-sm text-amber-900 font-medium mb-2">
-                  <History className="w-4 h-4" /> Previously deactivated match{inactiveMatches.length > 1 ? 'es' : ''}
+                  <History className="w-4 h-4" /> {t('admin.drivers_mgmt.deactivated_matches', { count: inactiveMatches.length })}
                 </div>
                 <div className="space-y-1.5">
                   {inactiveMatches.map(u => (
@@ -336,11 +338,11 @@ export default function DriversManagement() {
                       className="w-full text-left bg-white hover:bg-amber-100 border border-amber-200 rounded px-3 py-2 text-sm disabled:opacity-50"
                     >
                       <div className="font-medium text-gray-900">{u.firstName} {u.lastName}</div>
-                      <div className="text-xs text-gray-600">{u.username} · click to reactivate</div>
+                      <div className="text-xs text-gray-600">{u.username} · {t('admin.drivers_mgmt.click_reactivate')}</div>
                     </button>
                   ))}
                 </div>
-                <div className="text-xs text-amber-700 mt-2">If this is a returning driver, click their record to reactivate. Otherwise just continue filling in the form for a new driver.</div>
+                <div className="text-xs text-amber-700 mt-2">{t('admin.drivers_mgmt.returning_driver_hint')}</div>
               </div>
             )}
             {!createdId && (
@@ -359,17 +361,17 @@ export default function DriversManagement() {
             )}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <p className="text-sm font-medium text-gray-700">Assign Students</p>
+                <p className="text-sm font-medium text-gray-700">{t('admin.drivers_mgmt.assign_students')}</p>
                 {addStudentIds.length > 0 && (
                   <span className="text-xs font-semibold text-primary-600 bg-primary-50 px-2 py-0.5 rounded-full">
-                    {addStudentIds.length} selected
+                    {t('admin.drivers_mgmt.selected_count', { count: addStudentIds.length })}
                   </span>
                 )}
               </div>
               <div className="flex gap-2 mb-2">
                 <input
                   type="text"
-                  placeholder="Search students..."
+                  placeholder={t('admin.drivers_mgmt.search_students')}
                   value={addStudentSearch}
                   onChange={e => setAddStudentSearch(e.target.value)}
                   className="flex-1 text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-300"
@@ -379,7 +381,7 @@ export default function DriversManagement() {
                   onChange={e => setAddStudentClass(e.target.value)}
                   className="text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-300"
                 >
-                  <option value="">All classes</option>
+                  <option value="">{t('admin.drivers_mgmt.all_classes_opt')}</option>
                   {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </div>
@@ -393,7 +395,7 @@ export default function DriversManagement() {
                   const grouped = new Map<string, { className: string; students: typeof filtered }>();
                   for (const s of filtered) {
                     const key = s.classId || '_none';
-                    if (!grouped.has(key)) grouped.set(key, { className: s.classes?.name || 'No Class', students: [] });
+                    if (!grouped.has(key)) grouped.set(key, { className: s.classes?.name || t('admin.drivers_mgmt.no_class'), students: [] });
                     grouped.get(key)!.students.push(s);
                   }
                   return [...grouped.entries()].sort((a, b) => a[1].className.localeCompare(b[1].className)).map(([key, { className, students: grpStudents }]) => (
@@ -410,7 +412,7 @@ export default function DriversManagement() {
                             <span className={`text-sm flex-1 ${isSelected ? 'font-semibold text-primary-700' : 'text-gray-800'}`}>{s.fullName}</span>
                             {s.driverId && (
                               <span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full font-medium">
-                                {drivers.find(d => d.id === s.driverId)?.fullName || 'Has driver'}
+                                {drivers.find(d => d.id === s.driverId)?.fullName || t('admin.drivers_mgmt.has_driver')}
                               </span>
                             )}
                           </label>
@@ -424,12 +426,12 @@ export default function DriversManagement() {
             {!createdId && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Username (optional)</label>
-                  <Input placeholder="Username (optional)" {...addForm.register('username')} />
+                  <label className="block text-xs font-medium text-gray-500 mb-1">{t('admin.drivers_mgmt.username_optional')}</label>
+                  <Input placeholder={t('admin.drivers_mgmt.username_optional')} {...addForm.register('username')} />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Password</label>
-                  <Input type="password" placeholder="Default: Driver@123" {...addForm.register('password')} />
+                  <label className="block text-xs font-medium text-gray-500 mb-1">{t('admin.drivers_mgmt.password')}</label>
+                  <Input type="password" placeholder={t('admin.drivers_mgmt.password_default')} {...addForm.register('password')} />
                 </div>
               </div>
             )}
@@ -437,7 +439,7 @@ export default function DriversManagement() {
             {createdId && (
               <>
                 <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-sm text-green-800">
-                  Driver created. Attach a professional photo (optional), then click Save. They're already saved either way.
+                  {t('admin.drivers_mgmt.photo_phase_hint')}
                 </div>
                 <ProfessionalPhotoField
                   role="driver"
@@ -447,44 +449,44 @@ export default function DriversManagement() {
                 />
               </>
             )}
-            <Button type="submit" loading={addSubmitting} fullWidth>{createdId ? 'Save' : 'Add'}</Button>
+            <Button type="submit" loading={addSubmitting} fullWidth>{createdId ? t('admin.drivers_mgmt.save') : t('admin.drivers_mgmt.add')}</Button>
           </form>
         </Card>
 
         {/* Edit Driver — full width, stacked below Add */}
         <Card>
-          <h2 className="font-semibold text-gray-900 mb-4">Edit Driver</h2>
+          <h2 className="font-semibold text-gray-900 mb-4">{t('admin.drivers_mgmt.edit_driver')}</h2>
           <form onSubmit={editForm.handleSubmit(onEdit)} className="space-y-3">
             <Select
-              options={drivers.map(d => ({ value: d.id, label: d.fullName || '(Unnamed Driver)' }))}
-              placeholder="Select Driver"
+              options={drivers.map(d => ({ value: d.id, label: d.fullName || t('admin.drivers_mgmt.unnamed_driver') }))}
+              placeholder={t('admin.drivers_mgmt.select_driver')}
               value={selectedDriverId}
               onChange={e => setSelectedDriverId(e.target.value)}
             />
-            <Input placeholder="Full Name" {...editForm.register('fullName')} />
-            <Input placeholder="Primary Phone Number" {...editForm.register('phoneNumber')} />
-            <Input placeholder="Emergency Contact" {...editForm.register('emergencyContact')} />
-            <Input placeholder="Licence Number" {...editForm.register('licenseNumber')} />
+            <Input placeholder={t('admin.drivers_mgmt.full_name')} {...editForm.register('fullName')} />
+            <Input placeholder={t('admin.drivers_mgmt.primary_phone')} {...editForm.register('phoneNumber')} />
+            <Input placeholder={t('admin.drivers_mgmt.emergency_contact')} {...editForm.register('emergencyContact')} />
+            <Input placeholder={t('admin.drivers_mgmt.license_number')} {...editForm.register('licenseNumber')} />
             <Select
-              options={[{ value: 'bus', label: 'Bus' }, { value: 'taxi', label: 'Taxi' }]}
-              placeholder="Vehicle Type"
+              options={[{ value: 'bus', label: t('admin.drivers_mgmt.bus') }, { value: 'taxi', label: t('admin.drivers_mgmt.taxi') }]}
+              placeholder={t('admin.drivers_mgmt.vehicle_type')}
               {...editForm.register('vehicleType')}
             />
-            <Input placeholder="Vehicle / Bus Number" {...editForm.register('busNumber')} />
-            <Input type="number" placeholder="Age" {...editForm.register('age')} />
+            <Input placeholder={t('admin.drivers_mgmt.vehicle_number')} {...editForm.register('busNumber')} />
+            <Input type="number" placeholder={t('admin.drivers_mgmt.age')} {...editForm.register('age')} />
             <div>
               <div className="flex items-center justify-between mb-2">
-                <p className="text-sm font-medium text-gray-700">Assign Students</p>
+                <p className="text-sm font-medium text-gray-700">{t('admin.drivers_mgmt.assign_students')}</p>
                 {editStudentIds.length > 0 && (
                   <span className="text-xs font-semibold text-primary-600 bg-primary-50 px-2 py-0.5 rounded-full">
-                    {editStudentIds.length} assigned
+                    {t('admin.drivers_mgmt.assigned_count', { count: editStudentIds.length })}
                   </span>
                 )}
               </div>
               <div className="flex gap-2 mb-2">
                 <input
                   type="text"
-                  placeholder="Search students..."
+                  placeholder={t('admin.drivers_mgmt.search_students')}
                   value={editStudentSearch}
                   onChange={e => setEditStudentSearch(e.target.value)}
                   className="flex-1 text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-300"
@@ -494,7 +496,7 @@ export default function DriversManagement() {
                   onChange={e => setEditStudentClass(e.target.value)}
                   className="text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-300"
                 >
-                  <option value="">All classes</option>
+                  <option value="">{t('admin.drivers_mgmt.all_classes_opt')}</option>
                   {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </div>
@@ -509,7 +511,7 @@ export default function DriversManagement() {
                   const grouped = new Map<string, { className: string; students: typeof filtered }>();
                   for (const s of filtered) {
                     const key = s.classId || '_none';
-                    if (!grouped.has(key)) grouped.set(key, { className: s.classes?.name || 'No Class', students: [] });
+                    if (!grouped.has(key)) grouped.set(key, { className: s.classes?.name || t('admin.drivers_mgmt.no_class'), students: [] });
                     grouped.get(key)!.students.push(s);
                   }
                   // Sort: classes with assigned students first
@@ -538,7 +540,7 @@ export default function DriversManagement() {
                             <span className={`text-sm flex-1 ${isAssigned ? 'font-semibold text-primary-700' : 'text-gray-800'}`}>{s.fullName}</span>
                             {assignedToOther && (
                               <span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full font-medium">
-                                {drivers.find(d => d.id === s.driverId)?.fullName || 'Other driver'}
+                                {drivers.find(d => d.id === s.driverId)?.fullName || t('admin.drivers_mgmt.other_driver')}
                               </span>
                             )}
                           </label>
@@ -549,7 +551,7 @@ export default function DriversManagement() {
                 })()}
               </div>
               {editStudentsDirty && (
-                <p className="text-xs text-amber-600 mt-1 font-medium">Student assignments changed — click Update to save</p>
+                <p className="text-xs text-amber-600 mt-1 font-medium">{t('admin.drivers_mgmt.assignments_changed')}</p>
               )}
             </div>
             {selectedDriverId && <EmployeeHRFields register={editForm.register} />}
@@ -562,8 +564,8 @@ export default function DriversManagement() {
               />
             )}
             <div className="flex gap-2">
-              <Button type="submit" loading={editSubmitting} fullWidth disabled={!selectedDriverId}>Update Driver</Button>
-              <Button type="button" variant="danger" loading={removing} onClick={onRemove} disabled={!selectedDriverId}>Remove</Button>
+              <Button type="submit" loading={editSubmitting} fullWidth disabled={!selectedDriverId}>{t('admin.drivers_mgmt.update_driver')}</Button>
+              <Button type="button" variant="danger" loading={removing} onClick={onRemove} disabled={!selectedDriverId}>{t('admin.drivers_mgmt.remove')}</Button>
             </div>
           </form>
         </Card>
@@ -573,7 +575,7 @@ export default function DriversManagement() {
         onClose={() => setRemoveOpen(false)}
         onConfirm={doRemove}
         busy={removing}
-        entityLabel="driver"
+        entityLabel={t('admin.drivers_mgmt.entity_driver')}
       />
     </PageLayout>
   );

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'react-toastify';
 import { Camera, Loader2 } from 'lucide-react';
 import { adminApi } from '../../services/api';
@@ -18,6 +19,7 @@ export default function ProfessionalPhotoField({
   currentUrl: string | null;
   onUploaded: (url: string) => void;
 }) {
+  const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [preview, setPreview] = useState<string | null>(currentUrl);
@@ -34,9 +36,9 @@ export default function ProfessionalPhotoField({
       const url = res.data?.officialPhoto as string;
       setPreview(url);
       onUploaded(url);
-      toast.success('Professional photo updated');
+      toast.success(t('admin.photo.updated'));
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to upload photo');
+      toast.error(err.response?.data?.error || t('admin.photo.failed'));
     } finally {
       setBusy(false);
       if (inputRef.current) inputRef.current.value = '';
@@ -45,11 +47,11 @@ export default function ProfessionalPhotoField({
 
   return (
     <div className="border-t border-gray-100 pt-3">
-      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Professional photo</p>
+      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">{t('admin.photo.section')}</p>
       <div className="flex items-center gap-3">
         <div className="w-16 h-16 rounded-lg bg-gray-100 overflow-hidden flex items-center justify-center flex-shrink-0">
           {preview
-            ? <img src={preview} alt="Professional" className="w-full h-full object-cover" />
+            ? <img src={preview} alt={t('admin.photo.section')} className="w-full h-full object-cover" />
             : <Camera className="w-6 h-6 text-gray-400" />}
         </div>
         <div className="flex-1">
@@ -60,9 +62,9 @@ export default function ProfessionalPhotoField({
             className="inline-flex items-center gap-2 text-sm font-medium text-primary-600 hover:text-primary-700 disabled:opacity-50"
           >
             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
-            {preview ? 'Replace photo' : 'Upload photo'}
+            {preview ? t('admin.photo.replace') : t('admin.photo.upload')}
           </button>
-          <p className="text-xs text-gray-400 mt-1">Official photo for the employee record. Does not change the employee's own app picture.</p>
+          <p className="text-xs text-gray-400 mt-1">{t('admin.photo.hint')}</p>
         </div>
         <input ref={inputRef} type="file" accept="image/*" onChange={onPick} className="hidden" />
       </div>

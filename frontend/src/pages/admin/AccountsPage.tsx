@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation, Trans } from 'react-i18next';
 import { toast } from 'react-toastify';
 import { UserPlus, Search, Trash2, KeyRound, Clock, CheckCircle2, X, Pencil, Shield, ExternalLink, Printer } from 'lucide-react';
 import { adminApi } from '../../services/api';
@@ -26,6 +27,7 @@ const ROLE_FILTERS = ['all', 'parent', 'teacher', 'driver', 'supervisor', 'admin
 type RoleFilter = typeof ROLE_FILTERS[number];
 
 export default function AccountsPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const { register, handleSubmit, reset } = useForm<{
@@ -84,10 +86,10 @@ export default function AccountsPage() {
 
   const onExportCredentials = async () => {
     if (credRole === 'parent' && credParentScope === 'class' && !credClassId) {
-      toast.error('Pick a class first'); return;
+      toast.error(t('admin.accounts.pick_class_first')); return;
     }
     if (credRole === 'parent' && credParentScope === 'individual' && !credParentId) {
-      toast.error('Pick a parent first'); return;
+      toast.error(t('admin.accounts.pick_parent_first')); return;
     }
     setCredBusy(true);
     try {
@@ -104,7 +106,7 @@ export default function AccountsPage() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to download credentials PDF');
+      toast.error(err.response?.data?.error || t('admin.accounts.failed_download_pdf'));
     } finally {
       setCredBusy(false);
     }
@@ -118,27 +120,27 @@ export default function AccountsPage() {
     setLoading(true);
     try {
       await adminApi.createAccount(data);
-      toast.success(`Account created for ${data.firstName} ${data.lastName}`);
+      toast.success(t('admin.accounts.account_created', { name: `${data.firstName} ${data.lastName}` }));
       reset();
       loadAccounts();
       loadParents();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to create account');
+      toast.error(err.response?.data?.error || t('admin.accounts.failed_create'));
     } finally {
       setLoading(false);
     }
   };
 
   const onDeleteParent = async (parent: any) => {
-    if (!confirm(`Delete parent account "${parent.fullName}"?\n\nThis will permanently remove their login and unlink their children. This cannot be undone.`)) return;
+    if (!confirm(t('admin.accounts.confirm_delete_parent', { name: parent.fullName }))) return;
     setDeletingId(parent.id);
     try {
       await adminApi.deleteParent(parent.id);
-      toast.success(`Parent account "${parent.fullName}" deleted`);
+      toast.success(t('admin.accounts.parent_deleted', { name: parent.fullName }));
       loadAccounts();
       loadParents();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to delete parent');
+      toast.error(err.response?.data?.error || t('admin.accounts.failed_delete_parent'));
     } finally {
       setDeletingId(null);
     }
@@ -146,14 +148,14 @@ export default function AccountsPage() {
 
   const onDeleteAccount = async (acc: any) => {
     const name = displayName(acc);
-    if (!confirm(`Delete account "${name}"?\n\nThis will permanently remove their login. This cannot be undone.`)) return;
+    if (!confirm(t('admin.accounts.confirm_delete_account', { name }))) return;
     setDeletingId(acc.id);
     try {
       await adminApi.deleteAccount(acc.id);
-      toast.success(`Account "${name}" deleted`);
+      toast.success(t('admin.accounts.account_deleted', { name }));
       loadAccounts();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to delete account');
+      toast.error(err.response?.data?.error || t('admin.accounts.failed_delete_account'));
     } finally {
       setDeletingId(null);
     }
@@ -171,17 +173,17 @@ export default function AccountsPage() {
     }
     const userId = resetModalUser?.userId ?? resetModalUser?.id;
     if (!userId) {
-      toast.error('Could not find user account');
+      toast.error(t('admin.accounts.user_not_found'));
       return;
     }
     setResetting(true);
     try {
       await adminApi.resetUserPassword(userId, newPassword);
-      toast.success(`Password reset for ${resetModalUser.fullName ?? resetModalUser.firstName}`);
+      toast.success(t('admin.accounts.password_reset_for', { name: resetModalUser.fullName ?? resetModalUser.firstName }));
       setResetModalUser(null);
       loadResetRequests();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to reset password');
+      toast.error(err.response?.data?.error || t('admin.accounts.failed_reset'));
     } finally {
       setResetting(false);
     }
@@ -204,12 +206,12 @@ export default function AccountsPage() {
     setSaving(true);
     try {
       await adminApi.updateAccount(editUser.id, editForm);
-      toast.success('Account updated');
+      toast.success(t('admin.accounts.account_updated'));
       setEditUser(null);
       loadAccounts();
       loadParents();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to update account');
+      toast.error(err.response?.data?.error || t('admin.accounts.failed_update'));
     } finally {
       setSaving(false);
     }
@@ -230,14 +232,14 @@ export default function AccountsPage() {
     acc.firstName ? `${acc.firstName} ${acc.lastName ?? ''}`.trim() : acc.username;
 
   return (
-    <PageLayout title="Accounts Management" subtitle="Create and manage all user accounts">
+    <PageLayout title={t('admin.accounts.title')} subtitle={t('admin.accounts.subtitle')}>
       <div className="space-y-8 max-w-3xl">
         {/* Password Reset Requests */}
         {resetRequests.length > 0 && (
           <Card>
             <div className="flex items-center gap-2 mb-4">
               <Clock className="w-5 h-5 text-amber-500" />
-              <h2 className="font-semibold text-gray-900">Password Reset Requests</h2>
+              <h2 className="font-semibold text-gray-900">{t('admin.accounts.reset_requests')}</h2>
               <span className="ml-auto bg-amber-100 text-amber-700 text-xs font-semibold px-2 py-0.5 rounded-full">
                 {resetRequests.length}
               </span>
@@ -264,7 +266,7 @@ export default function AccountsPage() {
                     className="flex items-center gap-1.5 text-xs bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-lg font-medium transition-colors"
                   >
                     <KeyRound className="w-3 h-3" />
-                    Set Password
+                    {t('admin.accounts.set_password')}
                   </button>
                 </div>
               ))}
@@ -276,29 +278,29 @@ export default function AccountsPage() {
         <Card>
           <div className="flex items-center gap-2 mb-4">
             <UserPlus className="w-5 h-5 text-primary-600" />
-            <h2 className="font-semibold text-gray-900">Create Account</h2>
+            <h2 className="font-semibold text-gray-900">{t('admin.accounts.create_account')}</h2>
           </div>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <Select
-              label="Role"
+              label={t('admin.accounts.role')}
               options={[
-                { value: 'parent', label: 'Parent' },
-                { value: 'teacher', label: 'Teacher' },
-                { value: 'driver', label: 'Driver' },
-                { value: 'supervisor', label: 'Supervisor' },
+                { value: 'parent', label: t('admin.accounts.role_parent') },
+                { value: 'teacher', label: t('admin.accounts.role_teacher') },
+                { value: 'driver', label: t('admin.accounts.role_driver') },
+                { value: 'supervisor', label: t('admin.accounts.role_supervisor') },
               ]}
-              placeholder="Select role"
+              placeholder={t('admin.accounts.select_role')}
               {...register('role', { required: true })}
             />
             <div className="grid grid-cols-2 gap-3">
-              <Input label="First Name" placeholder="First name" {...register('firstName', { required: true })} />
-              <Input label="Last Name" placeholder="Last name" {...register('lastName', { required: true })} />
+              <Input label={t('admin.accounts.first_name')} placeholder={t('admin.accounts.first_name_ph')} {...register('firstName', { required: true })} />
+              <Input label={t('admin.accounts.last_name')} placeholder={t('admin.accounts.last_name_ph')} {...register('lastName', { required: true })} />
             </div>
-            <Input label="Email" type="email" placeholder="email@example.com" {...register('email')} />
-            <Input label="Phone" placeholder="Phone number" {...register('phone')} />
-            <Input label="Username" placeholder="Login username" {...register('username', { required: true })} />
-            <Input label="Password" type="password" placeholder="Min 8 chars, 1 uppercase, 1 special character" {...register('password', { required: true })} />
-            <Button type="submit" loading={loading} fullWidth icon={<UserPlus className="w-4 h-4" />}>Create Account</Button>
+            <Input label={t('admin.accounts.email')} type="email" placeholder="email@example.com" {...register('email')} />
+            <Input label={t('admin.accounts.phone')} placeholder={t('admin.accounts.phone_ph')} {...register('phone')} />
+            <Input label={t('admin.accounts.username')} placeholder={t('admin.accounts.username_ph')} {...register('username', { required: true })} />
+            <Input label={t('admin.accounts.password')} type="password" placeholder={t('admin.accounts.password_ph')} {...register('password', { required: true })} />
+            <Button type="submit" loading={loading} fullWidth icon={<UserPlus className="w-4 h-4" />}>{t('admin.accounts.create_account')}</Button>
           </form>
         </Card>
 
@@ -306,19 +308,18 @@ export default function AccountsPage() {
         <Card>
           <div className="flex items-center gap-2 mb-1">
             <Printer className="w-5 h-5 text-primary-600" />
-            <h2 className="font-semibold text-gray-900">Print Login Credentials</h2>
+            <h2 className="font-semibold text-gray-900">{t('admin.accounts.print_credentials')}</h2>
           </div>
           <p className="text-xs text-gray-500 mb-4">
-            Download a printable PDF with usernames and default passwords. The PDF prints 4 cards per A4 page (cut along the dashed lines).
-            Passwords shown are the role defaults — if the user has changed theirs, the printed value will not work.
+            {t('admin.accounts.print_credentials_hint')}
           </p>
           <div className="space-y-3">
             <Select
-              label="Role"
+              label={t('admin.accounts.role')}
               options={[
-                { value: 'teacher', label: 'All Teachers' },
-                { value: 'driver', label: 'All Drivers' },
-                { value: 'parent', label: 'Parents' },
+                { value: 'teacher', label: t('admin.accounts.all_teachers') },
+                { value: 'driver', label: t('admin.accounts.all_drivers') },
+                { value: 'parent', label: t('admin.accounts.parents') },
               ]}
               value={credRole}
               onChange={e => { setCredRole(e.target.value as any); setCredClassId(''); setCredParentId(''); }}
@@ -332,21 +333,21 @@ export default function AccountsPage() {
                       key={s}
                       type="button"
                       onClick={() => setCredParentScope(s)}
-                      className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors capitalize ${
+                      className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
                         credParentScope === s
                           ? 'bg-primary-600 text-white'
                           : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                       }`}
                     >
-                      {s === 'all' ? 'All Parents' : s === 'class' ? 'By Class' : 'Individual'}
+                      {s === 'all' ? t('admin.accounts.all_parents') : s === 'class' ? t('admin.accounts.by_class') : t('admin.accounts.individual')}
                     </button>
                   ))}
                 </div>
 
                 {credParentScope === 'class' && (
                   <Select
-                    label="Class"
-                    placeholder="Select a class"
+                    label={t('admin.accounts.class')}
+                    placeholder={t('admin.accounts.select_class')}
                     options={classes.map(c => ({ value: c.id, label: c.name }))}
                     value={credClassId}
                     onChange={e => setCredClassId(e.target.value)}
@@ -355,8 +356,8 @@ export default function AccountsPage() {
 
                 {credParentScope === 'individual' && (
                   <Select
-                    label="Parent"
-                    placeholder="Select a parent"
+                    label={t('admin.accounts.parent')}
+                    placeholder={t('admin.accounts.select_parent')}
                     options={parents.map(p => ({ value: p.id, label: p.fullName }))}
                     value={credParentId}
                     onChange={e => setCredParentId(e.target.value)}
@@ -371,7 +372,7 @@ export default function AccountsPage() {
               onClick={onExportCredentials}
               icon={<Printer className="w-4 h-4" />}
             >
-              Download Credentials PDF
+              {t('admin.accounts.download_credentials_pdf')}
             </Button>
           </div>
         </Card>
@@ -380,14 +381,14 @@ export default function AccountsPage() {
         <Card>
           <div className="flex items-center gap-2 mb-4">
             <Shield className="w-5 h-5 text-gray-500" />
-            <h2 className="font-semibold text-gray-900">All Accounts</h2>
-            <span className="ml-auto text-xs text-gray-400">{filteredAccounts.length} shown</span>
+            <h2 className="font-semibold text-gray-900">{t('admin.accounts.all_accounts')}</h2>
+            <span className="ml-auto text-xs text-gray-400">{t('admin.accounts.shown_count', { count: filteredAccounts.length })}</span>
           </div>
 
           {/* Search + role filters */}
           <div className="space-y-3 mb-4">
             <Input
-              placeholder="Search by name, username, or email..."
+              placeholder={t('admin.accounts.search_ph')}
               icon={<Search className="w-4 h-4" />}
               value={accountSearch}
               onChange={e => setAccountSearch(e.target.value)}
@@ -397,20 +398,20 @@ export default function AccountsPage() {
                 <button
                   key={r}
                   onClick={() => setRoleFilter(r)}
-                  className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors capitalize ${
+                  className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
                     roleFilter === r
                       ? 'bg-primary-600 text-white'
                       : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                   }`}
                 >
-                  {r}
+                  {t(`admin.accounts.role_${r}`)}
                 </button>
               ))}
             </div>
           </div>
 
           {filteredAccounts.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-6">No accounts found.</p>
+            <p className="text-sm text-gray-400 text-center py-6">{t('admin.accounts.no_accounts')}</p>
           ) : (
             <div className="divide-y divide-gray-100 border border-gray-200 rounded-xl overflow-hidden">
               {filteredAccounts.map(acc => {
@@ -426,12 +427,12 @@ export default function AccountsPage() {
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-semibold text-gray-900 truncate">{name}</p>
                         {!acc.isActive && (
-                          <span className="text-xs bg-gray-200 text-gray-500 px-1.5 py-0.5 rounded-full">inactive</span>
+                          <span className="text-xs bg-gray-200 text-gray-500 px-1.5 py-0.5 rounded-full">{t('admin.accounts.inactive')}</span>
                         )}
                       </div>
                       <div className="flex items-center gap-2 mt-0.5">
-                        <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full capitalize ${ROLE_COLORS[acc.role] ?? 'bg-gray-100 text-gray-600'}`}>
-                          {acc.role}
+                        <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full ${ROLE_COLORS[acc.role] ?? 'bg-gray-100 text-gray-600'}`}>
+                          {t(`admin.accounts.role_${acc.role}`)}
                         </span>
                         <p className="text-xs text-gray-500">@{acc.username}</p>
                         {acc.email && <p className="text-xs text-gray-400 truncate hidden sm:block">{acc.email}</p>}
@@ -440,14 +441,14 @@ export default function AccountsPage() {
                     <button
                       onClick={() => openEditModal(acc)}
                       className="text-gray-400 hover:text-primary-600 transition-colors p-1.5 rounded-lg hover:bg-primary-50"
-                      title="Edit account"
+                      title={t('admin.accounts.edit_account_title')}
                     >
                       <Pencil className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => openResetModal(acc)}
                       className="text-gray-400 hover:text-amber-600 transition-colors p-1.5 rounded-lg hover:bg-amber-50"
-                      title="Reset password"
+                      title={t('admin.accounts.reset_password')}
                     >
                       <KeyRound className="w-4 h-4" />
                     </button>
@@ -455,7 +456,7 @@ export default function AccountsPage() {
                       <button
                         onClick={() => navigate(`/admin/parents/${parent.id}`)}
                         className="text-gray-400 hover:text-primary-600 transition-colors p-1.5 rounded-lg hover:bg-primary-50"
-                        title="View parent profile"
+                        title={t('admin.accounts.view_parent_profile')}
                       >
                         <ExternalLink className="w-4 h-4" />
                       </button>
@@ -465,7 +466,7 @@ export default function AccountsPage() {
                         onClick={() => onDeleteParent(parent)}
                         disabled={deletingId === parent.id}
                         className="text-red-400 hover:text-red-600 disabled:opacity-40 transition-colors p-1.5 rounded-lg hover:bg-red-50"
-                        title="Delete parent account"
+                        title={t('admin.accounts.delete_parent_title')}
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -474,7 +475,7 @@ export default function AccountsPage() {
                         onClick={() => onDeleteAccount(acc)}
                         disabled={deletingId === acc.id}
                         className="text-red-400 hover:text-red-600 disabled:opacity-40 transition-colors p-1.5 rounded-lg hover:bg-red-50"
-                        title={`Delete ${acc.role} account`}
+                        title={t('admin.accounts.delete_role_title', { role: t(`admin.accounts.role_${acc.role}`) })}
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -492,30 +493,29 @@ export default function AccountsPage() {
         <Modal
           isOpen={true}
           onClose={() => setResetModalUser(null)}
-          title={`Reset Password — ${displayName(resetModalUser)}`}
+          title={t('admin.accounts.reset_modal_title', { name: displayName(resetModalUser) })}
         >
           <div className="space-y-4">
             <p className="text-sm text-gray-500">
-              Set a new password for <span className="font-medium text-gray-700">@{resetModalUser.username}</span>.
-              Make sure to inform them of their new password.
+              <Trans i18nKey="admin.accounts.reset_modal_hint" values={{ username: resetModalUser.username }} components={{ b: <span className="font-medium text-gray-700" /> }} />
             </p>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin.accounts.new_password')}</label>
               <input
                 type="password"
                 value={newPassword}
                 onChange={e => setNewPassword(e.target.value)}
-                placeholder="Min 8 chars, 1 uppercase, 1 special character"
+                placeholder={t('admin.accounts.password_ph')}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                 autoFocus
               />
             </div>
             <div className="flex gap-3 pt-1">
               <Button variant="outline" fullWidth onClick={() => setResetModalUser(null)} icon={<X className="w-4 h-4" />}>
-                Cancel
+                {t('common.cancel')}
               </Button>
               <Button fullWidth loading={resetting} onClick={onResetPassword} icon={<CheckCircle2 className="w-4 h-4" />}>
-                Set Password
+                {t('admin.accounts.set_password')}
               </Button>
             </div>
           </div>
@@ -527,12 +527,12 @@ export default function AccountsPage() {
         <Modal
           isOpen={true}
           onClose={() => setEditUser(null)}
-          title={`Edit Account — ${displayName(editUser)}`}
+          title={t('admin.accounts.edit_modal_title', { name: displayName(editUser) })}
         >
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin.accounts.first_name')}</label>
                 <input
                   type="text"
                   value={editForm.firstName}
@@ -541,7 +541,7 @@ export default function AccountsPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin.accounts.last_name')}</label>
                 <input
                   type="text"
                   value={editForm.lastName}
@@ -551,7 +551,7 @@ export default function AccountsPage() {
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin.accounts.username')}</label>
               <input
                 type="text"
                 value={editForm.username}
@@ -560,7 +560,7 @@ export default function AccountsPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin.accounts.email')}</label>
               <input
                 type="email"
                 value={editForm.email}
@@ -569,7 +569,7 @@ export default function AccountsPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin.accounts.phone')}</label>
               <input
                 type="text"
                 value={editForm.phone}
@@ -578,7 +578,7 @@ export default function AccountsPage() {
               />
             </div>
             <div className="flex items-center gap-3 py-1">
-              <label className="text-sm font-medium text-gray-700">Active</label>
+              <label className="text-sm font-medium text-gray-700">{t('admin.accounts.active')}</label>
               <button
                 type="button"
                 onClick={() => setEditForm(f => ({ ...f, isActive: !f.isActive }))}
@@ -586,14 +586,14 @@ export default function AccountsPage() {
               >
                 <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${editForm.isActive ? 'translate-x-6' : 'translate-x-1'}`} />
               </button>
-              <span className="text-sm text-gray-500">{editForm.isActive ? 'Active' : 'Inactive'}</span>
+              <span className="text-sm text-gray-500">{editForm.isActive ? t('admin.accounts.active') : t('admin.accounts.inactive_label')}</span>
             </div>
             <div className="flex gap-3 pt-1">
               <Button variant="outline" fullWidth onClick={() => setEditUser(null)} icon={<X className="w-4 h-4" />}>
-                Cancel
+                {t('common.cancel')}
               </Button>
               <Button fullWidth loading={saving} onClick={onSaveEdit} icon={<CheckCircle2 className="w-4 h-4" />}>
-                Save Changes
+                {t('admin.accounts.save_changes')}
               </Button>
             </div>
           </div>

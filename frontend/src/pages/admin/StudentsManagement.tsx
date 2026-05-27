@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'react-toastify';
 import { Search, Paperclip, History, X } from 'lucide-react';
 import { adminApi } from '../../services/api';
@@ -25,6 +26,7 @@ interface ArchivedCandidate {
 }
 
 export default function StudentsManagement() {
+  const { t } = useTranslation();
   const archiveEnabled = useAuthStore(s => s.school?.features?.archive === true);
   const [activeTab, setActiveTab] = useState<'active' | 'new'>('active');
   const [students, setStudents] = useState<Student[]>([]);
@@ -130,16 +132,16 @@ export default function StudentsManagement() {
       }
       const created = res.data?.parentAccountCreated;
       if (created) {
-        toast.success(`Student added! Parent account created — username: ${created.username} · password: Parent@123`, { autoClose: 8000 });
+        toast.success(t('admin.students_mgmt.student_added_parent', { username: created.username }), { autoClose: 8000 });
         adminApi.getParents().then(r => setParents(r.data || []));
       } else {
-        toast.success('Student added!');
+        toast.success(t('admin.students_mgmt.student_added'));
       }
       addForm.reset();
       clearArchiveLink();
       load();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to add student');
+      toast.error(err.response?.data?.error || t('admin.students_mgmt.failed_add'));
     } finally { setAddSubmitting(false); }
   };
 
@@ -151,10 +153,10 @@ export default function StudentsManagement() {
       if (data.parentId && (data.residenceType !== undefined || data.blockNumber !== undefined)) {
         await adminApi.updateParent(data.parentId, { residenceType: data.residenceType || null, blockNumber: data.blockNumber || null }).catch(() => {});
       }
-      toast.success('Student updated!');
+      toast.success(t('admin.students_mgmt.student_updated'));
       load();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed');
+      toast.error(err.response?.data?.error || t('admin.students_mgmt.failed'));
     } finally { setEditSubmitting(false); }
   };
 
@@ -167,24 +169,18 @@ export default function StudentsManagement() {
   };
 
   const onRemove = async () => {
-    if (removeStudentIds.size === 0) { toast.error('Select at least one student to remove'); return; }
+    if (removeStudentIds.size === 0) { toast.error(t('admin.students_mgmt.select_one_remove')); return; }
     const count = removeStudentIds.size;
-    const noun = count > 1 ? 'students' : 'student';
-    if (!confirm(
-      `Permanently delete ${count} ${noun}?\n\n` +
-      `This will also delete every grade, attendance record, report, homework submission, ` +
-      `assignment, and bus record tied to ${count > 1 ? 'them' : 'this student'}.\n\n` +
-      `If you want to keep their history, use Archive instead.\n\nThis cannot be undone.`
-    )) return;
+    if (!confirm(t('admin.students_mgmt.confirm_remove', { count }))) return;
     setRemoveSubmitting(true);
     try {
       await Promise.all([...removeStudentIds].map(id => adminApi.deleteStudent(id)));
-      toast.success(`${count} student${count > 1 ? 's' : ''} removed`);
+      toast.success(t('admin.students_mgmt.removed_count', { count }));
       setRemoveStudentIds(new Set());
       setRemoveClassId('');
       load();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to remove students');
+      toast.error(err.response?.data?.error || t('admin.students_mgmt.failed_remove'));
     } finally { setRemoveSubmitting(false); }
   };
 
@@ -198,20 +194,20 @@ export default function StudentsManagement() {
   const [archiveSubmitting, setArchiveSubmitting] = useState(false);
 
   const onArchive = async () => {
-    if (!archiveStudentId) { toast.error('Select a student to archive'); return; }
-    if (!archiveReason) { toast.error('Select a reason'); return; }
+    if (!archiveStudentId) { toast.error(t('admin.students_mgmt.select_student_archive')); return; }
+    if (!archiveReason) { toast.error(t('admin.students_mgmt.select_reason')); return; }
     const student = students.find(s => s.id === archiveStudentId);
-    if (!confirm(`Archive "${student?.fullName}"? Their grades and parent info will be saved, and they will be removed from active students.`)) return;
+    if (!confirm(t('admin.students_mgmt.confirm_archive', { name: student?.fullName }))) return;
     setArchiveSubmitting(true);
     try {
       await adminApi.archiveStudent(archiveStudentId, { reason: archiveReason, departureDate: archiveDepartureDate });
-      toast.success(`${student?.fullName} has been archived`);
+      toast.success(t('admin.students_mgmt.archived_done', { name: student?.fullName }));
       setArchiveStudentId('');
       setArchiveReason('');
       setArchiveDepartureDate(new Date().toISOString().split('T')[0]);
       load();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to archive student');
+      toast.error(err.response?.data?.error || t('admin.students_mgmt.failed_archive'));
     } finally { setArchiveSubmitting(false); }
   };
 
@@ -222,25 +218,25 @@ export default function StudentsManagement() {
   const onAssign = async (_data: any) => {
     // Bulk assign: all students in selected class, excluding those in excludedStudentIds
     const studentsToAssign = filteredByAssignClass.filter(s => !excludedStudentIds.has(s.id));
-    if (studentsToAssign.length === 0) { toast.error('No students to assign'); return; }
+    if (studentsToAssign.length === 0) { toast.error(t('admin.students_mgmt.no_students_assign')); return; }
     setAssignSubmitting(true);
     try {
       await Promise.all(studentsToAssign.map(s =>
         adminApi.assignStudent({ studentId: s.id, newClassId: bulkNewClassId || undefined, graduated: bulkGraduated })
       ));
-      toast.success(`${studentsToAssign.length} students assigned!`);
+      toast.success(t('admin.students_mgmt.assigned_done', { count: studentsToAssign.length }));
       setExcludedStudentIds(new Set());
       setBulkNewClassId('');
       setBulkGraduated(false);
       setAssignCurrentClassId('');
       load();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed');
+      toast.error(err.response?.data?.error || t('admin.students_mgmt.failed'));
     } finally { setAssignSubmitting(false); }
   };
 
   const onBulkUpload = async () => {
-    if (!uploadFile) { toast.error('Please select an Excel file first'); return; }
+    if (!uploadFile) { toast.error(t('admin.students_mgmt.select_excel_first')); return; }
     setUploadLoading(true);
     setUploadResult(null);
     try {
@@ -248,18 +244,20 @@ export default function StudentsManagement() {
       const result = res.data;
       setUploadResult(result);
       if (result.created > 0) {
-        toast.success(`${result.created} student${result.created !== 1 ? 's' : ''} added${result.skipped > 0 ? `, ${result.skipped} already existed` : ''}`);
+        toast.success(result.skipped > 0
+          ? t('admin.students_mgmt.upload_added_skipped', { created: result.created, skipped: result.skipped })
+          : t('admin.students_mgmt.upload_added', { created: result.created }));
         load();
         adminApi.getClasses().then(r => setClasses(r.data || []));
         adminApi.getParents().then(r => setParents(r.data || []));
       } else if (result.skipped > 0) {
-        toast.info(`All ${result.skipped} students already exist — nothing added.`);
+        toast.info(t('admin.students_mgmt.upload_all_exist', { count: result.skipped }));
       } else {
-        toast.error('No students were created. Check the errors below.');
+        toast.error(t('admin.students_mgmt.upload_none_created'));
       }
       setUploadFile(null);
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Upload failed');
+      toast.error(err.response?.data?.error || t('admin.students_mgmt.upload_failed'));
     } finally {
       setUploadLoading(false);
     }
@@ -267,34 +265,34 @@ export default function StudentsManagement() {
 
 
   return (
-    <PageLayout title="Students Management">
+    <PageLayout title={t('admin.students_mgmt.title')}>
       {/* Tab switcher */}
       <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit mb-6">
         <button
           onClick={() => setActiveTab('active')}
           className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${activeTab === 'active' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
         >
-          Active Students
+          {t('admin.students_mgmt.tab_active')}
         </button>
         <button
           onClick={() => setActiveTab('new')}
           className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${activeTab === 'new' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
         >
-          New Student
+          {t('admin.students_mgmt.tab_new')}
         </button>
       </div>
 
       {activeTab === 'new' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card>
-            <h2 className="font-bold text-gray-900 mb-4 text-center">Add Student</h2>
+            <h2 className="font-bold text-gray-900 mb-4 text-center">{t('admin.students_mgmt.add_student')}</h2>
             <form onSubmit={addForm.handleSubmit(onAdd)} className="space-y-3">
-              <Input placeholder="Full Name" {...addForm.register('fullName', { required: true })} />
+              <Input placeholder={t('admin.students_mgmt.full_name')} {...addForm.register('fullName', { required: true })} />
               {linkedArchiveId ? (
                 <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm">
                   <History className="w-4 h-4 text-amber-700 flex-shrink-0 mt-0.5" />
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium text-amber-900">Linking to previous enrollment</div>
+                    <div className="font-medium text-amber-900">{t('admin.students_mgmt.linking_previous')}</div>
                     <div className="text-amber-800 truncate">{linkedArchiveLabel}</div>
                   </div>
                   <button type="button" onClick={clearArchiveLink} className="p-1 text-amber-700 hover:bg-amber-100 rounded">
@@ -304,7 +302,7 @@ export default function StudentsManagement() {
               ) : archivedMatches.length > 0 ? (
                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
                   <div className="flex items-center gap-2 text-sm text-amber-900 font-medium mb-2">
-                    <History className="w-4 h-4" /> Previously archived match{archivedMatches.length > 1 ? 'es' : ''}
+                    <History className="w-4 h-4" /> {t('admin.students_mgmt.archived_matches', { count: archivedMatches.length })}
                   </div>
                   <div className="space-y-1.5">
                     {archivedMatches.map(c => (
@@ -316,40 +314,40 @@ export default function StudentsManagement() {
                       >
                         <div className="font-medium text-gray-900">{c.fullName}</div>
                         <div className="text-xs text-gray-600">
-                          {c.dateOfBirth && <>DOB {c.dateOfBirth} · </>}
-                          {c.reason} on {c.departureDate}
-                          {c.parentFullName && <> · parent {c.parentFullName}</>}
+                          {c.dateOfBirth && <>{t('admin.students_mgmt.dob')} {c.dateOfBirth} · </>}
+                          {t('admin.students_mgmt.match_reason_on', { reason: c.reason, date: c.departureDate })}
+                          {c.parentFullName && <> · {t('admin.students_mgmt.match_parent', { name: c.parentFullName })}</>}
                         </div>
                       </button>
                     ))}
                   </div>
-                  <div className="text-xs text-amber-700 mt-2">Click a match if this is a returning student. Otherwise just keep typing.</div>
+                  <div className="text-xs text-amber-700 mt-2">{t('admin.students_mgmt.click_match_hint')}</div>
                 </div>
               ) : null}
-              <Select options={parents.map(p => ({ value: p.id, label: p.fullName }))} placeholder="Select Parent / Guardian" {...addForm.register('parentId')} />
-              <Input placeholder="Parent Email (optional)" type="email" {...addForm.register('parentEmail')} />
-              <Input placeholder="Primary Phone Number" {...addForm.register('phoneNumber')} />
-              <Input placeholder="Emergency Contact" {...addForm.register('emergencyContact')} />
-              <Input placeholder="Address" {...addForm.register('homeAddress')} />
+              <Select options={parents.map(p => ({ value: p.id, label: p.fullName }))} placeholder={t('admin.students_mgmt.select_parent')} {...addForm.register('parentId')} />
+              <Input placeholder={t('admin.students_mgmt.parent_email')} type="email" {...addForm.register('parentEmail')} />
+              <Input placeholder={t('admin.students_mgmt.primary_phone')} {...addForm.register('phoneNumber')} />
+              <Input placeholder={t('admin.students_mgmt.emergency_contact')} {...addForm.register('emergencyContact')} />
+              <Input placeholder={t('admin.students_mgmt.address')} {...addForm.register('homeAddress')} />
               <Select
-                options={[{ value: 'house', label: 'House / Villa' }, { value: 'apartment', label: 'Apartment' }]}
-                placeholder="Residence Type (optional)"
+                options={[{ value: 'house', label: t('admin.students_mgmt.house') }, { value: 'apartment', label: t('admin.students_mgmt.apartment') }]}
+                placeholder={t('admin.students_mgmt.residence_type')}
                 {...addForm.register('residenceType')}
               />
-              <Input placeholder="Block / Building Number (optional)" {...addForm.register('blockNumber')} />
-              <Input label="Date of Birth" type="date" {...addForm.register('dateOfBirth')} />
-              <Select options={classes.map(c => ({ value: c.id, label: c.name }))} placeholder="Select Class" {...addForm.register('classId')} />
-              <Button type="submit" loading={addSubmitting} fullWidth>Send</Button>
+              <Input placeholder={t('admin.students_mgmt.block_number')} {...addForm.register('blockNumber')} />
+              <Input label={t('admin.students_mgmt.date_of_birth')} type="date" {...addForm.register('dateOfBirth')} />
+              <Select options={classes.map(c => ({ value: c.id, label: c.name }))} placeholder={t('admin.students_mgmt.select_class')} {...addForm.register('classId')} />
+              <Button type="submit" loading={addSubmitting} fullWidth>{t('admin.students_mgmt.send')}</Button>
             </form>
           </Card>
 
           <Card>
-            <h2 className="font-bold text-gray-900 mb-3 text-center">Upload Students</h2>
-            <p className="text-xs text-gray-500 mb-1">Excel columns: <span className="font-medium text-gray-700">Full Name, Primary Phone Number, Parent Phone, Parent Email, Emergency Contact, Date of Birth, Grade, Address, Residence Type, Block Number</span></p>
-            <p className="text-xs text-gray-400 mb-3">Optional: Parent Phone, Parent Email, Address, Residence Type (house/apartment), Block Number. New classes created automatically. Parent emails are linked to the auto-created parent account so they can later submit bug reports from the mobile app.</p>
+            <h2 className="font-bold text-gray-900 mb-3 text-center">{t('admin.students_mgmt.upload_students')}</h2>
+            <p className="text-xs text-gray-500 mb-1">{t('admin.students_mgmt.excel_columns')} <span className="font-medium text-gray-700">{t('admin.students_mgmt.excel_columns_list')}</span></p>
+            <p className="text-xs text-gray-400 mb-3">{t('admin.students_mgmt.upload_hint')}</p>
             <label className="flex items-center gap-2 cursor-pointer border-2 border-dashed border-gray-300 rounded-xl p-3 hover:border-primary-400 transition-colors">
               <Paperclip className="w-4 h-4 text-gray-400" />
-              <span className="text-sm text-gray-500 truncate">{uploadFile ? uploadFile.name : 'Choose .xlsx or .xls file'}</span>
+              <span className="text-sm text-gray-500 truncate">{uploadFile ? uploadFile.name : t('admin.students_mgmt.choose_file')}</span>
               <input
                 type="file"
                 className="hidden"
@@ -357,15 +355,15 @@ export default function StudentsManagement() {
                 onChange={e => { setUploadFile(e.target.files?.[0] || null); setUploadResult(null); }}
               />
             </label>
-            <Button className="mt-3" fullWidth loading={uploadLoading} onClick={onBulkUpload}>Upload</Button>
+            <Button className="mt-3" fullWidth loading={uploadLoading} onClick={onBulkUpload}>{t('admin.students_mgmt.upload')}</Button>
             {uploadResult && (
               <div className="mt-3 text-sm space-y-1">
-                <p className="text-green-700 font-medium">{uploadResult.created} added · {uploadResult.skipped} skipped (already exist) · {uploadResult.total} total in file</p>
+                <p className="text-green-700 font-medium">{t('admin.students_mgmt.upload_summary', { created: uploadResult.created, skipped: uploadResult.skipped, total: uploadResult.total })}</p>
                 {uploadResult.parentAccountsCreated > 0 && (
-                  <p className="text-green-600 text-xs">{uploadResult.parentAccountsCreated} parent account{uploadResult.parentAccountsCreated !== 1 ? 's' : ''} created — default password: <span className="font-mono font-semibold">Parent@123</span></p>
+                  <p className="text-green-600 text-xs">{t('admin.students_mgmt.parent_accounts_created', { count: uploadResult.parentAccountsCreated })} <span className="font-mono font-semibold">Parent@123</span></p>
                 )}
                 {uploadResult.autoCreatedClasses.length > 0 && (
-                  <p className="text-blue-600 text-xs">Auto-created classes: {uploadResult.autoCreatedClasses.join(', ')}</p>
+                  <p className="text-blue-600 text-xs">{t('admin.students_mgmt.auto_created_classes', { list: uploadResult.autoCreatedClasses.join(', ') })}</p>
                 )}
                 {uploadResult.errors.length > 0 && (
                   <div className="bg-red-50 border border-red-200 rounded-lg p-2 max-h-32 overflow-y-auto">
@@ -385,17 +383,17 @@ export default function StudentsManagement() {
         <div className="space-y-2">
           <div className="flex flex-wrap gap-3">
             <div className="flex-1 min-w-48">
-              <Input placeholder="Search students by name, address or phone..." icon={<Search className="w-4 h-4" />} value={search} onChange={e => setSearch(e.target.value)} />
+              <Input placeholder={t('admin.students_mgmt.search_ph')} icon={<Search className="w-4 h-4" />} value={search} onChange={e => setSearch(e.target.value)} />
             </div>
             <div className="w-48">
-              <Select options={classes.map(c => ({ value: c.id, label: c.name }))} placeholder="All Classes" value={classFilter} onChange={e => setClassFilter(e.target.value)} />
+              <Select options={classes.map(c => ({ value: c.id, label: c.name }))} placeholder={t('admin.students_mgmt.all_classes')} value={classFilter} onChange={e => setClassFilter(e.target.value)} />
             </div>
           </div>
           {/* Search results — click to load into Edit Student form */}
           {debouncedSearch && students.length > 0 && (
             <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
               <div className="px-3 py-2 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
-                <span className="text-xs text-gray-500">{students.length} student{students.length !== 1 ? 's' : ''} found — click to edit</span>
+                <span className="text-xs text-gray-500">{t('admin.students_mgmt.found_click_edit', { count: students.length })}</span>
               </div>
               <div className="divide-y divide-gray-50 max-h-48 overflow-y-auto">
                 {students.slice(0, 8).map(s => (
@@ -415,10 +413,10 @@ export default function StudentsManagement() {
                     <div>
                       <p className="text-sm font-medium text-gray-900">{s.fullName}</p>
                       <p className="text-xs text-gray-500">
-                        {(s as any).classes?.name || 'No class'}
+                        {(s as any).classes?.name || t('admin.students_mgmt.no_class')}
                         {(s as any).parents?.residenceType && (
                           <span className="ml-2 text-gray-400">
-                            · {(s as any).parents.residenceType === 'apartment' ? 'Apt' : 'House'}
+                            · {(s as any).parents.residenceType === 'apartment' ? t('admin.students_mgmt.apt') : t('admin.students_mgmt.house_short')}
                             {(s as any).parents.blockNumber ? ` ${(s as any).parents.blockNumber}` : ''}
                           </span>
                         )}
@@ -434,11 +432,11 @@ export default function StudentsManagement() {
         {/* Remove + Archive */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card>
-              <h2 className="font-bold text-gray-900 mb-4 text-center">Remove Students</h2>
+              <h2 className="font-bold text-gray-900 mb-4 text-center">{t('admin.students_mgmt.remove_students')}</h2>
               <div className="space-y-3">
                 <Select
                   options={classes.map(c => ({ value: c.id, label: c.name }))}
-                  placeholder="Filter by Class (optional)"
+                  placeholder={t('admin.students_mgmt.filter_by_class')}
                   value={removeClassId}
                   onChange={e => { setRemoveClassId(e.target.value); setRemoveStudentIds(new Set()); }}
                 />
@@ -448,8 +446,8 @@ export default function StudentsManagement() {
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-gray-500">
                         {removeStudentIds.size > 0
-                          ? `${removeStudentIds.size} selected`
-                          : 'Select students to remove'}
+                          ? t('admin.students_mgmt.selected_count', { count: removeStudentIds.size })
+                          : t('admin.students_mgmt.select_to_remove')}
                       </span>
                       <button
                         className="text-xs text-primary-600 hover:text-primary-700 font-medium"
@@ -461,7 +459,7 @@ export default function StudentsManagement() {
                           }
                         }}
                       >
-                        {removeStudentIds.size === filteredByRemoveClass.length ? 'Deselect all' : 'Select all'}
+                        {removeStudentIds.size === filteredByRemoveClass.length ? t('admin.students_mgmt.deselect_all') : t('admin.students_mgmt.select_all')}
                       </button>
                     </div>
                     <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-xl divide-y divide-gray-50">
@@ -480,7 +478,7 @@ export default function StudentsManagement() {
                             <p className={`text-sm font-medium truncate ${removeStudentIds.has(s.id) ? 'text-red-700 line-through' : 'text-gray-900'}`}>
                               {s.fullName}
                             </p>
-                            <p className="text-xs text-gray-400">{(s as any).classes?.name || 'No class'}</p>
+                            <p className="text-xs text-gray-400">{(s as any).classes?.name || t('admin.students_mgmt.no_class')}</p>
                           </div>
                         </label>
                       ))}
@@ -493,13 +491,13 @@ export default function StudentsManagement() {
                       disabled={removeStudentIds.size === 0}
                     >
                       {removeStudentIds.size > 0
-                        ? `Remove ${removeStudentIds.size} Student${removeStudentIds.size > 1 ? 's' : ''}`
-                        : 'Remove'}
+                        ? t('admin.students_mgmt.remove_n', { count: removeStudentIds.size })
+                        : t('admin.students_mgmt.remove')}
                     </Button>
                   </>
                 ) : (
                   <p className="text-sm text-gray-400 text-center py-3">
-                    {removeClassId ? 'No students in this class' : 'Select a class or leave empty to see all students'}
+                    {removeClassId ? t('admin.students_mgmt.no_students_class') : t('admin.students_mgmt.select_class_or_all')}
                   </p>
                 )}
               </div>
@@ -507,32 +505,32 @@ export default function StudentsManagement() {
 
             {archiveEnabled && (
               <Card>
-                <h2 className="font-bold text-gray-900 mb-4 text-center">Archive Student</h2>
-                <p className="text-xs text-gray-400 mb-3 text-center">Saves grades &amp; parent info, then removes from active roster</p>
+                <h2 className="font-bold text-gray-900 mb-4 text-center">{t('admin.students_mgmt.archive_student')}</h2>
+                <p className="text-xs text-gray-400 mb-3 text-center">{t('admin.students_mgmt.archive_desc')}</p>
                 <div className="space-y-3">
                   <Select
                     options={classes.map(c => ({ value: c.id, label: c.name }))}
-                    placeholder="Filter by Class (optional)"
+                    placeholder={t('admin.students_mgmt.filter_by_class')}
                     value={archiveFilterClassId}
                     onChange={e => { setArchiveFilterClassId(e.target.value); setArchiveStudentId(''); }}
                   />
                   <Select
                     options={(archiveFilterClassId ? students.filter(s => s.classId === archiveFilterClassId) : students).map(s => ({ value: s.id, label: s.fullName }))}
-                    placeholder="Select Student"
+                    placeholder={t('admin.students_mgmt.select_student')}
                     value={archiveStudentId}
                     onChange={e => setArchiveStudentId(e.target.value)}
                   />
                   <Select
                     options={[
-                      { value: 'transferred', label: 'Transferred to another school' },
-                      { value: 'withdrew', label: 'Withdrew' },
+                      { value: 'transferred', label: t('admin.students_mgmt.reason_transferred') },
+                      { value: 'withdrew', label: t('admin.students_mgmt.reason_withdrew') },
                     ]}
-                    placeholder="Reason for leaving"
+                    placeholder={t('admin.students_mgmt.reason_leaving')}
                     value={archiveReason}
                     onChange={e => setArchiveReason(e.target.value)}
                   />
                   <Input
-                    label="Departure Date"
+                    label={t('admin.students_mgmt.departure_date')}
                     type="date"
                     value={archiveDepartureDate}
                     onChange={e => setArchiveDepartureDate(e.target.value)}
@@ -544,7 +542,7 @@ export default function StudentsManagement() {
                     disabled={!archiveStudentId || !archiveReason}
                     onClick={onArchive}
                   >
-                    Archive Student
+                    {t('admin.students_mgmt.archive_student')}
                   </Button>
                 </div>
               </Card>
@@ -553,36 +551,36 @@ export default function StudentsManagement() {
 
         {/* Edit Student */}
         <Card className="max-w-xl" id="edit-student-section" style={{ scrollMarginTop: '80px' } as React.CSSProperties}>
-          <h2 className="font-bold text-gray-900 mb-4 text-center">Edit Student</h2>
+          <h2 className="font-bold text-gray-900 mb-4 text-center">{t('admin.students_mgmt.edit_student')}</h2>
           <div className="space-y-3">
             <Select
               options={classes.map(c => ({ value: c.id, label: c.name }))}
-              placeholder="Filter by Class (optional)"
+              placeholder={t('admin.students_mgmt.filter_by_class')}
               value={editFilterClassId}
               onChange={e => { setEditFilterClassId(e.target.value); setEditStudentId(''); }}
             />
             <Select
               options={(editFilterClassId ? students.filter(s => s.classId === editFilterClassId) : students).map(s => ({ value: s.id, label: s.fullName }))}
-              placeholder="Select Student"
+              placeholder={t('admin.students_mgmt.select_student')}
               value={editStudentId}
               onChange={e => setEditStudentId(e.target.value)}
             />
             {editStudentId && (
               <form onSubmit={editForm.handleSubmit(onEdit)} className="space-y-3 pt-2">
-                <Input placeholder="Full Name" {...editForm.register('fullName')} />
-                <Select options={parents.map(p => ({ value: p.id, label: p.fullName }))} placeholder="Select Parent / Guardian" {...editForm.register('parentId')} />
-                <Input placeholder="Primary Phone Number" {...editForm.register('phoneNumber')} />
-                <Input placeholder="Emergency Contact" {...editForm.register('emergencyContact')} />
-                <Input placeholder="Address" {...editForm.register('homeAddress')} />
+                <Input placeholder={t('admin.students_mgmt.full_name')} {...editForm.register('fullName')} />
+                <Select options={parents.map(p => ({ value: p.id, label: p.fullName }))} placeholder={t('admin.students_mgmt.select_parent')} {...editForm.register('parentId')} />
+                <Input placeholder={t('admin.students_mgmt.primary_phone')} {...editForm.register('phoneNumber')} />
+                <Input placeholder={t('admin.students_mgmt.emergency_contact')} {...editForm.register('emergencyContact')} />
+                <Input placeholder={t('admin.students_mgmt.address')} {...editForm.register('homeAddress')} />
                 <Select
-                  options={[{ value: 'house', label: 'House / Villa' }, { value: 'apartment', label: 'Apartment' }]}
-                  placeholder="Residence Type (optional)"
+                  options={[{ value: 'house', label: t('admin.students_mgmt.house') }, { value: 'apartment', label: t('admin.students_mgmt.apartment') }]}
+                  placeholder={t('admin.students_mgmt.residence_type')}
                   {...editForm.register('residenceType')}
                 />
-                <Input placeholder="Block / Building Number (optional)" {...editForm.register('blockNumber')} />
-                <Input label="Date of Birth" type="date" {...editForm.register('dateOfBirth')} />
-                <Select options={classes.map(c => ({ value: c.id, label: c.name }))} placeholder="Select Class" {...editForm.register('classId')} />
-                <Button type="submit" loading={editSubmitting} fullWidth>Send</Button>
+                <Input placeholder={t('admin.students_mgmt.block_number')} {...editForm.register('blockNumber')} />
+                <Input label={t('admin.students_mgmt.date_of_birth')} type="date" {...editForm.register('dateOfBirth')} />
+                <Select options={classes.map(c => ({ value: c.id, label: c.name }))} placeholder={t('admin.students_mgmt.select_class')} {...editForm.register('classId')} />
+                <Button type="submit" loading={editSubmitting} fullWidth>{t('admin.students_mgmt.send')}</Button>
               </form>
             )}
           </div>
@@ -590,20 +588,20 @@ export default function StudentsManagement() {
 
         {/* Assign Students (Bulk) */}
         <Card className="max-w-2xl">
-          <h2 className="font-bold text-gray-900 mb-1 text-center">Assign Students</h2>
-          <p className="text-xs text-gray-500 text-center mb-4">Select a class, uncheck students to exclude, then assign all to a new class</p>
+          <h2 className="font-bold text-gray-900 mb-1 text-center">{t('admin.students_mgmt.assign_students')}</h2>
+          <p className="text-xs text-gray-500 text-center mb-4">{t('admin.students_mgmt.assign_desc')}</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
             <div className="space-y-3">
-              <p className="text-sm font-semibold text-gray-700">Current Class:</p>
+              <p className="text-sm font-semibold text-gray-700">{t('admin.students_mgmt.current_class')}</p>
               <Select
                 options={classes.map(c => ({ value: c.id, label: c.name }))}
-                placeholder="Select Class"
+                placeholder={t('admin.students_mgmt.select_class')}
                 value={assignCurrentClassId}
                 onChange={e => { setAssignCurrentClassId(e.target.value); setExcludedStudentIds(new Set()); }}
               />
               {filteredByAssignClass.length > 0 && (
                 <div>
-                  <p className="text-xs font-medium text-gray-500 mb-1">Uncheck to exclude from assignment:</p>
+                  <p className="text-xs font-medium text-gray-500 mb-1">{t('admin.students_mgmt.uncheck_exclude')}</p>
                   <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-xl p-2 space-y-1">
                     {filteredByAssignClass.map(s => (
                       <label key={s.id} className={`flex items-center gap-2 cursor-pointer p-1 hover:bg-gray-50 rounded-lg ${excludedStudentIds.has(s.id) ? 'opacity-50' : ''}`}>
@@ -622,22 +620,22 @@ export default function StudentsManagement() {
                     ))}
                   </div>
                   <p className="text-xs text-gray-500 mt-1">
-                    {filteredByAssignClass.length - excludedStudentIds.size} of {filteredByAssignClass.length} students will be assigned
+                    {t('admin.students_mgmt.will_be_assigned', { count: filteredByAssignClass.length - excludedStudentIds.size, total: filteredByAssignClass.length })}
                   </p>
                 </div>
               )}
             </div>
             <div className="space-y-3">
-              <p className="text-sm font-semibold text-gray-700">New Class:</p>
+              <p className="text-sm font-semibold text-gray-700">{t('admin.students_mgmt.new_class')}</p>
               <Select
                 options={classes.map(c => ({ value: c.id, label: c.name }))}
-                placeholder="Select Class"
+                placeholder={t('admin.students_mgmt.select_class')}
                 value={bulkNewClassId}
                 onChange={e => setBulkNewClassId(e.target.value)}
               />
               <label className="flex items-center gap-2 cursor-pointer mt-2">
                 <input type="checkbox" checked={bulkGraduated} onChange={e => setBulkGraduated(e.target.checked)} className="w-4 h-4 text-primary-600" />
-                <span className="text-sm text-gray-700">Mark as Graduated</span>
+                <span className="text-sm text-gray-700">{t('admin.students_mgmt.mark_graduated')}</span>
               </label>
             </div>
           </div>
@@ -647,7 +645,7 @@ export default function StudentsManagement() {
             disabled={!assignCurrentClassId || filteredByAssignClass.length === excludedStudentIds.size}
             onClick={() => onAssign({})}
           >
-            Assign {filteredByAssignClass.length - excludedStudentIds.size} Students
+            {t('admin.students_mgmt.assign_n', { count: filteredByAssignClass.length - excludedStudentIds.size })}
           </Button>
         </Card>
       </div>}

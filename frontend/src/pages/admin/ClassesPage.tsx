@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { useTranslation, Trans } from 'react-i18next';
 import { toast } from 'react-toastify';
 import { BookOpen, Plus, Search, Tag, Trash2, GraduationCap, X } from 'lucide-react';
 import { adminApi } from '../../services/api';
@@ -16,6 +17,7 @@ interface CurriculumRow { id: string; classId: string; className: string | null;
 
 
 export default function ClassesPage() {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<'classes' | 'subjects'>('classes');
   const [classes, setClasses] = useState<Class[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
@@ -51,32 +53,32 @@ export default function ClassesPage() {
     setCreating(true);
     try {
       await adminApi.createClass(data);
-      toast.success('Class created!');
+      toast.success(t('admin.cls.class_created'));
       reset();
       loadClasses();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to create class');
+      toast.error(err.response?.data?.error || t('admin.cls.failed_create_class'));
     } finally {
       setCreating(false);
     }
   };
 
   const onCreateSubject = async () => {
-    if (!newSubjectName.trim()) { toast.error('Enter a subject name'); return; }
+    if (!newSubjectName.trim()) { toast.error(t('admin.cls.enter_subject_name')); return; }
     setCreatingSubject(true);
     try {
       await adminApi.createSubject({ name: newSubjectName.trim() });
-      toast.success('Subject created!');
+      toast.success(t('admin.cls.subject_created'));
       setNewSubjectName('');
       loadSubjects();
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to create subject');
+      toast.error(err.response?.data?.error || t('admin.cls.failed_create_subject'));
     } finally {
       setCreatingSubject(false); }
   };
 
   const onDeleteSubject = async (id: string) => {
-    if (!confirm('Delete this subject? It will be removed from every class that uses it.')) return;
+    if (!confirm(t('admin.cls.confirm_delete_subject'))) return;
     await adminApi.deleteSubject(id).catch(() => {});
     loadSubjects();
     loadCurriculum();
@@ -91,7 +93,7 @@ export default function ClassesPage() {
   };
 
   const addCstRow = async () => {
-    if (!curriculumClass || !newCstSubjectId || !newCstTeacherId) { toast.error('Pick a subject and a teacher'); return; }
+    if (!curriculumClass || !newCstSubjectId || !newCstTeacherId) { toast.error(t('admin.cls.pick_subject_teacher')); return; }
     setAddingCst(true);
     try {
       await adminApi.addCurriculumRow({ classId: curriculumClass.id, subjectId: newCstSubjectId, teacherId: newCstTeacherId });
@@ -99,9 +101,9 @@ export default function ClassesPage() {
       setNewCstTeacherId('');
       await loadCurriculum();
       loadTeachers();
-      toast.success('Added');
+      toast.success(t('admin.cls.added'));
     } catch (err: any) {
-      toast.error(err.response?.data?.error || 'Failed to add');
+      toast.error(err.response?.data?.error || t('admin.cls.failed_add'));
     } finally {
       setAddingCst(false);
     }
@@ -113,24 +115,24 @@ export default function ClassesPage() {
     loadTeachers();
   };
 
-  const teacherName = (id: string) => teachers.find(t => t.id === id)?.fullName || '—';
+  const teacherName = (id: string) => teachers.find(tc => tc.id === id)?.fullName || '—';
   const subjectName = (id: string) => subjects.find(s => s.id === id)?.name || '—';
 
   return (
-    <PageLayout title="Class Management">
+    <PageLayout title={t('admin.cls.title')}>
       {/* Tab switcher */}
       <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit mb-6">
         <button
           onClick={() => setActiveTab('classes')}
           className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${activeTab === 'classes' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
         >
-          Classes
+          {t('admin.cls.tab_classes')}
         </button>
         <button
           onClick={() => setActiveTab('subjects')}
           className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${activeTab === 'subjects' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
         >
-          Subjects
+          {t('admin.cls.tab_subjects')}
         </button>
       </div>
 
@@ -140,23 +142,23 @@ export default function ClassesPage() {
           <Card>
             <div className="flex items-center gap-2 mb-4">
               <Plus className="w-5 h-5 text-primary-600" />
-              <h2 className="font-semibold text-gray-900">Create Class</h2>
+              <h2 className="font-semibold text-gray-900">{t('admin.cls.create_class')}</h2>
             </div>
             <form onSubmit={handleSubmit(onCreate)} className="space-y-4">
-              <Input label="Class Name" placeholder="e.g. Grade 5A" {...register('name', { required: true })} />
+              <Input label={t('admin.cls.class_name')} placeholder={t('admin.cls.class_name_ph')} {...register('name', { required: true })} />
               <div className="grid grid-cols-2 gap-3">
-                <Input label="Grade Level" placeholder="e.g. Grade 5" {...register('gradeLevel')} />
-                <Input label="Academic Year" placeholder="e.g. 2024-2025" {...register('academicYear')} />
+                <Input label={t('admin.cls.grade_level')} placeholder={t('admin.cls.grade_level_ph')} {...register('gradeLevel')} />
+                <Input label={t('admin.cls.academic_year')} placeholder={t('admin.cls.academic_year_ph')} {...register('academicYear')} />
               </div>
               <div className="space-y-1.5">
-                <label className="block text-sm font-medium text-gray-700">Assign Students to Class</label>
+                <label className="block text-sm font-medium text-gray-700">{t('admin.cls.assign_students')}</label>
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
                   <input
                     type="text"
                     value={assignStudentSearch}
                     onChange={e => setAssignStudentSearch(e.target.value)}
-                    placeholder="Search students..."
+                    placeholder={t('admin.cls.search_students')}
                     className="w-full border border-gray-300 rounded-xl pl-9 pr-4 py-2.5 text-gray-900 bg-white min-h-[44px] focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   />
                 </div>
@@ -164,12 +166,12 @@ export default function ClassesPage() {
                   options={students
                     .filter(s => !assignStudentSearch || s.fullName.toLowerCase().includes(assignStudentSearch.toLowerCase()))
                     .map(s => ({ value: s.id, label: s.fullName }))}
-                  placeholder="Select students (assign later)"
+                  placeholder={t('admin.cls.select_students')}
                   {...register('assignStudents')}
                 />
               </div>
               <Button type="submit" loading={creating} fullWidth icon={<BookOpen className="w-4 h-4" />}>
-                Create Class
+                {t('admin.cls.create_class')}
               </Button>
             </form>
           </Card>
@@ -177,10 +179,10 @@ export default function ClassesPage() {
           {/* Existing classes */}
           <Card>
             <h2 className="font-semibold text-gray-900 mb-3">
-              Existing Classes ({classes.length})
+              {t('admin.cls.existing_classes', { count: classes.length })}
             </h2>
             {classes.length === 0 ? (
-              <p className="text-sm text-gray-500 text-center py-4">No classes yet</p>
+              <p className="text-sm text-gray-500 text-center py-4">{t('admin.cls.no_classes')}</p>
             ) : (
               <div className="space-y-2 max-h-[32rem] overflow-y-auto">
                 {classes.map(c => {
@@ -197,9 +199,9 @@ export default function ClassesPage() {
                             onClick={() => openCurriculum(c)}
                             className="flex items-center gap-1 text-xs text-primary-600 hover:bg-primary-50 rounded-lg px-2 py-1 whitespace-nowrap"
                           >
-                            <GraduationCap className="w-3.5 h-3.5" /> Curriculum ({rows.length})
+                            <GraduationCap className="w-3.5 h-3.5" /> {t('admin.cls.curriculum_count', { count: rows.length })}
                           </button>
-                          <span className="text-xs text-gray-400 whitespace-nowrap">Next class</span>
+                          <span className="text-xs text-gray-400 whitespace-nowrap">{t('admin.cls.next_class')}</span>
                           <select
                             className="border border-gray-200 rounded-lg px-2 py-1 text-xs bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500"
                             value={(c as any).nextClassId || ''}
@@ -209,31 +211,25 @@ export default function ClassesPage() {
                                 await adminApi.updateClass(c.id, { nextClassId });
                                 loadClasses();
                               } catch {
-                                toast.error('Failed to update next class');
+                                toast.error(t('admin.cls.failed_update_next'));
                               }
                             }}
                           >
-                            <option value="">None (graduating class)</option>
+                            <option value="">{t('admin.cls.none_graduating')}</option>
                             {classes.filter(oc => oc.id !== c.id).map(oc => (
                               <option key={oc.id} value={oc.id}>{oc.name}</option>
                             ))}
                           </select>
                           <button
                             onClick={async () => {
-                              if (!confirm(
-                                `Delete class "${c.name}"?\n\n` +
-                                `Students currently in this class will be unassigned (their records stay).\n\n` +
-                                `Grades and attendance for this class will be kept as historical records ` +
-                                `(no longer linked to an active class). Homework, assignments, weekly summaries, ` +
-                                `and schedule entries for this class will be permanently deleted.`
-                              )) return;
+                              if (!confirm(t('admin.cls.confirm_delete_class', { name: c.name }))) return;
                               try {
                                 await adminApi.deleteClass(c.id);
                                 loadClasses();
                                 loadCurriculum();
-                                toast.success('Class deleted');
+                                toast.success(t('admin.cls.class_deleted'));
                               } catch {
-                                toast.error('Failed to delete class');
+                                toast.error(t('admin.cls.failed_delete_class'));
                               }
                             }}
                             className="p-1.5 hover:bg-red-50 rounded-lg transition-colors"
@@ -262,32 +258,32 @@ export default function ClassesPage() {
           <Card>
             <div className="flex items-center gap-2 mb-3">
               <Tag className="w-4 h-4 text-primary-600" />
-              <h3 className="font-semibold text-gray-900">Create Subject</h3>
+              <h3 className="font-semibold text-gray-900">{t('admin.cls.create_subject')}</h3>
             </div>
             <div className="space-y-3">
-              <Input label="Subject Name" placeholder="Subject name (e.g. Mathematics)" value={newSubjectName} onChange={e => setNewSubjectName(e.target.value)} />
-              <p className="text-xs text-gray-400">Assign teachers to a subject per class in <span className="font-medium">Classes → Curriculum</span>.</p>
-              <Button onClick={onCreateSubject} loading={creatingSubject} fullWidth icon={<Plus className="w-4 h-4" />}>Add Subject</Button>
+              <Input label={t('admin.cls.subject_name')} placeholder={t('admin.cls.subject_name_ph')} value={newSubjectName} onChange={e => setNewSubjectName(e.target.value)} />
+              <p className="text-xs text-gray-400"><Trans i18nKey="admin.cls.assign_teachers_hint" components={{ b: <span className="font-medium" /> }} /></p>
+              <Button onClick={onCreateSubject} loading={creatingSubject} fullWidth icon={<Plus className="w-4 h-4" />}>{t('admin.cls.add_subject')}</Button>
             </div>
           </Card>
 
           {/* Subjects list */}
           <Card>
-            <h3 className="font-semibold text-gray-900 mb-3">All Subjects ({subjects.length})</h3>
+            <h3 className="font-semibold text-gray-900 mb-3">{t('admin.cls.all_subjects', { count: subjects.length })}</h3>
             {subjects.length === 0 ? (
-              <p className="text-sm text-gray-500 text-center py-4">No subjects yet</p>
+              <p className="text-sm text-gray-500 text-center py-4">{t('admin.cls.no_subjects')}</p>
             ) : (
               <div className="space-y-2 max-h-[32rem] overflow-y-auto">
                 {subjects.map(s => {
-                  const summary = (s.teachers || []).map(t => {
-                    const cls = (t.classes || []).map(c => c.name).filter(Boolean);
-                    return cls.length ? `${t.fullName} (${cls.join(', ')})` : t.fullName;
+                  const summary = (s.teachers || []).map(tch => {
+                    const cls = (tch.classes || []).map(c => c.name).filter(Boolean);
+                    return cls.length ? `${tch.fullName} (${cls.join(', ')})` : tch.fullName;
                   });
                   return (
                     <div key={s.id} className="flex items-center gap-2 p-2 bg-gray-50 rounded-xl">
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-gray-900">{s.name}</p>
-                        <p className="text-xs text-gray-500 truncate">{summary.length ? summary.join('; ') : 'Not assigned to any class yet'}</p>
+                        <p className="text-xs text-gray-500 truncate">{summary.length ? summary.join('; ') : t('admin.cls.not_assigned')}</p>
                       </div>
                       <button onClick={() => onDeleteSubject(s.id)} className="p-1 hover:bg-red-50 rounded-lg">
                         <Trash2 className="w-3.5 h-3.5 text-red-400" />
@@ -302,13 +298,13 @@ export default function ClassesPage() {
       )}
 
       {/* Curriculum modal */}
-      <Modal isOpen={!!curriculumClass} onClose={() => setCurriculumClass(null)} title={curriculumClass ? `Curriculum — ${curriculumClass.name}` : ''} size="lg">
+      <Modal isOpen={!!curriculumClass} onClose={() => setCurriculumClass(null)} title={curriculumClass ? t('admin.cls.curriculum_title', { name: curriculumClass.name }) : ''} size="lg">
         {curriculumClass && (
           <div className="space-y-4">
-            <p className="text-sm text-gray-500">Which subjects are taught in this class, and by whom.</p>
+            <p className="text-sm text-gray-500">{t('admin.cls.curriculum_hint')}</p>
             <div className="space-y-1.5 max-h-64 overflow-y-auto">
               {curriculum.filter(r => r.classId === curriculumClass.id).length === 0 ? (
-                <p className="text-sm text-gray-400">Nothing assigned yet.</p>
+                <p className="text-sm text-gray-400">{t('admin.cls.nothing_assigned')}</p>
               ) : curriculum.filter(r => r.classId === curriculumClass.id).map(r => (
                 <div key={r.id} className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg">
                   <span className="text-sm font-medium text-gray-900 flex-1">{r.subjectName || subjectName(r.subjectId)}</span>
@@ -320,23 +316,23 @@ export default function ClassesPage() {
               ))}
             </div>
             <div className="border-t border-gray-100 pt-3">
-              <p className="text-sm font-medium text-gray-700 mb-2">Add</p>
+              <p className="text-sm font-medium text-gray-700 mb-2">{t('admin.cls.add')}</p>
               <div className="flex flex-col sm:flex-row gap-2">
                 <select className="flex-1 border border-gray-300 rounded-xl px-3 py-2.5 text-sm bg-white" value={newCstSubjectId} onChange={e => setNewCstSubjectId(e.target.value)}>
-                  <option value="">Subject…</option>
+                  <option value="">{t('admin.cls.subject_opt')}</option>
                   {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
                 <select className="flex-1 border border-gray-300 rounded-xl px-3 py-2.5 text-sm bg-white" value={newCstTeacherId} onChange={e => setNewCstTeacherId(e.target.value)}>
-                  <option value="">Teacher…</option>
+                  <option value="">{t('admin.cls.teacher_opt')}</option>
                   {teachers
-                    .filter(t => (t.teacherClasses || []).some(tc => tc.classId === curriculumClass.id))
-                    .map(t => <option key={t.id} value={t.id}>{t.fullName}</option>)}
+                    .filter(tc => (tc.teacherClasses || []).some(c => c.classId === curriculumClass.id))
+                    .map(tc => <option key={tc.id} value={tc.id}>{tc.fullName}</option>)}
                 </select>
-                <Button onClick={addCstRow} loading={addingCst} disabled={!newCstSubjectId || !newCstTeacherId}>Add</Button>
+                <Button onClick={addCstRow} loading={addingCst} disabled={!newCstSubjectId || !newCstTeacherId}>{t('admin.cls.add')}</Button>
               </div>
-              {subjects.length === 0 && <p className="text-xs text-gray-400 mt-2">No subjects yet — create them in the Subjects tab first.</p>}
-              {teachers.filter(t => (t.teacherClasses || []).some(tc => tc.classId === curriculumClass.id)).length === 0 && (
-                <p className="text-xs text-gray-400 mt-2">No teachers are assigned to this class yet — assign it in the <span className="font-medium">Teachers</span> tab first.</p>
+              {subjects.length === 0 && <p className="text-xs text-gray-400 mt-2">{t('admin.cls.no_subjects_hint')}</p>}
+              {teachers.filter(tc => (tc.teacherClasses || []).some(c => c.classId === curriculumClass.id)).length === 0 && (
+                <p className="text-xs text-gray-400 mt-2"><Trans i18nKey="admin.cls.no_teachers_hint" components={{ b: <span className="font-medium" /> }} /></p>
               )}
             </div>
           </div>
