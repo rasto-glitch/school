@@ -806,7 +806,12 @@
       "no_students": "لا يوجد طلاب",
       "no_match": "لا توجد سجلات رسوم مطابقة لهذا الفلتر.",
       "remaining": "{{amount}} متبقٍ",
-      "paid_in_full": "مدفوع بالكامل"
+      "paid_in_full": "مدفوع بالكامل",
+      "families_load_failed": "تعذّر تحميل العائلات",
+      "search_family_ph": "ابحث عن عائلة أو طالب…",
+      "no_families": "لا توجد عائلات",
+      "one_student": "طالب",
+      "many_students": "طلاب"
     }
   }
 }

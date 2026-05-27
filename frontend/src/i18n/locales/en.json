@@ -806,7 +806,12 @@
       "no_students": "No students",
       "no_match": "No fee records match this filter.",
       "remaining": "{{amount}} remaining",
-      "paid_in_full": "Paid in full"
+      "paid_in_full": "Paid in full",
+      "families_load_failed": "Failed to load families",
+      "search_family_ph": "Search family or student…",
+      "no_families": "No families",
+      "one_student": "student",
+      "many_students": "students"
     }
   }
 }

@@ -806,7 +806,12 @@
       "no_students": "هیچ قوتابییەک نییە",
       "no_match": "هیچ تۆمارێکی قست لەگەڵ ئەم فلتەرە نییە.",
       "remaining": "{{amount}} ماوە",
-      "paid_in_full": "بەتەواوی دراوە"
+      "paid_in_full": "بەتەواوی دراوە",
+      "families_load_failed": "بارکردنی خێزانەکان سەرکەوتوو نەبوو",
+      "search_family_ph": "گەڕان بۆ خێزان یان قوتابی…",
+      "no_families": "هیچ خێزانێک نییە",
+      "one_student": "قوتابی",
+      "many_students": "قوتابی"
     }
   }
 }

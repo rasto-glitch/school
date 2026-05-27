@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { feesApi } from '../../services/api';
 import { toast } from 'react-toastify';
@@ -10,8 +11,12 @@ import type { FamilyFeeGroup, FeeStatus } from '../../types';
 
 interface Props { basePath: string }
 
+// i18n keys (shared accounting.tuition.status.*); resolved with t() at render.
 const STATUS_LABEL: Record<FeeStatus, string> = {
-  paid_up: 'Paid up', current: 'On track', due_soon: 'Due soon', overdue: 'Overdue',
+  paid_up: 'accounting.tuition.status.paid_up',
+  current: 'accounting.tuition.status.current',
+  due_soon: 'accounting.tuition.status.due_soon',
+  overdue: 'accounting.tuition.status.overdue',
 };
 const STATUS_COLOR: Record<FeeStatus, string> = {
   paid_up: 'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -23,6 +28,7 @@ const STATUS_COLOR: Record<FeeStatus, string> = {
 import { fmtMoney as fmt } from '../../utils/money';
 
 export default function TuitionFamiliesTab({ basePath }: Props) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [groups, setGroups] = useState<FamilyFeeGroup[] | null>(null);
   const [search, setSearch] = useState('');
@@ -31,7 +37,7 @@ export default function TuitionFamiliesTab({ basePath }: Props) {
   useEffect(() => {
     feesApi.listFamilies()
       .then(r => setGroups(r.data))
-      .catch((e: any) => toast.error(e.response?.data?.error || 'Failed to load families'));
+      .catch((e: any) => toast.error(e.response?.data?.error || t('accounting.tuition.families_load_failed')));
   }, []);
 
   const filtered = useMemo(() => {
@@ -52,11 +58,11 @@ export default function TuitionFamiliesTab({ basePath }: Props) {
   return (
     <div>
       <div className="mb-4 max-w-sm">
-        <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search family or student…" icon={<Search className="w-4 h-4 text-gray-400" />} />
+        <Input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('accounting.tuition.search_family_ph')} icon={<Search className="w-4 h-4 text-gray-400" />} />
       </div>
 
       {!filtered || filtered.length === 0 ? (
-        <EmptyState title="No families" icon={<Users className="w-8 h-8 text-gray-400" />} />
+        <EmptyState title={t('accounting.tuition.no_families')} icon={<Users className="w-8 h-8 text-gray-400" />} />
       ) : (
         <div className="space-y-2">
           {filtered.map(g => {
@@ -73,15 +79,15 @@ export default function TuitionFamiliesTab({ basePath }: Props) {
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <h3 className="font-semibold text-gray-900 truncate">{g.parentName}</h3>
-                        <span className="text-xs text-gray-500">· {g.students.length} {g.students.length === 1 ? 'student' : 'students'}</span>
+                        <span className="text-xs text-gray-500">· {g.students.length} {g.students.length === 1 ? t('accounting.tuition.one_student') : t('accounting.tuition.many_students')}</span>
                       </div>
                     </div>
                     <div className="text-right shrink-0 flex items-center gap-3">
                       <div>
                         <div className="text-sm font-bold text-gray-900">{fmt(g.totalPaid, g.currency)} <span className="text-gray-400">/ {fmt(due, g.currency)}</span></div>
                         {g.totalBalance > 0
-                          ? <div className="text-xs text-gray-500">{fmt(g.totalBalance, g.currency)} remaining</div>
-                          : <div className="text-xs text-emerald-600">Paid in full</div>}
+                          ? <div className="text-xs text-gray-500">{t('accounting.tuition.remaining', { amount: fmt(g.totalBalance, g.currency) })}</div>
+                          : <div className="text-xs text-emerald-600">{t('accounting.tuition.paid_in_full')}</div>}
                       </div>
                       {isOpen ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
                     </div>
@@ -108,7 +114,7 @@ export default function TuitionFamiliesTab({ basePath }: Props) {
                                 <span className="font-medium text-gray-900 truncate">{s.studentName}</span>
                                 {s.className && <span className="text-xs text-gray-500">· {s.className}</span>}
                                 <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${STATUS_COLOR[s.status]}`}>
-                                  {STATUS_LABEL[s.status]}
+                                  {t(STATUS_LABEL[s.status])}
                                 </span>
                               </div>
                               <div className="text-xs text-gray-500">{s.planName}</div>
