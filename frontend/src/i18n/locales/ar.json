@@ -218,7 +218,15 @@
     "release": "إطلاق",
     "note_label": "ملاحظة لأولياء الأمور (اختياري)",
     "note_ph": "أضف ملاحظة سيراها أولياء الأمور مع هذه الدرجة…",
-    "no_marks": "لا توجد درجات مسجلة."
+    "no_marks": "لا توجد درجات مسجلة.",
+    "all_classes": "كل الصفوف",
+    "no_classes": "لا توجد صفوف بعد.",
+    "no_students": "لا يوجد طلاب في هذا الصف.",
+    "no_pending_student": "لا توجد درجات بانتظار المراجعة لهذا الطالب.",
+    "students_complete": "{{done}}/{{total}} طالب مكتمل",
+    "subjects_graded": "{{done}}/{{total}} مادة مُقيّمة",
+    "pending_badge": "{{count}} بانتظار المراجعة",
+    "release_student": "إطلاق الكل"
   },
   "reports": {
     "title": "التقارير",

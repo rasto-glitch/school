@@ -2534,6 +2534,95 @@ export async function releaseGrades(req: AuthRequest, res: Response): Promise<vo
   res.json({ released: (released || []).length });
 }
 
+// Drill-down overview for the Grade Review page, scoped to one grading term:
+// classes → students → that student's pending grades, plus progress counts.
+// "Submitted" = a curriculum subject has any grade for the student this term
+// (released or pending). The per-student `pending` list is unreleased only.
+export async function getGradeReviewOverview(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const termParam = (req.query.term as string | undefined)?.trim() || '';
+
+  const [classesRes, studentsRes, cstRes, termsRes] = await Promise.all([
+    supabase.from('classes').select('id, name').eq('school_id', schoolId).order('name'),
+    supabase.from('students').select('id, full_name, class_id').eq('school_id', schoolId).eq('is_graduated', false).order('full_name'),
+    supabase.from('class_subject_teachers').select('class_id, subjects(name)').eq('school_id', schoolId),
+    supabase.from('terms').select('name').eq('school_id', schoolId).order('order_index').order('created_at'),
+  ]);
+
+  const termNames: string[] = (termsRes.data || []).map((t: any) => t.name).filter(Boolean);
+  const selectedTerm = termParam || termNames[0] || '';
+
+  let gq = supabase.from('grades')
+    .select('id, student_id, subject, grading_period, marks, admin_note, is_released, created_at, teachers(full_name)')
+    .eq('school_id', schoolId);
+  if (selectedTerm) gq = gq.eq('grading_period', selectedTerm);
+  const { data: grades } = await gq;
+
+  // curriculum subjects (distinct names) per class
+  const subjectsByClass = new Map<string, Set<string>>();
+  for (const r of (cstRes.data || []) as any[]) {
+    const name = r.subjects?.name;
+    if (!name) continue;
+    if (!subjectsByClass.has(r.class_id)) subjectsByClass.set(r.class_id, new Set());
+    subjectsByClass.get(r.class_id)!.add(name);
+  }
+
+  const gradesByStudent = new Map<string, any[]>();
+  for (const g of (grades || []) as any[]) {
+    if (!gradesByStudent.has(g.student_id)) gradesByStudent.set(g.student_id, []);
+    gradesByStudent.get(g.student_id)!.push(g);
+  }
+
+  const studentsByClass = new Map<string, any[]>();
+  for (const s of (studentsRes.data || []) as any[]) {
+    if (!s.class_id) continue;
+    if (!studentsByClass.has(s.class_id)) studentsByClass.set(s.class_id, []);
+    studentsByClass.get(s.class_id)!.push(s);
+  }
+
+  const classes = (classesRes.data || []).map((c: any) => {
+    const subjSet = subjectsByClass.get(c.id) || new Set<string>();
+    const totalSubjects = subjSet.size;
+    const roster = studentsByClass.get(c.id) || [];
+    let studentsComplete = 0;
+
+    const students = roster.map((s: any) => {
+      const sg = gradesByStudent.get(s.id) || [];
+      const gradedSet = new Set<string>();
+      const pending: any[] = [];
+      for (const g of sg) {
+        if (subjSet.has(g.subject)) gradedSet.add(g.subject);
+        if (!g.is_released) {
+          pending.push({
+            id: g.id, subject: g.subject, gradingPeriod: g.grading_period,
+            marks: g.marks || [], adminNote: g.admin_note, createdAt: g.created_at,
+            teacherName: g.teachers?.full_name || null,
+          });
+        }
+      }
+      const gradedSubjects = gradedSet.size;
+      if (totalSubjects > 0 && gradedSubjects >= totalSubjects) studentsComplete++;
+      return {
+        studentId: s.id, fullName: s.full_name,
+        gradedSubjects, totalSubjects,
+        pendingCount: pending.length,
+        pending,
+      };
+    });
+
+    return {
+      classId: c.id, className: c.name,
+      subjects: Array.from(subjSet),
+      totalSubjects,
+      totalStudents: roster.length,
+      studentsComplete,
+      students,
+    };
+  });
+
+  res.json({ terms: termNames, selectedTerm, classes });
+}
+
 // ---- TEACHER DELETE ----
 export async function deleteTeacher(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;

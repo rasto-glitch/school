@@ -132,13 +132,37 @@ export interface Grade {
   termExamGrade?: number;
 }
 
-// A pending grade as shown in the admin review queue (with joined context).
-export interface PendingGrade extends Grade {
+// ---- Admin Grade Review drill-down (classes → students → pending grades) ----
+export interface GradeReviewPending {
+  id: string;
+  subject: string;
+  gradingPeriod?: string;
+  marks: Mark[];
+  adminNote?: string | null;
+  createdAt: string;
+  teacherName?: string | null;
+}
+export interface GradeReviewStudent {
   studentId: string;
-  classId?: string;
-  students?: { fullName: string };
-  classes?: { name: string };
-  teachers?: { fullName: string };
+  fullName: string;
+  gradedSubjects: number;
+  totalSubjects: number;
+  pendingCount: number;
+  pending: GradeReviewPending[];
+}
+export interface GradeReviewClass {
+  classId: string;
+  className: string;
+  subjects: string[];
+  totalSubjects: number;
+  totalStudents: number;
+  studentsComplete: number;
+  students: GradeReviewStudent[];
+}
+export interface GradeReviewOverview {
+  terms: string[];
+  selectedTerm: string;
+  classes: GradeReviewClass[];
 }
 
 export interface Report {

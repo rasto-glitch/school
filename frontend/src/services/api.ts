@@ -233,6 +233,7 @@ export const adminApi = {
   getStudentBrief: (id: string) => api.get(`/admin/students/${id}/brief`),
   // Grade review & release gate
   getPendingGrades: () => api.get('/admin/grades/pending'),
+  getGradeReviewOverview: (term?: string) => api.get('/admin/grades/overview', { params: term ? { term } : {} }),
   updateGrade: (id: string, data: { marks?: { name: string; value: number | string }[]; adminNote?: string | null }) =>
     api.put(`/admin/grades/${id}`, data),
   releaseGrades: (ids: string[]) => api.post('/admin/grades/release', { ids }),

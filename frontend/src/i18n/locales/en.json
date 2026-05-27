@@ -218,7 +218,15 @@
     "release": "Release",
     "note_label": "Note for parents (optional)",
     "note_ph": "Add a note parents will see with this grade…",
-    "no_marks": "No marks recorded."
+    "no_marks": "No marks recorded.",
+    "all_classes": "All classes",
+    "no_classes": "No classes yet.",
+    "no_students": "No students in this class.",
+    "no_pending_student": "No grades pending for this student.",
+    "students_complete": "{{done}}/{{total}} students complete",
+    "subjects_graded": "{{done}}/{{total}} subjects graded",
+    "pending_badge": "{{count}} pending",
+    "release_student": "Release all"
   },
   "reports": {
     "title": "Reports",
