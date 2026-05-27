@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { feesApi } from '../../services/api';
 import { toast } from 'react-toastify';
@@ -14,11 +15,12 @@ interface Props {
   canWrite: boolean;
 }
 
+// Maps to i18n keys; resolved with t() at render (module scope has no t()).
 const STATUS_LABEL: Record<FeeStatus, string> = {
-  paid_up: 'Paid up',
-  current: 'On track',
-  due_soon: 'Due soon',
-  overdue: 'Overdue',
+  paid_up: 'accounting.tuition.status.paid_up',
+  current: 'accounting.tuition.status.current',
+  due_soon: 'accounting.tuition.status.due_soon',
+  overdue: 'accounting.tuition.status.overdue',
 };
 const STATUS_COLOR: Record<FeeStatus, string> = {
   paid_up: 'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -33,18 +35,19 @@ const BAR_COLOR: Record<FeeStatus, string> = {
   overdue: 'bg-rose-500',
 };
 
-// Plain English for the kind badges
+// i18n keys for the kind badges; resolved with t() at render.
 const KIND_LABEL: Record<FeePlanKind, string> = {
-  tuition: 'Tuition',
-  transport: 'Transport',
-  lunch: 'Lunch',
-  uniform: 'Uniform',
-  exam: 'Exam',
-  registration: 'Registration',
-  other: 'Other',
+  tuition: 'accounting.tuition.kind.tuition',
+  transport: 'accounting.tuition.kind.transport',
+  lunch: 'accounting.tuition.kind.lunch',
+  uniform: 'accounting.tuition.kind.uniform',
+  exam: 'accounting.tuition.kind.exam',
+  registration: 'accounting.tuition.kind.registration',
+  other: 'accounting.tuition.kind.other',
 };
 
 export default function TuitionStudentsTab({ basePath, canWrite: _canWrite }: Props) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   // Kind filter lives in the URL (?kind=transport) so it survives navigating to a
   // student's detail page and back, and so that picking a student opens the matching
@@ -65,7 +68,7 @@ export default function TuitionStudentsTab({ basePath, canWrite: _canWrite }: Pr
   useEffect(() => {
     feesApi.listStudentRollup()
       .then(r => setRows(r.data as StudentRollupRow[]))
-      .catch((e: any) => toast.error(e.response?.data?.error || 'Failed to load tuition'));
+      .catch((e: any) => toast.error(e.response?.data?.error || t('accounting.tuition.load_failed')));
   }, []);
 
   // Total balance per row across all currencies — used for the right-side summary.
@@ -129,25 +132,25 @@ export default function TuitionStudentsTab({ basePath, canWrite: _canWrite }: Pr
               statusFilter === s ? 'bg-primary-600 text-white border-primary-600' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
             }`}
           >
-            {s === 'all' ? 'All' : STATUS_LABEL[s]} <span className="ml-1 opacity-70">({statusCounts[s]})</span>
+            {s === 'all' ? t('accounting.tuition.all') : t(STATUS_LABEL[s])} <span className="ml-1 opacity-70">({statusCounts[s]})</span>
           </button>
         ))}
         <div className="ml-auto w-full sm:w-64">
-          <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search student, parent, class…" icon={<Search className="w-4 h-4 text-gray-400" />} />
+          <Input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('accounting.tuition.search_ph')} icon={<Search className="w-4 h-4 text-gray-400" />} />
         </div>
       </div>
 
       {/* Kind chips — only render when more than one kind is in use */}
       {presentKinds.length > 1 && (
         <div className="flex flex-wrap items-center gap-2 mb-4">
-          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide mr-1">Kind:</span>
+          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide mr-1">{t('accounting.tuition.kind_label')}</span>
           <button
             onClick={() => setKindFilter('all')}
             className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
               kindFilter === 'all' ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
             }`}
           >
-            All <span className="ml-1 opacity-70">({kindCounts.all ?? 0})</span>
+            {t('accounting.tuition.all')} <span className="ml-1 opacity-70">({kindCounts.all ?? 0})</span>
           </button>
           {presentKinds.map(k => (
             <button
@@ -159,14 +162,14 @@ export default function TuitionStudentsTab({ basePath, canWrite: _canWrite }: Pr
                   : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
               }`}
             >
-              {KIND_LABEL[k] ?? k} <span className="ml-1 opacity-70">({kindCounts[k] ?? 0})</span>
+              {KIND_LABEL[k] ? t(KIND_LABEL[k]) : k} <span className="ml-1 opacity-70">({kindCounts[k] ?? 0})</span>
             </button>
           ))}
         </div>
       )}
 
       {filtered.length === 0 ? (
-        <EmptyState title="No students" description="No fee records match this filter." icon={<CreditCard className="w-8 h-8 text-gray-400" />} />
+        <EmptyState title={t('accounting.tuition.no_students')} description={t('accounting.tuition.no_match')} icon={<CreditCard className="w-8 h-8 text-gray-400" />} />
       ) : (
         <div className="space-y-2">
           {filtered.map(r => {
@@ -211,19 +214,19 @@ export default function TuitionStudentsTab({ basePath, canWrite: _canWrite }: Pr
                               : 'bg-indigo-50 text-indigo-700 border-indigo-200'
                           }`}
                         >
-                          {KIND_LABEL[p.kind] ?? p.kind}
+                          {KIND_LABEL[p.kind] ? t(KIND_LABEL[p.kind]) : p.kind}
                           {p.balance > 0.01 && <span className="opacity-70 ml-1">· {fmt(p.balance, p.currency)}</span>}
                         </span>
                       ))}
                     </div>
                   </div>
                   <div className="text-right shrink-0">
-                    {visibleTotals.map(t => (
-                      <div key={t.currency} className="text-sm">
-                        <span className="font-bold text-gray-900">{fmt(t.paid, t.currency)}</span>
-                        <span className="text-gray-400"> / {fmt(t.due, t.currency)}</span>
-                        {t.balance > 0.01 && <div className="text-xs text-gray-500">{fmt(t.balance, t.currency)} remaining</div>}
-                        {t.balance < 0.01 && t.due > 0 && <div className="text-xs text-emerald-600">Paid in full</div>}
+                    {visibleTotals.map(tot => (
+                      <div key={tot.currency} className="text-sm">
+                        <span className="font-bold text-gray-900">{fmt(tot.paid, tot.currency)}</span>
+                        <span className="text-gray-400"> / {fmt(tot.due, tot.currency)}</span>
+                        {tot.balance > 0.01 && <div className="text-xs text-gray-500">{t('accounting.tuition.remaining', { amount: fmt(tot.balance, tot.currency) })}</div>}
+                        {tot.balance < 0.01 && tot.due > 0 && <div className="text-xs text-emerald-600">{t('accounting.tuition.paid_in_full')}</div>}
                       </div>
                     ))}
                   </div>

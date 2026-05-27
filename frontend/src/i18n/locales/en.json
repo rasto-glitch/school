@@ -796,7 +796,17 @@
       "staff_sub_ro": "View staff salaries (read-only)",
       "students_title": "Students",
       "students_sub_rw": "Plans, payments, reminders",
-      "students_sub_ro": "View tuition status (read-only)"
+      "students_sub_ro": "View tuition status (read-only)",
+      "status": { "paid_up": "Paid up", "current": "On track", "due_soon": "Due soon", "overdue": "Overdue" },
+      "kind": { "tuition": "Tuition", "transport": "Transport", "lunch": "Lunch", "uniform": "Uniform", "exam": "Exam", "registration": "Registration", "other": "Other" },
+      "load_failed": "Failed to load tuition",
+      "all": "All",
+      "search_ph": "Search student, parent, class…",
+      "kind_label": "Kind:",
+      "no_students": "No students",
+      "no_match": "No fee records match this filter.",
+      "remaining": "{{amount}} remaining",
+      "paid_in_full": "Paid in full"
     }
   }
 }

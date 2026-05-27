@@ -796,7 +796,17 @@
       "staff_sub_ro": "عرض رواتب الموظفين (للقراءة فقط)",
       "students_title": "الطلاب",
       "students_sub_rw": "الخطط، المدفوعات، التذكيرات",
-      "students_sub_ro": "عرض حالة الرسوم (للقراءة فقط)"
+      "students_sub_ro": "عرض حالة الرسوم (للقراءة فقط)",
+      "status": { "paid_up": "مدفوع بالكامل", "current": "على المسار", "due_soon": "مستحق قريباً", "overdue": "متأخر" },
+      "kind": { "tuition": "القسط الدراسي", "transport": "النقل", "lunch": "الغداء", "uniform": "الزي", "exam": "الامتحان", "registration": "التسجيل", "other": "أخرى" },
+      "load_failed": "تعذّر تحميل الرسوم",
+      "all": "الكل",
+      "search_ph": "ابحث عن طالب، ولي أمر، صف…",
+      "kind_label": "النوع:",
+      "no_students": "لا يوجد طلاب",
+      "no_match": "لا توجد سجلات رسوم مطابقة لهذا الفلتر.",
+      "remaining": "{{amount}} متبقٍ",
+      "paid_in_full": "مدفوع بالكامل"
     }
   }
 }
