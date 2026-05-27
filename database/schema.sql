@@ -450,7 +450,7 @@ CREATE TABLE IF NOT EXISTS notifications (
   title TEXT NOT NULL,
   message TEXT NOT NULL,
   is_read BOOLEAN DEFAULT FALSE,
-  notification_type TEXT DEFAULT 'general' CHECK (notification_type IN ('homework','assignment','announcement','bus','grade','general','system','report','appointment','post','payment_recorded','fees_reminder','salary_due_soon','salary_paid')),
+  notification_type TEXT DEFAULT 'general' CHECK (notification_type IN ('homework','assignment','announcement','bus','grade','grade_pending','general','system','report','appointment','post','payment_recorded','fees_reminder','salary_due_soon','salary_paid')),
   related_id UUID,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -1110,8 +1110,16 @@ CREATE INDEX IF NOT EXISTS idx_audit_logs_chain ON audit_logs(school_id, chain_s
 -- ============================================================
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
+-- SET search_path so `digest` (pgcrypto, in the `extensions` schema) resolves
+-- regardless of the caller's path. Backend connections (PostgREST/service_role)
+-- run with `public` only, so without this the hash triggers on archived_students
+-- / archived_employees / audit_logs throw 42883 over the API. A function's
+-- SET search_path applies during its own execution no matter who calls it, and
+-- _sha is the only function that touches digest — so pinning it here covers
+-- every hash path.
 CREATE OR REPLACE FUNCTION _sha(t text) RETURNS text
-LANGUAGE sql IMMUTABLE AS $$ SELECT encode(digest(coalesce(t,''), 'sha256'), 'hex') $$;
+LANGUAGE sql IMMUTABLE SET search_path = public, extensions
+AS $$ SELECT encode(digest(coalesce(t,''), 'sha256'), 'hex') $$;
 
 CREATE OR REPLACE FUNCTION _canon_archived_student(r archived_students) RETURNS text
 LANGUAGE sql IMMUTABLE AS $$
