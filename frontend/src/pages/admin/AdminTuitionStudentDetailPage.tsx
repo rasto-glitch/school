@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { feesApi, accountingApi, type PaymentAccount } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
@@ -13,8 +14,12 @@ import { ArrowLeft, Plus, Trash2, Lock, Unlock, FileDown, Pencil, Undo2 } from '
 import type { StudentDetail, StudentDetailPlan, FeePayment, FeeStatus, FeePlanKind } from '../../types';
 import { fmtMoney as fmt } from '../../utils/money';
 
+// i18n keys (shared accounting.tuition.*); resolved with t() at render.
 const STATUS_LABEL: Record<FeeStatus, string> = {
-  paid_up: 'Paid up', current: 'On track', due_soon: 'Due soon', overdue: 'Overdue',
+  paid_up: 'accounting.tuition.status.paid_up',
+  current: 'accounting.tuition.status.current',
+  due_soon: 'accounting.tuition.status.due_soon',
+  overdue: 'accounting.tuition.status.overdue',
 };
 const STATUS_COLOR: Record<FeeStatus, string> = {
   paid_up: 'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -23,13 +28,13 @@ const STATUS_COLOR: Record<FeeStatus, string> = {
   overdue: 'bg-rose-50 text-rose-700 border-rose-200',
 };
 const KIND_LABEL: Record<FeePlanKind, string> = {
-  tuition: 'Tuition',
-  transport: 'Transport',
-  lunch: 'Lunch',
-  uniform: 'Uniform',
-  exam: 'Exam',
-  registration: 'Registration',
-  other: 'Other',
+  tuition: 'accounting.tuition.kind.tuition',
+  transport: 'accounting.tuition.kind.transport',
+  lunch: 'accounting.tuition.kind.lunch',
+  uniform: 'accounting.tuition.kind.uniform',
+  exam: 'accounting.tuition.kind.exam',
+  registration: 'accounting.tuition.kind.registration',
+  other: 'accounting.tuition.kind.other',
 };
 
 function downloadBlob(blob: Blob, filename: string) {
@@ -44,6 +49,7 @@ function downloadBlob(blob: Blob, filename: string) {
 }
 
 export default function AdminTuitionStudentDetailPage() {
+  const { t } = useTranslation();
   // The :id route param is now the student.id (not the student_fees.id).
   // Existing links from AR aging already pass studentId; legacy links from earlier
   // builds passing student_fees.id will 404 cleanly with "Student has no fees".
@@ -116,7 +122,7 @@ export default function AdminTuitionStudentDetailPage() {
 
   useEffect(() => {
     if (!studentId) return;
-    load().catch((e: any) => toast.error(e.response?.data?.error || 'Failed to load'));
+    load().catch((e: any) => toast.error(e.response?.data?.error || t('accounting.detail.load_failed')));
     accountingApi.listPaymentAccounts().then(r => {
       const active = r.data.filter(a => a.isActive);
       setAccounts(active);
@@ -146,14 +152,14 @@ export default function AdminTuitionStudentDetailPage() {
     return m;
   }, [activePlan]);
 
-  if (!data) return <PageLayout title="Tuition"><LoadingSpinner /></PageLayout>;
+  if (!data) return <PageLayout title={t('accounting.tuition.students_title')}><LoadingSpinner /></PageLayout>;
   if (!activePlan) {
     return (
-      <PageLayout title={data.studentName} subtitle="No fee plans assigned">
+      <PageLayout title={data.studentName} subtitle={t('accounting.detail.no_plans_sub')}>
         <button onClick={() => navigate(basePath)} className="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900 mb-4">
-          <ArrowLeft className="w-4 h-4" /> Back
+          <ArrowLeft className="w-4 h-4" /> {t('common.back')}
         </button>
-        <Card><p className="text-sm text-gray-500">This student has no fee plans assigned.</p></Card>
+        <Card><p className="text-sm text-gray-500">{t('accounting.detail.no_plans_body')}</p></Card>
       </PageLayout>
     );
   }
@@ -177,9 +183,9 @@ export default function AdminTuitionStudentDetailPage() {
   const needsExtraNote = hasInstallments && allocations.length > 0 && extraValid > 0;
 
   const recordPayment = async () => {
-    if (totalPay <= 0) { toast.error('Enter a positive amount'); return; }
-    if (needsExtraNote && !extraNote.trim()) { toast.error('Please add a note explaining the other amount'); return; }
-    if (!payAccountId) { toast.error('Choose which account the payment goes into'); return; }
+    if (totalPay <= 0) { toast.error(t('accounting.detail.err_positive')); return; }
+    if (needsExtraNote && !extraNote.trim()) { toast.error(t('accounting.detail.err_other_note')); return; }
+    if (!payAccountId) { toast.error(t('accounting.detail.err_account')); return; }
     setPaySaving(true);
     try {
       await feesApi.recordPayment(activePlan.studentFeeId, {
@@ -194,30 +200,30 @@ export default function AdminTuitionStudentDetailPage() {
         taxLabel: payTaxLabel || undefined,
         paymentAccountId: payAccountId,
       });
-      toast.success('Payment recorded');
+      toast.success(t('accounting.detail.payment_recorded'));
       setShowPay(false);
       setAllocAmounts({}); setExtraAmount(''); setExtraNote(''); setPayRef(''); setPayNotes('');
       setPayTaxAmount(''); setPayTaxLabel('');
       await load();
     } catch (e: any) {
-      toast.error(e.response?.data?.error || 'Failed to record payment');
+      toast.error(e.response?.data?.error || t('accounting.detail.record_failed'));
     } finally { setPaySaving(false); }
   };
 
   const deletePayment = async (paymentId: string) => {
-    if (!confirm('Void this payment? It will be removed from the ledger.')) return;
+    if (!confirm(t('accounting.detail.void_confirm'))) return;
     try {
       await feesApi.deletePayment(paymentId);
-      toast.success('Payment voided');
+      toast.success(t('accounting.detail.payment_voided'));
       await load();
-    } catch (e: any) { toast.error(e.response?.data?.error || 'Failed'); }
+    } catch (e: any) { toast.error(e.response?.data?.error || t('accounting.detail.failed')); }
   };
 
   const downloadReceipt = async (p: FeePayment) => {
     try {
       const r = await feesApi.downloadPaymentReceipt(p.id);
       downloadBlob(r.data, `receipt-${p.id.slice(0, 8)}.pdf`);
-    } catch (e: any) { toast.error(e.response?.data?.error || 'Failed'); }
+    } catch (e: any) { toast.error(e.response?.data?.error || t('accounting.detail.failed')); }
   };
 
   const downloadSummary = async () => {
@@ -225,14 +231,14 @@ export default function AdminTuitionStudentDetailPage() {
     try {
       const r = await feesApi.downloadStudentFeeSummary(activePlan.studentFeeId);
       downloadBlob(r.data, `tuition-statement-${activePlan.studentFeeId.slice(0, 8)}.pdf`);
-    } catch (e: any) { toast.error(e.response?.data?.error || 'Failed'); }
+    } catch (e: any) { toast.error(e.response?.data?.error || t('accounting.detail.failed')); }
   };
 
   const submitRefund = async () => {
     if (!refundOf) return;
     const amt = Number(refundAmount);
-    if (!isFinite(amt) || amt <= 0) { toast.error('Enter a positive refund amount'); return; }
-    if (!refundAccountId) { toast.error('Choose which account the refund is paid from'); return; }
+    if (!isFinite(amt) || amt <= 0) { toast.error(t('accounting.detail.err_refund_positive')); return; }
+    if (!refundAccountId) { toast.error(t('accounting.detail.err_refund_account')); return; }
     setRefundBusy(true);
     try {
       await feesApi.refundPayment(refundOf.id, {
@@ -242,12 +248,12 @@ export default function AdminTuitionStudentDetailPage() {
         notes: refundNotes || undefined,
         paymentAccountId: refundAccountId,
       });
-      toast.success('Refund recorded');
+      toast.success(t('accounting.detail.refund_recorded'));
       setRefundOf(null);
       setRefundAmount(''); setRefundNotes('');
       await load();
     } catch (e: any) {
-      toast.error(e.response?.data?.error || 'Failed to refund');
+      toast.error(e.response?.data?.error || t('accounting.detail.refund_failed'));
     } finally { setRefundBusy(false); }
   };
 
@@ -256,33 +262,34 @@ export default function AdminTuitionStudentDetailPage() {
     setAdjSaving(true);
     try {
       await feesApi.updateStudentFee(activePlan.studentFeeId, { adjustment: Number(adjValue), notes: adjNotes || null });
-      toast.success('Adjustment saved');
+      toast.success(t('accounting.detail.adjustment_saved'));
       setShowAdjust(false);
       await load();
     } catch (e: any) {
-      toast.error(e.response?.data?.error || 'Failed to save');
+      toast.error(e.response?.data?.error || t('accounting.detail.save_failed'));
     } finally { setAdjSaving(false); }
   };
 
   const toggleLock = async (feature: 'grades' | 'reports') => {
     if (!data || !canWrite) return;
     const isLocked = data.lockedFeatures.includes(feature);
+    const featureLabel = t(`nav.${feature}`);
     try {
       if (isLocked) {
         await feesApi.removeLock(data.studentId, feature);
-        toast.success(`${feature} unlocked`);
+        toast.success(t('accounting.detail.feature_unlocked', { feature: featureLabel }));
       } else {
         await feesApi.setLock(data.studentId, { feature, reason: 'unpaid_fees' });
-        toast.success(`${feature} locked`);
+        toast.success(t('accounting.detail.feature_locked', { feature: featureLabel }));
       }
       await load();
-    } catch (e: any) { toast.error(e.response?.data?.error || 'Failed'); }
+    } catch (e: any) { toast.error(e.response?.data?.error || t('accounting.detail.failed')); }
   };
 
   return (
-    <PageLayout title={data.studentName} subtitle={data.parentName || 'No parent linked'}>
+    <PageLayout title={data.studentName} subtitle={data.parentName || t('accounting.detail.no_parent')}>
       <button onClick={() => navigate(desiredKind ? `${basePath}?kind=${desiredKind}` : basePath)} className="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900 mb-4">
-        <ArrowLeft className="w-4 h-4" /> Back to tuition
+        <ArrowLeft className="w-4 h-4" /> {t('accounting.detail.back_to_tuition')}
       </button>
 
       {/* Per-plan tabs — one tab per kind/plan. Each tab shows its own balance so the
@@ -299,7 +306,7 @@ export default function AdminTuitionStudentDetailPage() {
                 isActive ? 'bg-primary-600 text-white' : 'text-gray-600 hover:bg-gray-100'
               }`}
             >
-              <span>{KIND_LABEL[p.kind] ?? p.kind}</span>
+              <span>{KIND_LABEL[p.kind] ? t(KIND_LABEL[p.kind]) : p.kind}</span>
               <span className={`text-xs font-medium ${isActive ? 'opacity-90' : 'text-gray-400'}`}>
                 {fmt(planBal, p.currency)}
               </span>
@@ -317,34 +324,34 @@ export default function AdminTuitionStudentDetailPage() {
                 <div className="flex items-center gap-2 flex-wrap">
                   <h2 className="font-semibold text-gray-900">{activePlan.planName}</h2>
                   {activePlan.kind !== 'tuition' && (
-                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 capitalize">
-                      {activePlan.kind}
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                      {t(`accounting.tuition.kind.${activePlan.kind}`)}
                     </span>
                   )}
                 </div>
                 <div className="text-sm text-gray-500">
                   {activePlan.academicYear && <>{activePlan.academicYear} · </>}
-                  {data.className || 'No class'}
+                  {data.className || t('accounting.detail.no_class')}
                 </div>
               </div>
               <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${STATUS_COLOR[activePlan.status]}`}>
-                {STATUS_LABEL[activePlan.status]}
+                {t(STATUS_LABEL[activePlan.status])}
               </span>
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-              <Stat label="Plan total" value={fmt(activePlan.totalAmount, activePlan.currency)} />
-              {activePlan.adjustment !== 0 && <Stat label={activePlan.adjustment < 0 ? 'Adjustment' : 'Surcharge'} value={fmt(activePlan.adjustment, activePlan.currency)} />}
-              {activePlan.siblingDiscount > 0 && <Stat label="Sibling discount" value={`−${fmt(activePlan.siblingDiscount, activePlan.currency)}`} />}
-              {activePlan.lateFees > 0 && <Stat label="Late fees" value={fmt(activePlan.lateFees, activePlan.currency)} />}
-              <Stat label="Paid" value={fmt(activePlan.paid, activePlan.currency)} />
-              <Stat label="Balance" value={fmt(remaining, activePlan.currency)} accent={remaining > 0} />
+              <Stat label={t('accounting.detail.plan_total')} value={fmt(activePlan.totalAmount, activePlan.currency)} />
+              {activePlan.adjustment !== 0 && <Stat label={activePlan.adjustment < 0 ? t('accounting.detail.adjustment') : t('accounting.detail.surcharge')} value={fmt(activePlan.adjustment, activePlan.currency)} />}
+              {activePlan.siblingDiscount > 0 && <Stat label={t('accounting.detail.sibling_discount')} value={`−${fmt(activePlan.siblingDiscount, activePlan.currency)}`} />}
+              {activePlan.lateFees > 0 && <Stat label={t('accounting.detail.late_fees')} value={fmt(activePlan.lateFees, activePlan.currency)} />}
+              <Stat label={t('accounting.detail.paid')} value={fmt(activePlan.paid, activePlan.currency)} />
+              <Stat label={t('accounting.detail.balance')} value={fmt(remaining, activePlan.currency)} accent={remaining > 0} />
             </div>
 
             <div className="h-2 rounded-full bg-gray-100 overflow-hidden mb-1">
               <div className="h-full bg-primary-500" style={{ width: `${due > 0 ? Math.min(100, (activePlan.paid / due) * 100) : 100}%` }} />
             </div>
-            <p className="text-xs text-gray-500">{fmt(activePlan.paid, activePlan.currency)} of {fmt(due, activePlan.currency)}</p>
+            <p className="text-xs text-gray-500">{t('accounting.detail.paid_of', { paid: fmt(activePlan.paid, activePlan.currency), due: fmt(due, activePlan.currency) })}</p>
 
             {activePlan.installments.length > 0 && (
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-4">
@@ -356,16 +363,16 @@ export default function AdminTuitionStudentDetailPage() {
                   return (
                     <div key={i.id} className={`rounded-lg px-3 py-2 text-xs border ${fullyPaid ? 'bg-emerald-50 border-emerald-200' : partial ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200'}`}>
                       <div className="flex items-center justify-between">
-                        <span className="text-gray-500">Installment {i.sequence}</span>
-                        {fullyPaid && <span className="text-emerald-700 font-medium">Paid</span>}
-                        {partial && <span className="text-amber-700 font-medium">Partial</span>}
+                        <span className="text-gray-500">{t('accounting.detail.installment_n', { n: i.sequence })}</span>
+                        {fullyPaid && <span className="text-emerald-700 font-medium">{t('accounting.detail.paid_badge')}</span>}
+                        {partial && <span className="text-amber-700 font-medium">{t('accounting.detail.partial')}</span>}
                       </div>
                       <div className="font-semibold text-gray-900">{fmt(i.effectiveAmount, activePlan.currency)}</div>
-                      {adjusted && <div className="text-gray-400 text-[10px]">base {fmt(i.amount, activePlan.currency)}</div>}
+                      {adjusted && <div className="text-gray-400 text-[10px]">{t('accounting.detail.base', { amount: fmt(i.amount, activePlan.currency) })}</div>}
                       {paidThis > 0 && !fullyPaid && (
-                        <div className="text-amber-700">{fmt(paidThis, activePlan.currency)} paid</div>
+                        <div className="text-amber-700">{t('accounting.detail.amount_paid', { amount: fmt(paidThis, activePlan.currency) })}</div>
                       )}
-                      <div className="text-gray-500">due {i.dueDate}</div>
+                      <div className="text-gray-500">{t('accounting.detail.due_date', { date: i.dueDate })}</div>
                     </div>
                   );
                 })}
@@ -376,14 +383,14 @@ export default function AdminTuitionStudentDetailPage() {
           {/* Payments for the active plan */}
           <div className="mt-4">
             <div className="flex items-center justify-between mb-2">
-              <h3 className="font-semibold text-gray-900">Payments · {KIND_LABEL[activePlan.kind] ?? activePlan.kind}</h3>
+              <h3 className="font-semibold text-gray-900">{t('accounting.detail.payments')} · {KIND_LABEL[activePlan.kind] ? t(KIND_LABEL[activePlan.kind]) : activePlan.kind}</h3>
               <div className="flex gap-2">
-                <Button variant="ghost" size="sm" onClick={downloadSummary} icon={<FileDown className="w-4 h-4" />}>Statement</Button>
-                {canWrite && <Button size="sm" onClick={() => setShowPay(true)} icon={<Plus className="w-4 h-4" />}>Record payment</Button>}
+                <Button variant="ghost" size="sm" onClick={downloadSummary} icon={<FileDown className="w-4 h-4" />}>{t('accounting.detail.statement')}</Button>
+                {canWrite && <Button size="sm" onClick={() => setShowPay(true)} icon={<Plus className="w-4 h-4" />}>{t('accounting.detail.record_payment')}</Button>}
               </div>
             </div>
             {activePlan.payments.length === 0 ? (
-              <Card><p className="text-sm text-gray-500 text-center py-4">No payments recorded yet for this plan.</p></Card>
+              <Card><p className="text-sm text-gray-500 text-center py-4">{t('accounting.detail.no_payments_yet')}</p></Card>
             ) : (
               <Card className="!p-0">
                 <div className="divide-y divide-gray-100">
@@ -393,28 +400,28 @@ export default function AdminTuitionStudentDetailPage() {
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className={`font-semibold ${p.isRefund ? 'text-rose-700' : 'text-gray-900'}`}>{p.isRefund ? '−' : ''}{fmt(p.amount, p.currency || activePlan.currency)}</span>
                           <span className="text-xs text-gray-500">· {p.paidOn}</span>
-                          {p.isRefund && <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-rose-100 text-rose-700">Refund</span>}
+                          {p.isRefund && <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-rose-100 text-rose-700">{t('accounting.detail.refund_badge')}</span>}
                           {p.receiptYear && p.receiptNumber && (
                             <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">RCP-{p.receiptYear}-{String(p.receiptNumber).padStart(5, '0')}</span>
                           )}
                           {p.method && <span className="text-xs text-gray-500">· {p.method}</span>}
-                          {p.reference && <span className="text-xs text-gray-500">· ref {p.reference}</span>}
-                          {(p.taxAmount ?? 0) > 0 && <span className="text-xs text-gray-500">· tax {fmt(p.taxAmount ?? 0, p.currency || activePlan.currency)}{p.taxLabel ? ` (${p.taxLabel})` : ''}</span>}
+                          {p.reference && <span className="text-xs text-gray-500">· {t('accounting.detail.ref', { ref: p.reference })}</span>}
+                          {(p.taxAmount ?? 0) > 0 && <span className="text-xs text-gray-500">· {t('accounting.detail.tax', { amount: fmt(p.taxAmount ?? 0, p.currency || activePlan.currency) })}{p.taxLabel ? ` (${p.taxLabel})` : ''}</span>}
                         </div>
                         <div className="text-xs text-gray-700 mt-0.5">
-                          <span className="text-gray-500">Recorded by </span>
+                          <span className="text-gray-500">{t('accounting.detail.recorded_by')} </span>
                           <span className="font-medium">{p.recorderName || '—'}</span>
                         </div>
                         {p.allocations && p.allocations.length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-1">
                             {p.allocations.map(a => (
                               <span key={a.installmentId} className="text-xs px-1.5 py-0.5 rounded bg-primary-50 text-primary-700 border border-primary-100">
-                                Inst. {a.sequence} · {fmt(a.amount, activePlan.currency)}
+                                {t('accounting.detail.inst_alloc', { n: a.sequence, amount: fmt(a.amount, activePlan.currency) })}
                               </span>
                             ))}
                             {(p.unallocatedAmount ?? 0) > 0 && (
                               <span className="text-xs px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-100">
-                                Other · {fmt(p.unallocatedAmount ?? 0, activePlan.currency)}
+                                {t('accounting.detail.other_alloc', { amount: fmt(p.unallocatedAmount ?? 0, activePlan.currency) })}
                               </span>
                             )}
                           </div>
@@ -448,13 +455,13 @@ export default function AdminTuitionStudentDetailPage() {
         {/* Side panel: locks (per-student) + adjustment (per-active-plan) */}
         <div className="space-y-4">
           <Card>
-            <h3 className="font-semibold text-gray-900 mb-1">Feature locks</h3>
-            <p className="text-xs text-gray-500 mb-3">Locks apply to the student across all plans. Critical features (attendance, bus, chat) stay available.</p>
+            <h3 className="font-semibold text-gray-900 mb-1">{t('accounting.detail.feature_locks')}</h3>
+            <p className="text-xs text-gray-500 mb-3">{t('accounting.detail.locks_desc')}</p>
             {(['grades', 'reports'] as const).map(f => {
               const locked = data.lockedFeatures.includes(f);
               return (
                 <div key={f} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-b-0">
-                  <span className="text-sm font-medium text-gray-800 capitalize">{f}</span>
+                  <span className="text-sm font-medium text-gray-800">{t(`nav.${f}`)}</span>
                   <button
                     onClick={() => toggleLock(f)}
                     disabled={!canWrite}
@@ -462,7 +469,7 @@ export default function AdminTuitionStudentDetailPage() {
                       locked ? 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100' : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
                     } disabled:opacity-50 disabled:cursor-not-allowed`}
                   >
-                    {locked ? <><Lock className="w-3 h-3" /> Locked</> : <><Unlock className="w-3 h-3" /> Unlocked</>}
+                    {locked ? <><Lock className="w-3 h-3" /> {t('accounting.detail.locked')}</> : <><Unlock className="w-3 h-3" /> {t('accounting.detail.unlocked')}</>}
                   </button>
                 </div>
               );
@@ -472,10 +479,10 @@ export default function AdminTuitionStudentDetailPage() {
           {canWrite && (
             <Card>
               <div className="flex items-center justify-between mb-1">
-                <h3 className="font-semibold text-gray-900">Adjustment <span className="text-xs text-gray-400 font-normal">· {KIND_LABEL[activePlan.kind] ?? activePlan.kind}</span></h3>
-                <button onClick={() => { setAdjValue(String(activePlan.adjustment)); setAdjNotes(activePlan.adjustment ? 'Scholarship' : ''); setShowAdjust(true); }} className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg"><Pencil className="w-4 h-4" /></button>
+                <h3 className="font-semibold text-gray-900">{t('accounting.detail.adjustment')} <span className="text-xs text-gray-400 font-normal">· {KIND_LABEL[activePlan.kind] ? t(KIND_LABEL[activePlan.kind]) : activePlan.kind}</span></h3>
+                <button onClick={() => { setAdjValue(String(activePlan.adjustment)); setAdjNotes(activePlan.adjustment ? t('accounting.detail.scholarship') : ''); setShowAdjust(true); }} className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg"><Pencil className="w-4 h-4" /></button>
               </div>
-              <p className="text-xs text-gray-500 mb-2">Per-plan override. Negative for scholarships, positive for surcharges. Sibling discount is computed separately.</p>
+              <p className="text-xs text-gray-500 mb-2">{t('accounting.detail.adjustment_desc')}</p>
               <div className="text-2xl font-bold text-gray-900">{fmt(activePlan.adjustment, activePlan.currency)}</div>
             </Card>
           )}
@@ -484,12 +491,12 @@ export default function AdminTuitionStudentDetailPage() {
 
       {/* Record payment modal */}
       {showPay && (
-        <Modal isOpen onClose={() => setShowPay(false)} title={`Record payment · ${KIND_LABEL[activePlan.kind] ?? activePlan.kind}`}>
+        <Modal isOpen onClose={() => setShowPay(false)} title={`${t('accounting.detail.record_payment')} · ${KIND_LABEL[activePlan.kind] ? t(KIND_LABEL[activePlan.kind]) : activePlan.kind}`}>
           <div className="space-y-3">
             {hasInstallments && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Installments</label>
-                <p className="text-xs text-gray-500 mb-2">Enter the amount paid against each installment — you can pay one, several, or partials.</p>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('accounting.plans.f_installments')}</label>
+                <p className="text-xs text-gray-500 mb-2">{t('accounting.detail.installments_help')}</p>
                 <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                   {activePlan.installments.map(i => {
                     const alreadyPaid = paidByInstallment.get(i.id) ?? 0;
@@ -500,12 +507,12 @@ export default function AdminTuitionStudentDetailPage() {
                       <div key={i.id} className={`rounded-lg border ${isPaid ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-50 border-gray-200'} px-3 py-2`}>
                         <div className="flex items-center justify-between gap-2 mb-1">
                           <div className="text-xs text-gray-600">
-                            <span className="font-semibold text-gray-900">Installment {i.sequence}</span>
-                            <span className="text-gray-500"> · due {i.dueDate}</span>
-                            {adjusted && <span className="text-gray-400"> · base {fmt(i.amount, activePlan.currency)}</span>}
+                            <span className="font-semibold text-gray-900">{t('accounting.detail.installment_n', { n: i.sequence })}</span>
+                            <span className="text-gray-500"> · {t('accounting.detail.due_date', { date: i.dueDate })}</span>
+                            {adjusted && <span className="text-gray-400"> · {t('accounting.detail.base', { amount: fmt(i.amount, activePlan.currency) })}</span>}
                           </div>
                           <div className="text-xs text-gray-500">
-                            {isPaid ? <span className="text-emerald-700 font-medium">Paid</span> : <>{fmt(remainingThis, activePlan.currency)} left of {fmt(i.effectiveAmount, activePlan.currency)}</>}
+                            {isPaid ? <span className="text-emerald-700 font-medium">{t('accounting.detail.paid_badge')}</span> : <>{t('accounting.detail.left_of', { left: fmt(remainingThis, activePlan.currency), total: fmt(i.effectiveAmount, activePlan.currency) })}</>}
                           </div>
                         </div>
                         {!isPaid && (
@@ -523,7 +530,7 @@ export default function AdminTuitionStudentDetailPage() {
                 </div>
                 <Input
                   className="mt-2"
-                  label="Other amount (advance / unallocated)"
+                  label={t('accounting.detail.other_amount')}
                   type="number"
                   step="0.01"
                   value={extraAmount}
@@ -532,12 +539,12 @@ export default function AdminTuitionStudentDetailPage() {
                 />
                 {needsExtraNote && (
                   <div className="mt-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Note for the other amount <span className="text-red-500">*</span></label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('accounting.detail.other_note_label')} <span className="text-red-500">*</span></label>
                     <textarea
                       rows={2}
                       value={extraNote}
                       onChange={e => setExtraNote(e.target.value)}
-                      placeholder="e.g. advance for next month, late fee, transport"
+                      placeholder={t('accounting.detail.other_note_ph')}
                       className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
                     />
                   </div>
@@ -546,7 +553,7 @@ export default function AdminTuitionStudentDetailPage() {
             )}
             {!hasInstallments && (
               <Input
-                label={`Amount (${activePlan.currency})`}
+                label={t('accounting.detail.amount_currency', { currency: activePlan.currency })}
                 type="number"
                 step="0.01"
                 value={extraAmount}
@@ -555,42 +562,42 @@ export default function AdminTuitionStudentDetailPage() {
               />
             )}
             <div className="flex items-center justify-between rounded-lg bg-primary-50 border border-primary-200 px-3 py-2">
-              <span className="text-sm font-medium text-primary-900">Total</span>
+              <span className="text-sm font-medium text-primary-900">{t('accounting.plans.total')}</span>
               <span className="text-lg font-bold text-primary-900">{fmt(totalPay, activePlan.currency)}</span>
             </div>
-            <Input label="Paid on" type="date" value={payDate} onChange={e => setPayDate(e.target.value)} />
+            <Input label={t('accounting.detail.paid_on')} type="date" value={payDate} onChange={e => setPayDate(e.target.value)} />
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Method</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('accounting.detail.method')}</label>
               <select value={payMethod} onChange={e => setPayMethod(e.target.value)} className="w-full border border-gray-300 rounded-xl px-4 py-2.5 bg-white min-h-[44px] focus:outline-none focus:ring-2 focus:ring-primary-500">
-                <option value="cash">Cash</option>
-                <option value="bank">Bank deposit</option>
-                <option value="transfer">Bank transfer</option>
-                <option value="card">Card</option>
-                <option value="other">Other</option>
+                <option value="cash">{t('accounting.detail.m_cash')}</option>
+                <option value="bank">{t('accounting.detail.m_bank')}</option>
+                <option value="transfer">{t('accounting.detail.m_transfer')}</option>
+                <option value="card">{t('accounting.detail.m_card')}</option>
+                <option value="other">{t('accounting.detail.m_other')}</option>
               </select>
             </div>
-            <Input label="Reference (optional)" value={payRef} onChange={e => setPayRef(e.target.value)} placeholder="Receipt no., transfer ID…" />
+            <Input label={t('accounting.detail.reference_opt')} value={payRef} onChange={e => setPayRef(e.target.value)} placeholder={t('accounting.detail.reference_ph')} />
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Deposit into <span className="text-rose-500">*</span></label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('accounting.detail.deposit_into')} <span className="text-rose-500">*</span></label>
               {accounts.length > 0 ? (
                 <select value={payAccountId} onChange={e => setPayAccountId(e.target.value)} className="w-full border border-gray-300 rounded-xl px-4 py-2.5 bg-white min-h-[44px] focus:outline-none focus:ring-2 focus:ring-primary-500">
                   {accounts.map(a => <option key={a.id} value={a.id}>{a.name} ({a.kind} · {a.currency})</option>)}
                 </select>
               ) : (
-                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2">No payment accounts yet — create one under Payment accounts before recording payments.</p>
+                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2">{t('accounting.detail.no_accounts_pay')}</p>
               )}
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Input label="Tax included (optional)" type="number" step="0.01" value={payTaxAmount} onChange={e => setPayTaxAmount(e.target.value)} placeholder="0.00" />
-              <Input label="Tax label" value={payTaxLabel} onChange={e => setPayTaxLabel(e.target.value)} placeholder="VAT 5%, etc." />
+              <Input label={t('accounting.detail.tax_included')} type="number" step="0.01" value={payTaxAmount} onChange={e => setPayTaxAmount(e.target.value)} placeholder="0.00" />
+              <Input label={t('accounting.detail.tax_label')} value={payTaxLabel} onChange={e => setPayTaxLabel(e.target.value)} placeholder={t('accounting.detail.tax_label_ph')} />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Notes (optional)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('accounting.detail.notes_opt')}</label>
               <textarea rows={2} value={payNotes} onChange={e => setPayNotes(e.target.value)} className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500" />
             </div>
             <div className="flex gap-2 justify-end pt-2">
-              <Button variant="ghost" onClick={() => setShowPay(false)}>Cancel</Button>
-              <Button onClick={recordPayment} loading={paySaving} disabled={totalPay <= 0 || !payAccountId}>Record</Button>
+              <Button variant="ghost" onClick={() => setShowPay(false)}>{t('common.cancel')}</Button>
+              <Button onClick={recordPayment} loading={paySaving} disabled={totalPay <= 0 || !payAccountId}>{t('accounting.detail.record')}</Button>
             </div>
           </div>
         </Modal>
@@ -598,40 +605,40 @@ export default function AdminTuitionStudentDetailPage() {
 
       {/* Refund modal */}
       {refundOf && (
-        <Modal isOpen onClose={() => setRefundOf(null)} title={`Refund payment of ${fmt(refundOf.amount, refundOf.currency || activePlan.currency)}`}>
+        <Modal isOpen onClose={() => setRefundOf(null)} title={t('accounting.detail.refund_title', { amount: fmt(refundOf.amount, refundOf.currency || activePlan.currency) })}>
           <div className="space-y-3">
             <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2">
-              The original payment is preserved. The refund is recorded as a separate negative event and a new receipt is issued.
+              {t('accounting.detail.refund_note')}
             </p>
-            <Input label="Refund amount" type="number" step="0.01" value={refundAmount} onChange={e => setRefundAmount(e.target.value)} />
-            <Input label="Refunded on" type="date" value={refundDate} onChange={e => setRefundDate(e.target.value)} />
+            <Input label={t('accounting.detail.refund_amount')} type="number" step="0.01" value={refundAmount} onChange={e => setRefundAmount(e.target.value)} />
+            <Input label={t('accounting.detail.refunded_on')} type="date" value={refundDate} onChange={e => setRefundDate(e.target.value)} />
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Method</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('accounting.detail.method')}</label>
               <select value={refundMethod} onChange={e => setRefundMethod(e.target.value)} className="w-full border border-gray-300 rounded-xl px-4 py-2.5 bg-white min-h-[44px] focus:outline-none focus:ring-2 focus:ring-primary-500">
-                <option value="cash">Cash</option>
-                <option value="bank">Bank deposit</option>
-                <option value="transfer">Bank transfer</option>
-                <option value="card">Card</option>
-                <option value="other">Other</option>
+                <option value="cash">{t('accounting.detail.m_cash')}</option>
+                <option value="bank">{t('accounting.detail.m_bank')}</option>
+                <option value="transfer">{t('accounting.detail.m_transfer')}</option>
+                <option value="card">{t('accounting.detail.m_card')}</option>
+                <option value="other">{t('accounting.detail.m_other')}</option>
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Paid from <span className="text-rose-500">*</span></label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('accounting.detail.paid_from')} <span className="text-rose-500">*</span></label>
               {accounts.length > 0 ? (
                 <select value={refundAccountId} onChange={e => setRefundAccountId(e.target.value)} className="w-full border border-gray-300 rounded-xl px-4 py-2.5 bg-white min-h-[44px] focus:outline-none focus:ring-2 focus:ring-primary-500">
                   {accounts.map(a => <option key={a.id} value={a.id}>{a.name} ({a.kind} · {a.currency})</option>)}
                 </select>
               ) : (
-                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2">No payment accounts yet — create one before issuing refunds.</p>
+                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2">{t('accounting.detail.no_accounts_refund')}</p>
               )}
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Notes (optional)</label>
-              <textarea rows={2} value={refundNotes} onChange={e => setRefundNotes(e.target.value)} className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="Why is this being refunded?" />
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('accounting.detail.notes_opt')}</label>
+              <textarea rows={2} value={refundNotes} onChange={e => setRefundNotes(e.target.value)} className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder={t('accounting.detail.refund_reason_ph')} />
             </div>
             <div className="flex gap-2 justify-end pt-2">
-              <Button variant="ghost" onClick={() => setRefundOf(null)} disabled={refundBusy}>Cancel</Button>
-              <Button onClick={submitRefund} loading={refundBusy} disabled={!refundAccountId} icon={<Undo2 className="w-4 h-4" />}>Refund</Button>
+              <Button variant="ghost" onClick={() => setRefundOf(null)} disabled={refundBusy}>{t('common.cancel')}</Button>
+              <Button onClick={submitRefund} loading={refundBusy} disabled={!refundAccountId} icon={<Undo2 className="w-4 h-4" />}>{t('accounting.detail.refund')}</Button>
             </div>
           </div>
         </Modal>
@@ -639,23 +646,23 @@ export default function AdminTuitionStudentDetailPage() {
 
       {/* Adjustment modal */}
       {showAdjust && (
-        <Modal isOpen onClose={() => setShowAdjust(false)} title={`Adjustment · ${KIND_LABEL[activePlan.kind] ?? activePlan.kind}`}>
+        <Modal isOpen onClose={() => setShowAdjust(false)} title={`${t('accounting.detail.adjustment')} · ${KIND_LABEL[activePlan.kind] ? t(KIND_LABEL[activePlan.kind]) : activePlan.kind}`}>
           <div className="space-y-3">
-            <Input label={`Adjustment (${activePlan.currency})`} type="number" step="0.01" value={adjValue} onChange={e => setAdjValue(e.target.value)} />
-            <p className="text-xs text-gray-500">Negative reduces the bill (scholarship). Positive adds a surcharge.</p>
+            <Input label={t('accounting.detail.adjustment_currency', { currency: activePlan.currency })} type="number" step="0.01" value={adjValue} onChange={e => setAdjValue(e.target.value)} />
+            <p className="text-xs text-gray-500">{t('accounting.detail.adjustment_hint')}</p>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Reason</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('accounting.detail.reason')}</label>
               <textarea
                 rows={2}
                 value={adjNotes}
                 onChange={e => setAdjNotes(e.target.value)}
-                placeholder="Scholarship, sibling override, etc."
+                placeholder={t('accounting.detail.reason_ph')}
                 className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
             </div>
             <div className="flex gap-2 justify-end pt-2">
-              <Button variant="ghost" onClick={() => setShowAdjust(false)}>Cancel</Button>
-              <Button onClick={saveAdjustment} loading={adjSaving}>Save</Button>
+              <Button variant="ghost" onClick={() => setShowAdjust(false)}>{t('common.cancel')}</Button>
+              <Button onClick={saveAdjustment} loading={adjSaving}>{t('common.save')}</Button>
             </div>
           </div>
         </Modal>
