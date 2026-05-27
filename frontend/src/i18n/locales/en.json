@@ -779,6 +779,24 @@
       "ledger": { "label": "Ledger", "desc": "Every money movement, exportable" },
       "periods": { "label": "Periods", "desc": "Close months/years to lock history" },
       "payment_accounts": { "label": "Payment accounts", "desc": "Cash drawers, bank tills, balances" }
+    },
+    "tuition": {
+      "tab_students": "Students",
+      "tab_families": "Families",
+      "tab_plans": "Plans",
+      "tab_archive": "Archive",
+      "tab_voided": "Voided",
+      "tab_settings": "Settings",
+      "not_enabled_title": "Accounting module not enabled",
+      "not_enabled_body": "The accounting module is part of the Premium plan. Contact Scholify to enable it for your school.",
+      "staff_title": "Teachers & staff",
+      "restricted": "Restricted",
+      "no_staff_access": "You do not have access to staff salaries.",
+      "staff_sub_rw": "Track salaries and payments",
+      "staff_sub_ro": "View staff salaries (read-only)",
+      "students_title": "Students",
+      "students_sub_rw": "Plans, payments, reminders",
+      "students_sub_ro": "View tuition status (read-only)"
     }
   }
 }

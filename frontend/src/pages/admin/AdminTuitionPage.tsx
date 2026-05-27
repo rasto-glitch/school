@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import PageLayout from '../../components/layout/PageLayout';
@@ -13,6 +14,7 @@ import StaffSalariesTab from './StaffSalariesTab';
 type StudentTab = 'students' | 'families' | 'plans' | 'archive' | 'voided' | 'settings';
 
 export default function AdminTuitionPage() {
+  const { t } = useTranslation();
   const { user, school } = useAuthStore();
   const location = useLocation();
   const role = user?.role;
@@ -24,21 +26,21 @@ export default function AdminTuitionPage() {
   const [studentTab, setStudentTab] = useState<StudentTab>('students');
 
   const studentTabs: { id: StudentTab; label: string; show: boolean }[] = [
-    { id: 'students', label: 'Students', show: true },
-    { id: 'families', label: 'Families', show: true },
-    { id: 'plans', label: 'Plans', show: canWrite },
-    { id: 'archive', label: 'Archive', show: true },
-    { id: 'voided', label: 'Voided', show: canWrite },
-    { id: 'settings', label: 'Settings', show: canWrite },
+    { id: 'students', label: t('accounting.tuition.tab_students'), show: true },
+    { id: 'families', label: t('accounting.tuition.tab_families'), show: true },
+    { id: 'plans', label: t('accounting.tuition.tab_plans'), show: canWrite },
+    { id: 'archive', label: t('accounting.tuition.tab_archive'), show: true },
+    { id: 'voided', label: t('accounting.tuition.tab_voided'), show: canWrite },
+    { id: 'settings', label: t('accounting.tuition.tab_settings'), show: canWrite },
   ];
 
   if (!isPremium) {
     return (
-      <PageLayout title="Accounting" subtitle="Premium feature">
+      <PageLayout title={t('accounting.title')} subtitle={t('accounting.premium_subtitle')}>
         <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 max-w-xl">
-          <h3 className="font-semibold text-amber-900 mb-1">Accounting module not enabled</h3>
+          <h3 className="font-semibold text-amber-900 mb-1">{t('accounting.tuition.not_enabled_title')}</h3>
           <p className="text-sm text-amber-800">
-            The accounting module is part of the Premium plan. Contact Scholify to enable it for your school.
+            {t('accounting.tuition.not_enabled_body')}
           </p>
         </div>
       </PageLayout>
@@ -48,30 +50,30 @@ export default function AdminTuitionPage() {
   if (isStaffSection) {
     if (!canWrite) {
       return (
-        <PageLayout title="Teachers & staff" subtitle="Restricted">
+        <PageLayout title={t('accounting.tuition.staff_title')} subtitle={t('accounting.tuition.restricted')}>
           <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 max-w-xl">
-            <p className="text-sm text-amber-800">You do not have access to staff salaries.</p>
+            <p className="text-sm text-amber-800">{t('accounting.tuition.no_staff_access')}</p>
           </div>
         </PageLayout>
       );
     }
     return (
-      <PageLayout title="Teachers & staff" subtitle={canWrite ? 'Track salaries and payments' : 'View staff salaries (read-only)'}>
+      <PageLayout title={t('accounting.tuition.staff_title')} subtitle={canWrite ? t('accounting.tuition.staff_sub_rw') : t('accounting.tuition.staff_sub_ro')}>
         <StaffSalariesTab />
       </PageLayout>
     );
   }
 
   return (
-    <PageLayout title="Students" subtitle={canWrite ? 'Plans, payments, reminders' : 'View tuition status (read-only)'}>
+    <PageLayout title={t('accounting.tuition.students_title')} subtitle={canWrite ? t('accounting.tuition.students_sub_rw') : t('accounting.tuition.students_sub_ro')}>
       <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit mb-6">
-        {studentTabs.filter(t => t.show).map(t => (
+        {studentTabs.filter(tab => tab.show).map(tab => (
           <button
-            key={t.id}
-            onClick={() => setStudentTab(t.id)}
-            className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${studentTab === t.id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            key={tab.id}
+            onClick={() => setStudentTab(tab.id)}
+            className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${studentTab === tab.id ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
           >
-            {t.label}
+            {tab.label}
           </button>
         ))}
       </div>
