@@ -746,5 +746,39 @@
     "close_after_open": "{{day}}: closing time must be after opening time.",
     "chat_schedule_saved": "Chat schedule saved",
     "chat_schedule_save_failed": "Failed to save chat schedule"
+  },
+  "accounting": {
+    "title": "Accounting",
+    "premium_subtitle": "Premium feature",
+    "premium_body": "The accounting module is part of the Premium plan.",
+    "income": "Income",
+    "expense": "Expense",
+    "net": "Net",
+    "dash": {
+      "load_failed": "Failed to load dashboard",
+      "welcome": "Welcome",
+      "welcome_name": "Welcome, {{name}}",
+      "subtitle_glance": "Money movement at a glance",
+      "this_month": "This month — {{from}} → {{to}}",
+      "no_movements": "No movements this month yet.",
+      "outstanding": "Outstanding receivables",
+      "no_outstanding": "No outstanding balances. Nice.",
+      "students_with_balance": "Students with a balance: {{count}}",
+      "see_aging": "See aging report",
+      "upcoming_salaries": "Upcoming staff payments (next 7 days)",
+      "nothing_due_week": "Nothing due in the next week.",
+      "recurring_expenses": "Recurring expenses (next 30 days)",
+      "no_recurring": "No recurring expenses due.",
+      "reports_tools": "Reports & tools"
+    },
+    "reports": {
+      "ar_aging": { "label": "AR aging", "desc": "Outstanding balances bucketed by overdue days" },
+      "profit_loss": { "label": "Profit & Loss", "desc": "Income vs expense by category, period compare" },
+      "cash_flow": { "label": "Cash flow forecast", "desc": "Projected inflows and outflows by week" },
+      "tax": { "label": "Tax report", "desc": "Tax / withholding collected by label" },
+      "ledger": { "label": "Ledger", "desc": "Every money movement, exportable" },
+      "periods": { "label": "Periods", "desc": "Close months/years to lock history" },
+      "payment_accounts": { "label": "Payment accounts", "desc": "Cash drawers, bank tills, balances" }
+    }
   }
 }
