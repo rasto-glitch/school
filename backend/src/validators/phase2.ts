@@ -207,6 +207,21 @@ export const yearTransitionSchema = z.object({
 export const createMarkTypeSchema = z.object({
   name: nonEmptyStr(120),
   appliesTo: z.enum(['report', 'grade', 'both']),
+  maxValue: z.union([z.number(), z.string().max(12), z.null()]).optional(),
+});
+export const updateMarkTypeSchema = z.object({
+  name: z.string().trim().min(1).max(120).optional(),
+  appliesTo: z.enum(['report', 'grade', 'both']).optional(),
+  maxValue: z.union([z.number(), z.string().max(12), z.null()]).optional(),
+});
+// GPA grading config: mode + the full band set (replace-all).
+export const updateGradingConfigSchema = z.object({
+  mode: z.enum(['scale', 'gpa', 'both']).optional(),
+  bands: z.array(z.object({
+    minPercent: z.number().min(0).max(100),
+    letter: nonEmptyStr(8),
+    gradePoint: z.number().min(0).max(10),
+  })).max(40).optional(),
 });
 export const createTermSchema = z.object({ name: nonEmptyStr(120) });
 

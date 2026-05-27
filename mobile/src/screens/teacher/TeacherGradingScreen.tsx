@@ -9,6 +9,7 @@ import { teacherApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
 import { spacing, radius, font, shadow } from '../../theme';
 import { subjectsForClass, type SubjectOpt, type TeachingEntry } from '../../utils/subjects';
+import { subjectPercent, bandForPercent, EMPTY_GRADING_CONFIG, type GradingConfig } from '../../utils/gpa';
 
 interface ClassItem { id: string; name: string }
 interface StudentItem { id: string; fullName: string }
@@ -34,6 +35,8 @@ export default function TeacherGradingScreen({ subject, classes, subjects, teach
   const [marks, setMarks] = useState<Mark[]>([{ name: '', value: '' }]);
   const [history, setHistory] = useState<GradeRecord[]>([]);
   const [saving, setSaving] = useState(false);
+  const [cfg, setCfg] = useState<GradingConfig>(EMPTY_GRADING_CONFIG);
+  const showGpa = cfg.mode === 'gpa' || cfg.mode === 'both';
 
   // Pickers
   const [pickerIndex, setPickerIndex] = useState<number | null>(null);
@@ -42,6 +45,7 @@ export default function TeacherGradingScreen({ subject, classes, subjects, teach
   useEffect(() => {
     teacherApi.getMarkTypes('grade').then(r => setMarkTypes(r.data || [])).catch(() => {});
     teacherApi.getTerms().then(r => setTerms(r.data || [])).catch(() => {});
+    teacherApi.getGradeConfig().then(r => setCfg(r.data)).catch(() => {});
     if (classes.length > 0) setSelectedClass(classes[0].id);
   }, [classes]);
 
@@ -220,6 +224,11 @@ export default function TeacherGradingScreen({ subject, classes, subjects, teach
                     {g.isReleased ? t('teacher.grade_released') : t('teacher.grade_pending')}
                   </Text>
                 </View>
+                {showGpa && (() => {
+                  const tot = (g.marks || []).reduce((s: number, m: Mark) => s + (parseFloat(String(m.value)) || 0), 0);
+                  const band = bandForPercent(subjectPercent(g.marks as any, tot, cfg.markMaxes), cfg.bands);
+                  return band ? <Text style={styles.historyGpa}>{band.letter} {band.gradePoint.toFixed(1)}</Text> : null;
+                })()}
                 <Text style={styles.historyTotal}>{(g.marks || []).reduce((s: number, m: Mark) => s + (parseFloat(String(m.value)) || 0), 0).toFixed(1)}</Text>
               </View>
               <View style={styles.historyMarks}>
@@ -317,6 +326,7 @@ const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').u
   statusReleased: { backgroundColor: colors.successLight },
   statusPillText: { fontSize: 10, fontWeight: '700' },
   historyTotal: { fontSize: font.lg, fontWeight: '800', color: colors.primary },
+  historyGpa: { fontSize: font.xs, fontWeight: '800', color: '#6D28D9', backgroundColor: '#F5F3FF', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, marginRight: spacing.sm },
   historyMarks: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
   historyMark: { fontSize: font.xs, color: colors.textSecondary, backgroundColor: colors.bg, paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.full },
   pickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },

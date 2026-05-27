@@ -26,6 +26,9 @@ CREATE TABLE IF NOT EXISTS schools (
   tuition_config JSONB DEFAULT '{"currency":"USD","siblingDiscount":{"enabled":false,"type":"percent","tiers":[]}}'::jsonb,
   timezone TEXT NOT NULL DEFAULT 'Asia/Baghdad',
   chat_restrictions JSONB NOT NULL DEFAULT '{"enabled":false}'::jsonb,
+  -- Grading display mode. Lives OUTSIDE `features` so changing it does NOT
+  -- bump features_version / force a re-login.
+  grading_config JSONB NOT NULL DEFAULT '{"mode":"scale"}'::jsonb,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 -- Run this if the table already exists:
@@ -33,6 +36,7 @@ CREATE TABLE IF NOT EXISTS schools (
 -- ALTER TABLE schools ADD COLUMN IF NOT EXISTS features_version INTEGER NOT NULL DEFAULT 1;
 -- ALTER TABLE schools ADD COLUMN IF NOT EXISTS timezone TEXT NOT NULL DEFAULT 'Asia/Baghdad';
 -- ALTER TABLE schools ADD COLUMN IF NOT EXISTS chat_restrictions JSONB NOT NULL DEFAULT '{"enabled":false}'::jsonb;
+-- ALTER TABLE schools ADD COLUMN IF NOT EXISTS grading_config JSONB NOT NULL DEFAULT '{"mode":"scale"}'::jsonb;
 
 -- Trigger: auto-increment features_version whenever the features JSONB column changes
 CREATE OR REPLACE FUNCTION increment_features_version()
@@ -285,11 +289,32 @@ CREATE TABLE IF NOT EXISTS mark_types (
   school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   applies_to TEXT NOT NULL DEFAULT 'both' CHECK (applies_to IN ('report', 'grade', 'both')),
+  -- Optional "out of" value. NULL = legacy behavior (subject total is the raw
+  -- sum, assumed to be a percentage). When set, a subject's percentage is
+  -- sum(values) / sum(maxes) * 100 — which is also what GPA grading needs.
+  max_value NUMERIC(6,2),
   order_index INTEGER DEFAULT 0,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 -- Run if table already exists:
 -- ALTER TABLE mark_types ADD COLUMN IF NOT EXISTS order_index INTEGER DEFAULT 0;
+-- ALTER TABLE mark_types ADD COLUMN IF NOT EXISTS max_value NUMERIC(6,2);
+
+-- ============================================================
+-- GPA GRADING (per-school, optional — layered on top of scale grading)
+-- grading_config.mode ∈ 'scale' (default, % only) | 'gpa' | 'both'.
+-- grade_scale_bands maps a percentage to a letter + grade point.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS grade_scale_bands (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  min_percent NUMERIC(5,2) NOT NULL,   -- band applies when percentage >= this
+  letter TEXT NOT NULL,                 -- "A", "B+", ...
+  grade_point NUMERIC(4,2) NOT NULL,    -- 4.0, 3.3, ...
+  order_index INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_grade_scale_bands_school ON grade_scale_bands(school_id, order_index);
 
 -- ============================================================
 -- TERMS (admin-defined per school — used as grading_period dropdown)

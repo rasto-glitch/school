@@ -3887,15 +3887,36 @@ export async function getMarkTypes(req: AuthRequest, res: Response): Promise<voi
 
 export async function createMarkType(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
-  const { name, appliesTo } = req.body;
+  const { name, appliesTo, maxValue } = req.body;
   if (!name?.trim()) { res.status(400).json({ error: 'name is required' }); return; }
   const { data, error } = await supabase.from('mark_types').insert({
     school_id: schoolId,
     name: name.trim(),
     applies_to: appliesTo || 'both',
+    max_value: (maxValue === '' || maxValue == null) ? null : Number(maxValue),
   }).select().single();
   if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.status(201).json(toCC(data));
+}
+
+export async function updateMarkType(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { id } = req.params;
+  const { name, appliesTo, maxValue } = req.body;
+  const patch: Record<string, unknown> = {};
+  if (name !== undefined) {
+    if (!name?.trim()) { res.status(400).json({ error: 'name cannot be empty' }); return; }
+    patch.name = name.trim();
+  }
+  if (appliesTo !== undefined) patch.applies_to = appliesTo;
+  if (maxValue !== undefined) patch.max_value = (maxValue === '' || maxValue == null) ? null : Number(maxValue);
+  if (Object.keys(patch).length === 0) { res.status(400).json({ error: 'Nothing to update' }); return; }
+
+  const { data, error } = await supabase.from('mark_types')
+    .update(patch).eq('id', id).eq('school_id', schoolId).select().single();
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+  if (!data) { res.status(404).json({ error: 'Mark type not found' }); return; }
+  res.json(toCC(data));
 }
 
 export async function deleteMarkType(req: AuthRequest, res: Response): Promise<void> {
@@ -3904,6 +3925,59 @@ export async function deleteMarkType(req: AuthRequest, res: Response): Promise<v
   const { error } = await supabase.from('mark_types').delete().eq('id', id).eq('school_id', schoolId);
   if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json({ message: 'Deleted' });
+}
+
+// ---- GRADING CONFIG (GPA) ----
+// Shared read for ALL roles: the grading mode, GPA bands, and the per-name
+// mark maxes the clients need to compute a percentage / GPA.
+export async function getGradeConfig(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const [schoolRes, bandsRes, marksRes] = await Promise.all([
+    supabase.from('schools').select('grading_config').eq('id', schoolId).single(),
+    supabase.from('grade_scale_bands').select('min_percent, letter, grade_point').eq('school_id', schoolId).order('order_index'),
+    supabase.from('mark_types').select('name, max_value').eq('school_id', schoolId),
+  ]);
+  const mode = (schoolRes.data?.grading_config as any)?.mode || 'scale';
+  const bands = (bandsRes.data || []).map((b: any) => ({
+    minPercent: Number(b.min_percent), letter: b.letter, gradePoint: Number(b.grade_point),
+  }));
+  const markMaxes: Record<string, number> = {};
+  for (const m of (marksRes.data || []) as any[]) {
+    if (m.max_value != null) markMaxes[m.name] = Number(m.max_value);
+  }
+  res.json({ mode, bands, markMaxes });
+}
+
+// Admin write: set the mode and replace the band set in one call.
+export async function updateGradingConfig(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { mode, bands } = req.body as {
+    mode?: string;
+    bands?: { minPercent: number; letter: string; gradePoint: number }[];
+  };
+
+  if (mode !== undefined) {
+    const { error } = await supabase.from('schools')
+      .update({ grading_config: { mode } }).eq('id', schoolId);
+    if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+  }
+
+  if (bands !== undefined) {
+    await supabase.from('grade_scale_bands').delete().eq('school_id', schoolId);
+    if (bands.length > 0) {
+      const rows = bands.map((b, i) => ({
+        school_id: schoolId,
+        min_percent: Number(b.minPercent),
+        letter: String(b.letter).trim(),
+        grade_point: Number(b.gradePoint),
+        order_index: i,
+      }));
+      const { error } = await supabase.from('grade_scale_bands').insert(rows);
+      if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+    }
+  }
+
+  res.json({ message: 'Saved' });
 }
 
 // ---- TERMS ----

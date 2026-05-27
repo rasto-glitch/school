@@ -104,6 +104,7 @@ export interface MarkType {
   id: string;
   name: string;
   appliesTo: 'report' | 'grade' | 'both';
+  maxValue?: number | null;
   orderIndex: number;
 }
 

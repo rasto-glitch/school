@@ -202,7 +202,9 @@
     "term": "Term",
     "total": "Total",
     "subject": "Subject",
-    "school_note": "Note from school"
+    "school_note": "Note from school",
+    "cumulative_gpa": "Cumulative GPA",
+    "year_gpa": "Year GPA"
   },
   "grade_review": {
     "title": "Grade Review",

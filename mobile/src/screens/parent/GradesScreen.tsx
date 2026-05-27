@@ -10,6 +10,7 @@ import { useColors, useIsDark } from '../../store/themeStore';
 import { useBadgeStore } from '../../store/badgeStore';
 import { spacing, radius, font, shadow } from '../../theme';
 import type { Grade, Student } from '../../types';
+import { subjectPercent, bandForPercent, averageGpa, EMPTY_GRADING_CONFIG, type GradingConfig } from '../../utils/gpa';
 
 function canonicalLabel(s: string | null | undefined): string {
   if (!s) return '';
@@ -62,6 +63,24 @@ function MarkBadge({ value, colors }: { value?: number | null; colors: any }) {
   );
 }
 
+function GpaBadge({ band }: { band: { letter: string; gradePoint: number } | null }) {
+  if (!band) return <Text style={{ color: '#9CA3AF', fontSize: font.sm }}>—</Text>;
+  return (
+    <View style={{ backgroundColor: '#F5F3FF', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
+      <Text style={{ color: '#6D28D9', fontSize: font.xs, fontWeight: '700' }}>{band.letter} {band.gradePoint.toFixed(1)}</Text>
+    </View>
+  );
+}
+
+function GpaNum({ value, colors }: { value: number | null; colors: any }) {
+  if (value == null) return <Text style={{ color: colors.textMuted, fontSize: font.sm }}>—</Text>;
+  return (
+    <View style={{ backgroundColor: '#F5F3FF', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
+      <Text style={{ color: '#6D28D9', fontSize: font.sm, fontWeight: '800' }}>{value.toFixed(2)}</Text>
+    </View>
+  );
+}
+
 const SUBJECT_COL_WIDTH = 110;
 const MARK_COL_WIDTH = 68;
 
@@ -73,6 +92,7 @@ export default function GradesScreen() {
   const [children, setChildren] = useState<Student[]>([]);
   const [selectedChild, setSelectedChild] = useState('');
   const [grades, setGrades] = useState<Grade[]>([]);
+  const [cfg, setCfg] = useState<GradingConfig>(EMPTY_GRADING_CONFIG);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const clearGrade = useBadgeStore(s => s.clearGrade);
@@ -94,7 +114,13 @@ export default function GradesScreen() {
       setChildren(kids);
       if (kids.length > 0) setSelectedChild(kids[0].id);
     });
+    parentApi.getGradeConfig().then(r => setCfg(r.data)).catch(() => {});
   }, []);
+
+  const showGpa = cfg.mode === 'gpa' || cfg.mode === 'both';
+  const showPct = cfg.mode === 'scale' || cfg.mode === 'both';
+  const gradePoints = (g: Grade) =>
+    bandForPercent(subjectPercent(g.marks, gradeTotal(g, getMarkNames(g)), cfg.markMaxes), cfg.bands)?.gradePoint ?? null;
 
   const load = () => parentApi.getGrades(selectedChild).then(r => setGrades(r.data || []));
 
@@ -119,6 +145,7 @@ export default function GradesScreen() {
   }, {} as Record<string, Record<string, Record<string, Grade>>>), [grades]);
 
   const years = Object.keys(byYear).sort((a, b) => b.localeCompare(a));
+  const cgpa = averageGpa(grades.map(g => gradePoints(g)).filter((p): p is number => p != null));
 
   return (
     <ScrollView
@@ -149,7 +176,14 @@ export default function GradesScreen() {
           <Text style={styles.emptyText}>{t('grades.no_grades')}</Text>
         </View>
       ) : (
-        years.map(yr => {
+        <>
+        {showGpa && cgpa != null && (
+          <View style={styles.cgpaCard}>
+            <Text style={styles.cgpaLabel}>{t('grades.cumulative_gpa')}</Text>
+            <Text style={styles.cgpaValue}>{cgpa.toFixed(2)}</Text>
+          </View>
+        )}
+        {years.map(yr => {
           const terms = Object.keys(byYear[yr]).sort();
           const subjects = Array.from(new Set(terms.flatMap(tm => Object.keys(byYear[yr][tm])))).sort();
 
@@ -170,6 +204,13 @@ export default function GradesScreen() {
           const validTermAvgs = termAvgs.filter(a => a > 0);
           const yearAvg = validTermAvgs.length === 0 ? 0
             : Math.round((validTermAvgs.reduce((a, b) => a + b, 0) / validTermAvgs.length) * 10) / 10;
+
+          const termGpas = terms.map(tm =>
+            averageGpa(subjects.map(s => byYear[yr][tm][s] ? gradePoints(byYear[yr][tm][s]) : null)
+              .filter((p): p is number => p != null)));
+          const yearGpa = averageGpa(terms.flatMap(tm =>
+            subjects.map(s => byYear[yr][tm][s] ? gradePoints(byYear[yr][tm][s]) : null))
+            .filter((p): p is number => p != null));
 
           const tableWidth = SUBJECT_COL_WIDTH + markNames.length * MARK_COL_WIDTH + MARK_COL_WIDTH;
 
@@ -223,8 +264,13 @@ export default function GradesScreen() {
                                 <MarkBadge value={g ? getMarkValue(g, name) : null} colors={colors} />
                               </View>
                             ))}
-                            <View style={[styles.cell, { width: MARK_COL_WIDTH }]}>
-                              <MarkBadge value={total > 0 ? total : null} colors={colors} />
+                            <View style={[styles.cell, { width: MARK_COL_WIDTH, gap: 2 }]}>
+                              {!g ? <Text style={{ color: colors.textMuted, fontSize: font.sm }}>—</Text> : (
+                                <>
+                                  {showPct && <MarkBadge value={total > 0 ? total : null} colors={colors} />}
+                                  {showGpa && <GpaBadge band={bandForPercent(subjectPercent(g.marks, total, cfg.markMaxes), cfg.bands)} />}
+                                </>
+                              )}
                             </View>
                           </View>
                         );
@@ -235,8 +281,9 @@ export default function GradesScreen() {
                         <Text style={[styles.avgLabel, { width: SUBJECT_COL_WIDTH + markNames.length * MARK_COL_WIDTH }]} numberOfLines={1}>
                           {t('grades.term_average')}
                         </Text>
-                        <View style={[styles.cell, { width: MARK_COL_WIDTH }]}>
-                          <MarkBadge value={termAvgs[ti] > 0 ? termAvgs[ti] : null} colors={colors} />
+                        <View style={[styles.cell, { width: MARK_COL_WIDTH, gap: 2 }]}>
+                          {showPct && <MarkBadge value={termAvgs[ti] > 0 ? termAvgs[ti] : null} colors={colors} />}
+                          {showGpa && <GpaNum value={termGpas[ti]} colors={colors} />}
                         </View>
                       </View>
                     </View>
@@ -254,12 +301,16 @@ export default function GradesScreen() {
 
               {/* Year average */}
               <View style={styles.yearAvgRow}>
-                <Text style={styles.yearAvgLabel}>{t('grades.year_average')}</Text>
-                <MarkBadge value={yearAvg > 0 ? yearAvg : null} colors={colors} />
+                <Text style={styles.yearAvgLabel}>{showGpa && !showPct ? t('grades.year_gpa') : t('grades.year_average')}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                  {showPct && <MarkBadge value={yearAvg > 0 ? yearAvg : null} colors={colors} />}
+                  {showGpa && <GpaNum value={yearGpa} colors={colors} />}
+                </View>
               </View>
             </View>
           );
-        })
+        })}
+        </>
       )}
     </ScrollView>
   );
@@ -305,4 +356,7 @@ const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').u
   noteBox: { marginHorizontal: spacing.md, marginTop: spacing.sm, backgroundColor: colors.warningLight, borderRadius: radius.md, padding: spacing.sm },
   noteLabel: { fontSize: font.xs, fontWeight: '700', color: colors.warning, marginBottom: 2 },
   noteText: { fontSize: font.sm, color: colors.text },
+  cgpaCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.md, marginBottom: spacing.md, ...shadow.sm },
+  cgpaLabel: { fontSize: font.md, fontWeight: '700', color: colors.text },
+  cgpaValue: { fontSize: font.xxl, fontWeight: '800', color: '#6D28D9' },
 });

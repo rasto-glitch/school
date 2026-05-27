@@ -202,7 +202,9 @@
     "term": "الفصل",
     "total": "المجموع",
     "subject": "المادة",
-    "school_note": "ملاحظة من المدرسة"
+    "school_note": "ملاحظة من المدرسة",
+    "cumulative_gpa": "المعدل التراكمي",
+    "year_gpa": "معدل السنة"
   },
   "grade_review": {
     "title": "مراجعة الدرجات",

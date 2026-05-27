@@ -202,7 +202,9 @@
     "term": "وەرز",
     "total": "کۆی گشتی",
     "subject": "بابەت",
-    "school_note": "تێبینی لە قوتابخانە"
+    "school_note": "تێبینی لە قوتابخانە",
+    "cumulative_gpa": "ناوەندی گشتی (GPA)",
+    "year_gpa": "GPA ی ساڵ"
   },
   "grade_review": {
     "title": "پێداچوونەوەی نمرە",

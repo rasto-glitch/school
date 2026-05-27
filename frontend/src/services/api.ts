@@ -143,6 +143,7 @@ export const parentApi = {
     api.get<Paginated<Announcement>>('/parent/announcements', { params: cursor ? { cursor } : {} }),
   getReports: (params?: Record<string, string>) => api.get('/parent/reports', { params }),
   getGrades: (studentId?: string) => api.get('/parent/grades', { params: studentId ? { studentId } : {} }),
+  getGradeConfig: () => api.get('/grade-config'),
   getBusLocation: (studentId?: string) => api.get('/parent/bus-location', { params: { studentId } }),
   getNotifications: (cursor?: string | null) =>
     api.get<Paginated<Notification>>('/parent/notifications', { params: cursor ? { cursor } : {} }),
@@ -340,8 +341,12 @@ export const adminApi = {
   yearTransition: (data: { newAcademicYear: string; studentIdsToGraduate: string[]; classAssignments: { studentId: string; classId: string }[] }) =>
     api.post('/admin/year-transition', data),
   getMarkTypes: (appliesTo?: 'report' | 'grade') => api.get('/admin/mark-types', { params: appliesTo ? { for: appliesTo } : {} }),
-  createMarkType: (data: { name: string; appliesTo: 'report' | 'grade' | 'both' }) => api.post('/admin/mark-types', data),
+  createMarkType: (data: { name: string; appliesTo: 'report' | 'grade' | 'both'; maxValue?: number | null }) => api.post('/admin/mark-types', data),
+  updateMarkType: (id: string, data: { name?: string; appliesTo?: 'report' | 'grade' | 'both'; maxValue?: number | null }) => api.put(`/admin/mark-types/${id}`, data),
   deleteMarkType: (id: string) => api.delete(`/admin/mark-types/${id}`),
+  // GPA grading config
+  getGradeConfig: () => api.get('/grade-config'),
+  updateGradingConfig: (data: { mode?: 'scale' | 'gpa' | 'both'; bands?: { minPercent: number; letter: string; gradePoint: number }[] }) => api.put('/admin/grading-config', data),
   getTerms: () => api.get('/admin/terms'),
   createTerm: (data: { name: string }) => api.post('/admin/terms', data),
   deleteTerm: (id: string) => api.delete(`/admin/terms/${id}`),

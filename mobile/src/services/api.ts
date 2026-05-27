@@ -163,6 +163,7 @@ export const parentApi = {
   getHomework: (params?: Record<string, string>) => api.get('/parent/homework', { params }),
   getAssignments: (params?: Record<string, string>) => api.get('/parent/assignments', { params }),
   getGrades: (studentId?: string) => api.get('/parent/grades', { params: studentId ? { studentId } : {} }),
+  getGradeConfig: () => api.get('/grade-config'),
   getReports: (params?: Record<string, string>) => api.get('/parent/reports', { params }),
   getAnnouncements: (cursor?: string | null) =>
     api.get<Paginated<Announcement>>('/parent/announcements', { params: cursor ? { cursor } : {} }),
@@ -276,6 +277,7 @@ export const teacherApi = {
   deleteAssignment: (id: string) => api.delete(`/teacher/assignments/${id}`),
   createReport: (data: object) => api.post('/teacher/reports', data),
   getGrades: (studentId: string) => api.get('/teacher/grades', { params: { studentId } }),
+  getGradeConfig: () => api.get('/grade-config'),
   upsertGrade: (data: object) => api.post('/teacher/grades', data),
   getMarkTypes: (appliesTo?: 'report' | 'grade') => api.get('/teacher/mark-types', { params: appliesTo ? { for: appliesTo } : {} }),
   getTerms: () => api.get('/teacher/terms'),

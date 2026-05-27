@@ -203,8 +203,13 @@ export function createRouter(io: SocketServer) {
 
   router.get('/admin/mark-types', authenticate, authorize('admin'), (req, res) => admin.getMarkTypes(req as AuthRequest, res));
   router.post('/admin/mark-types', authenticate, authorize('admin'), validate({ body: vp.createMarkTypeSchema }), (req, res) => admin.createMarkType(req as AuthRequest, res));
+  router.put('/admin/mark-types/:id', authenticate, authorize('admin'), validate({ params: vp.idParam, body: vp.updateMarkTypeSchema }), (req, res) => admin.updateMarkType(req as AuthRequest, res));
   router.delete('/admin/mark-types/:id', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => admin.deleteMarkType(req as AuthRequest, res));
   router.get('/teacher/mark-types', authenticate, authorize('teacher'), (req, res) => admin.getMarkTypes(req as AuthRequest, res));
+
+  // Grading config (GPA). Read is shared by every role; write is admin-only.
+  router.get('/grade-config', authenticate, (req, res) => admin.getGradeConfig(req as AuthRequest, res));
+  router.put('/admin/grading-config', authenticate, authorize('admin'), validate({ body: vp.updateGradingConfigSchema }), (req, res) => admin.updateGradingConfig(req as AuthRequest, res));
 
   router.get('/admin/terms', authenticate, authorize('admin'), (req, res) => admin.getTerms(req as AuthRequest, res));
   router.post('/admin/terms', authenticate, authorize('admin'), validate({ body: vp.createTermSchema }), (req, res) => admin.createTerm(req as AuthRequest, res));

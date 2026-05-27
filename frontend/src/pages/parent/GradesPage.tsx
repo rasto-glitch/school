@@ -9,7 +9,8 @@ import EmptyState from '../../components/common/EmptyState';
 import ErrorMessage from '../../components/common/ErrorMessage';
 import { GradesTableSkeleton } from '../../components/common/Skeleton';
 import type { Student, Grade } from '../../types';
-import { getMarkNames, getMarkValue, gradeTotal } from '../../utils/marks';
+import { getMarkNames, getMarkValue, gradeTotal, subjectPercent, bandForPercent, averageGpa } from '../../utils/marks';
+import type { GradingConfig } from '../../utils/marks';
 
 export default function GradesPage() {
   const { t } = useTranslation();
@@ -19,6 +20,7 @@ export default function GradesPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
+  const [cfg, setCfg] = useState<GradingConfig>({ mode: 'scale', bands: [], markMaxes: {} });
 
   useEffect(() => {
     parentApi.getChildren().then(r => {
@@ -26,7 +28,13 @@ export default function GradesPage() {
       setChildren(kids);
       if (kids.length > 0) setSelectedChild(kids[0].id);
     });
+    parentApi.getGradeConfig().then(r => setCfg(r.data)).catch(() => {});
   }, []);
+
+  const showGpa = cfg.mode === 'gpa' || cfg.mode === 'both';
+  const showPct = cfg.mode === 'scale' || cfg.mode === 'both';
+  // Grade point for one subject (null if no band matches / no marks).
+  const points = (g: Grade) => bandForPercent(subjectPercent(g, cfg.markMaxes), cfg.bands)?.gradePoint ?? null;
 
   useEffect(() => {
     if (!selectedChild) return;
@@ -52,6 +60,9 @@ export default function GradesPage() {
 
   const years = Object.keys(byYear).sort((a, b) => b.localeCompare(a));
 
+  // Cumulative GPA across everything on file (equal-weight).
+  const cgpa = averageGpa(grades.map(g => points(g)).filter((p): p is number => p != null));
+
   return (
     <PageLayout title={t('grades.title')} subtitle={t('grades.subtitle')}>
       <div className="space-y-6">
@@ -71,7 +82,17 @@ export default function GradesPage() {
         ) : grades.length === 0 ? (
           <EmptyState title={t('grades.no_grades')} icon={<GraduationCap className="w-8 h-8 text-gray-400" />} />
         ) : (
-          years.map(yr => {
+        <>
+          {showGpa && cgpa != null && (
+            <Card className="flex items-center justify-between !py-4">
+              <div className="flex items-center gap-2">
+                <GraduationCap className="w-5 h-5 text-violet-600" />
+                <span className="font-semibold text-gray-900">{t('grades.cumulative_gpa')}</span>
+              </div>
+              <span className="text-2xl font-extrabold text-violet-700">{cgpa.toFixed(2)}</span>
+            </Card>
+          )}
+          {years.map(yr => {
             const terms = Object.keys(byYear[yr]).sort();
             const subjects = Array.from(
               new Set(terms.flatMap(t => Object.keys(byYear[yr][t])))
@@ -104,6 +125,14 @@ export default function GradesPage() {
             const overallYearAvg = validTermAvgs.length === 0 ? 0
               : Math.round((validTermAvgs.reduce((a, b) => a + b, 0) / validTermAvgs.length) * 10) / 10;
 
+            // GPA per term + for the whole year (equal-weight average of points)
+            const termGpas = terms.map(term =>
+              averageGpa(subjects.map(s => byYear[yr][term][s] ? points(byYear[yr][term][s]) : null)
+                .filter((p): p is number => p != null)));
+            const yearGpa = averageGpa(terms.flatMap(term =>
+              subjects.map(s => byYear[yr][term][s] ? points(byYear[yr][term][s]) : null))
+              .filter((p): p is number => p != null));
+
             return (
               <Card key={yr} className="p-0 overflow-hidden">
                 <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
@@ -131,6 +160,7 @@ export default function GradesPage() {
                             {subjects.map(subject => {
                               const g = byYear[yr][term][subject];
                               const total = g ? gradeTotal(g, markNames) : 0;
+                              const band = g ? bandForPercent(subjectPercent(g, cfg.markMaxes), cfg.bands) : null;
                               return (
                                 <tr key={subject} className="hover:bg-gray-50">
                                   <td className="px-4 py-2.5 font-medium text-gray-800 text-sm">{subject}</td>
@@ -140,7 +170,12 @@ export default function GradesPage() {
                                     </td>
                                   ))}
                                   <td className="px-2 py-2.5 text-center">
-                                    {total > 0 ? <MarkBadge value={total} /> : <span className="text-gray-300">—</span>}
+                                    {!g ? <span className="text-gray-300">—</span> : (
+                                      <div className="flex flex-col items-center gap-1">
+                                        {showPct && (total > 0 ? <MarkBadge value={total} /> : (!showGpa && <span className="text-gray-300">—</span>))}
+                                        {showGpa && (band ? <GpaBadge letter={band.letter} points={band.gradePoint} /> : (!showPct && <span className="text-gray-300">—</span>))}
+                                      </div>
+                                    )}
                                   </td>
                                 </tr>
                               );
@@ -153,9 +188,10 @@ export default function GradesPage() {
                                 {t('grades.term_average')}
                               </td>
                               <td className="px-2 py-2.5 text-center">
-                                {termAvgs[ti] > 0
-                                  ? <MarkBadge value={termAvgs[ti]} />
-                                  : <span className="text-gray-300">—</span>}
+                                <div className="flex flex-col items-center gap-1">
+                                  {showPct && (termAvgs[ti] > 0 ? <MarkBadge value={termAvgs[ti]} /> : (!showGpa && <span className="text-gray-300">—</span>))}
+                                  {showGpa && <GpaValue value={termGpas[ti]} />}
+                                </div>
                               </td>
                             </tr>
                           </tfoot>
@@ -179,14 +215,18 @@ export default function GradesPage() {
                 )}
 
                 <div className="border-t-2 border-gray-200 px-4 py-3 bg-gray-50 flex items-center justify-between">
-                  <span className="text-sm font-semibold text-gray-700">{t('grades.year_average')}</span>
-                  {overallYearAvg > 0
-                    ? <MarkBadge value={overallYearAvg} />
-                    : <span className="text-gray-300 text-sm">—</span>}
+                  <span className="text-sm font-semibold text-gray-700">
+                    {showGpa && !showPct ? t('grades.year_gpa') : t('grades.year_average')}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {showPct && (overallYearAvg > 0 ? <MarkBadge value={overallYearAvg} /> : (!showGpa && <span className="text-gray-300 text-sm">—</span>))}
+                    {showGpa && <GpaValue value={yearGpa} />}
+                  </div>
                 </div>
               </Card>
             );
-          })
+          })}
+        </>
         )}
       </div>
     </PageLayout>
@@ -212,6 +252,25 @@ class LinkedSet {
   private map = new Map<string, true>();
   add(v: string) { this.map.set(v, true); }
   values(): string[] { return Array.from(this.map.keys()); }
+}
+
+// Subject GPA: letter + grade point, e.g. "A (4.0)".
+function GpaBadge({ letter, points }: { letter: string; points: number }) {
+  return (
+    <span className="inline-block px-2 py-0.5 rounded-lg text-sm font-semibold text-violet-700 bg-violet-50">
+      {letter} ({points.toFixed(1)})
+    </span>
+  );
+}
+
+// An averaged GPA value (term / year), e.g. "3.50".
+function GpaValue({ value }: { value?: number | null }) {
+  if (value == null) return <span className="text-gray-300">—</span>;
+  return (
+    <span className="inline-block px-2 py-0.5 rounded-lg text-sm font-bold text-violet-700 bg-violet-50">
+      {value.toFixed(2)}
+    </span>
+  );
 }
 
 function MarkBadge({ value }: { value?: number | null }) {
