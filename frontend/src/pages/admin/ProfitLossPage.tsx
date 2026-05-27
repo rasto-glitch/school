@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'react-toastify';
 import { FileBarChart, TrendingUp, TrendingDown } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
@@ -27,6 +28,7 @@ function firstOfMonthISO(): string {
 function todayISO(): string { return new Date().toISOString().slice(0, 10); }
 
 export default function ProfitLossPage() {
+  const { t } = useTranslation();
   const { school } = useAuthStore();
   const isPremium = school?.features?.tuition_fees === true;
   const [startDate, setStartDate] = useState(firstOfMonthISO());
@@ -43,29 +45,29 @@ export default function ProfitLossPage() {
       setCurrent(r.data.current);
       setPrior(r.data.prior ?? null);
     } catch (e: any) {
-      toast.error(e.response?.data?.error || 'Failed to load P&L');
+      toast.error(e.response?.data?.error || t('accounting.pl.load_failed'));
     } finally { setLoading(false); }
   };
   useEffect(() => { if (isPremium) run(); /* eslint-disable-next-line */ }, []);
 
-  if (!isPremium) return <PageLayout title="Profit & Loss"><p className="text-sm text-amber-700">Premium feature</p></PageLayout>;
+  if (!isPremium) return <PageLayout title={t('accounting.reports.profit_loss.label')}><p className="text-sm text-amber-700">{t('accounting.premium_subtitle')}</p></PageLayout>;
 
   return (
-    <PageLayout title="Profit & Loss" subtitle="Income vs expense by category">
+    <PageLayout title={t('accounting.reports.profit_loss.label')} subtitle={t('accounting.pl.subtitle')}>
       <Card className="mb-4">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-          <Input label="From" type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
-          <Input label="To" type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
+          <Input label={t('accounting.ledger.from')} type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
+          <Input label={t('accounting.ledger.to')} type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
           <label className="flex items-end gap-2 text-sm pb-1">
             <input type="checkbox" checked={compare} onChange={e => setCompare(e.target.checked)} className="w-4 h-4 text-primary-600" />
-            Compare to prior period
+            {t('accounting.pl.compare')}
           </label>
-          <div className="flex items-end"><Button onClick={run} fullWidth loading={loading}>Run</Button></div>
+          <div className="flex items-end"><Button onClick={run} fullWidth loading={loading}>{t('accounting.pl.run')}</Button></div>
         </div>
       </Card>
 
       {loading ? <LoadingSpinner /> : !current ? null : current.length === 0 ? (
-        <Card><p className="text-sm text-gray-500">No movements in the selected range.</p></Card>
+        <Card><p className="text-sm text-gray-500">{t('accounting.pl.no_movements')}</p></Card>
       ) : (
         <div className="space-y-4">
           {current.map(block => {
@@ -84,7 +86,7 @@ export default function ProfitLossPage() {
                   {/* Income column */}
                   <div>
                     <div className="flex items-center gap-1.5 text-sm font-medium text-emerald-700 mb-2 pb-1.5 border-b border-emerald-100">
-                      <TrendingUp className="w-3.5 h-3.5" /> Income
+                      <TrendingUp className="w-3.5 h-3.5" /> {t('accounting.income')}
                     </div>
                     {block.income.length === 0 ? <p className="text-xs text-gray-400 py-1">—</p> : (
                       <ul className="space-y-1">
@@ -97,12 +99,12 @@ export default function ProfitLossPage() {
                       </ul>
                     )}
                     <div className="mt-2 pt-2 border-t border-gray-100 flex items-center justify-between text-sm">
-                      <span className="font-semibold text-gray-700">Total</span>
+                      <span className="font-semibold text-gray-700">{t('accounting.plans.total')}</span>
                       <span className="font-bold text-emerald-700">{fmtMoney(block.incomeTotal, block.currency)}</span>
                     </div>
                     {priorBlock && (
                       <div className="mt-1 text-xs text-gray-500 flex items-center justify-between">
-                        <span>Prior</span>
+                        <span>{t('accounting.pl.prior')}</span>
                         <span>{fmtMoney(priorBlock.incomeTotal, block.currency)} · {pct(block.incomeTotal, priorBlock.incomeTotal)}</span>
                       </div>
                     )}
@@ -110,7 +112,7 @@ export default function ProfitLossPage() {
                   {/* Expense column */}
                   <div>
                     <div className="flex items-center gap-1.5 text-sm font-medium text-rose-700 mb-2 pb-1.5 border-b border-rose-100">
-                      <TrendingDown className="w-3.5 h-3.5" /> Expense
+                      <TrendingDown className="w-3.5 h-3.5" /> {t('accounting.expense')}
                     </div>
                     {block.expense.length === 0 ? <p className="text-xs text-gray-400 py-1">—</p> : (
                       <ul className="space-y-1">
@@ -123,12 +125,12 @@ export default function ProfitLossPage() {
                       </ul>
                     )}
                     <div className="mt-2 pt-2 border-t border-gray-100 flex items-center justify-between text-sm">
-                      <span className="font-semibold text-gray-700">Total</span>
+                      <span className="font-semibold text-gray-700">{t('accounting.plans.total')}</span>
                       <span className="font-bold text-rose-700">{fmtMoney(block.expenseTotal, block.currency)}</span>
                     </div>
                     {priorBlock && (
                       <div className="mt-1 text-xs text-gray-500 flex items-center justify-between">
-                        <span>Prior</span>
+                        <span>{t('accounting.pl.prior')}</span>
                         <span>{fmtMoney(priorBlock.expenseTotal, block.currency)} · {pct(block.expenseTotal, priorBlock.expenseTotal)}</span>
                       </div>
                     )}

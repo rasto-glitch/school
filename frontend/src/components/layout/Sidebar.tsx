@@ -214,7 +214,7 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
   }, [location.pathname]);
 
   const isRTL = ['ar', 'ku'].includes(i18n.language);
-  const showLangSwitcher = user?.role === 'parent' || user?.role === 'driver';
+  const showLangSwitcher = user?.role === 'parent' || user?.role === 'driver' || user?.role === 'accountant';
   // Premium-only features default to OFF when the key is missing — so a school
   // without a premium plan never sees the tab even if their features JSONB
   // pre-dates the feature flag being added.

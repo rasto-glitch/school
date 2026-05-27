@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'react-toastify';
 import { BarChart3, TrendingUp, TrendingDown } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
@@ -14,6 +15,7 @@ interface WeekSlot { weekStart: string; byCurrency: Record<string, { inflow: num
 interface Event { date: string; currency: string; amount: number; kind: 'inflow' | 'outflow'; label: string }
 
 export default function CashFlowForecastPage() {
+  const { t } = useTranslation();
   const { school } = useAuthStore();
   const isPremium = school?.features?.tuition_fees === true;
   const [weeks, setWeeks] = useState<number>(12);
@@ -26,32 +28,32 @@ export default function CashFlowForecastPage() {
       const r = await accountingApi.getCashFlow(weeks);
       setData(r.data);
     } catch (e: any) {
-      toast.error(e.response?.data?.error || 'Failed to load cash flow');
+      toast.error(e.response?.data?.error || t('accounting.cf.load_failed'));
     } finally { setLoading(false); }
   };
   useEffect(() => { if (isPremium) run(); /* eslint-disable-next-line */ }, []);
 
-  if (!isPremium) return <PageLayout title="Cash flow"><p className="text-sm text-amber-700">Premium feature</p></PageLayout>;
+  if (!isPremium) return <PageLayout title={t('accounting.cf.title')}><p className="text-sm text-amber-700">{t('accounting.premium_subtitle')}</p></PageLayout>;
 
   // Currencies that appear across the forecast
   const currencies = Array.from(new Set((data?.weeks ?? []).flatMap(w => Object.keys(w.byCurrency))));
 
   return (
-    <PageLayout title="Cash flow forecast" subtitle="Projected inflows and outflows by week">
+    <PageLayout title={t('accounting.cf.title')} subtitle={t('accounting.cf.subtitle')}>
       <Card className="mb-4">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <Select
-            label="Horizon"
+            label={t('accounting.cf.horizon')}
             value={String(weeks)}
             onChange={e => setWeeks(parseInt(e.target.value, 10))}
-            options={[4, 8, 12, 16, 26, 52].map(w => ({ value: String(w), label: `${w} weeks` }))}
+            options={[4, 8, 12, 16, 26, 52].map(w => ({ value: String(w), label: t('accounting.cf.weeks_n', { n: w }) }))}
           />
-          <div className="flex items-end"><Button onClick={run} loading={loading} fullWidth>Run</Button></div>
+          <div className="flex items-end"><Button onClick={run} loading={loading} fullWidth>{t('accounting.pl.run')}</Button></div>
         </div>
       </Card>
 
       {loading ? <LoadingSpinner /> : !data ? null : data.weeks.length === 0 ? (
-        <Card><p className="text-sm text-gray-500">No forecast data.</p></Card>
+        <Card><p className="text-sm text-gray-500">{t('accounting.cf.no_data')}</p></Card>
       ) : (
         <>
           {currencies.map(cur => (
@@ -63,11 +65,11 @@ export default function CashFlowForecastPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-left text-xs font-medium text-gray-500 border-b border-gray-100">
-                      <th className="py-2 pr-3 whitespace-nowrap">Week starting</th>
-                      <th className="py-2 pr-3 text-right">Inflow</th>
-                      <th className="py-2 pr-3 text-right">Outflow</th>
-                      <th className="py-2 pr-3 text-right">Net</th>
-                      <th className="py-2 pr-3 text-right whitespace-nowrap">Running</th>
+                      <th className="py-2 pr-3 whitespace-nowrap">{t('accounting.cf.col_week')}</th>
+                      <th className="py-2 pr-3 text-right">{t('accounting.cf.col_inflow')}</th>
+                      <th className="py-2 pr-3 text-right">{t('accounting.cf.col_outflow')}</th>
+                      <th className="py-2 pr-3 text-right">{t('accounting.net')}</th>
+                      <th className="py-2 pr-3 text-right whitespace-nowrap">{t('accounting.cf.col_running')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -98,8 +100,8 @@ export default function CashFlowForecastPage() {
 
           {/* Event list */}
           <Card>
-            <h3 className="font-semibold text-gray-900 mb-3">Scheduled events</h3>
-            {data.events.length === 0 ? <p className="text-sm text-gray-400">No scheduled events in this horizon.</p> : (
+            <h3 className="font-semibold text-gray-900 mb-3">{t('accounting.cf.events')}</h3>
+            {data.events.length === 0 ? <p className="text-sm text-gray-400">{t('accounting.cf.no_events')}</p> : (
               <ul className="divide-y divide-gray-100">
                 {data.events.map((e, i) => (
                   <li key={`${e.date}-${i}`} className="py-2 flex items-center justify-between text-sm">

@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation, Trans } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { Virtuoso } from 'react-virtuoso';
 import { staffApi, accountingApi, drainPages, type PaymentAccount } from '../../services/api';
 import { fmtMoney } from '../../utils/money';
@@ -113,14 +115,14 @@ function daysUntil(dateStr: string | null): number | null {
   return Math.round((target.getTime() - today.getTime()) / 86400000);
 }
 
-function dueBadge(dateStr: string | null): { text: string; cls: string } | null {
+function dueBadge(dateStr: string | null, t: TFunction): { text: string; cls: string } | null {
   const d = daysUntil(dateStr);
   if (d === null) return null;
-  if (d < 0) return { text: `${Math.abs(d)} day${Math.abs(d) === 1 ? '' : 's'} overdue`, cls: 'bg-red-100 text-red-700' };
-  if (d === 0) return { text: 'Due today', cls: 'bg-amber-100 text-amber-800' };
-  if (d <= 3) return { text: `Due in ${d} day${d === 1 ? '' : 's'}`, cls: 'bg-amber-100 text-amber-800' };
-  if (d <= 7) return { text: `Due in ${d} days`, cls: 'bg-yellow-50 text-yellow-700' };
-  return { text: `Due in ${d} days`, cls: 'bg-gray-100 text-gray-600' };
+  if (d < 0) return { text: t('accounting.staff.overdue_days', { count: Math.abs(d) }), cls: 'bg-red-100 text-red-700' };
+  if (d === 0) return { text: t('accounting.staff.due_today'), cls: 'bg-amber-100 text-amber-800' };
+  if (d <= 3) return { text: t('accounting.staff.due_in_days', { count: d }), cls: 'bg-amber-100 text-amber-800' };
+  if (d <= 7) return { text: t('accounting.staff.due_in_days', { count: d }), cls: 'bg-yellow-50 text-yellow-700' };
+  return { text: t('accounting.staff.due_in_days', { count: d }), cls: 'bg-gray-100 text-gray-600' };
 }
 
 function downloadBlob(blob: Blob, filename: string) {
@@ -135,6 +137,7 @@ function downloadBlob(blob: Blob, filename: string) {
 }
 
 export default function StaffSalariesTab() {
+  const { t } = useTranslation();
   const [subTab, setSubTab] = useState<SubTab>('active');
   const [active, setActive] = useState<StaffMember[] | null>(null);
   const [archived, setArchived] = useState<StaffMember[] | null>(null);
@@ -200,7 +203,7 @@ export default function StaffSalariesTab() {
   };
 
   useEffect(() => {
-    loadAll().catch((e: any) => toast.error(e.response?.data?.error || 'Failed to load staff'));
+    loadAll().catch((e: any) => toast.error(e.response?.data?.error || t('accounting.staff.load_failed')));
     loadSetup().catch(() => {});
     // Only show active accounts in the payment "paid from" picker so retired tills don't clutter it.
     accountingApi.listPaymentAccounts().then(r => setAccounts(r.data.filter(a => a.isActive))).catch(() => {});
@@ -208,29 +211,29 @@ export default function StaffSalariesTab() {
 
   useEffect(() => {
     if (subTab === 'voided' && (voidedStaff === null || voidedPayments === null)) {
-      loadVoided().catch((e: any) => toast.error(e.response?.data?.error || 'Failed to load voided records'));
+      loadVoided().catch((e: any) => toast.error(e.response?.data?.error || t('accounting.staff.load_failed_voided')));
     }
   }, [subTab]);
 
   const unvoidStaff = async (id: string) => {
-    if (!confirm('Restore this voided staff member?')) return;
+    if (!confirm(t('accounting.staff.confirm_restore_staff'))) return;
     setUnvoidBusy(id);
     try {
       await staffApi.unvoid(id);
-      toast.success('Staff member restored');
+      toast.success(t('accounting.staff.staff_restored'));
       await Promise.all([loadVoided(), loadAll()]);
-    } catch (e: any) { toast.error(e.response?.data?.error || 'Failed to restore'); }
+    } catch (e: any) { toast.error(e.response?.data?.error || t('accounting.staff.failed_restore')); }
     finally { setUnvoidBusy(null); }
   };
 
   const unvoidStaffPayment = async (id: string) => {
-    if (!confirm("Restore this voided payment? It will reappear in the staff member's payment history.")) return;
+    if (!confirm(t('accounting.staff.confirm_restore_payment'))) return;
     setUnvoidBusy(id);
     try {
       await staffApi.unvoidPayment(id);
-      toast.success('Payment restored');
+      toast.success(t('accounting.staff.payment_restored'));
       await loadVoided();
-    } catch (e: any) { toast.error(e.response?.data?.error || 'Failed to restore'); }
+    } catch (e: any) { toast.error(e.response?.data?.error || t('accounting.staff.failed_restore')); }
     finally { setUnvoidBusy(null); }
   };
 
@@ -250,15 +253,15 @@ export default function StaffSalariesTab() {
   const save = async () => {
     if (!editing) return;
     const total = Number(editing.salaryAmount);
-    if (!editing.id && !editing.userId) { toast.error('Pick an employee from the roster'); return; }
-    if (isNaN(total) || total < 0) { toast.error('Salary amount is required'); return; }
-    if (!editing.fullName.trim()) { toast.error('Name is required'); return; }
-    if (!editing.currency.trim()) { toast.error('Currency is required'); return; }
+    if (!editing.id && !editing.userId) { toast.error(t('accounting.staff.err_pick_employee')); return; }
+    if (isNaN(total) || total < 0) { toast.error(t('accounting.staff.err_salary_required')); return; }
+    if (!editing.fullName.trim()) { toast.error(t('accounting.staff.err_name_required')); return; }
+    if (!editing.currency.trim()) { toast.error(t('accounting.staff.err_currency_required')); return; }
 
     let insurancePct: number | null = null;
     if (editing.insurancePercentage.trim() !== '') {
       const pct = Number(editing.insurancePercentage);
-      if (isNaN(pct) || pct < 0 || pct > 100) { toast.error('Insurance % must be between 0 and 100'); return; }
+      if (isNaN(pct) || pct < 0 || pct > 100) { toast.error(t('accounting.staff.err_insurance_pct')); return; }
       insurancePct = pct;
     }
 
@@ -277,63 +280,63 @@ export default function StaffSalariesTab() {
     try {
       if (editing.id) {
         await staffApi.update(editing.id, body);
-        toast.success('Salary updated');
+        toast.success(t('accounting.staff.salary_updated'));
       } else {
         await staffApi.create(body);
-        toast.success('Added to payroll');
+        toast.success(t('accounting.staff.added_payroll'));
       }
       setEditing(null);
       await Promise.all([loadAll(), loadSetup()]);
     } catch (e: any) {
-      toast.error(e.response?.data?.error || 'Failed to save');
+      toast.error(e.response?.data?.error || t('accounting.staff.failed_save'));
     } finally { setSaving(false); }
   };
 
   const deactivate = async (s: StaffMember) => {
-    if (!confirm(`Deactivate ${s.fullName}? Their record will move to the archive but payment history will be kept.`)) return;
+    if (!confirm(t('accounting.staff.confirm_deactivate', { name: s.fullName }))) return;
     try {
       await staffApi.update(s.id, { isActive: false });
-      toast.success('Staff archived');
+      toast.success(t('accounting.staff.staff_archived'));
       await loadAll();
     } catch (e: any) {
-      toast.error(e.response?.data?.error || 'Failed to deactivate');
+      toast.error(e.response?.data?.error || t('accounting.staff.failed_deactivate'));
     }
   };
 
   const reactivate = async (s: StaffMember) => {
     if (s.userIsActive === false) {
-      toast.error('Reactivate the user account in the admin portal first.');
+      toast.error(t('accounting.staff.reactivate_account_first'));
       return;
     }
     setReactivatingId(s.id);
     try {
       await staffApi.update(s.id, { isActive: true });
-      toast.success('Staff reactivated');
+      toast.success(t('accounting.staff.staff_reactivated'));
       await loadAll();
     } catch (e: any) {
-      toast.error(e.response?.data?.error || 'Failed to reactivate');
+      toast.error(e.response?.data?.error || t('accounting.staff.failed_reactivate'));
     } finally { setReactivatingId(null); }
   };
 
   const remove = async (s: StaffMember) => {
-    if (!confirm(`Permanently delete ${s.fullName}? Payment history will also be deleted. This cannot be undone.`)) return;
+    if (!confirm(t('accounting.staff.confirm_delete', { name: s.fullName }))) return;
     try {
       await staffApi.remove(s.id);
-      toast.success('Staff deleted');
+      toast.success(t('accounting.staff.staff_deleted'));
       await Promise.all([loadAll(), loadSetup()]);
     } catch (e: any) {
-      toast.error(e.response?.data?.error || 'Failed to delete');
+      toast.error(e.response?.data?.error || t('accounting.staff.failed_delete'));
     }
   };
 
   const sendReminder = async (s: StaffMember) => {
-    if (!s.userId) { toast.info('No linked account — cannot send notification'); return; }
+    if (!s.userId) { toast.info(t('accounting.staff.no_linked_account')); return; }
     setNotifyingId(s.id);
     try {
       await staffApi.notifyDue(s.id);
-      toast.success(`Reminder sent to ${s.fullName}`);
+      toast.success(t('accounting.staff.reminder_sent', { name: s.fullName }));
     } catch (e: any) {
-      toast.error(e.response?.data?.error || 'Failed to send reminder');
+      toast.error(e.response?.data?.error || t('accounting.staff.failed_reminder'));
     } finally { setNotifyingId(null); }
   };
 
@@ -359,21 +362,21 @@ export default function StaffSalariesTab() {
   const submitPayment = async () => {
     if (!paymentTarget || !paymentForm) return;
     const amt = Number(paymentForm.amount);
-    if (isNaN(amt) || amt <= 0) { toast.error('Amount must be greater than 0'); return; }
-    if (!paymentForm.paidOn) { toast.error('Payment date is required'); return; }
-    if (!paymentForm.paymentAccountId) { toast.error('Choose which account the salary is paid from'); return; }
+    if (isNaN(amt) || amt <= 0) { toast.error(t('accounting.staff.err_amount_gt0')); return; }
+    if (!paymentForm.paidOn) { toast.error(t('accounting.staff.err_payment_date')); return; }
+    if (!paymentForm.paymentAccountId) { toast.error(t('accounting.staff.err_choose_account')); return; }
 
     let insAmt: number | null = null;
     if (paymentForm.insuranceAmount.trim() !== '') {
       const v = Number(paymentForm.insuranceAmount);
-      if (isNaN(v) || v < 0) { toast.error('Insurance amount must be non-negative'); return; }
-      if (v > amt) { toast.error('Insurance cannot exceed the payment amount'); return; }
+      if (isNaN(v) || v < 0) { toast.error(t('accounting.staff.err_insurance_nonneg')); return; }
+      if (v > amt) { toast.error(t('accounting.staff.err_insurance_exceeds')); return; }
       insAmt = Math.round(v * 100) / 100;
     }
     let insPct: number | null = null;
     if (paymentForm.insurancePercentage.trim() !== '') {
       const v = Number(paymentForm.insurancePercentage);
-      if (isNaN(v) || v < 0 || v > 100) { toast.error('Insurance % must be between 0 and 100'); return; }
+      if (isNaN(v) || v < 0 || v > 100) { toast.error(t('accounting.staff.err_insurance_pct')); return; }
       insPct = v;
     }
 
@@ -391,12 +394,12 @@ export default function StaffSalariesTab() {
         taxLabel: paymentForm.taxLabel.trim() || null,
         paymentAccountId: paymentForm.paymentAccountId,
       });
-      toast.success('Payment recorded');
+      toast.success(t('accounting.staff.payment_recorded'));
       setPaymentTarget(null);
       setPaymentForm(null);
       await loadAll();
     } catch (e: any) {
-      toast.error(e.response?.data?.error || 'Failed to record payment');
+      toast.error(e.response?.data?.error || t('accounting.staff.failed_record_payment'));
     } finally { setSavingPayment(false); }
   };
 
@@ -411,7 +414,7 @@ export default function StaffSalariesTab() {
       setHistoryTotals(r.data.totals);
       historyCursor.current = r.data.nextCursor;
     } catch (e: any) {
-      toast.error(e.response?.data?.error || 'Failed to load payment history');
+      toast.error(e.response?.data?.error || t('accounting.staff.failed_load_history'));
       setHistoryTarget(null);
     }
   }, []);
@@ -437,14 +440,14 @@ export default function StaffSalariesTab() {
 
   const deletePaymentEntry = async (p: StaffSalaryPayment) => {
     if (!historyTarget) return;
-    if (!confirm(`Delete payment of ${fmtMoney(p.amount, p.currency)} from ${p.paidOn}? This cannot be undone.`)) return;
+    if (!confirm(t('accounting.staff.confirm_delete_payment', { amount: fmtMoney(p.amount, p.currency), date: p.paidOn }))) return;
     try {
       await staffApi.deletePayment(p.id);
-      toast.success('Payment deleted');
+      toast.success(t('accounting.staff.payment_deleted'));
       await fetchHistory(historyTarget.id);
       await loadAll();
     } catch (e: any) {
-      toast.error(e.response?.data?.error || 'Failed to delete payment');
+      toast.error(e.response?.data?.error || t('accounting.staff.failed_delete_payment'));
     }
   };
 
@@ -461,8 +464,8 @@ export default function StaffSalariesTab() {
   const submitInsurancePayout = async () => {
     if (!insurancePayoutTarget || !insurancePayoutForm) return;
     const amt = Number(insurancePayoutForm.amount);
-    if (isNaN(amt) || amt < 0) { toast.error('Amount must be non-negative'); return; }
-    if (!insurancePayoutForm.paidOn) { toast.error('Date is required'); return; }
+    if (isNaN(amt) || amt < 0) { toast.error(t('accounting.staff.err_amount_nonneg')); return; }
+    if (!insurancePayoutForm.paidOn) { toast.error(t('accounting.staff.err_date_required')); return; }
 
     setSavingInsurancePayout(true);
     try {
@@ -472,24 +475,24 @@ export default function StaffSalariesTab() {
         currency: insurancePayoutForm.currency.toUpperCase(),
         notes: insurancePayoutForm.notes.trim() || null,
       });
-      toast.success('Insurance marked as paid');
+      toast.success(t('accounting.staff.insurance_marked_paid'));
       setInsurancePayoutTarget(null);
       setInsurancePayoutForm(null);
       await loadAll();
     } catch (e: any) {
-      toast.error(e.response?.data?.error || 'Failed to mark insurance paid');
+      toast.error(e.response?.data?.error || t('accounting.staff.failed_mark_insurance'));
     } finally { setSavingInsurancePayout(false); }
   };
 
   const reverseInsurancePayout = async (s: StaffMember) => {
-    if (!confirm(`Reverse the insurance payout for ${s.fullName}? Their insurance will be marked as still pending.`)) return;
+    if (!confirm(t('accounting.staff.confirm_reverse_insurance', { name: s.fullName }))) return;
     setReversingInsuranceId(s.id);
     try {
       await staffApi.reverseInsurancePayout(s.id);
-      toast.success('Insurance payout reversed');
+      toast.success(t('accounting.staff.insurance_reversed'));
       await loadAll();
     } catch (e: any) {
-      toast.error(e.response?.data?.error || 'Failed to reverse payout');
+      toast.error(e.response?.data?.error || t('accounting.staff.failed_reverse_payout'));
     } finally { setReversingInsuranceId(null); }
   };
 
@@ -506,9 +509,9 @@ export default function StaffSalariesTab() {
 
   const submitBulkNextPayment = async () => {
     if (!bulkNextPayment) return;
-    if (bulkNextPayment.selectedIds.size === 0) { toast.error('Select at least one staff member'); return; }
+    if (bulkNextPayment.selectedIds.size === 0) { toast.error(t('accounting.staff.err_select_one')); return; }
     if (bulkNextPayment.date && !/^\d{4}-\d{2}-\d{2}$/.test(bulkNextPayment.date)) {
-      toast.error('Enter a valid date'); return;
+      toast.error(t('accounting.staff.err_valid_date')); return;
     }
     setSavingBulkNext(true);
     try {
@@ -519,13 +522,13 @@ export default function StaffSalariesTab() {
       const n = r.data?.updated ?? bulkNextPayment.selectedIds.size;
       toast.success(
         bulkNextPayment.date
-          ? `Next payment date set for ${n} staff member${n === 1 ? '' : 's'}`
-          : `Next payment date cleared for ${n} staff member${n === 1 ? '' : 's'}`
+          ? t('accounting.staff.bulk_set_done', { count: n })
+          : t('accounting.staff.bulk_cleared_done', { count: n })
       );
       setBulkNextPayment(null);
       await loadActive();
     } catch (e: any) {
-      toast.error(e.response?.data?.error || 'Failed to update');
+      toast.error(e.response?.data?.error || t('accounting.staff.failed_update'));
     } finally { setSavingBulkNext(false); }
   };
 
@@ -541,10 +544,10 @@ export default function StaffSalariesTab() {
     try {
       const r = await staffApi.notifyAllDue(body);
       const count = r.data?.sent ?? 0;
-      toast.success(count === 0 ? 'No staff matched the filter' : `Reminder sent to ${count} staff member${count === 1 ? '' : 's'}`);
+      toast.success(count === 0 ? t('accounting.staff.no_staff_matched') : t('accounting.staff.reminders_sent', { count }));
       setMassReminder(null);
     } catch (e: any) {
-      toast.error(e.response?.data?.error || 'Failed to send reminders');
+      toast.error(e.response?.data?.error || t('accounting.staff.failed_send_reminders'));
     } finally { setSendingMass(false); }
   };
 
@@ -554,7 +557,7 @@ export default function StaffSalariesTab() {
       const r = await staffApi.downloadSalaryPdf(s.id);
       downloadBlob(r.data as Blob, `salary-${s.fullName.replace(/[^a-zA-Z0-9._-]+/g, '_')}.pdf`);
     } catch (e: any) {
-      toast.error(e.response?.data?.error || 'Failed to download PDF');
+      toast.error(e.response?.data?.error || t('accounting.staff.failed_pdf'));
     } finally { setExporting(null); }
   };
 
@@ -564,7 +567,7 @@ export default function StaffSalariesTab() {
       const r = await staffApi.downloadSalaryXlsx(s.id);
       downloadBlob(r.data as Blob, `salary-${s.fullName.replace(/[^a-zA-Z0-9._-]+/g, '_')}.xlsx`);
     } catch (e: any) {
-      toast.error(e.response?.data?.error || 'Failed to download Excel');
+      toast.error(e.response?.data?.error || t('accounting.staff.failed_excel'));
     } finally { setExporting(null); }
   };
 
@@ -591,44 +594,44 @@ export default function StaffSalariesTab() {
         <button
           onClick={() => setSubTab('active')}
           className={`px-4 py-1.5 text-sm font-medium rounded-lg transition-colors ${subTab === 'active' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-        >Active{active && ` (${active.length})`}</button>
+        >{t('accounting.staff.tab_active')}{active && ` (${active.length})`}</button>
         <button
           onClick={() => setSubTab('archive')}
           className={`px-4 py-1.5 text-sm font-medium rounded-lg transition-colors ${subTab === 'archive' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-        >Archive{archived && ` (${archived.length})`}</button>
+        >{t('accounting.staff.tab_archive')}{archived && ` (${archived.length})`}</button>
         <button
           onClick={() => setSubTab('voided')}
           className={`px-4 py-1.5 text-sm font-medium rounded-lg transition-colors ${subTab === 'voided' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-        >Voided{voidedStaff && voidedPayments && ` (${voidedStaff.length + voidedPayments.length})`}</button>
+        >{t('accounting.staff.tab_voided')}{voidedStaff && voidedPayments && ` (${voidedStaff.length + voidedPayments.length})`}</button>
       </div>
 
       {subTab === 'active' && (
         <div className="flex items-center justify-between mb-4">
-          <p className="text-sm text-gray-500">Salaries for employees created in Admin → Employees. Pick a teacher/supervisor/administrator to put them on payroll; non-login staff appear automatically. Linked employees get in-app reminders.</p>
+          <p className="text-sm text-gray-500">{t('accounting.staff.active_hint')}</p>
           <div className="flex gap-2 flex-wrap">
-            <Button variant="ghost" onClick={openBulkNextPayment} icon={<CalendarClock className="w-4 h-4" />}>Set next payment</Button>
-            <Button variant="ghost" onClick={() => setMassReminder({ ...emptyMass })} icon={<Megaphone className="w-4 h-4" />}>Mass reminder</Button>
-            <Button onClick={openNew} icon={<Plus className="w-4 h-4" />}>Add to payroll</Button>
+            <Button variant="ghost" onClick={openBulkNextPayment} icon={<CalendarClock className="w-4 h-4" />}>{t('accounting.staff.set_next_payment')}</Button>
+            <Button variant="ghost" onClick={() => setMassReminder({ ...emptyMass })} icon={<Megaphone className="w-4 h-4" />}>{t('accounting.staff.mass_reminder')}</Button>
+            <Button onClick={openNew} icon={<Plus className="w-4 h-4" />}>{t('accounting.staff.add_payroll')}</Button>
           </div>
         </div>
       )}
 
       {subTab === 'archive' && (
         <div className="mb-4">
-          <p className="text-sm text-gray-500">Archived staff. Payment history is preserved and can be exported. Teachers whose admin account is deactivated appear here automatically.</p>
+          <p className="text-sm text-gray-500">{t('accounting.staff.archive_hint')}</p>
         </div>
       )}
 
       {subTab === 'voided' && (
         <div>
-          <p className="text-sm text-gray-500 mb-4">Voided staff records and salary payments. Click <span className="font-medium">Restore</span> to bring an item back. After the retention window these are permanently deleted.</p>
+          <p className="text-sm text-gray-500 mb-4"><Trans i18nKey="accounting.staff.voided_hint" components={{ b: <span className="font-medium" /> }} /></p>
           {voidedStaff === null || voidedPayments === null ? <LoadingSpinner /> : (voidedStaff.length === 0 && voidedPayments.length === 0) ? (
-            <EmptyState title="Nothing voided" description="Staff or payments you delete will appear here so you can recover them." icon={<ArchiveIcon className="w-8 h-8 text-gray-400" />} />
+            <EmptyState title={t('accounting.staff.voided_empty_title')} description={t('accounting.staff.voided_empty_desc')} icon={<ArchiveIcon className="w-8 h-8 text-gray-400" />} />
           ) : (
             <div className="space-y-6">
               {voidedPayments.length > 0 && (
                 <div>
-                  <h4 className="font-semibold text-gray-900 mb-2">Voided payments ({voidedPayments.length})</h4>
+                  <h4 className="font-semibold text-gray-900 mb-2">{t('accounting.staff.voided_payments', { count: voidedPayments.length })}</h4>
                   <div className="space-y-2">
                     {voidedPayments.map(p => (
                       <div key={p.id} className="bg-white rounded-2xl border border-gray-200 p-4">
@@ -639,14 +642,14 @@ export default function StaffSalariesTab() {
                               <span className="text-xs text-gray-500">· {p.paidOn}</span>
                               {p.periodLabel && <span className="text-xs text-gray-500">· {p.periodLabel}</span>}
                             </div>
-                            <div className="text-sm text-gray-700 mt-0.5">{p.staffName ?? '(unknown staff)'}</div>
+                            <div className="text-sm text-gray-700 mt-0.5">{p.staffName ?? t('accounting.staff.unknown_staff')}</div>
                             <div className="text-xs text-gray-500 mt-1">
-                              Voided {new Date(p.voidedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
-                              {p.voidedByName && <> by <span className="font-medium text-gray-700">{p.voidedByName}</span></>}
+                              {t('accounting.staff.voided_at', { date: new Date(p.voidedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) })}
+                              {p.voidedByName && <> {t('accounting.staff.by')} <span className="font-medium text-gray-700">{p.voidedByName}</span></>}
                             </div>
                             {p.voidReason && <div className="text-xs text-rose-700 italic mt-1">"{p.voidReason}"</div>}
                           </div>
-                          <Button size="sm" variant="secondary" onClick={() => unvoidStaffPayment(p.id)} disabled={unvoidBusy === p.id} icon={<RotateCcw className="w-4 h-4" />}>Restore</Button>
+                          <Button size="sm" variant="secondary" onClick={() => unvoidStaffPayment(p.id)} disabled={unvoidBusy === p.id} icon={<RotateCcw className="w-4 h-4" />}>{t('accounting.staff.restore')}</Button>
                         </div>
                       </div>
                     ))}
@@ -655,7 +658,7 @@ export default function StaffSalariesTab() {
               )}
               {voidedStaff.length > 0 && (
                 <div>
-                  <h4 className="font-semibold text-gray-900 mb-2">Voided staff ({voidedStaff.length})</h4>
+                  <h4 className="font-semibold text-gray-900 mb-2">{t('accounting.staff.voided_staff', { count: voidedStaff.length })}</h4>
                   <div className="space-y-2">
                     {voidedStaff.map(s => (
                       <div key={s.id} className="bg-white rounded-2xl border border-gray-200 p-4">
@@ -667,12 +670,12 @@ export default function StaffSalariesTab() {
                               <span className="text-sm text-gray-700">{fmtMoney(s.salaryAmount, s.currency)}</span>
                             </div>
                             <div className="text-xs text-gray-500 mt-1">
-                              Voided {new Date(s.voidedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
-                              {s.voidedByName && <> by <span className="font-medium text-gray-700">{s.voidedByName}</span></>}
+                              {t('accounting.staff.voided_at', { date: new Date(s.voidedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) })}
+                              {s.voidedByName && <> {t('accounting.staff.by')} <span className="font-medium text-gray-700">{s.voidedByName}</span></>}
                             </div>
                             {s.voidReason && <div className="text-xs text-rose-700 italic mt-1">"{s.voidReason}"</div>}
                           </div>
-                          <Button size="sm" variant="secondary" onClick={() => unvoidStaff(s.id)} disabled={unvoidBusy === s.id} icon={<RotateCcw className="w-4 h-4" />}>Restore</Button>
+                          <Button size="sm" variant="secondary" onClick={() => unvoidStaff(s.id)} disabled={unvoidBusy === s.id} icon={<RotateCcw className="w-4 h-4" />}>{t('accounting.staff.restore')}</Button>
                         </div>
                       </div>
                     ))}
@@ -686,14 +689,14 @@ export default function StaffSalariesTab() {
 
       {subTab !== 'voided' && (list === null ? <LoadingSpinner /> : list.length === 0 ? (
         subTab === 'active' ? (
-          <EmptyState title="No one on payroll yet" description="Pick a teacher, supervisor or administrator to put them on payroll. Non-login staff added in Admin → Employees → Staff appear here automatically." icon={<UsersIcon className="w-8 h-8 text-gray-400" />} />
+          <EmptyState title={t('accounting.staff.payroll_empty_title')} description={t('accounting.staff.payroll_empty_desc')} icon={<UsersIcon className="w-8 h-8 text-gray-400" />} />
         ) : (
-          <EmptyState title="Archive is empty" description="Deactivated or removed staff will appear here." icon={<ArchiveIcon className="w-8 h-8 text-gray-400" />} />
+          <EmptyState title={t('accounting.staff.archive_empty_title')} description={t('accounting.staff.archive_empty_desc')} icon={<ArchiveIcon className="w-8 h-8 text-gray-400" />} />
         )
       ) : (
         <div className="space-y-3">
           {list.map(s => {
-            const badge = subTab === 'active' && s.isActive ? dueBadge(s.nextPaymentDate) : null;
+            const badge = subTab === 'active' && s.isActive ? dueBadge(s.nextPaymentDate, t) : null;
             const hasInsurance = s.insurancePercentage !== null && s.insurancePercentage !== undefined;
             const insuranceHeld = s.insuranceHeldTotal || 0;
             const showHeldBadge = insuranceHeld > 0 && !s.insurancePaidOut;
@@ -704,42 +707,42 @@ export default function StaffSalariesTab() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <h3 className="font-semibold text-gray-900">{s.fullName}</h3>
                       {s.position && <span className="text-xs text-gray-500">· {s.position}</span>}
-                      {!s.userId && <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">No account</span>}
+                      {!s.userId && <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{t('accounting.staff.no_account')}</span>}
                       {s.archiveReason && <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{s.archiveReason}</span>}
                       {badge && <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${badge.cls}`}>{badge.text}</span>}
                       {hasInsurance && (
                         <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 inline-flex items-center gap-1">
-                          <Shield className="w-3 h-3" /> Insurance {s.insurancePercentage}%
+                          <Shield className="w-3 h-3" /> {t('accounting.staff.insurance_pct_badge', { pct: s.insurancePercentage })}
                         </span>
                       )}
                       {showHeldBadge && (
                         <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800">
-                          Held: {fmtMoney(insuranceHeld, s.currency)}
+                          {t('accounting.staff.held_badge', { amount: fmtMoney(insuranceHeld, s.currency) })}
                         </span>
                       )}
                       {s.insurancePaidOut && (
                         <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 inline-flex items-center gap-1">
-                          <ShieldCheck className="w-3 h-3" /> Insurance paid {s.insurancePaidOutAt ?? ''}
+                          <ShieldCheck className="w-3 h-3" /> {t('accounting.staff.insurance_paid_badge', { date: s.insurancePaidOutAt ?? '' })}
                         </span>
                       )}
                       {subTab === 'archive' && insuranceHeld > 0 && !s.insurancePaidOut && (
-                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">Insurance pending payout</span>
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">{t('accounting.staff.insurance_pending')}</span>
                       )}
                     </div>
                     <div className="text-sm text-gray-500 mt-0.5">
-                      Salary: <span className="font-semibold text-gray-700">{fmtMoney(s.salaryAmount, s.currency)}</span>
-                      {s.nextPaymentDate && subTab === 'active' && <> · Next payment: {s.nextPaymentDate}</>}
+                      {t('accounting.staff.salary_label')}: <span className="font-semibold text-gray-700">{fmtMoney(s.salaryAmount, s.currency)}</span>
+                      {s.nextPaymentDate && subTab === 'active' && <> · {t('accounting.staff.next_payment_inline', { date: s.nextPaymentDate })}</>}
                       {s.lastPayment && (
-                        <> · Last paid: {fmtMoney(s.lastPayment.amount, s.lastPayment.currency)} on {s.lastPayment.paidOn}
+                        <> · {t('accounting.staff.last_paid_inline', { amount: fmtMoney(s.lastPayment.amount, s.lastPayment.currency), date: s.lastPayment.paidOn })}
                           {s.lastPayment.insuranceAmount > 0 && (
-                            <> (insurance: {fmtMoney(s.lastPayment.insuranceAmount, s.lastPayment.currency)})</>
+                            <> {t('accounting.staff.last_paid_insurance', { amount: fmtMoney(s.lastPayment.insuranceAmount, s.lastPayment.currency) })}</>
                           )}
                         </>
                       )}
                     </div>
                     {s.insurancePaidOut && (s.insurancePaidOutAmount ?? 0) > 0 && (
                       <div className="text-xs text-emerald-700 mt-1">
-                        Insurance paid out: {fmtMoney(s.insurancePaidOutAmount ?? 0, s.insurancePaidOutCurrency ?? s.currency)} on {s.insurancePaidOutAt ?? '—'}
+                        {t('accounting.staff.insurance_paid_out_inline', { amount: fmtMoney(s.insurancePaidOutAmount ?? 0, s.insurancePaidOutCurrency ?? s.currency), date: s.insurancePaidOutAt ?? '—' })}
                         {s.insurancePaidOutNotes && <> · {s.insurancePaidOutNotes}</>}
                       </div>
                     )}
@@ -747,30 +750,30 @@ export default function StaffSalariesTab() {
                   <div className="flex gap-1 shrink-0 flex-wrap">
                     {subTab === 'active' && (
                       <>
-                        <Button size="sm" variant="ghost" onClick={() => openRecordPayment(s)} icon={<Receipt className="w-4 h-4" />}>Record payment</Button>
-                        <Button size="sm" variant="ghost" onClick={() => openHistory(s)} icon={<History className="w-4 h-4" />}>History</Button>
+                        <Button size="sm" variant="ghost" onClick={() => openRecordPayment(s)} icon={<Receipt className="w-4 h-4" />}>{t('accounting.staff.record_payment')}</Button>
+                        <Button size="sm" variant="ghost" onClick={() => openHistory(s)} icon={<History className="w-4 h-4" />}>{t('accounting.staff.history')}</Button>
                         {s.userId && (
-                          <Button size="sm" variant="ghost" onClick={() => sendReminder(s)} loading={notifyingId === s.id} icon={<BellRing className="w-4 h-4" />}>Send reminder</Button>
+                          <Button size="sm" variant="ghost" onClick={() => sendReminder(s)} loading={notifyingId === s.id} icon={<BellRing className="w-4 h-4" />}>{t('accounting.staff.send_reminder')}</Button>
                         )}
-                        <button onClick={() => openEdit(s)} className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg" title="Edit"><Pencil className="w-4 h-4" /></button>
-                        <button onClick={() => deactivate(s)} className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg" title="Archive (deactivate)"><ArchiveIcon className="w-4 h-4" /></button>
+                        <button onClick={() => openEdit(s)} className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg" title={t('common.edit')}><Pencil className="w-4 h-4" /></button>
+                        <button onClick={() => deactivate(s)} className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg" title={t('accounting.staff.archive_deactivate')}><ArchiveIcon className="w-4 h-4" /></button>
                       </>
                     )}
                     {subTab === 'archive' && (
                       <>
                         {!s.insurancePaidOut && insuranceHeld > 0 && (
-                          <Button size="sm" variant="ghost" onClick={() => openInsurancePayout(s)} icon={<ShieldCheck className="w-4 h-4" />}>Pay insurance</Button>
+                          <Button size="sm" variant="ghost" onClick={() => openInsurancePayout(s)} icon={<ShieldCheck className="w-4 h-4" />}>{t('accounting.staff.pay_insurance')}</Button>
                         )}
                         {s.insurancePaidOut && (
-                          <Button size="sm" variant="ghost" onClick={() => reverseInsurancePayout(s)} loading={reversingInsuranceId === s.id} icon={<RotateCcw className="w-4 h-4" />}>Reverse insurance</Button>
+                          <Button size="sm" variant="ghost" onClick={() => reverseInsurancePayout(s)} loading={reversingInsuranceId === s.id} icon={<RotateCcw className="w-4 h-4" />}>{t('accounting.staff.reverse_insurance')}</Button>
                         )}
-                        <Button size="sm" variant="ghost" onClick={() => exportPdf(s)} loading={exporting === `${s.id}:pdf`} icon={<FileDown className="w-4 h-4" />}>PDF</Button>
-                        <Button size="sm" variant="ghost" onClick={() => exportXlsx(s)} loading={exporting === `${s.id}:xlsx`} icon={<FileSpreadsheet className="w-4 h-4" />}>Excel</Button>
-                        <Button size="sm" variant="ghost" onClick={() => openHistory(s)} icon={<History className="w-4 h-4" />}>History</Button>
+                        <Button size="sm" variant="ghost" onClick={() => exportPdf(s)} loading={exporting === `${s.id}:pdf`} icon={<FileDown className="w-4 h-4" />}>{t('accounting.archive.pdf')}</Button>
+                        <Button size="sm" variant="ghost" onClick={() => exportXlsx(s)} loading={exporting === `${s.id}:xlsx`} icon={<FileSpreadsheet className="w-4 h-4" />}>{t('accounting.archive.excel')}</Button>
+                        <Button size="sm" variant="ghost" onClick={() => openHistory(s)} icon={<History className="w-4 h-4" />}>{t('accounting.staff.history')}</Button>
                         {s.userIsActive !== false && (
-                          <Button size="sm" variant="ghost" onClick={() => reactivate(s)} loading={reactivatingId === s.id} icon={<RotateCcw className="w-4 h-4" />}>Reactivate</Button>
+                          <Button size="sm" variant="ghost" onClick={() => reactivate(s)} loading={reactivatingId === s.id} icon={<RotateCcw className="w-4 h-4" />}>{t('accounting.staff.reactivate')}</Button>
                         )}
-                        <button onClick={() => remove(s)} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg" title="Delete permanently"><Trash2 className="w-4 h-4" /></button>
+                        <button onClick={() => remove(s)} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg" title={t('accounting.staff.delete_permanently')}><Trash2 className="w-4 h-4" /></button>
                       </>
                     )}
                   </div>
@@ -782,46 +785,46 @@ export default function StaffSalariesTab() {
       ))}
 
       {editing && (
-        <Modal isOpen onClose={() => setEditing(null)} title={editing.id ? 'Edit salary' : 'Add to payroll'} size="lg">
+        <Modal isOpen onClose={() => setEditing(null)} title={editing.id ? t('accounting.staff.edit_salary') : t('accounting.staff.add_payroll')} size="lg">
           <div className="space-y-4">
             {!editing.id ? (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Employee</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('accounting.staff.employee')}</label>
                 <select
                   value={editing.userId}
                   onChange={e => {
                     const userId = e.target.value;
-                    const t = teachers.find(x => x.userId === userId);
-                    const sup = !t ? supervisors.find(x => x.userId === userId) : undefined;
-                    const adm = !t && !sup ? admins.find(x => x.userId === userId) : undefined;
+                    const tch = teachers.find(x => x.userId === userId);
+                    const sup = !tch ? supervisors.find(x => x.userId === userId) : undefined;
+                    const adm = !tch && !sup ? admins.find(x => x.userId === userId) : undefined;
                     setEditing({
                       ...editing,
                       userId,
-                      fullName: t ? t.fullName : sup ? sup.fullName : adm ? adm.fullName : '',
-                      position: t ? (t.subject ? `Teacher · ${t.subject}` : 'Teacher') : sup ? 'Supervisor' : adm ? 'Administrator' : '',
+                      fullName: tch ? tch.fullName : sup ? sup.fullName : adm ? adm.fullName : '',
+                      position: tch ? (tch.subject ? t('accounting.staff.pos_teacher_subject', { subject: tch.subject }) : t('accounting.staff.pos_teacher')) : sup ? t('accounting.staff.pos_supervisor') : adm ? t('accounting.staff.pos_administrator') : '',
                     });
                   }}
                   className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-gray-900 bg-white min-h-[44px] focus:outline-none focus:ring-2 focus:ring-primary-500"
                 >
-                  <option value="">— Select an employee —</option>
+                  <option value="">{t('accounting.staff.select_employee')}</option>
                   {availableTeachers.length > 0 && (
-                    <optgroup label="Teachers">
-                      {availableTeachers.map(t => (
-                        <option key={t.userId} value={t.userId}>
-                          {t.fullName}{t.subject ? ` (${t.subject})` : ''}
+                    <optgroup label={t('accounting.staff.grp_teachers')}>
+                      {availableTeachers.map(tch => (
+                        <option key={tch.userId} value={tch.userId}>
+                          {tch.fullName}{tch.subject ? ` (${tch.subject})` : ''}
                         </option>
                       ))}
                     </optgroup>
                   )}
                   {availableSupervisors.length > 0 && (
-                    <optgroup label="Supervisors">
+                    <optgroup label={t('accounting.staff.grp_supervisors')}>
                       {availableSupervisors.map(s => (
                         <option key={s.userId} value={s.userId}>{s.fullName}</option>
                       ))}
                     </optgroup>
                   )}
                   {availableAdmins.length > 0 && (
-                    <optgroup label="Administration">
+                    <optgroup label={t('accounting.staff.grp_administration')}>
                       {availableAdmins.map(a => (
                         <option key={a.userId} value={a.userId}>{a.fullName}</option>
                       ))}
@@ -829,47 +832,46 @@ export default function StaffSalariesTab() {
                   )}
                 </select>
                 <p className="text-xs text-gray-500 mt-1">
-                  Teachers, supervisors and administrators come from Admin → Employees. Non-login staff (janitors, cooks…) are added in
-                  {' '}Admin → Employees → Staff and appear on this list automatically — no need to add them here.
+                  {t('accounting.staff.employee_hint')}
                 </p>
               </div>
             ) : (
               <div className="bg-gray-50 rounded-xl px-4 py-3">
                 <div className="text-sm font-semibold text-gray-900">{editing.fullName}</div>
                 {editing.position && <div className="text-xs text-gray-500 mt-0.5">{editing.position}</div>}
-                <div className="text-xs text-gray-400 mt-1">Name &amp; position are managed in Admin → Employees.</div>
+                <div className="text-xs text-gray-400 mt-1">{t('accounting.staff.name_position_managed')}</div>
               </div>
             )}
 
             <div className="grid grid-cols-2 gap-3">
-              <Input label="Salary amount" type="number" step="0.01" value={editing.salaryAmount} onChange={e => setEditing({ ...editing, salaryAmount: e.target.value })} />
-              <Input label="Currency" value={editing.currency} onChange={e => setEditing({ ...editing, currency: e.target.value.toUpperCase() })} />
+              <Input label={t('accounting.staff.salary_amount')} type="number" step="0.01" value={editing.salaryAmount} onChange={e => setEditing({ ...editing, salaryAmount: e.target.value })} />
+              <Input label={t('accounting.staff.currency')} value={editing.currency} onChange={e => setEditing({ ...editing, currency: e.target.value.toUpperCase() })} />
             </div>
 
-            <Input label="Next payment date (optional)" type="date" value={editing.nextPaymentDate} onChange={e => setEditing({ ...editing, nextPaymentDate: e.target.value })} />
+            <Input label={t('accounting.staff.next_payment_optional')} type="date" value={editing.nextPaymentDate} onChange={e => setEditing({ ...editing, nextPaymentDate: e.target.value })} />
 
             <div>
               <Input
-                label="Insurance % (optional)"
+                label={t('accounting.staff.insurance_pct_optional')}
                 type="number"
                 step="0.01"
                 min="0"
                 max="100"
                 value={editing.insurancePercentage}
                 onChange={e => setEditing({ ...editing, insurancePercentage: e.target.value })}
-                placeholder="e.g. 5"
+                placeholder={t('accounting.staff.ph_insurance_pct')}
               />
-              <p className="text-xs text-gray-500 mt-1">Percentage withheld from each salary payment as insurance. The accumulated amount is paid out when the staff member leaves. Leave blank for no insurance.</p>
+              <p className="text-xs text-gray-500 mt-1">{t('accounting.staff.insurance_hint')}</p>
             </div>
 
             <label className="flex items-center gap-2 text-sm text-gray-700">
               <input type="checkbox" checked={editing.isActive} onChange={e => setEditing({ ...editing, isActive: e.target.checked })} className="w-4 h-4 rounded border-gray-300 text-primary-600" />
-              Active (uncheck to archive without deleting)
+              {t('accounting.staff.active_checkbox')}
             </label>
 
             <div className="flex gap-2 justify-end pt-2">
-              <Button variant="ghost" onClick={() => setEditing(null)}>Cancel</Button>
-              <Button onClick={save} loading={saving}>{editing.id ? 'Save changes' : 'Add to payroll'}</Button>
+              <Button variant="ghost" onClick={() => setEditing(null)}>{t('common.cancel')}</Button>
+              <Button onClick={save} loading={saving}>{editing.id ? t('accounting.staff.save_changes') : t('accounting.staff.add_payroll')}</Button>
             </div>
           </div>
         </Modal>
@@ -880,11 +882,11 @@ export default function StaffSalariesTab() {
         const insN = Number(paymentForm.insuranceAmount) || 0;
         const netN = Math.max(0, Math.round((grossN - insN) * 100) / 100);
         return (
-          <Modal isOpen onClose={() => { setPaymentTarget(null); setPaymentForm(null); }} title={`Record payment — ${paymentTarget.fullName}`} size="lg">
+          <Modal isOpen onClose={() => { setPaymentTarget(null); setPaymentForm(null); }} title={t('accounting.staff.record_payment_title', { name: paymentTarget.fullName })} size="lg">
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <Input
-                  label="Gross amount"
+                  label={t('accounting.staff.gross_amount')}
                   type="number"
                   step="0.01"
                   value={paymentForm.amount}
@@ -899,19 +901,19 @@ export default function StaffSalariesTab() {
                     setPaymentForm(next);
                   }}
                 />
-                <Input label="Currency" value={paymentForm.currency} onChange={e => setPaymentForm({ ...paymentForm, currency: e.target.value.toUpperCase() })} />
+                <Input label={t('accounting.staff.currency')} value={paymentForm.currency} onChange={e => setPaymentForm({ ...paymentForm, currency: e.target.value.toUpperCase() })} />
               </div>
-              <Input label="Payment date" type="date" value={paymentForm.paidOn} onChange={e => setPaymentForm({ ...paymentForm, paidOn: e.target.value })} />
-              <Input label="Period label (optional)" value={paymentForm.periodLabel} onChange={e => setPaymentForm({ ...paymentForm, periodLabel: e.target.value })} placeholder="e.g. May 2026" />
+              <Input label={t('accounting.staff.payment_date')} type="date" value={paymentForm.paidOn} onChange={e => setPaymentForm({ ...paymentForm, paidOn: e.target.value })} />
+              <Input label={t('accounting.staff.period_label')} value={paymentForm.periodLabel} onChange={e => setPaymentForm({ ...paymentForm, periodLabel: e.target.value })} placeholder={t('accounting.staff.ph_period')} />
 
               <div className="border-t border-gray-200 pt-4">
                 <div className="flex items-center gap-2 mb-2">
                   <Shield className="w-4 h-4 text-indigo-600" />
-                  <h4 className="text-sm font-semibold text-gray-700">Insurance withholding</h4>
+                  <h4 className="text-sm font-semibold text-gray-700">{t('accounting.staff.insurance_withholding')}</h4>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <Input
-                    label="Insurance %"
+                    label={t('accounting.staff.insurance_pct')}
                     type="number"
                     step="0.01"
                     min="0"
@@ -930,7 +932,7 @@ export default function StaffSalariesTab() {
                     }}
                   />
                   <Input
-                    label="Insurance amount"
+                    label={t('accounting.staff.insurance_amount')}
                     type="number"
                     step="0.01"
                     min="0"
@@ -940,22 +942,22 @@ export default function StaffSalariesTab() {
                 </div>
                 <div className="mt-3 grid grid-cols-3 gap-2 text-center">
                   <div className="bg-gray-50 rounded-lg py-2 px-3">
-                    <div className="text-xs text-gray-500">Gross</div>
+                    <div className="text-xs text-gray-500">{t('accounting.staff.gross')}</div>
                     <div className="font-semibold text-gray-900">{fmtMoney(grossN, paymentForm.currency)}</div>
                   </div>
                   <div className="bg-indigo-50 rounded-lg py-2 px-3">
-                    <div className="text-xs text-indigo-600">Insurance</div>
+                    <div className="text-xs text-indigo-600">{t('accounting.staff.insurance')}</div>
                     <div className="font-semibold text-indigo-900">{fmtMoney(insN, paymentForm.currency)}</div>
                   </div>
                   <div className="bg-emerald-50 rounded-lg py-2 px-3">
-                    <div className="text-xs text-emerald-700">Net paid</div>
+                    <div className="text-xs text-emerald-700">{t('accounting.staff.net_paid')}</div>
                     <div className="font-semibold text-emerald-900">{fmtMoney(netN, paymentForm.currency)}</div>
                   </div>
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Paid from <span className="text-rose-500">*</span></label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('accounting.staff.paid_from')} <span className="text-rose-500">*</span></label>
                 {accounts.length > 0 ? (
                   <>
                     <select
@@ -967,15 +969,15 @@ export default function StaffSalariesTab() {
                         <option key={a.id} value={a.id}>{a.name} ({a.kind} · {a.currency})</option>
                       ))}
                     </select>
-                    <p className="text-xs text-gray-500 mt-1">Cash leaves this account's running balance when the payment is recorded.</p>
+                    <p className="text-xs text-gray-500 mt-1">{t('accounting.staff.paid_from_hint')}</p>
                   </>
                 ) : (
-                  <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2">No payment accounts yet — create one before paying salaries.</p>
+                  <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2">{t('accounting.staff.no_accounts_warning')}</p>
                 )}
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <Input
-                  label="Tax included (optional)"
+                  label={t('accounting.staff.tax_included')}
                   type="number"
                   step="0.01"
                   value={paymentForm.taxAmount}
@@ -983,14 +985,14 @@ export default function StaffSalariesTab() {
                   placeholder="0.00"
                 />
                 <Input
-                  label="Tax label"
+                  label={t('accounting.staff.tax_label')}
                   value={paymentForm.taxLabel}
                   onChange={e => setPaymentForm({ ...paymentForm, taxLabel: e.target.value })}
-                  placeholder="Income tax, etc."
+                  placeholder={t('accounting.staff.ph_tax_label')}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Notes (optional)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('accounting.staff.notes_optional')}</label>
                 <textarea
                   value={paymentForm.notes}
                   onChange={e => setPaymentForm({ ...paymentForm, notes: e.target.value })}
@@ -999,11 +1001,11 @@ export default function StaffSalariesTab() {
                 />
               </div>
               {paymentTarget.userId && (
-                <p className="text-xs text-gray-500">A confirmation notification will be sent to {paymentTarget.fullName}.</p>
+                <p className="text-xs text-gray-500">{t('accounting.staff.confirmation_notice', { name: paymentTarget.fullName })}</p>
               )}
               <div className="flex gap-2 justify-end pt-2">
-                <Button variant="ghost" onClick={() => { setPaymentTarget(null); setPaymentForm(null); }}>Cancel</Button>
-                <Button onClick={submitPayment} loading={savingPayment}>Record payment</Button>
+                <Button variant="ghost" onClick={() => { setPaymentTarget(null); setPaymentForm(null); }}>{t('common.cancel')}</Button>
+                <Button onClick={submitPayment} loading={savingPayment}>{t('accounting.staff.record_payment')}</Button>
               </div>
             </div>
           </Modal>
@@ -1011,9 +1013,9 @@ export default function StaffSalariesTab() {
       })()}
 
       {historyTarget && (
-        <Modal isOpen onClose={() => { setHistoryTarget(null); setHistory(null); }} title={`Payment history — ${historyTarget.fullName}`} size="xl">
+        <Modal isOpen onClose={() => { setHistoryTarget(null); setHistory(null); }} title={t('accounting.staff.history_title', { name: historyTarget.fullName })} size="xl">
           {history === null ? <LoadingSpinner /> : history.length === 0 ? (
-            <p className="text-sm text-gray-500 py-6 text-center">No payments recorded yet.</p>
+            <p className="text-sm text-gray-500 py-6 text-center">{t('accounting.staff.no_payments_yet')}</p>
           ) : (
             <div>
               <Virtuoso
@@ -1034,14 +1036,14 @@ export default function StaffSalariesTab() {
                       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
                         <span className="font-semibold text-gray-900">{fmtMoney(p.amount, p.currency)}</span>
                         {ins > 0 && (
-                          <span className="text-xs text-indigo-700">− insurance {fmtMoney(ins, p.currency)}{p.insurancePercentage !== null && p.insurancePercentage !== undefined ? ` (${p.insurancePercentage}%)` : ''}</span>
+                          <span className="text-xs text-indigo-700">{t('accounting.staff.minus_insurance', { amount: fmtMoney(ins, p.currency) })}{p.insurancePercentage !== null && p.insurancePercentage !== undefined ? ` (${p.insurancePercentage}%)` : ''}</span>
                         )}
                         {ins > 0 && (
-                          <span className="text-xs font-semibold text-emerald-700">net {fmtMoney(net, p.currency)}</span>
+                          <span className="text-xs font-semibold text-emerald-700">{t('accounting.staff.net_inline', { amount: fmtMoney(net, p.currency) })}</span>
                         )}
                       </div>
                       <div className="text-xs text-gray-500 mt-0.5">
-                        Paid on {p.paidOn}
+                        {t('accounting.staff.paid_on', { date: p.paidOn })}
                         {p.periodLabel && <> · {p.periodLabel}</>}
                       </div>
                       {p.notes && <div className="text-xs text-gray-600 mt-1">{p.notes}</div>}
@@ -1055,26 +1057,26 @@ export default function StaffSalariesTab() {
                   );
                 }}
               />
-              {historyLoadingMore && <div className="py-2 text-center text-xs text-gray-400">Loading more…</div>}
+              {historyLoadingMore && <div className="py-2 text-center text-xs text-gray-400">{t('accounting.staff.loading_more')}</div>}
               {(() => {
                 // Whole-set totals from the backend — reflects ALL payments,
                 // not just the loaded page. Matches prior behavior: only the
                 // staff member's own currency, hidden when no insurance.
-                const t = historyTotals.find(x => x.currency === historyTarget.currency);
-                if (!t || t.count === 0 || t.insurance === 0) return null;
+                const tot = historyTotals.find(x => x.currency === historyTarget.currency);
+                if (!tot || tot.count === 0 || tot.insurance === 0) return null;
                 return (
                   <div className="mt-3 pt-3 border-t border-gray-200 grid grid-cols-3 gap-2 text-center">
                     <div className="bg-gray-50 rounded-lg py-2 px-3">
-                      <div className="text-xs text-gray-500">Total gross</div>
-                      <div className="font-semibold text-gray-900">{fmtMoney(t.gross, historyTarget.currency)}</div>
+                      <div className="text-xs text-gray-500">{t('accounting.staff.total_gross')}</div>
+                      <div className="font-semibold text-gray-900">{fmtMoney(tot.gross, historyTarget.currency)}</div>
                     </div>
                     <div className="bg-indigo-50 rounded-lg py-2 px-3">
-                      <div className="text-xs text-indigo-600">Insurance withheld</div>
-                      <div className="font-semibold text-indigo-900">{fmtMoney(t.insurance, historyTarget.currency)}</div>
+                      <div className="text-xs text-indigo-600">{t('accounting.staff.insurance_withheld')}</div>
+                      <div className="font-semibold text-indigo-900">{fmtMoney(tot.insurance, historyTarget.currency)}</div>
                     </div>
                     <div className="bg-emerald-50 rounded-lg py-2 px-3">
-                      <div className="text-xs text-emerald-700">Total net</div>
-                      <div className="font-semibold text-emerald-900">{fmtMoney(t.net, historyTarget.currency)}</div>
+                      <div className="text-xs text-emerald-700">{t('accounting.staff.total_net')}</div>
+                      <div className="font-semibold text-emerald-900">{fmtMoney(tot.net, historyTarget.currency)}</div>
                     </div>
                   </div>
                 );
@@ -1085,46 +1087,46 @@ export default function StaffSalariesTab() {
       )}
 
       {insurancePayoutTarget && insurancePayoutForm && (
-        <Modal isOpen onClose={() => { setInsurancePayoutTarget(null); setInsurancePayoutForm(null); }} title={`Pay insurance — ${insurancePayoutTarget.fullName}`} size="lg">
+        <Modal isOpen onClose={() => { setInsurancePayoutTarget(null); setInsurancePayoutForm(null); }} title={t('accounting.staff.pay_insurance_title', { name: insurancePayoutTarget.fullName })} size="lg">
           <div className="space-y-4">
             <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-3">
-              <div className="text-xs text-indigo-700 font-semibold uppercase tracking-wide">Insurance held</div>
+              <div className="text-xs text-indigo-700 font-semibold uppercase tracking-wide">{t('accounting.staff.insurance_held')}</div>
               <div className="text-xl font-bold text-indigo-900 mt-1">{fmtMoney(insurancePayoutTarget.insuranceHeldTotal || 0, insurancePayoutTarget.currency)}</div>
-              <div className="text-xs text-indigo-700 mt-1">Total withheld across all recorded salary payments.</div>
+              <div className="text-xs text-indigo-700 mt-1">{t('accounting.staff.total_withheld_hint')}</div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              <Input label="Payout amount" type="number" step="0.01" min="0" value={insurancePayoutForm.amount} onChange={e => setInsurancePayoutForm({ ...insurancePayoutForm, amount: e.target.value })} />
-              <Input label="Currency" value={insurancePayoutForm.currency} onChange={e => setInsurancePayoutForm({ ...insurancePayoutForm, currency: e.target.value.toUpperCase() })} />
+              <Input label={t('accounting.staff.payout_amount')} type="number" step="0.01" min="0" value={insurancePayoutForm.amount} onChange={e => setInsurancePayoutForm({ ...insurancePayoutForm, amount: e.target.value })} />
+              <Input label={t('accounting.staff.currency')} value={insurancePayoutForm.currency} onChange={e => setInsurancePayoutForm({ ...insurancePayoutForm, currency: e.target.value.toUpperCase() })} />
             </div>
-            <Input label="Payout date" type="date" value={insurancePayoutForm.paidOn} onChange={e => setInsurancePayoutForm({ ...insurancePayoutForm, paidOn: e.target.value })} />
+            <Input label={t('accounting.staff.payout_date')} type="date" value={insurancePayoutForm.paidOn} onChange={e => setInsurancePayoutForm({ ...insurancePayoutForm, paidOn: e.target.value })} />
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Notes (optional)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('accounting.staff.notes_optional')}</label>
               <textarea
                 value={insurancePayoutForm.notes}
                 onChange={e => setInsurancePayoutForm({ ...insurancePayoutForm, notes: e.target.value })}
                 rows={3}
-                placeholder="e.g. End-of-contract insurance settlement"
+                placeholder={t('accounting.staff.ph_insurance_settlement')}
                 className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
             </div>
-            <p className="text-xs text-gray-500">This records the insurance settlement on the staff member's archive entry. You can reverse it later if needed.</p>
+            <p className="text-xs text-gray-500">{t('accounting.staff.insurance_settlement_hint')}</p>
 
             <div className="flex gap-2 justify-end pt-2">
-              <Button variant="ghost" onClick={() => { setInsurancePayoutTarget(null); setInsurancePayoutForm(null); }}>Cancel</Button>
-              <Button onClick={submitInsurancePayout} loading={savingInsurancePayout}>Mark insurance paid</Button>
+              <Button variant="ghost" onClick={() => { setInsurancePayoutTarget(null); setInsurancePayoutForm(null); }}>{t('common.cancel')}</Button>
+              <Button onClick={submitInsurancePayout} loading={savingInsurancePayout}>{t('accounting.staff.mark_insurance_paid')}</Button>
             </div>
           </div>
         </Modal>
       )}
 
       {bulkNextPayment && (
-        <Modal isOpen onClose={() => setBulkNextPayment(null)} title="Set next payment for all" size="lg">
+        <Modal isOpen onClose={() => setBulkNextPayment(null)} title={t('accounting.staff.bulk_title')} size="lg">
           <div className="space-y-4">
-            <p className="text-sm text-gray-500">Apply a single next payment date to multiple active staff members at once. Leave the date blank to clear it for the selected staff.</p>
+            <p className="text-sm text-gray-500">{t('accounting.staff.bulk_hint')}</p>
 
             <Input
-              label="Next payment date"
+              label={t('accounting.staff.next_payment_date')}
               type="date"
               value={bulkNextPayment.date}
               onChange={e => setBulkNextPayment({ ...bulkNextPayment, date: e.target.value })}
@@ -1132,14 +1134,14 @@ export default function StaffSalariesTab() {
 
             {!bulkNextPayment.date && (
               <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
-                Date is empty — selected staff will have their next payment date cleared.
+                {t('accounting.staff.bulk_empty_warning')}
               </p>
             )}
 
             <div className="border border-gray-200 rounded-xl overflow-hidden">
               <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200 bg-gray-50">
                 <span className="text-sm font-semibold text-gray-700">
-                  {bulkNextPayment.selectedIds.size} of {active?.length ?? 0} selected
+                  {t('accounting.staff.selected_count', { selected: bulkNextPayment.selectedIds.size, total: active?.length ?? 0 })}
                 </span>
                 <button
                   type="button"
@@ -1153,7 +1155,7 @@ export default function StaffSalariesTab() {
                   }}
                   className="text-sm text-primary-600 hover:underline font-medium"
                 >
-                  {bulkNextPayment.selectedIds.size === (active?.length ?? 0) && (active?.length ?? 0) > 0 ? 'Deselect all' : 'Select all'}
+                  {bulkNextPayment.selectedIds.size === (active?.length ?? 0) && (active?.length ?? 0) > 0 ? t('accounting.staff.deselect_all') : t('accounting.staff.select_all')}
                 </button>
               </div>
               <div className="max-h-72 overflow-y-auto divide-y divide-gray-100">
@@ -1174,8 +1176,8 @@ export default function StaffSalariesTab() {
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-medium text-gray-900 truncate">{s.fullName}</div>
                         <div className="text-xs text-gray-500 truncate">
-                          {s.position ?? 'Staff'}
-                          {s.nextPaymentDate ? <> · current: {s.nextPaymentDate}</> : <> · no date set</>}
+                          {s.position ?? t('accounting.staff.staff_fallback')}
+                          {s.nextPaymentDate ? <> · {t('accounting.staff.current_date', { date: s.nextPaymentDate })}</> : <> · {t('accounting.staff.no_date_set')}</>}
                         </div>
                       </div>
                     </label>
@@ -1185,9 +1187,9 @@ export default function StaffSalariesTab() {
             </div>
 
             <div className="flex gap-2 justify-end pt-2">
-              <Button variant="ghost" onClick={() => setBulkNextPayment(null)}>Cancel</Button>
+              <Button variant="ghost" onClick={() => setBulkNextPayment(null)}>{t('common.cancel')}</Button>
               <Button onClick={submitBulkNextPayment} loading={savingBulkNext} disabled={bulkNextPayment.selectedIds.size === 0}>
-                {bulkNextPayment.date ? `Apply to ${bulkNextPayment.selectedIds.size}` : `Clear for ${bulkNextPayment.selectedIds.size}`}
+                {bulkNextPayment.date ? t('accounting.staff.apply_to', { count: bulkNextPayment.selectedIds.size }) : t('accounting.staff.clear_for', { count: bulkNextPayment.selectedIds.size })}
               </Button>
             </div>
           </div>
@@ -1195,36 +1197,36 @@ export default function StaffSalariesTab() {
       )}
 
       {massReminder && (
-        <Modal isOpen onClose={() => setMassReminder(null)} title="Send mass salary reminder" size="lg">
+        <Modal isOpen onClose={() => setMassReminder(null)} title={t('accounting.staff.mass_title')} size="lg">
           <div className="space-y-4">
-            <p className="text-sm text-gray-500">Sends a push and in-app notification to every active staff member with a linked teacher account. Leave the title and message blank to use the default (which is auto-translated for each teacher).</p>
+            <p className="text-sm text-gray-500">{t('accounting.staff.mass_hint')}</p>
 
-            <Input label="Custom title (optional)" value={massReminder.title} onChange={e => setMassReminder({ ...massReminder, title: e.target.value })} placeholder="Salary payment due" />
+            <Input label={t('accounting.staff.custom_title')} value={massReminder.title} onChange={e => setMassReminder({ ...massReminder, title: e.target.value })} placeholder={t('accounting.staff.ph_salary_due')} />
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Custom message (optional)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('accounting.staff.custom_message')}</label>
               <textarea
                 value={massReminder.message}
                 onChange={e => setMassReminder({ ...massReminder, message: e.target.value })}
                 rows={3}
-                placeholder="Leave blank to use the default per-staff message with their amount and date."
+                placeholder={t('accounting.staff.ph_custom_message')}
                 className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
             </div>
 
             <label className="flex items-center gap-2 text-sm text-gray-700">
               <input type="checkbox" checked={massReminder.onlyDueSoon} onChange={e => setMassReminder({ ...massReminder, onlyDueSoon: e.target.checked })} className="w-4 h-4 rounded border-gray-300 text-primary-600" />
-              Only send to staff with payment due within
+              {t('accounting.staff.only_due_within')}
             </label>
             {massReminder.onlyDueSoon && (
               <div className="flex items-center gap-2 ml-6">
                 <Input label="" type="number" min="0" value={massReminder.dueWithinDays} onChange={e => setMassReminder({ ...massReminder, dueWithinDays: e.target.value })} />
-                <span className="text-sm text-gray-500">days</span>
+                <span className="text-sm text-gray-500">{t('accounting.staff.days')}</span>
               </div>
             )}
 
             <div className="flex gap-2 justify-end pt-2">
-              <Button variant="ghost" onClick={() => setMassReminder(null)}>Cancel</Button>
-              <Button onClick={sendMassReminder} loading={sendingMass}>Send reminders</Button>
+              <Button variant="ghost" onClick={() => setMassReminder(null)}>{t('common.cancel')}</Button>
+              <Button onClick={sendMassReminder} loading={sendingMass}>{t('accounting.staff.send_reminders')}</Button>
             </div>
           </div>
         </Modal>
