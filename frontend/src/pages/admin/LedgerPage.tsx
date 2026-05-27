@@ -1,4 +1,5 @@
 import { forwardRef, useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { TableVirtuoso, type TableComponents } from 'react-virtuoso';
 import { toast } from 'react-toastify';
 import { Calendar, TrendingUp, TrendingDown, Wallet, FileText, FileSpreadsheet, Filter as FilterIcon, BookOpen } from 'lucide-react';
@@ -24,10 +25,11 @@ function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+// i18n keys; resolved with t() at render.
 const SOURCE_LABELS: Record<SourceKey, string> = {
-  fee_payment: 'Tuition payments',
-  staff_salary_payment: 'Staff salaries',
-  expense: 'Expenses',
+  fee_payment: 'accounting.ledger.src_fee',
+  staff_salary_payment: 'accounting.ledger.src_salary',
+  expense: 'accounting.ledger.src_expense',
 };
 
 function saveBlob(blob: Blob, filename: string) {
@@ -48,6 +50,7 @@ const LEDGER_TABLE_COMPONENTS: TableComponents<LedgerRow> = {
 };
 
 export default function LedgerPage() {
+  const { t } = useTranslation();
   const { school, user } = useAuthStore();
   const role = user?.role;
   const canWrite = role === 'admin' || role === 'accountant';
@@ -110,7 +113,7 @@ export default function LedgerPage() {
       }
     } catch (e: any) {
       if (myReq === reqIdRef.current && cursor === null) {
-        toast.error(e.response?.data?.error || 'Failed to load ledger');
+        toast.error(e.response?.data?.error || t('accounting.ledger.load_failed'));
         setRows([]);
       }
       // a failed page-load keeps what we have; next scroll retries
@@ -135,7 +138,7 @@ export default function LedgerPage() {
   const [exporting, setExporting] = useState<'pdf' | 'xlsx' | null>(null);
   const exportLedger = async (kind: 'pdf' | 'xlsx') => {
     const enabled = (Object.keys(enabledSources) as SourceKey[]).filter(k => enabledSources[k]);
-    if (enabled.length === 0) { toast.info('Pick at least one source first'); return; }
+    if (enabled.length === 0) { toast.info(t('accounting.ledger.pick_source')); return; }
     setExporting(kind);
     try {
       const params = {
@@ -148,7 +151,7 @@ export default function LedgerPage() {
       const tag = `${startDate || 'all'}-to-${endDate || 'now'}`;
       saveBlob(r.data as Blob, `ledger-${tag}.${kind}`);
     } catch (e: any) {
-      toast.error(e.response?.data?.error || `Failed to export ${kind.toUpperCase()}`);
+      toast.error(e.response?.data?.error || t('accounting.ledger.export_failed', { format: kind.toUpperCase() }));
     } finally { setExporting(null); }
   };
 
@@ -178,11 +181,11 @@ export default function LedgerPage() {
 
   if (!isPremium) {
     return (
-      <PageLayout title="Ledger" subtitle="Premium feature">
+      <PageLayout title={t('accounting.ledger.title')} subtitle={t('accounting.premium_subtitle')}>
         <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 max-w-xl">
-          <h3 className="font-semibold text-amber-900 mb-1">Accounting module not enabled</h3>
+          <h3 className="font-semibold text-amber-900 mb-1">{t('accounting.tuition.not_enabled_title')}</h3>
           <p className="text-sm text-amber-800">
-            The accounting module is part of the Premium plan. Contact Scholify to enable it for your school.
+            {t('accounting.tuition.not_enabled_body')}
           </p>
         </div>
       </PageLayout>
@@ -190,56 +193,56 @@ export default function LedgerPage() {
   }
   if (!canWrite) {
     return (
-      <PageLayout title="Ledger" subtitle="Restricted">
+      <PageLayout title={t('accounting.ledger.title')} subtitle={t('accounting.tuition.restricted')}>
         <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 max-w-xl">
-          <p className="text-sm text-amber-800">You do not have access to the ledger.</p>
+          <p className="text-sm text-amber-800">{t('accounting.ledger.no_access')}</p>
         </div>
       </PageLayout>
     );
   }
 
   return (
-    <PageLayout title="Ledger" subtitle="All money movement across tuition, salaries, and operating expenses">
+    <PageLayout title={t('accounting.ledger.title')} subtitle={t('accounting.ledger.subtitle')}>
       {/* Filters */}
       <Card className="mb-4">
         <div className="flex items-center gap-2 mb-3">
           <FilterIcon className="w-4 h-4 text-gray-500" />
-          <h3 className="font-semibold text-gray-900">Filters</h3>
+          <h3 className="font-semibold text-gray-900">{t('accounting.ledger.filters')}</h3>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-3">
-          <Input label="From" type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
-          <Input label="To" type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
+          <Input label={t('accounting.ledger.from')} type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
+          <Input label={t('accounting.ledger.to')} type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
           <Select
-            label="Currency"
-            options={[{ value: '', label: 'All' }, ...Array.from(new Set([defaultCurrency, ...totals.map(t => t.currency)])).map(c => ({ value: c, label: c }))]}
+            label={t('accounting.ledger.currency')}
+            options={[{ value: '', label: t('accounting.tuition.all') }, ...Array.from(new Set([defaultCurrency, ...totals.map(tot => tot.currency)])).map(c => ({ value: c, label: c }))]}
             value={currencyFilter}
             onChange={e => setCurrencyFilter(e.target.value)}
           />
           <Select
-            label="Direction"
+            label={t('accounting.ledger.direction')}
             options={[
-              { value: 'all', label: 'All' },
-              { value: 'income', label: 'Income only' },
-              { value: 'expense', label: 'Expense only' },
+              { value: 'all', label: t('accounting.tuition.all') },
+              { value: 'income', label: t('accounting.ledger.income_only') },
+              { value: 'expense', label: t('accounting.ledger.expense_only') },
             ]}
             value={typeFilter}
             onChange={e => onChangeType(e.target.value as any)}
           />
           <div className="flex items-end">
-            <Button onClick={reload} fullWidth>Apply</Button>
+            <Button onClick={reload} fullWidth>{t('accounting.ledger.apply')}</Button>
           </div>
         </div>
 
         <div className="flex flex-wrap gap-2 mb-3">
-          <button onClick={() => setQuickRange('this_month')} className="text-xs px-2.5 py-1 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700">This month</button>
-          <button onClick={() => setQuickRange('last_month')} className="text-xs px-2.5 py-1 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700">Last month</button>
-          <button onClick={() => setQuickRange('last_30')} className="text-xs px-2.5 py-1 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700">Last 30 days</button>
-          <button onClick={() => setQuickRange('last_90')} className="text-xs px-2.5 py-1 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700">Last 90 days</button>
-          <button onClick={() => setQuickRange('ytd')} className="text-xs px-2.5 py-1 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700">Year to date</button>
+          <button onClick={() => setQuickRange('this_month')} className="text-xs px-2.5 py-1 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700">{t('accounting.ledger.range_this_month')}</button>
+          <button onClick={() => setQuickRange('last_month')} className="text-xs px-2.5 py-1 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700">{t('accounting.ledger.range_last_month')}</button>
+          <button onClick={() => setQuickRange('last_30')} className="text-xs px-2.5 py-1 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700">{t('accounting.ledger.range_last_30')}</button>
+          <button onClick={() => setQuickRange('last_90')} className="text-xs px-2.5 py-1 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700">{t('accounting.ledger.range_last_90')}</button>
+          <button onClick={() => setQuickRange('ytd')} className="text-xs px-2.5 py-1 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700">{t('accounting.ledger.range_ytd')}</button>
         </div>
 
         <div className="flex flex-wrap gap-3 pt-3 border-t border-gray-100">
-          <span className="text-sm text-gray-600">Sources:</span>
+          <span className="text-sm text-gray-600">{t('accounting.ledger.sources_label')}</span>
           {(Object.keys(SOURCE_LABELS) as SourceKey[]).map(k => (
             <label key={k} className="flex items-center gap-2 text-sm cursor-pointer">
               <input
@@ -248,7 +251,7 @@ export default function LedgerPage() {
                 onChange={e => setEnabledSources(s => ({ ...s, [k]: e.target.checked }))}
                 className="w-4 h-4 text-primary-600"
               />
-              {SOURCE_LABELS[k]}
+              {t(SOURCE_LABELS[k])}
             </label>
           ))}
         </div>
@@ -257,26 +260,26 @@ export default function LedgerPage() {
       {/* Summary cards per currency */}
       {totals.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
-          {totals.map(t => (
-            <Card key={t.currency}>
+          {totals.map(tot => (
+            <Card key={tot.currency}>
               <div className="flex items-center justify-between mb-3">
-                <span className="text-sm font-medium text-gray-500">{t.currency}</span>
+                <span className="text-sm font-medium text-gray-500">{tot.currency}</span>
                 <Wallet className="w-4 h-4 text-gray-400" />
               </div>
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600 flex items-center gap-1"><TrendingUp className="w-3.5 h-3.5 text-emerald-600" /> Income</span>
-                  <span className="font-semibold text-emerald-700">{fmt(t.income, t.currency)}</span>
+                  <span className="text-gray-600 flex items-center gap-1"><TrendingUp className="w-3.5 h-3.5 text-emerald-600" /> {t('accounting.income')}</span>
+                  <span className="font-semibold text-emerald-700">{fmt(tot.income, tot.currency)}</span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600 flex items-center gap-1"><TrendingDown className="w-3.5 h-3.5 text-rose-600" /> Expense</span>
-                  <span className="font-semibold text-rose-700">{fmt(t.expense, t.currency)}</span>
+                  <span className="text-gray-600 flex items-center gap-1"><TrendingDown className="w-3.5 h-3.5 text-rose-600" /> {t('accounting.expense')}</span>
+                  <span className="font-semibold text-rose-700">{fmt(tot.expense, tot.currency)}</span>
                 </div>
                 <div className="flex items-center justify-between text-sm pt-2 border-t border-gray-100">
-                  <span className="text-gray-700 font-medium">Net</span>
-                  <span className={`font-bold ${t.net >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{fmt(t.net, t.currency)}</span>
+                  <span className="text-gray-700 font-medium">{t('accounting.net')}</span>
+                  <span className={`font-bold ${tot.net >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{fmt(tot.net, tot.currency)}</span>
                 </div>
-                <div className="text-xs text-gray-500 pt-1">{t.count} {t.count === 1 ? 'entry' : 'entries'}</div>
+                <div className="text-xs text-gray-500 pt-1">{tot.count} {tot.count === 1 ? t('accounting.ledger.entry_one') : t('accounting.ledger.entry_many')}</div>
               </div>
             </Card>
           ))}
@@ -286,10 +289,10 @@ export default function LedgerPage() {
       {/* Category breakdown */}
       {categories.length > 0 && (
         <Card className="mb-4">
-          <h3 className="font-semibold text-gray-900 mb-3">By category</h3>
+          <h3 className="font-semibold text-gray-900 mb-3">{t('accounting.ledger.by_category')}</h3>
           <div className="space-y-3">
-            {totals.map(t => {
-              const cur = t.currency;
+            {totals.map(tot => {
+              const cur = tot.currency;
               const inc = categories.filter(c => c.currency === cur && c.type === 'income');
               const exp = categories.filter(c => c.currency === cur && c.type === 'expense');
               return (
@@ -297,7 +300,7 @@ export default function LedgerPage() {
                   {totals.length > 1 && <div className="text-xs font-medium text-gray-500 mb-2">{cur}</div>}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
-                      <div className="text-xs font-medium text-emerald-700 mb-1.5">Income</div>
+                      <div className="text-xs font-medium text-emerald-700 mb-1.5">{t('accounting.income')}</div>
                       {inc.length === 0 ? <div className="text-xs text-gray-400">—</div> : (
                         <div className="space-y-1">
                           {inc.map(c => (
@@ -310,7 +313,7 @@ export default function LedgerPage() {
                       )}
                     </div>
                     <div>
-                      <div className="text-xs font-medium text-rose-700 mb-1.5">Expense</div>
+                      <div className="text-xs font-medium text-rose-700 mb-1.5">{t('accounting.expense')}</div>
                       {exp.length === 0 ? <div className="text-xs text-gray-400">—</div> : (
                         <div className="space-y-1">
                           {exp.map(c => (
@@ -335,7 +338,7 @@ export default function LedgerPage() {
         <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
           <div className="flex items-center gap-2">
             <BookOpen className="w-4 h-4 text-gray-500" />
-            <h3 className="font-semibold text-gray-900">Entries</h3>
+            <h3 className="font-semibold text-gray-900">{t('accounting.ledger.entries')}</h3>
             {rows && <span className="text-xs text-gray-500">({visibleRows.length}{hasMore ? '+' : ''})</span>}
           </div>
           <div className="flex items-center gap-2">
@@ -347,7 +350,7 @@ export default function LedgerPage() {
               loading={exporting === 'pdf'}
               disabled={!rows || visibleRows.length === 0 || exporting !== null}
             >
-              PDF
+              {t('accounting.archive.pdf')}
             </Button>
             <Button
               size="sm"
@@ -357,15 +360,15 @@ export default function LedgerPage() {
               loading={exporting === 'xlsx'}
               disabled={!rows || visibleRows.length === 0 || exporting !== null}
             >
-              Excel
+              {t('accounting.archive.excel')}
             </Button>
           </div>
         </div>
 
         {rows === null ? <LoadingSpinner /> : visibleRows.length === 0 ? (
           <EmptyState
-            title="No entries in range"
-            description="Try broadening the date range or enabling more sources."
+            title={t('accounting.ledger.no_entries_title')}
+            description={t('accounting.ledger.no_entries_desc')}
             icon={<Calendar className="w-8 h-8 text-gray-400" />}
           />
         ) : (
@@ -379,12 +382,12 @@ export default function LedgerPage() {
               endReached={() => loadMore()}
               fixedHeaderContent={() => (
                 <tr className="text-left text-xs font-medium text-gray-500 border-b border-gray-100 bg-white">
-                  <th className="py-2 pr-3 whitespace-nowrap">Date</th>
-                  <th className="py-2 pr-3">Source</th>
-                  <th className="py-2 pr-3">Category</th>
-                  <th className="py-2 pr-3">Description</th>
-                  <th className="py-2 pr-3 text-right whitespace-nowrap">In</th>
-                  <th className="py-2 pr-3 text-right whitespace-nowrap">Out</th>
+                  <th className="py-2 pr-3 whitespace-nowrap">{t('accounting.ledger.col_date')}</th>
+                  <th className="py-2 pr-3">{t('accounting.ledger.col_source')}</th>
+                  <th className="py-2 pr-3">{t('accounting.ledger.col_category')}</th>
+                  <th className="py-2 pr-3">{t('accounting.ledger.col_description')}</th>
+                  <th className="py-2 pr-3 text-right whitespace-nowrap">{t('accounting.ledger.col_in')}</th>
+                  <th className="py-2 pr-3 text-right whitespace-nowrap">{t('accounting.ledger.col_out')}</th>
                 </tr>
               )}
               itemContent={(_i, r) => (
@@ -396,7 +399,7 @@ export default function LedgerPage() {
                       : r.source === 'staff_salary_payment' ? 'bg-amber-50 text-amber-700'
                       : 'bg-rose-50 text-rose-700'
                     }`}>
-                      {SOURCE_LABELS[r.source]}
+                      {t(SOURCE_LABELS[r.source])}
                     </span>
                   </td>
                   <td className="py-2 pr-3 text-gray-700">{r.category}</td>
@@ -414,7 +417,7 @@ export default function LedgerPage() {
               )}
             />
             {loadingMore && (
-              <div className="py-3 text-center text-xs text-gray-400">Loading more…</div>
+              <div className="py-3 text-center text-xs text-gray-400">{t('accounting.ledger.loading_more')}</div>
             )}
           </div>
         )}
