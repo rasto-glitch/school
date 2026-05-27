@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'react-toastify';
 import { Scale, BookText, ListTree, CheckCircle2, AlertTriangle, TrendingUp, FileBarChart, Plus, Pencil, Trash2, Power, X, FileText, FileSpreadsheet } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
@@ -47,18 +48,20 @@ function ExportButtons({ onPdf, onXlsx }: { onPdf?: () => void; onXlsx: () => vo
   );
 }
 
+// i18n keys; resolved with t() at render.
 const TYPE_LABELS: Record<string, string> = {
-  asset: 'Assets', liability: 'Liabilities', equity: 'Equity', income: 'Income', expense: 'Expenses',
+  asset: 'accounting.gl.type_asset', liability: 'accounting.gl.type_liability', equity: 'accounting.gl.type_equity', income: 'accounting.gl.type_income', expense: 'accounting.gl.type_expense',
 };
 const TYPE_ORDER = ['asset', 'liability', 'equity', 'income', 'expense'];
 
 const SOURCE_LABELS: Record<string, string> = {
-  tuition_billing: 'Tuition billed', fee_payment: 'Tuition payment', refund: 'Refund',
-  expense: 'Expense', salary: 'Salary', insurance_payout: 'Insurance payout',
-  late_fee: 'Late fee', manual: 'Manual entry', reversal: 'Reversal', opening: 'Opening balance',
+  tuition_billing: 'accounting.gl.src_tuition_billing', fee_payment: 'accounting.gl.src_fee_payment', refund: 'accounting.gl.src_refund',
+  expense: 'accounting.gl.src_expense', salary: 'accounting.gl.src_salary', insurance_payout: 'accounting.gl.src_insurance',
+  late_fee: 'accounting.gl.src_late_fee', manual: 'accounting.gl.src_manual', reversal: 'accounting.gl.src_reversal', opening: 'accounting.gl.src_opening',
 };
 
 export default function GeneralLedgerPage() {
+  const { t } = useTranslation();
   const { school } = useAuthStore();
   const isPremium = school?.features?.tuition_fees === true;
 
@@ -99,53 +102,53 @@ export default function GeneralLedgerPage() {
   const loadTrialBalance = useCallback(async (d: string) => {
     setTbLoading(true);
     try { setTb((await glApi.trialBalance({ asOf: d || undefined })).data.currencies); }
-    catch (e: any) { toast.error(e.response?.data?.error || 'Failed to load trial balance'); setTb([]); }
+    catch (e: any) { toast.error(e.response?.data?.error || t('accounting.gl.load_tb_failed')); setTb([]); }
     finally { setTbLoading(false); }
   }, []);
 
   const loadPl = useCallback(async (s: string, e: string) => {
     setPlLoading(true);
     try { setPl((await glApi.incomeStatement({ startDate: s || undefined, endDate: e || undefined })).data.currencies); }
-    catch (err: any) { toast.error(err.response?.data?.error || 'Failed to load income statement'); setPl([]); }
+    catch (err: any) { toast.error(err.response?.data?.error || t('accounting.gl.load_pl_failed')); setPl([]); }
     finally { setPlLoading(false); }
   }, []);
 
   const loadBs = useCallback(async (d: string) => {
     setBsLoading(true);
     try { setBs((await glApi.balanceSheet({ asOf: d || undefined })).data.currencies); }
-    catch (e: any) { toast.error(e.response?.data?.error || 'Failed to load balance sheet'); setBs([]); }
+    catch (e: any) { toast.error(e.response?.data?.error || t('accounting.gl.load_bs_failed')); setBs([]); }
     finally { setBsLoading(false); }
   }, []);
 
   const loadAccounts = useCallback(async () => {
     try { setAccounts((await glApi.accounts()).data); }
-    catch (e: any) { toast.error(e.response?.data?.error || 'Failed to load chart of accounts'); setAccounts([]); }
+    catch (e: any) { toast.error(e.response?.data?.error || t('accounting.gl.load_coa_failed')); setAccounts([]); }
   }, []);
 
   const loadJournal = useCallback(async () => {
     try { setJournal((await glApi.journal({ limit: 100 })).data); }
-    catch (e: any) { toast.error(e.response?.data?.error || 'Failed to load journal'); setJournal([]); }
+    catch (e: any) { toast.error(e.response?.data?.error || t('accounting.gl.load_journal_failed')); setJournal([]); }
   }, []);
 
   const openAccount = useCallback(async (id: string) => {
     setLedgerLoading(true);
     setLedger({ account: { id, code: '', name: '', type: '' }, debitNormal: true, startDate: null, endDate: null, currencies: [] });
     try { setLedger((await glApi.accountLedger(id)).data); }
-    catch (e: any) { toast.error(e.response?.data?.error || 'Failed to load account'); setLedger(null); }
+    catch (e: any) { toast.error(e.response?.data?.error || t('accounting.gl.load_account_failed')); setLedger(null); }
     finally { setLedgerLoading(false); }
   }, []);
 
   const toggleActive = async (a: GlAccount) => {
     try {
       await glApi.updateAccount(a.id, { isActive: !a.isActive });
-      toast.success(a.isActive ? 'Account deactivated' : 'Account activated');
+      toast.success(a.isActive ? t('accounting.gl.account_deactivated') : t('accounting.gl.account_activated'));
       loadAccounts();
-    } catch (e: any) { toast.error(e.response?.data?.error || 'Failed to update account'); }
+    } catch (e: any) { toast.error(e.response?.data?.error || t('accounting.gl.update_account_failed')); }
   };
   const removeAccount = async (a: GlAccount) => {
-    if (!window.confirm(`Delete account ${a.code} ${a.name}? This cannot be undone.`)) return;
-    try { await glApi.deleteAccount(a.id); toast.success('Account deleted'); loadAccounts(); }
-    catch (e: any) { toast.error(e.response?.data?.error || 'Failed to delete account'); }
+    if (!window.confirm(t('accounting.gl.delete_account_confirm', { code: a.code, name: a.name }))) return;
+    try { await glApi.deleteAccount(a.id); toast.success(t('accounting.gl.account_deleted')); loadAccounts(); }
+    catch (e: any) { toast.error(e.response?.data?.error || t('accounting.gl.delete_account_failed')); }
   };
 
   // After posting an entry, every report is stale — drop the caches and reload
@@ -171,11 +174,11 @@ export default function GeneralLedgerPage() {
 
   if (!isPremium) {
     return (
-      <PageLayout title="General Ledger" subtitle="Premium feature">
+      <PageLayout title={t('accounting.gl.title')} subtitle={t('accounting.premium_subtitle')}>
         <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 max-w-xl">
-          <h3 className="font-semibold text-amber-900 mb-1">Accounting module not enabled</h3>
+          <h3 className="font-semibold text-amber-900 mb-1">{t('accounting.tuition.not_enabled_title')}</h3>
           <p className="text-sm text-amber-800">
-            The accounting module is part of the Premium plan. Contact Scholify to enable it for your school.
+            {t('accounting.tuition.not_enabled_body')}
           </p>
         </div>
       </PageLayout>
@@ -183,11 +186,11 @@ export default function GeneralLedgerPage() {
   }
 
   const tabs: { key: Tab; label: string; icon: typeof Scale }[] = [
-    { key: 'trial', label: 'Trial Balance', icon: Scale },
-    { key: 'pl', label: 'Income (P&L)', icon: TrendingUp },
-    { key: 'balance', label: 'Balance Sheet', icon: FileBarChart },
-    { key: 'accounts', label: 'Chart of Accounts', icon: ListTree },
-    { key: 'journal', label: 'Journal', icon: BookText },
+    { key: 'trial', label: t('accounting.gl.tab_trial'), icon: Scale },
+    { key: 'pl', label: t('accounting.gl.tab_pl'), icon: TrendingUp },
+    { key: 'balance', label: t('accounting.gl.tab_balance'), icon: FileBarChart },
+    { key: 'accounts', label: t('accounting.gl.tab_accounts'), icon: ListTree },
+    { key: 'journal', label: t('accounting.gl.tab_journal'), icon: BookText },
   ];
 
   const acctBtn = (id: string, label: ReactNode) => (
@@ -195,20 +198,20 @@ export default function GeneralLedgerPage() {
   );
 
   return (
-    <PageLayout title="General Ledger" subtitle="Double-entry book of record — every transaction, immutable and balanced">
+    <PageLayout title={t('accounting.gl.title')} subtitle={t('accounting.gl.subtitle')}>
       <div className="flex flex-wrap gap-2 mb-4">
-        {tabs.map(t => {
-          const Icon = t.icon;
+        {tabs.map(tabItem => {
+          const Icon = tabItem.icon;
           return (
             <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
+              key={tabItem.key}
+              onClick={() => setTab(tabItem.key)}
               className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                tab === t.key ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                tab === tabItem.key ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
               <Icon className="w-4 h-4" />
-              {t.label}
+              {tabItem.label}
             </button>
           );
         })}
@@ -219,8 +222,8 @@ export default function GeneralLedgerPage() {
         <>
           <Card className="mb-4">
             <div className="flex items-end gap-3 flex-wrap">
-              <Input label="As of" type="date" value={asOf} onChange={e => setAsOf(e.target.value)} />
-              <Button onClick={() => loadTrialBalance(asOf)} loading={tbLoading}>Apply</Button>
+              <Input label={t('accounting.gl.as_of')} type="date" value={asOf} onChange={e => setAsOf(e.target.value)} />
+              <Button onClick={() => loadTrialBalance(asOf)} loading={tbLoading}>{t('accounting.ledger.apply')}</Button>
               <div className="ml-auto">
                 <ExportButtons
                   onPdf={() => doExport(() => glApi.trialBalancePdf({ asOf: asOf || undefined }), `trial-balance-${asOf || 'today'}.pdf`)}
@@ -230,21 +233,21 @@ export default function GeneralLedgerPage() {
             </div>
           </Card>
           {tb === null || tbLoading ? <LoadingSpinner /> : tb.length === 0 ? (
-            <EmptyState title="Nothing posted yet" description="Once tuition is billed or payments are recorded, balanced entries appear here." icon={<Scale className="w-8 h-8 text-gray-400" />} />
+            <EmptyState title={t('accounting.gl.nothing_posted')} description={t('accounting.gl.nothing_posted_desc')} icon={<Scale className="w-8 h-8 text-gray-400" />} />
           ) : tb.map(block => (
             <Card key={block.currency} className="mb-4">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="font-semibold text-gray-900">Trial Balance · {block.currency}</h3>
+                <h3 className="font-semibold text-gray-900">{t('accounting.gl.tab_trial')} · {block.currency}</h3>
                 <BalancedBadge balanced={block.balanced} />
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="text-left text-xs font-medium text-gray-500 border-b border-gray-100">
-                      <th className="py-2 pr-3 whitespace-nowrap">Code</th>
-                      <th className="py-2 pr-3">Account</th>
-                      <th className="py-2 pr-3 text-right whitespace-nowrap">Debit</th>
-                      <th className="py-2 pr-3 text-right whitespace-nowrap">Credit</th>
+                      <th className="py-2 pr-3 whitespace-nowrap">{t('accounting.gl.col_code')}</th>
+                      <th className="py-2 pr-3">{t('accounting.gl.col_account')}</th>
+                      <th className="py-2 pr-3 text-right whitespace-nowrap">{t('accounting.gl.col_debit')}</th>
+                      <th className="py-2 pr-3 text-right whitespace-nowrap">{t('accounting.gl.col_credit')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -259,7 +262,7 @@ export default function GeneralLedgerPage() {
                   </tbody>
                   <tfoot>
                     <tr className="border-t-2 border-gray-200 font-semibold text-gray-900">
-                      <td className="py-2 pr-3" colSpan={2}>Totals</td>
+                      <td className="py-2 pr-3" colSpan={2}>{t('accounting.gl.totals')}</td>
                       <td className="py-2 pr-3 text-right whitespace-nowrap">{fmt(block.totalDebit, block.currency)}</td>
                       <td className="py-2 pr-3 text-right whitespace-nowrap">{fmt(block.totalCredit, block.currency)}</td>
                     </tr>
@@ -276,9 +279,9 @@ export default function GeneralLedgerPage() {
         <>
           <Card className="mb-4">
             <div className="flex items-end gap-3 flex-wrap">
-              <Input label="From" type="date" value={plStart} onChange={e => setPlStart(e.target.value)} />
-              <Input label="To" type="date" value={plEnd} onChange={e => setPlEnd(e.target.value)} />
-              <Button onClick={() => loadPl(plStart, plEnd)} loading={plLoading}>Apply</Button>
+              <Input label={t('accounting.ledger.from')} type="date" value={plStart} onChange={e => setPlStart(e.target.value)} />
+              <Input label={t('accounting.ledger.to')} type="date" value={plEnd} onChange={e => setPlEnd(e.target.value)} />
+              <Button onClick={() => loadPl(plStart, plEnd)} loading={plLoading}>{t('accounting.ledger.apply')}</Button>
               <div className="ml-auto">
                 <ExportButtons
                   onPdf={() => doExport(() => glApi.incomeStatementPdf({ startDate: plStart || undefined, endDate: plEnd || undefined }), `income-statement-${plStart}-to-${plEnd}.pdf`)}
@@ -288,15 +291,15 @@ export default function GeneralLedgerPage() {
             </div>
           </Card>
           {pl === null || plLoading ? <LoadingSpinner /> : pl.length === 0 ? (
-            <EmptyState title="No income or expenses in range" description="Try a wider date range." icon={<TrendingUp className="w-8 h-8 text-gray-400" />} />
+            <EmptyState title={t('accounting.gl.no_pl')} description={t('accounting.gl.no_pl_desc')} icon={<TrendingUp className="w-8 h-8 text-gray-400" />} />
           ) : pl.map(b => (
             <Card key={b.currency} className="mb-4">
-              <h3 className="font-semibold text-gray-900 mb-3">Income Statement · {b.currency}</h3>
-              <Section title="Income" rows={b.income} currency={b.currency} total={b.totalIncome} totalLabel="Total income" tone="emerald" />
+              <h3 className="font-semibold text-gray-900 mb-3">{t('accounting.gl.income_statement')} · {b.currency}</h3>
+              <Section title={t('accounting.income')} rows={b.income} currency={b.currency} total={b.totalIncome} totalLabel={t('accounting.gl.total_income')} tone="emerald" />
               <div className="h-3" />
-              <Section title="Expenses" rows={b.expense} currency={b.currency} total={b.totalExpense} totalLabel="Total expenses" tone="rose" />
+              <Section title={t('accounting.gl.type_expense')} rows={b.expense} currency={b.currency} total={b.totalExpense} totalLabel={t('accounting.gl.total_expenses')} tone="rose" />
               <div className="flex items-center justify-between mt-3 pt-3 border-t-2 border-gray-200">
-                <span className="font-semibold text-gray-900">Net {b.netIncome >= 0 ? 'profit' : 'loss'}</span>
+                <span className="font-semibold text-gray-900">{b.netIncome >= 0 ? t('accounting.gl.net_profit') : t('accounting.gl.net_loss')}</span>
                 <span className={`font-bold ${b.netIncome >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{fmt(b.netIncome, b.currency)}</span>
               </div>
             </Card>
@@ -309,8 +312,8 @@ export default function GeneralLedgerPage() {
         <>
           <Card className="mb-4">
             <div className="flex items-end gap-3 flex-wrap">
-              <Input label="As of" type="date" value={bsAsOf} onChange={e => setBsAsOf(e.target.value)} />
-              <Button onClick={() => loadBs(bsAsOf)} loading={bsLoading}>Apply</Button>
+              <Input label={t('accounting.gl.as_of')} type="date" value={bsAsOf} onChange={e => setBsAsOf(e.target.value)} />
+              <Button onClick={() => loadBs(bsAsOf)} loading={bsLoading}>{t('accounting.ledger.apply')}</Button>
               <div className="ml-auto">
                 <ExportButtons
                   onPdf={() => doExport(() => glApi.balanceSheetPdf({ asOf: bsAsOf || undefined }), `balance-sheet-${bsAsOf || 'today'}.pdf`)}
@@ -320,24 +323,24 @@ export default function GeneralLedgerPage() {
             </div>
           </Card>
           {bs === null || bsLoading ? <LoadingSpinner /> : bs.length === 0 ? (
-            <EmptyState title="Nothing on the books yet" description="Record some transactions to populate the balance sheet." icon={<FileBarChart className="w-8 h-8 text-gray-400" />} />
+            <EmptyState title={t('accounting.gl.nothing_books')} description={t('accounting.gl.nothing_books_desc')} icon={<FileBarChart className="w-8 h-8 text-gray-400" />} />
           ) : bs.map(b => (
             <Card key={b.currency} className="mb-4">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="font-semibold text-gray-900">Balance Sheet · {b.currency}</h3>
+                <h3 className="font-semibold text-gray-900">{t('accounting.gl.tab_balance')} · {b.currency}</h3>
                 <BalancedBadge balanced={b.balanced} />
               </div>
-              <Section title="Assets" rows={b.assets} currency={b.currency} total={b.totalAssets} totalLabel="Total assets" tone="gray" />
+              <Section title={t('accounting.gl.type_asset')} rows={b.assets} currency={b.currency} total={b.totalAssets} totalLabel={t('accounting.gl.total_assets')} tone="gray" />
               <div className="h-3" />
-              <Section title="Liabilities" rows={b.liabilities} currency={b.currency} total={b.totalLiabilities} totalLabel="Total liabilities" tone="gray" />
+              <Section title={t('accounting.gl.type_liability')} rows={b.liabilities} currency={b.currency} total={b.totalLiabilities} totalLabel={t('accounting.gl.total_liabilities')} tone="gray" />
               <div className="h-3" />
               <Section
-                title="Equity" currency={b.currency} tone="gray"
-                rows={[...b.equity, { code: '', name: 'Current period earnings', amount: b.currentEarnings }]}
-                total={b.totalEquity} totalLabel="Total equity"
+                title={t('accounting.gl.type_equity')} currency={b.currency} tone="gray"
+                rows={[...b.equity, { code: '', name: t('accounting.gl.current_earnings'), amount: b.currentEarnings }]}
+                total={b.totalEquity} totalLabel={t('accounting.gl.total_equity')}
               />
               <div className="flex items-center justify-between mt-3 pt-3 border-t-2 border-gray-200">
-                <span className="font-semibold text-gray-900">Liabilities + Equity</span>
+                <span className="font-semibold text-gray-900">{t('accounting.gl.liab_plus_equity')}</span>
                 <span className="font-bold text-gray-900">{fmt(b.totalLiabilities + b.totalEquity, b.currency)}</span>
               </div>
             </Card>
@@ -349,19 +352,19 @@ export default function GeneralLedgerPage() {
       {tab === 'accounts' && (
         <Card>
           <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
-            <h3 className="font-semibold text-gray-900">Chart of Accounts</h3>
+            <h3 className="font-semibold text-gray-900">{t('accounting.gl.tab_accounts')}</h3>
             <div className="flex items-center gap-2">
-              <Button size="sm" variant="ghost" onClick={() => { if (accounts === null) loadAccounts(); setShowOpening(true); }}>Opening balances</Button>
-              <Button size="sm" icon={<Plus className="w-4 h-4" />} onClick={() => setShowNewAccount(true)}>Add account</Button>
+              <Button size="sm" variant="ghost" onClick={() => { if (accounts === null) loadAccounts(); setShowOpening(true); }}>{t('accounting.gl.opening_balances')}</Button>
+              <Button size="sm" icon={<Plus className="w-4 h-4" />} onClick={() => setShowNewAccount(true)}>{t('accounting.gl.add_account')}</Button>
             </div>
           </div>
           {accounts === null ? <LoadingSpinner /> : accounts.length === 0 ? (
-            <EmptyState title="No accounts" description="The chart is seeded on first use." icon={<ListTree className="w-8 h-8 text-gray-400" />} />
+            <EmptyState title={t('accounting.gl.no_accounts')} description={t('accounting.gl.no_accounts_desc')} icon={<ListTree className="w-8 h-8 text-gray-400" />} />
           ) : (
             <div className="space-y-5">
               {TYPE_ORDER.filter(type => accounts.some(a => a.type === type)).map(type => (
                 <div key={type}>
-                  <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">{TYPE_LABELS[type]}</div>
+                  <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">{t(TYPE_LABELS[type])}</div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <tbody>
@@ -370,17 +373,17 @@ export default function GeneralLedgerPage() {
                             <td className="py-2 pr-3 text-gray-500 font-mono text-xs whitespace-nowrap w-16">{a.code}</td>
                             <td className="py-2 pr-3 text-gray-900">
                               {acctBtn(a.id, a.name)}
-                              {a.isSystem && <span className="ml-2 text-xs text-gray-400">system</span>}
-                              {!a.isActive && <span className="ml-2 text-xs text-amber-600">inactive</span>}
+                              {a.isSystem && <span className="ml-2 text-xs text-gray-400">{t('accounting.gl.system')}</span>}
+                              {!a.isActive && <span className="ml-2 text-xs text-amber-600">{t('accounting.gl.inactive')}</span>}
                             </td>
                             <td className="py-2 pr-3 text-right whitespace-nowrap">
                               <div className="inline-flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button title="Edit" onClick={() => setEditAccount(a)} className="p-1 rounded hover:bg-gray-100 text-gray-500"><Pencil className="w-3.5 h-3.5" /></button>
+                                <button title={t('accounting.gl.edit')} onClick={() => setEditAccount(a)} className="p-1 rounded hover:bg-gray-100 text-gray-500"><Pencil className="w-3.5 h-3.5" /></button>
                                 {!a.isSystem && (
-                                  <button title={a.isActive ? 'Deactivate' : 'Activate'} onClick={() => toggleActive(a)} className={`p-1 rounded hover:bg-gray-100 ${a.isActive ? 'text-gray-500' : 'text-amber-600'}`}><Power className="w-3.5 h-3.5" /></button>
+                                  <button title={a.isActive ? t('accounting.gl.deactivate') : t('accounting.gl.activate')} onClick={() => toggleActive(a)} className={`p-1 rounded hover:bg-gray-100 ${a.isActive ? 'text-gray-500' : 'text-amber-600'}`}><Power className="w-3.5 h-3.5" /></button>
                                 )}
                                 {!a.isSystem && (
-                                  <button title="Delete" onClick={() => removeAccount(a)} className="p-1 rounded hover:bg-rose-50 text-rose-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                                  <button title={t('accounting.gl.delete')} onClick={() => removeAccount(a)} className="p-1 rounded hover:bg-rose-50 text-rose-500"><Trash2 className="w-3.5 h-3.5" /></button>
                                 )}
                               </div>
                             </td>
@@ -400,14 +403,14 @@ export default function GeneralLedgerPage() {
       {tab === 'journal' && (
         <Card>
           <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
-            <h3 className="font-semibold text-gray-900">Journal</h3>
+            <h3 className="font-semibold text-gray-900">{t('accounting.gl.tab_journal')}</h3>
             <div className="flex items-center gap-2">
-              <Button size="sm" variant="ghost" icon={<FileSpreadsheet className="w-4 h-4" />} onClick={() => doExport(() => glApi.journalXlsx(), `journal-${todayISO()}.xlsx`)}>Excel</Button>
-              <Button size="sm" icon={<Plus className="w-4 h-4" />} onClick={() => { if (accounts === null) loadAccounts(); setShowEntry(true); }}>New entry</Button>
+              <Button size="sm" variant="ghost" icon={<FileSpreadsheet className="w-4 h-4" />} onClick={() => doExport(() => glApi.journalXlsx(), `journal-${todayISO()}.xlsx`)}>{t('accounting.archive.excel')}</Button>
+              <Button size="sm" icon={<Plus className="w-4 h-4" />} onClick={() => { if (accounts === null) loadAccounts(); setShowEntry(true); }}>{t('accounting.gl.new_entry')}</Button>
             </div>
           </div>
           {journal === null ? <LoadingSpinner /> : journal.length === 0 ? (
-            <EmptyState title="No journal entries yet" description="Entries are posted automatically as money moves." icon={<BookText className="w-8 h-8 text-gray-400" />} />
+            <EmptyState title={t('accounting.gl.no_journal')} description={t('accounting.gl.no_journal_desc')} icon={<BookText className="w-8 h-8 text-gray-400" />} />
           ) : (
             <div className="space-y-3">
               {journal.map(e => (
@@ -416,8 +419,8 @@ export default function GeneralLedgerPage() {
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-mono text-gray-400">#{e.entryNo}</span>
                       <span className="text-sm text-gray-700">{e.entryDate}</span>
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{SOURCE_LABELS[e.source] ?? e.source}</span>
-                      {e.isReversal && <span className="text-xs px-2 py-0.5 rounded-full bg-rose-50 text-rose-700">reversal</span>}
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{SOURCE_LABELS[e.source] ? t(SOURCE_LABELS[e.source]) : e.source}</span>
+                      {e.isReversal && <span className="text-xs px-2 py-0.5 rounded-full bg-rose-50 text-rose-700">{t('accounting.gl.reversal_badge')}</span>}
                     </div>
                     {e.memo && <span className="text-xs text-gray-500">{e.memo}</span>}
                   </div>
@@ -452,26 +455,26 @@ export default function GeneralLedgerPage() {
       )}
 
       {/* ── Account drill-down ── */}
-      <Modal isOpen={ledger !== null} onClose={() => setLedger(null)} title={ledger ? `${ledger.account.code} ${ledger.account.name}`.trim() : 'Account'} size="xl">
+      <Modal isOpen={ledger !== null} onClose={() => setLedger(null)} title={ledger ? `${ledger.account.code} ${ledger.account.name}`.trim() : t('accounting.gl.col_account')} size="xl">
         {ledgerLoading || !ledger ? <LoadingSpinner /> : ledger.currencies.length === 0 ? (
-          <p className="text-sm text-gray-500 py-4">No activity on this account.</p>
+          <p className="text-sm text-gray-500 py-4">{t('accounting.gl.no_activity')}</p>
         ) : (
           <div className="space-y-5">
             {ledger.currencies.map(c => (
               <div key={c.currency}>
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-medium text-gray-700">{c.currency}</span>
-                  <span className="text-xs text-gray-500">Opening {fmt(c.opening, c.currency)} · Closing <strong className="text-gray-800">{fmt(c.closing, c.currency)}</strong></span>
+                  <span className="text-xs text-gray-500">{t('accounting.gl.opening')} {fmt(c.opening, c.currency)} · {t('accounting.gl.closing')} <strong className="text-gray-800">{fmt(c.closing, c.currency)}</strong></span>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="text-left text-xs font-medium text-gray-500 border-b border-gray-100">
-                        <th className="py-2 pr-3 whitespace-nowrap">Date</th>
-                        <th className="py-2 pr-3">Description</th>
-                        <th className="py-2 pr-3 text-right whitespace-nowrap">Debit</th>
-                        <th className="py-2 pr-3 text-right whitespace-nowrap">Credit</th>
-                        <th className="py-2 pr-3 text-right whitespace-nowrap">Balance</th>
+                        <th className="py-2 pr-3 whitespace-nowrap">{t('accounting.gl.col_date')}</th>
+                        <th className="py-2 pr-3">{t('accounting.gl.col_description')}</th>
+                        <th className="py-2 pr-3 text-right whitespace-nowrap">{t('accounting.gl.col_debit')}</th>
+                        <th className="py-2 pr-3 text-right whitespace-nowrap">{t('accounting.gl.col_credit')}</th>
+                        <th className="py-2 pr-3 text-right whitespace-nowrap">{t('accounting.gl.col_balance')}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -480,7 +483,7 @@ export default function GeneralLedgerPage() {
                           <td className="py-1.5 pr-3 text-gray-600 whitespace-nowrap">{r.date}</td>
                           <td className="py-1.5 pr-3 text-gray-800">
                             <span className="text-xs text-gray-400 mr-1">#{r.entryNo}</span>
-                            {SOURCE_LABELS[r.source] ?? r.source}{r.memo ? ` · ${r.memo}` : ''}
+                            {SOURCE_LABELS[r.source] ? t(SOURCE_LABELS[r.source]) : r.source}{r.memo ? ` · ${r.memo}` : ''}
                           </td>
                           <td className="py-1.5 pr-3 text-right whitespace-nowrap">{r.debit ? fmt(r.debit, c.currency) : ''}</td>
                           <td className="py-1.5 pr-3 text-right whitespace-nowrap">{r.credit ? fmt(r.credit, c.currency) : ''}</td>
@@ -500,13 +503,14 @@ export default function GeneralLedgerPage() {
 }
 
 function BalancedBadge({ balanced }: { balanced: boolean }) {
+  const { t } = useTranslation();
   return balanced ? (
     <span className="flex items-center gap-1 text-xs text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
-      <CheckCircle2 className="w-3.5 h-3.5" /> Balanced
+      <CheckCircle2 className="w-3.5 h-3.5" /> {t('accounting.gl.balanced')}
     </span>
   ) : (
     <span className="flex items-center gap-1 text-xs text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full">
-      <AlertTriangle className="w-3.5 h-3.5" /> Out of balance
+      <AlertTriangle className="w-3.5 h-3.5" /> {t('accounting.gl.out_of_balance')}
     </span>
   );
 }
@@ -549,6 +553,7 @@ const ACCOUNT_TYPES: GlAccount['type'][] = ['asset', 'liability', 'equity', 'inc
 // ── Manual journal entry ──
 interface EntryLine { accountId: string; debit: string; credit: string; description: string }
 function ManualEntryModal({ accounts, onClose, onSaved }: { accounts: GlAccount[]; onClose: () => void; onSaved: () => void }) {
+  const { t } = useTranslation();
   const [entryDate, setEntryDate] = useState(todayISO());
   const [currency, setCurrency] = useState('USD');
   const [memo, setMemo] = useState('');
@@ -559,7 +564,7 @@ function ManualEntryModal({ accounts, onClose, onSaved }: { accounts: GlAccount[
   const [saving, setSaving] = useState(false);
 
   const active = accounts.filter(a => a.isActive);
-  const acctOptions = [{ value: '', label: '— account —' }, ...active.map(a => ({ value: a.id, label: `${a.code} ${a.name}` }))];
+  const acctOptions = [{ value: '', label: t('accounting.gl.account_ph') }, ...active.map(a => ({ value: a.id, label: `${a.code} ${a.name}` }))];
   const num = (s: string) => { const n = parseFloat(s); return isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : 0; };
   const totalDebit = lines.reduce((s, l) => s + num(l.debit), 0);
   const totalCredit = lines.reduce((s, l) => s + num(l.credit), 0);
@@ -583,27 +588,27 @@ function ManualEntryModal({ accounts, onClose, onSaved }: { accounts: GlAccount[
           description: l.description.trim() || null,
         })),
       });
-      toast.success('Journal entry posted');
+      toast.success(t('accounting.gl.entry_posted'));
       onSaved();
-    } catch (e: any) { toast.error(e.response?.data?.error || 'Failed to post entry'); }
+    } catch (e: any) { toast.error(e.response?.data?.error || t('accounting.gl.post_entry_failed')); }
     finally { setSaving(false); }
   };
 
   return (
-    <Modal isOpen onClose={onClose} title="New journal entry" size="xl">
+    <Modal isOpen onClose={onClose} title={t('accounting.gl.new_entry_title')} size="xl">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-        <Input label="Date" type="date" value={entryDate} onChange={e => setEntryDate(e.target.value)} />
-        <Input label="Currency" value={currency} onChange={e => setCurrency(e.target.value)} maxLength={8} />
-        <Input label="Memo" value={memo} onChange={e => setMemo(e.target.value)} placeholder="Optional" />
+        <Input label={t('accounting.gl.f_date')} type="date" value={entryDate} onChange={e => setEntryDate(e.target.value)} />
+        <Input label={t('accounting.gl.f_currency')} value={currency} onChange={e => setCurrency(e.target.value)} maxLength={8} />
+        <Input label={t('accounting.gl.f_memo')} value={memo} onChange={e => setMemo(e.target.value)} placeholder={t('accounting.gl.optional')} />
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-xs font-medium text-gray-500 border-b border-gray-100">
-              <th className="py-2 pr-2">Account</th>
-              <th className="py-2 pr-2 text-right w-28">Debit</th>
-              <th className="py-2 pr-2 text-right w-28">Credit</th>
-              <th className="py-2 pr-2">Description</th>
+              <th className="py-2 pr-2">{t('accounting.gl.col_account')}</th>
+              <th className="py-2 pr-2 text-right w-28">{t('accounting.gl.col_debit')}</th>
+              <th className="py-2 pr-2 text-right w-28">{t('accounting.gl.col_credit')}</th>
+              <th className="py-2 pr-2">{t('accounting.gl.col_description')}</th>
               <th className="w-8" />
             </tr>
           </thead>
@@ -620,7 +625,7 @@ function ManualEntryModal({ accounts, onClose, onSaved }: { accounts: GlAccount[
                   <Input type="number" value={l.credit} onChange={e => setLine(i, { credit: e.target.value, debit: e.target.value ? '' : l.debit })} className="text-right" />
                 </td>
                 <td className="py-1 pr-2">
-                  <Input value={l.description} onChange={e => setLine(i, { description: e.target.value })} placeholder="Optional" />
+                  <Input value={l.description} onChange={e => setLine(i, { description: e.target.value })} placeholder={t('accounting.gl.optional')} />
                 </td>
                 <td className="py-1 text-center">
                   <button onClick={() => removeLine(i)} disabled={lines.length <= 2} className="p-1 rounded hover:bg-gray-100 text-gray-400 disabled:opacity-30"><X className="w-4 h-4" /></button>
@@ -631,17 +636,17 @@ function ManualEntryModal({ accounts, onClose, onSaved }: { accounts: GlAccount[
         </table>
       </div>
       <div className="flex items-center justify-between mt-2">
-        <Button size="sm" variant="ghost" icon={<Plus className="w-4 h-4" />} onClick={addLine}>Add line</Button>
+        <Button size="sm" variant="ghost" icon={<Plus className="w-4 h-4" />} onClick={addLine}>{t('accounting.gl.add_line')}</Button>
         <div className="text-sm">
-          <span className="text-gray-500 mr-3">Debit {totalDebit.toFixed(2)} · Credit {totalCredit.toFixed(2)}</span>
+          <span className="text-gray-500 mr-3">{t('accounting.gl.col_debit')} {totalDebit.toFixed(2)} · {t('accounting.gl.col_credit')} {totalCredit.toFixed(2)}</span>
           {diff === 0
-            ? <span className="text-emerald-700 font-medium">Balanced</span>
-            : <span className="text-rose-700 font-medium">Off by {Math.abs(diff).toFixed(2)}</span>}
+            ? <span className="text-emerald-700 font-medium">{t('accounting.gl.balanced')}</span>
+            : <span className="text-rose-700 font-medium">{t('accounting.gl.off_by', { amount: Math.abs(diff).toFixed(2) })}</span>}
         </div>
       </div>
       <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-gray-100">
-        <Button variant="ghost" onClick={onClose}>Cancel</Button>
-        <Button onClick={submit} loading={saving} disabled={!canSave}>Post entry</Button>
+        <Button variant="ghost" onClick={onClose}>{t('common.cancel')}</Button>
+        <Button onClick={submit} loading={saving} disabled={!canSave}>{t('accounting.gl.post_entry')}</Button>
       </div>
     </Modal>
   );
@@ -649,6 +654,7 @@ function ManualEntryModal({ accounts, onClose, onSaved }: { accounts: GlAccount[
 
 // ── Create / edit account ──
 function AccountFormModal({ account, onClose, onSaved }: { account: GlAccount | null; onClose: () => void; onSaved: () => void }) {
+  const { t } = useTranslation();
   const editing = !!account;
   const [code, setCode] = useState(account?.code ?? '');
   const [name, setName] = useState(account?.name ?? '');
@@ -657,29 +663,29 @@ function AccountFormModal({ account, onClose, onSaved }: { account: GlAccount | 
   const [saving, setSaving] = useState(false);
 
   const submit = async () => {
-    if (!name.trim() || (!editing && !code.trim())) { toast.error('Code and name are required'); return; }
+    if (!name.trim() || (!editing && !code.trim())) { toast.error(t('accounting.gl.code_name_required')); return; }
     setSaving(true);
     try {
       if (editing) await glApi.updateAccount(account!.id, { name: name.trim(), subtype: subtype.trim() || null });
       else await glApi.createAccount({ code: code.trim(), name: name.trim(), type, subtype: subtype.trim() || null });
-      toast.success(editing ? 'Account updated' : 'Account created');
+      toast.success(editing ? t('accounting.gl.account_updated') : t('accounting.gl.account_created'));
       onSaved();
-    } catch (e: any) { toast.error(e.response?.data?.error || 'Failed to save account'); }
+    } catch (e: any) { toast.error(e.response?.data?.error || t('accounting.gl.save_account_failed')); }
     finally { setSaving(false); }
   };
 
   return (
-    <Modal isOpen onClose={onClose} title={editing ? 'Edit account' : 'New account'} size="md">
+    <Modal isOpen onClose={onClose} title={editing ? t('accounting.gl.edit_account') : t('accounting.gl.new_account')} size="md">
       <div className="space-y-3">
-        <Input label="Code" value={code} onChange={e => setCode(e.target.value)} disabled={editing} placeholder="e.g. 5200" />
-        <Input label="Name" value={name} onChange={e => setName(e.target.value)} />
-        <Select label="Type" options={ACCOUNT_TYPES.map(t => ({ value: t, label: t[0].toUpperCase() + t.slice(1) }))} value={type} onChange={e => setType(e.target.value as GlAccount['type'])} disabled={editing} />
-        <Input label="Subtype (optional)" value={subtype ?? ''} onChange={e => setSubtype(e.target.value)} placeholder="e.g. cash, payable" />
-        {editing && <p className="text-xs text-gray-400">Code and type can't be changed once an account exists.</p>}
+        <Input label={t('accounting.gl.col_code')} value={code} onChange={e => setCode(e.target.value)} disabled={editing} placeholder="e.g. 5200" />
+        <Input label={t('accounting.gl.f_name')} value={name} onChange={e => setName(e.target.value)} />
+        <Select label={t('accounting.gl.f_type')} options={ACCOUNT_TYPES.map(ty => ({ value: ty, label: t(TYPE_LABELS[ty]) }))} value={type} onChange={e => setType(e.target.value as GlAccount['type'])} disabled={editing} />
+        <Input label={t('accounting.gl.f_subtype')} value={subtype ?? ''} onChange={e => setSubtype(e.target.value)} placeholder="e.g. cash, payable" />
+        {editing && <p className="text-xs text-gray-400">{t('accounting.gl.code_type_locked')}</p>}
       </div>
       <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-gray-100">
-        <Button variant="ghost" onClick={onClose}>Cancel</Button>
-        <Button onClick={submit} loading={saving}>{editing ? 'Save' : 'Create'}</Button>
+        <Button variant="ghost" onClick={onClose}>{t('common.cancel')}</Button>
+        <Button onClick={submit} loading={saving}>{editing ? t('common.save') : t('accounting.gl.create')}</Button>
       </div>
     </Modal>
   );
@@ -687,6 +693,7 @@ function AccountFormModal({ account, onClose, onSaved }: { account: GlAccount | 
 
 // ── Opening balances ──
 function OpeningBalancesModal({ accounts, onClose, onSaved }: { accounts: GlAccount[]; onClose: () => void; onSaved: () => void }) {
+  const { t } = useTranslation();
   const [asOf, setAsOf] = useState(todayISO());
   const [currency, setCurrency] = useState('USD');
   const [amounts, setAmounts] = useState<Record<string, string>>({});
@@ -698,34 +705,34 @@ function OpeningBalancesModal({ accounts, onClose, onSaved }: { accounts: GlAcco
   const nonZero = eligible.filter(a => num(amounts[a.id]) !== 0);
 
   const submit = async () => {
-    if (nonZero.length === 0) { toast.error('Enter at least one opening balance'); return; }
+    if (nonZero.length === 0) { toast.error(t('accounting.gl.enter_one_balance')); return; }
     setSaving(true);
     try {
       await glApi.postOpeningBalances({
         asOf, currency: currency.trim().toUpperCase() || 'USD',
         balances: nonZero.map(a => ({ accountId: a.id, amount: num(amounts[a.id]) })),
       });
-      toast.success('Opening balances posted');
+      toast.success(t('accounting.gl.opening_posted'));
       onSaved();
-    } catch (e: any) { toast.error(e.response?.data?.error || 'Failed to post opening balances'); }
+    } catch (e: any) { toast.error(e.response?.data?.error || t('accounting.gl.opening_failed')); }
     finally { setSaving(false); }
   };
 
   return (
-    <Modal isOpen onClose={onClose} title="Set opening balances" size="lg">
+    <Modal isOpen onClose={onClose} title={t('accounting.gl.set_opening')} size="lg">
       <div className="grid grid-cols-2 gap-3 mb-3">
-        <Input label="As of" type="date" value={asOf} onChange={e => setAsOf(e.target.value)} />
-        <Input label="Currency" value={currency} onChange={e => setCurrency(e.target.value)} maxLength={8} />
+        <Input label={t('accounting.gl.as_of')} type="date" value={asOf} onChange={e => setAsOf(e.target.value)} />
+        <Input label={t('accounting.gl.f_currency')} value={currency} onChange={e => setCurrency(e.target.value)} maxLength={8} />
       </div>
       <p className="text-xs text-gray-500 mb-3">
-        Enter each account's starting balance in its normal direction (assets &amp; expenses positive = debit; liabilities, equity &amp; income positive = credit). The difference is posted automatically to Opening Balance Equity.
+        {t('accounting.gl.opening_help')}
       </p>
       <div className="max-h-[45vh] overflow-y-auto space-y-4">
-        {ACCOUNT_TYPES.filter(t => eligible.some(a => a.type === t)).map(t => (
-          <div key={t}>
-            <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1.5">{t}</div>
+        {ACCOUNT_TYPES.filter(ty => eligible.some(a => a.type === ty)).map(ty => (
+          <div key={ty}>
+            <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1.5">{t(TYPE_LABELS[ty])}</div>
             <div className="space-y-1">
-              {eligible.filter(a => a.type === t).map(a => (
+              {eligible.filter(a => a.type === ty).map(a => (
                 <div key={a.id} className="flex items-center gap-3">
                   <span className="text-xs font-mono text-gray-400 w-14">{a.code}</span>
                   <span className="flex-1 text-sm text-gray-800">{a.name}</span>
@@ -737,8 +744,8 @@ function OpeningBalancesModal({ accounts, onClose, onSaved }: { accounts: GlAcco
         ))}
       </div>
       <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-gray-100">
-        <Button variant="ghost" onClick={onClose}>Cancel</Button>
-        <Button onClick={submit} loading={saving} disabled={nonZero.length === 0}>Post opening balances</Button>
+        <Button variant="ghost" onClick={onClose}>{t('common.cancel')}</Button>
+        <Button onClick={submit} loading={saving} disabled={nonZero.length === 0}>{t('accounting.gl.post_opening')}</Button>
       </div>
     </Modal>
   );
