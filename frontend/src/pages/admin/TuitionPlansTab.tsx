@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { feesApi } from '../../services/api';
 import { toast } from 'react-toastify';
 import Button from '../../components/common/Button';
@@ -46,6 +47,7 @@ const empty: PlanForm = {
 };
 
 export default function TuitionPlansTab() {
+  const { t } = useTranslation();
   const [plans, setPlans] = useState<FeePlan[] | null>(null);
   const [classes, setClasses] = useState<Class[]>([]);
   const [currentAcademicYear, setCurrentAcademicYear] = useState<string>('');
@@ -55,7 +57,7 @@ export default function TuitionPlansTab() {
 
   const load = () => feesApi.listPlans().then(r => setPlans(r.data));
   useEffect(() => {
-    load().catch((e: any) => toast.error(e.response?.data?.error || 'Failed to load plans'));
+    load().catch((e: any) => toast.error(e.response?.data?.error || t('accounting.plans.load_failed')));
     feesApi.getSetup().then(r => {
       setClasses(r.data.classes as Class[]);
       setCurrentAcademicYear(r.data.currentAcademicYear ?? '');
@@ -86,10 +88,10 @@ export default function TuitionPlansTab() {
   const save = async () => {
     if (!editing) return;
     const total = Number(editing.totalAmount);
-    if (!editing.name.trim() || isNaN(total) || total < 0) { toast.error('Name and total are required'); return; }
+    if (!editing.name.trim() || isNaN(total) || total < 0) { toast.error(t('accounting.plans.err_name_total')); return; }
     const sumI = editing.installments.reduce((s, i) => s + Number(i.amount || 0), 0);
-    if (Math.abs(sumI - total) > 0.01) { toast.error('Installments must sum to the total'); return; }
-    if (editing.appliesTo === 'classes' && editing.classIds.length === 0) { toast.error('Select at least one class'); return; }
+    if (Math.abs(sumI - total) > 0.01) { toast.error(t('accounting.plans.err_installments_sum')); return; }
+    if (editing.appliesTo === 'classes' && editing.classIds.length === 0) { toast.error(t('accounting.plans.err_select_class')); return; }
 
     const body = {
       name: editing.name.trim(),
@@ -111,26 +113,26 @@ export default function TuitionPlansTab() {
     try {
       if (editing.id) {
         await feesApi.updatePlan(editing.id, body);
-        toast.success('Plan updated');
+        toast.success(t('accounting.plans.updated'));
       } else {
         await feesApi.createPlan(body);
-        toast.success('Plan created');
+        toast.success(t('accounting.plans.created'));
       }
       setEditing(null);
       await load();
     } catch (e: any) {
-      toast.error(e.response?.data?.error || 'Failed to save plan');
+      toast.error(e.response?.data?.error || t('accounting.plans.save_failed'));
     } finally { setSaving(false); }
   };
 
   const remove = async (p: FeePlan) => {
-    if (!confirm(`Delete plan "${p.name}"? This cannot be undone.`)) return;
+    if (!confirm(t('accounting.plans.delete_confirm', { name: p.name }))) return;
     try {
       await feesApi.deletePlan(p.id);
-      toast.success('Plan deleted');
+      toast.success(t('accounting.plans.deleted'));
       await load();
     } catch (e: any) {
-      toast.error(e.response?.data?.error || 'Failed to delete');
+      toast.error(e.response?.data?.error || t('accounting.plans.delete_failed'));
     }
   };
 
@@ -139,9 +141,10 @@ export default function TuitionPlansTab() {
     try {
       const r = await feesApi.assignPlan(p.id);
       const { assigned, skipped } = r.data;
-      toast.success(`Assigned to ${assigned} student${assigned === 1 ? '' : 's'}${skipped ? ` (${skipped} already had it)` : ''}`);
+      const base = t('accounting.plans.assigned', { count: assigned });
+      toast.success(skipped ? `${base} ${t('accounting.plans.assigned_skipped', { count: skipped })}` : base);
     } catch (e: any) {
-      toast.error(e.response?.data?.error || 'Failed to assign');
+      toast.error(e.response?.data?.error || t('accounting.plans.assign_failed'));
     } finally { setAssigning(null); }
   };
 
@@ -150,12 +153,12 @@ export default function TuitionPlansTab() {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <p className="text-sm text-gray-500">Fee plans define tuition amounts and installment due dates. Assign a plan to students to start tracking.</p>
-        <Button onClick={openNew} icon={<Plus className="w-4 h-4" />}>New plan</Button>
+        <p className="text-sm text-gray-500">{t('accounting.plans.intro')}</p>
+        <Button onClick={openNew} icon={<Plus className="w-4 h-4" />}>{t('accounting.plans.new_plan')}</Button>
       </div>
 
       {plans.length === 0 ? (
-        <EmptyState title="No plans yet" description="Create your first tuition plan." icon={<ListChecks className="w-8 h-8 text-gray-400" />} />
+        <EmptyState title={t('accounting.plans.none_title')} description={t('accounting.plans.none_desc')} icon={<ListChecks className="w-8 h-8 text-gray-400" />} />
       ) : (
         <div className="space-y-3">
           {plans.map(p => (
@@ -165,27 +168,27 @@ export default function TuitionPlansTab() {
                   <div className="flex items-center gap-2 flex-wrap">
                     <h3 className="font-semibold text-gray-900">{p.name}</h3>
                     {p.kind && p.kind !== 'tuition' && (
-                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 capitalize">
-                        {p.kind}
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                        {t(`accounting.tuition.kind.${p.kind}`)}
                       </span>
                     )}
                     {p.academicYear && <span className="text-xs text-gray-500">· {p.academicYear}</span>}
-                    {!p.isActive && <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">Inactive</span>}
+                    {!p.isActive && <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{t('accounting.plans.inactive')}</span>}
                     {p.lateFeeEnabled && (
                       <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
-                        Late fee {p.lateFeeType === 'percent' ? `${p.lateFeeAmount}%` : fmt(p.lateFeeAmount ?? 0, p.currency)}
+                        {t('accounting.plans.late_fee')} {p.lateFeeType === 'percent' ? `${p.lateFeeAmount}%` : fmt(p.lateFeeAmount ?? 0, p.currency)}
                       </span>
                     )}
                   </div>
                   <div className="text-sm text-gray-500">
-                    {fmt(p.totalAmount, p.currency)} · {p.installments.length} installment{p.installments.length === 1 ? '' : 's'} · {' '}
-                    {p.appliesTo === 'all' && 'all students'}
-                    {p.appliesTo === 'classes' && `${p.classIds.length} class${p.classIds.length === 1 ? '' : 'es'}`}
-                    {p.appliesTo === 'manual' && 'manual assignment'}
+                    {fmt(p.totalAmount, p.currency)} · {p.installments.length} {p.installments.length === 1 ? t('accounting.plans.one_installment') : t('accounting.plans.many_installments')} · {' '}
+                    {p.appliesTo === 'all' && t('accounting.plans.applies_all')}
+                    {p.appliesTo === 'classes' && t('accounting.plans.applies_classes_count', { count: p.classIds.length })}
+                    {p.appliesTo === 'manual' && t('accounting.plans.applies_manual')}
                   </div>
                 </div>
                 <div className="flex gap-1 shrink-0">
-                  <Button size="sm" variant="ghost" onClick={() => assign(p)} loading={assigning === p.id} icon={<UsersIcon className="w-4 h-4" />}>Assign</Button>
+                  <Button size="sm" variant="ghost" onClick={() => assign(p)} loading={assigning === p.id} icon={<UsersIcon className="w-4 h-4" />}>{t('accounting.plans.assign')}</Button>
                   <button onClick={() => openEdit(p)} className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg"><Pencil className="w-4 h-4" /></button>
                   <button onClick={() => remove(p)} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4" /></button>
                 </div>
@@ -195,9 +198,9 @@ export default function TuitionPlansTab() {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3">
                   {p.installments.map(i => (
                     <div key={i.id} className="rounded-lg bg-gray-50 px-3 py-2 text-xs">
-                      <div className="text-gray-500">Installment {i.sequence}</div>
+                      <div className="text-gray-500">{t('accounting.plans.installment_n', { n: i.sequence })}</div>
                       <div className="font-semibold text-gray-900">{fmt(i.amount, p.currency)}</div>
-                      <div className="text-gray-500">due {i.dueDate}</div>
+                      <div className="text-gray-500">{t('accounting.plans.due_date', { date: i.dueDate })}</div>
                     </div>
                   ))}
                 </div>
@@ -208,54 +211,54 @@ export default function TuitionPlansTab() {
       )}
 
       {editing && (
-        <Modal isOpen onClose={() => setEditing(null)} title={editing.id ? 'Edit plan' : 'New plan'} size="xl">
+        <Modal isOpen onClose={() => setEditing(null)} title={editing.id ? t('accounting.plans.edit_title') : t('accounting.plans.new_title')} size="xl">
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
-              <Input label="Name" value={editing.name} onChange={e => setEditing({ ...editing, name: e.target.value })} placeholder="2026-2027 Tuition" />
+              <Input label={t('accounting.plans.f_name')} value={editing.name} onChange={e => setEditing({ ...editing, name: e.target.value })} placeholder={t('accounting.plans.name_ph')} />
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Kind</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('accounting.plans.f_kind')}</label>
                 <select
                   value={editing.kind}
                   onChange={e => setEditing({ ...editing, kind: e.target.value as FeePlanKind })}
                   className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-gray-900 bg-white min-h-[44px] focus:outline-none focus:ring-2 focus:ring-primary-500"
                 >
-                  <option value="tuition">Tuition</option>
-                  <option value="transport">Transport</option>
-                  <option value="lunch">Lunch</option>
-                  <option value="uniform">Uniform</option>
-                  <option value="exam">Exam</option>
-                  <option value="registration">Registration</option>
-                  <option value="other">Other</option>
+                  <option value="tuition">{t('accounting.tuition.kind.tuition')}</option>
+                  <option value="transport">{t('accounting.tuition.kind.transport')}</option>
+                  <option value="lunch">{t('accounting.tuition.kind.lunch')}</option>
+                  <option value="uniform">{t('accounting.tuition.kind.uniform')}</option>
+                  <option value="exam">{t('accounting.tuition.kind.exam')}</option>
+                  <option value="registration">{t('accounting.tuition.kind.registration')}</option>
+                  <option value="other">{t('accounting.tuition.kind.other')}</option>
                 </select>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Input label="Total amount" type="number" step="0.01" value={editing.totalAmount} onChange={e => setEditing({ ...editing, totalAmount: e.target.value })} />
-              <Input label="Currency" value={editing.currency} onChange={e => setEditing({ ...editing, currency: e.target.value.toUpperCase() })} />
+              <Input label={t('accounting.plans.f_total')} type="number" step="0.01" value={editing.totalAmount} onChange={e => setEditing({ ...editing, totalAmount: e.target.value })} />
+              <Input label={t('accounting.plans.f_currency')} value={editing.currency} onChange={e => setEditing({ ...editing, currency: e.target.value.toUpperCase() })} />
             </div>
             <Input
-              label={currentAcademicYear ? `Academic year (auto-filled from school settings)` : 'Academic year (optional)'}
+              label={currentAcademicYear ? t('accounting.plans.f_year_autofilled') : t('accounting.plans.f_year_optional')}
               value={editing.academicYear}
               onChange={e => setEditing({ ...editing, academicYear: e.target.value })}
               placeholder={currentAcademicYear || '2026-2027'}
             />
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Applies to</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('accounting.plans.f_applies_to')}</label>
               <select
                 value={editing.appliesTo}
                 onChange={e => setEditing({ ...editing, appliesTo: e.target.value as FeeAppliesTo })}
                 className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-gray-900 bg-white min-h-[44px] focus:outline-none focus:ring-2 focus:ring-primary-500"
               >
-                <option value="all">All students</option>
-                <option value="classes">Specific class(es)</option>
-                <option value="manual">Manual (assign one by one)</option>
+                <option value="all">{t('accounting.plans.opt_all')}</option>
+                <option value="classes">{t('accounting.plans.opt_classes')}</option>
+                <option value="manual">{t('accounting.plans.opt_manual')}</option>
               </select>
             </div>
 
             {editing.appliesTo === 'classes' && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Classes</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('accounting.plans.f_classes')}</label>
                 <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto border border-gray-200 rounded-xl p-3">
                   {classes.map(c => {
                     const checked = editing.classIds.includes(c.id);
@@ -280,7 +283,7 @@ export default function TuitionPlansTab() {
 
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-sm font-medium text-gray-700">Installments</label>
+                <label className="block text-sm font-medium text-gray-700">{t('accounting.plans.f_installments')}</label>
                 <button
                   type="button"
                   onClick={() => setEditing({
@@ -288,20 +291,20 @@ export default function TuitionPlansTab() {
                     installments: [...editing.installments, { sequence: editing.installments.length + 1, amount: 0, dueDate: new Date().toISOString().slice(0, 10) }],
                   })}
                   className="text-xs text-primary-600 hover:underline"
-                >+ Add installment</button>
+                >{t('accounting.plans.add_installment')}</button>
               </div>
               <div className="space-y-2">
                 {editing.installments.map((i, idx) => (
                   <div key={idx} className="flex gap-2 items-end">
                     <div className="w-24">
-                      <Input label={idx === 0 ? 'Amount' : ''} type="number" step="0.01" value={i.amount} onChange={e => {
+                      <Input label={idx === 0 ? t('accounting.plans.f_amount') : ''} type="number" step="0.01" value={i.amount} onChange={e => {
                         const next = [...editing.installments];
                         next[idx] = { ...i, amount: Number(e.target.value) };
                         setEditing({ ...editing, installments: next });
                       }} />
                     </div>
                     <div className="flex-1">
-                      <Input label={idx === 0 ? 'Due date' : ''} type="date" value={i.dueDate} onChange={e => {
+                      <Input label={idx === 0 ? t('accounting.plans.f_due_date') : ''} type="date" value={i.dueDate} onChange={e => {
                         const next = [...editing.installments];
                         next[idx] = { ...i, dueDate: e.target.value };
                         setEditing({ ...editing, installments: next });
@@ -318,40 +321,40 @@ export default function TuitionPlansTab() {
                 ))}
               </div>
               <div className="text-xs text-gray-500 mt-2">
-                Sum: {fmt(editing.installments.reduce((s, i) => s + Number(i.amount || 0), 0), editing.currency)} · Total: {fmt(Number(editing.totalAmount || 0), editing.currency)}
+                {t('accounting.plans.sum')}: {fmt(editing.installments.reduce((s, i) => s + Number(i.amount || 0), 0), editing.currency)} · {t('accounting.plans.total')}: {fmt(Number(editing.totalAmount || 0), editing.currency)}
               </div>
             </div>
 
             <label className="flex items-center gap-2 text-sm text-gray-700">
               <input type="checkbox" checked={editing.isActive} onChange={e => setEditing({ ...editing, isActive: e.target.checked })} className="w-4 h-4 rounded border-gray-300 text-primary-600" />
-              Active (uncheck to archive without deleting)
+              {t('accounting.plans.active_hint')}
             </label>
 
             {/* Late fees */}
             <div className="border-t border-gray-100 pt-4">
               <label className="flex items-center gap-2 text-sm font-medium text-gray-800 mb-2">
                 <input type="checkbox" checked={editing.lateFeeEnabled} onChange={e => setEditing({ ...editing, lateFeeEnabled: e.target.checked })} className="w-4 h-4 rounded border-gray-300 text-primary-600" />
-                Charge a late fee on overdue installments
+                {t('accounting.plans.late_fee_enable')}
               </label>
               {editing.lateFeeEnabled && (
                 <div className="grid grid-cols-3 gap-3 pl-6">
                   <div>
-                    <label className="block text-xs text-gray-600 mb-1">Type</label>
+                    <label className="block text-xs text-gray-600 mb-1">{t('accounting.plans.f_type')}</label>
                     <select value={editing.lateFeeType} onChange={e => setEditing({ ...editing, lateFeeType: e.target.value as 'fixed' | 'percent' })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white">
-                      <option value="fixed">Fixed amount</option>
-                      <option value="percent">Percent of installment</option>
+                      <option value="fixed">{t('accounting.plans.late_fixed')}</option>
+                      <option value="percent">{t('accounting.plans.late_percent')}</option>
                     </select>
                   </div>
-                  <Input label={editing.lateFeeType === 'percent' ? 'Percent' : 'Amount'} type="number" step="0.01" value={editing.lateFeeAmount} onChange={e => setEditing({ ...editing, lateFeeAmount: e.target.value })} />
-                  <Input label="Grace days" type="number" step="1" value={editing.lateFeeGraceDays} onChange={e => setEditing({ ...editing, lateFeeGraceDays: e.target.value })} />
+                  <Input label={editing.lateFeeType === 'percent' ? t('accounting.plans.f_percent') : t('accounting.plans.f_amount')} type="number" step="0.01" value={editing.lateFeeAmount} onChange={e => setEditing({ ...editing, lateFeeAmount: e.target.value })} />
+                  <Input label={t('accounting.plans.f_grace_days')} type="number" step="1" value={editing.lateFeeGraceDays} onChange={e => setEditing({ ...editing, lateFeeGraceDays: e.target.value })} />
                 </div>
               )}
-              <p className="text-xs text-gray-500 mt-2 pl-6">Late fees are applied automatically every night for installments still unpaid after the grace period.</p>
+              <p className="text-xs text-gray-500 mt-2 pl-6">{t('accounting.plans.late_fee_note')}</p>
             </div>
 
             <div className="flex gap-2 justify-end pt-2">
-              <Button variant="ghost" onClick={() => setEditing(null)}>Cancel</Button>
-              <Button onClick={save} loading={saving}>{editing.id ? 'Save changes' : 'Create plan'}</Button>
+              <Button variant="ghost" onClick={() => setEditing(null)}>{t('accounting.plans.cancel')}</Button>
+              <Button onClick={save} loading={saving}>{editing.id ? t('accounting.plans.save_changes') : t('accounting.plans.create_plan')}</Button>
             </div>
           </div>
         </Modal>
