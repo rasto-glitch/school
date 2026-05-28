@@ -116,3 +116,17 @@ export const updateParentSchema = z.object({
   residenceType: z.string().trim().max(40).nullable().optional(),
   blockNumber: z.string().trim().max(40).nullable().optional(),
 });
+
+// Employee document endpoints (migration 028). Reuses employeePhotoParams
+// for :role/:id and idParam for :id. The multipart upload body is parsed
+// by multer and re-validated inline in employeeDocs.controller.ts, so it
+// has no zod schema here. PATCH and DELETE bodies do:
+export const updateDocumentSchema = z.object({
+  document_number: z.string().trim().max(120).nullable().optional(),
+  issued_on: z.union([z.string().regex(/^\d{4}-\d{2}-\d{2}$/), z.literal('')]).optional(),
+  expires_on: z.union([z.string().regex(/^\d{4}-\d{2}-\d{2}$/), z.literal('')]).optional(),
+  notes: z.string().max(2000).nullable().optional(),
+});
+export const voidDocumentSchema = z.object({
+  reason: z.string().trim().min(1).max(1000),
+});

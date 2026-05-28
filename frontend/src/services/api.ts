@@ -297,6 +297,38 @@ export const adminApi = {
     fd.append('photo', file);
     return api.post(`/admin/employees/${role}/${id}/photo`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
   },
+  // ── Employee profile + documents (Wave 1, migration 028) ─────────────
+  getEmployeeProfile: (role: string, id: string) =>
+    api.get(`/admin/employees/${role}/${id}`),
+  exportEmployeeProfileJson: (role: string, id: string) =>
+    api.get(`/admin/employees/${role}/${id}/export.json`, { responseType: 'blob' }),
+  exportEmployeeProfilePdf: (role: string, id: string) =>
+    api.get(`/admin/employees/${role}/${id}/export.pdf`, { responseType: 'blob' }),
+  getEmployeeDocumentCategories: () => api.get('/admin/employee-document-categories'),
+  listEmployeeDocuments: (role: string, id: string) =>
+    api.get(`/admin/employees/${role}/${id}/documents`),
+  uploadEmployeeDocument: (
+    role: string,
+    id: string,
+    file: File,
+    meta: { category: string; document_number?: string; issued_on?: string; expires_on?: string; notes?: string },
+  ) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('category', meta.category);
+    if (meta.document_number) fd.append('document_number', meta.document_number);
+    if (meta.issued_on) fd.append('issued_on', meta.issued_on);
+    if (meta.expires_on) fd.append('expires_on', meta.expires_on);
+    if (meta.notes) fd.append('notes', meta.notes);
+    return api.post(`/admin/employees/${role}/${id}/documents`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
+  getEmployeeDocumentSignedUrl: (id: string) => api.get(`/admin/employee-documents/${id}/signed-url`),
+  updateEmployeeDocument: (id: string, data: { document_number?: string | null; issued_on?: string | null; expires_on?: string | null; notes?: string | null }) =>
+    api.patch(`/admin/employee-documents/${id}`, data),
+  voidEmployeeDocument: (id: string, reason: string) =>
+    api.delete(`/admin/employee-documents/${id}`, { data: { reason } }),
+  listExpiringEmployeeDocuments: (days = 30) =>
+    api.get('/admin/employee-documents/expiring', { params: { days } }),
   deleteAccount: (userId: string, body?: { reason?: string; departureDate?: string }) =>
     api.delete(`/admin/accounts/${userId}`, { data: body ?? {} }),
   exportCredentialsPdf: (params: { role: 'parent' | 'teacher' | 'driver'; classId?: string; parentId?: string }) =>

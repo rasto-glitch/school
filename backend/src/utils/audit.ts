@@ -4,7 +4,7 @@
 import { adminDb as supabase } from './db';
 import type { AuthRequest } from '../middleware/auth';
 
-export type AuditAction = 'create' | 'update' | 'delete';
+export type AuditAction = 'create' | 'update' | 'delete' | 'read' | 'export';
 export type AuditEntityType =
   | 'student'
   | 'fee_plan'
@@ -24,7 +24,10 @@ export type AuditEntityType =
   | 'supervisor'
   | 'admin'
   | 'reception'
-  | 'accountant';
+  | 'accountant'
+  // Wave 1 — employee legal-compliance records (migration 028)
+  | 'employee_document'
+  | 'employee_profile';
 
 interface LogParams {
   req: AuthRequest;

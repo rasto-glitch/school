@@ -49,18 +49,20 @@ export default function AdminDriversListPage() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {filtered.map(d => (
-              <Card key={d.id}>
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center flex-shrink-0">
-                    <Bus className="w-5 h-5 text-amber-700" />
+              <button key={d.id} type="button" onClick={() => navigate(`/admin/employees/driver/${d.id}`)} className="text-left w-full">
+                <Card className="hover:shadow-md hover:border-primary-200 transition-all cursor-pointer h-full">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center flex-shrink-0">
+                      <Bus className="w-5 h-5 text-amber-700" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-semibold text-gray-900">{d.fullName}</p>
+                      <p className="text-xs text-gray-500">{t('admin.bus_number', { number: d.buses?.busNumber || t('admin.na') })}</p>
+                      <p className="text-xs text-gray-400">{d.phoneNumber || '—'} · {t('admin.license')}: {d.licenseNumber || '—'}</p>
+                    </div>
                   </div>
-                  <div className="min-w-0">
-                    <p className="font-semibold text-gray-900">{d.fullName}</p>
-                    <p className="text-xs text-gray-500">{t('admin.bus_number', { number: d.buses?.busNumber || t('admin.na') })}</p>
-                    <p className="text-xs text-gray-400">{d.phoneNumber || '—'} · {t('admin.license')}: {d.licenseNumber || '—'}</p>
-                  </div>
-                </div>
-              </Card>
+                </Card>
+              </button>
             ))}
           </div>
         )}

@@ -19,6 +19,8 @@ import * as ledger from '../controllers/ledger.controller';
 import * as gl from '../controllers/glaccounting.controller';
 import * as accounting from '../controllers/accounting.controller';
 import * as reports from '../controllers/accountingReports.controller';
+import * as employeeDocs from '../controllers/employeeDocs.controller';
+import * as employeeProfile from '../controllers/employeeProfile.controller';
 import { authenticate, authorize } from '../middleware/auth';
 import type { AuthRequest } from '../middleware/auth';
 import { validate } from '../middleware/validate';
@@ -164,6 +166,32 @@ export function createRouter(io: SocketServer) {
   // Professional (official) employee photo — admin-uploaded, kept on the
   // employee record; separate from the self-set app avatar.
   router.post('/admin/employees/:role/:id/photo', authenticate, authorize('admin'), upload.single('photo'), validate({ params: vu.employeePhotoParams }), (req, res) => admin.uploadEmployeePhoto(req as AuthRequest, res));
+
+  // ── Employee profile (Wave 1: read + export) ────────────────────────────
+  // GET /admin/employees/:role/:id              → full record (HR fields +
+  //                                                role-specific joins +
+  //                                                documents list)
+  // GET /admin/employees/:role/:id/export.json  → audited JSON dump
+  // GET /admin/employees/:role/:id/export.pdf   → printable HR file
+  // Static export paths come BEFORE the catch-all :id endpoint so they
+  // aren't shadowed.
+  router.get('/admin/employees/:role/:id/export.json', authenticate, authorize('admin'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeProfile.exportProfileJson(req as AuthRequest, res));
+  router.get('/admin/employees/:role/:id/export.pdf',  authenticate, authorize('admin'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeProfile.exportProfilePdf(req as AuthRequest, res));
+  router.get('/admin/employees/:role/:id',             authenticate, authorize('admin'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeProfile.getProfile(req as AuthRequest, res));
+
+  // ── Employee documents (Wave 1) ─────────────────────────────────────────
+  // Per-employee list + upload (multipart 'file'). Sensitivity gating +
+  // magic-byte sniff + SHA-256 + private-bucket upload happen inside the
+  // controller — see backend/src/utils/employeeDocs.ts.
+  router.get( '/admin/employees/:role/:id/documents', authenticate, authorize('admin'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeDocs.listForEmployee(req as AuthRequest, res));
+  router.post('/admin/employees/:role/:id/documents', authenticate, authorize('admin'), upload.single('file'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeDocs.uploadForEmployee(req as AuthRequest, res));
+
+  // Per-document (static paths before :id).
+  router.get('/admin/employee-document-categories', authenticate, authorize('admin'), (req, res) => employeeDocs.listCategories(req as AuthRequest, res));
+  router.get('/admin/employee-documents/expiring',  authenticate, authorize('admin'), (req, res) => employeeDocs.listExpiring(req as AuthRequest, res));
+  router.get(   '/admin/employee-documents/:id/signed-url', authenticate, authorize('admin'), validate({ params: vu.idParam }), (req, res) => employeeDocs.issueSignedUrl(req as AuthRequest, res));
+  router.patch( '/admin/employee-documents/:id', authenticate, authorize('admin'), validate({ params: vu.idParam, body: vu.updateDocumentSchema }), (req, res) => employeeDocs.updateDocument(req as AuthRequest, res));
+  router.delete('/admin/employee-documents/:id', authenticate, authorize('admin'), validate({ params: vu.idParam, body: vu.voidDocumentSchema   }), (req, res) => employeeDocs.voidDocument(req as AuthRequest, res));
   router.get('/admin/reset-requests', authenticate, authorize('admin'), (req, res) => admin.getResetRequests(req as AuthRequest, res));
   router.post('/admin/users/:userId/reset-password', authenticate, authorize('admin'), validate({ params: vu.userIdParam, body: vu.resetUserPasswordSchema }), (req, res) => admin.resetUserPassword(req as AuthRequest, res));
   router.get('/admin/users/inactive/search', authenticate, authorize('admin'), validate({ query: vq.listQuery }), (req, res) => admin.searchInactiveUsers(req as AuthRequest, res));
