@@ -220,6 +220,7 @@ export async function uploadForEmployee(req: AuthRequest, res: Response): Promis
     uploaded_by: userId,
   };
 
+  // tenant-check-allow: insertRow carries school_id from req.user!.schoolId (line above); INSERT has no WHERE to .eq() on.
   const { data: inserted, error: insErr } = await supabase
     .from('employee_documents')
     .insert(insertRow)
