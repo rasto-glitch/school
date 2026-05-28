@@ -17,3 +17,7 @@ mobile/credentials/
 
 # Pen-test report — contains live exploitation details, not for source control
 PENTEST_FINDINGS.md
+
+
+
+.claude/
