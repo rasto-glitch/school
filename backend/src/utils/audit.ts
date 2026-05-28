@@ -27,7 +27,14 @@ export type AuditEntityType =
   | 'accountant'
   // Wave 1 — employee legal-compliance records (migration 028)
   | 'employee_document'
-  | 'employee_profile';
+  | 'employee_profile'
+  // Wave 2 — extended PII + acknowledgements + actions (migration 029)
+  | 'employee_extended_profile'
+  | 'employee_emergency_contact'
+  | 'school_policy'
+  | 'employee_acknowledgement'
+  | 'employee_action'
+  | 'hr_officer';
 
 interface LogParams {
   req: AuthRequest;

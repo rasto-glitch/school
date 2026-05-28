@@ -18,7 +18,7 @@ import { loadArchiveSnapshot, streamPdf, buildXlsx } from '../utils/archiveExpor
 import { loadEmployeeArchiveSnapshot, streamPdf as streamEmployeePdf, buildXlsx as buildEmployeeXlsx } from '../utils/employeeArchiveExport';
 import { streamCredentialsPdf, type CredentialEntry } from '../utils/credentialsPdf';
 import { logAudit } from '../utils/audit';
-import { hasArchiveFeature, normalizeArchiveReason, resolveEmployeeArchiveId } from '../utils/employeeArchive';
+import { hasArchiveFeature, normalizeArchiveReason, resolveEmployeeArchiveId, rewriteOwnershipToArchive } from '../utils/employeeArchive';
 import { hrColumns, hrSnapshot } from '../utils/employeeHr';
 import { isUrlSafeToFetch } from '../utils/urlSafety';
 import { logger } from '../utils/logger';
@@ -2662,6 +2662,10 @@ export async function deleteTeacher(req: AuthRequest, res: Response): Promise<vo
       actorId: req.user!.userId, actorName: req.user!.username, actorRole: req.user!.role,
     });
     if (!r.ok) { res.status(500).json({ error: r.error }); return; }
+    // Wave 2: rewrite polymorphic owner pointers on employee_documents +
+    // extended profile + emergency contacts + acknowledgements + actions
+    // so they survive the cascade and stay attached to the archive row.
+    await rewriteOwnershipToArchive(schoolId, 'teachers', String(id), r.archiveId);
     await logAudit({ req, entityType: 'teacher', entityId: String(id), action: 'delete', before: teacher as Record<string, unknown>, label: teacher.full_name, reason: `Archived (${reason})` });
     res.json({ message: 'Teacher archived', archived: true, archiveId: r.archiveId });
     return;
@@ -2729,6 +2733,7 @@ export async function deleteDriver(req: AuthRequest, res: Response): Promise<voi
       actorId: req.user!.userId, actorName: req.user!.username, actorRole: req.user!.role,
     });
     if (!r.ok) { res.status(500).json({ error: r.error }); return; }
+    await rewriteOwnershipToArchive(schoolId, 'drivers', String(id), r.archiveId);
     await logAudit({ req, entityType: 'driver', entityId: String(id), action: 'delete', before: driver as Record<string, unknown>, label: driver.full_name, reason: `Archived (${reason})` });
     res.json({ message: 'Driver archived', archived: true, archiveId: r.archiveId });
     return;
@@ -3503,6 +3508,7 @@ export async function deleteAccount(req: AuthRequest, res: Response): Promise<vo
           actorId: req.user!.userId, actorName: req.user!.username, actorRole: req.user!.role,
         });
         if (!r.ok) { res.status(500).json({ error: r.error }); return; }
+        await rewriteOwnershipToArchive(schoolId, 'teachers', String(teacher.id), r.archiveId);
         await logAudit({ req, entityType: 'teacher', entityId: String(teacher.id), action: 'delete', before: teacher as Record<string, unknown>, label: teacher.full_name, reason: `Archived (${reason})` });
         res.json({ message: 'Account archived', archived: true, archiveId: r.archiveId });
         return;
@@ -3524,6 +3530,7 @@ export async function deleteAccount(req: AuthRequest, res: Response): Promise<vo
       actorId: req.user!.userId, actorName: req.user!.username, actorRole: req.user!.role,
     });
     if (!r.ok) { res.status(500).json({ error: r.error }); return; }
+    await rewriteOwnershipToArchive(schoolId, 'users', String(user.id), r.archiveId);
     await logAudit({ req, entityType: bareRole, entityId: String(user.id), action: 'delete', before: account, label: fullName, reason: `Archived (${reason})` });
     res.json({ message: 'Account archived', archived: true, archiveId: r.archiveId });
     return;
@@ -3583,6 +3590,116 @@ export async function uploadEmployeePhoto(req: AuthRequest, res: Response): Prom
   if (!updated) { res.status(404).json({ error: 'Employee not found' }); return; }
 
   res.json({ officialPhoto });
+}
+
+// ---- HR OFFICER PROMOTE / DEMOTE (Wave 2) ----
+// Only admins can carry the HR-officer flag. Promoting elevates a colleague
+// to read decrypted PII + manage high-sensitivity documents. We notify
+// every OTHER admin of the school on promote/demote so the change is
+// transparent — flipping the flag silently would invite abuse.
+
+export async function promoteHrOfficer(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId, userId: actorId, username: actorName } = req.user!;
+  const targetId = String(req.params.userId);
+
+  if (targetId === actorId) {
+    res.status(400).json({ error: "You can't promote yourself — ask another admin." });
+    return;
+  }
+
+  const { data: target } = await supabase
+    .from('users')
+    .select('id, role, first_name, last_name, username, is_active, is_hr_officer')
+    .eq('id', targetId).eq('school_id', schoolId).maybeSingle();
+  if (!target) { res.status(404).json({ error: 'User not found' }); return; }
+  if (target.role !== 'admin') { res.status(400).json({ error: 'Only admins can be HR officers' }); return; }
+  if (target.is_active === false) { res.status(400).json({ error: 'User is inactive' }); return; }
+  if (target.is_hr_officer === true) {
+    res.json({ user: toCC(target), changed: false });
+    return;
+  }
+
+  const { error } = await supabase
+    .from('users').update({ is_hr_officer: true })
+    .eq('id', targetId).eq('school_id', schoolId);
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+
+  await logAudit({
+    req, entityType: 'hr_officer', entityId: targetId,
+    action: 'create',
+    after: { _meta: { kind: 'hr_officer_promote', target_username: target.username } },
+    label: 'hr_officer_promote',
+  });
+
+  // Notify every other admin of the school.
+  const { data: peers } = await supabase
+    .from('users').select('id').eq('school_id', schoolId).eq('role', 'admin').eq('is_active', true);
+  const peerIds = (peers ?? []).map(p => p.id).filter(id => id !== actorId && id !== targetId);
+  const targetName = `${target.first_name ?? ''} ${target.last_name ?? ''}`.trim() || target.username;
+  await Promise.all(peerIds.map(pid => notify({
+    schoolId, userId: pid,
+    title: 'HR officer promoted',
+    message: `${actorName} promoted ${targetName} to HR officer.`,
+    type: 'hr_officer_promoted',
+    relatedId: targetId,
+  })));
+
+  res.json({ ok: true, userId: targetId, changed: true });
+}
+
+export async function demoteHrOfficer(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId, userId: actorId, username: actorName } = req.user!;
+  const targetId = String(req.params.userId);
+
+  const { data: target } = await supabase
+    .from('users')
+    .select('id, role, first_name, last_name, username, is_hr_officer')
+    .eq('id', targetId).eq('school_id', schoolId).maybeSingle();
+  if (!target) { res.status(404).json({ error: 'User not found' }); return; }
+  if (target.is_hr_officer !== true) {
+    res.json({ user: toCC(target), changed: false });
+    return;
+  }
+
+  const { error } = await supabase
+    .from('users').update({ is_hr_officer: false })
+    .eq('id', targetId).eq('school_id', schoolId);
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+
+  await logAudit({
+    req, entityType: 'hr_officer', entityId: targetId,
+    action: 'delete',
+    before: { _meta: { kind: 'hr_officer_demote', target_username: target.username } },
+    label: 'hr_officer_demote',
+  });
+
+  const { data: peers } = await supabase
+    .from('users').select('id').eq('school_id', schoolId).eq('role', 'admin').eq('is_active', true);
+  const peerIds = (peers ?? []).map(p => p.id).filter(id => id !== actorId);
+  const targetName = `${target.first_name ?? ''} ${target.last_name ?? ''}`.trim() || target.username;
+  await Promise.all(peerIds.map(pid => notify({
+    schoolId, userId: pid,
+    title: 'HR officer revoked',
+    message: `${actorName} revoked HR officer access from ${targetName}.`,
+    type: 'hr_officer_demoted',
+    relatedId: targetId,
+  })));
+
+  res.json({ ok: true, userId: targetId, changed: true });
+}
+
+// Lightweight read for the admin user-management page: which admins are
+// HR officers right now? Returns minimal columns — the full users list
+// already has the rest.
+export async function listHrOfficers(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { data, error } = await supabase
+    .from('users')
+    .select('id, username, first_name, last_name, is_active')
+    .eq('school_id', schoolId).eq('role', 'admin').eq('is_hr_officer', true)
+    .order('first_name', { ascending: true });
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+  res.json({ officers: toCC(data) });
 }
 
 export async function getParents(req: AuthRequest, res: Response): Promise<void> {

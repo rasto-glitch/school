@@ -9,7 +9,7 @@ import { streamStaffSalaryPdf, buildStaffSalaryXlsx, type StaffSalaryExportData 
 import { logAudit } from '../utils/audit';
 import { postSalary, postInsurancePayout, reverseEntry, reinstateEntry } from '../utils/glPosting';
 import { assertPeriodOpen } from '../utils/period';
-import { hasArchiveFeature, normalizeArchiveReason, resolveEmployeeArchiveId } from '../utils/employeeArchive';
+import { hasArchiveFeature, normalizeArchiveReason, resolveEmployeeArchiveId, rewriteOwnershipToArchive } from '../utils/employeeArchive';
 import { hrColumns, hrSnapshot } from '../utils/employeeHr';
 import { parseCursorParams, buildPageWith, keysetAfter } from '../utils/pagination';
 
@@ -455,8 +455,16 @@ export async function deleteStaff(req: AuthRequest, res: Response): Promise<void
   if (await hasArchiveFeature(schoolId)) {
     const departureDate = (req.body?.departureDate as string | undefined) || new Date().toISOString().split('T')[0];
     const snap = await snapshotStaffArchive(schoolId, before as Record<string, any>, reason, departureDate, { id: userId, name: req.user!.username, role: req.user!.role });
-    if (snap.ok) archived = { archived: true, archiveId: snap.archiveId };
-    else console.error(`[staff archive] snapshot failed for staff ${id}: ${snap.error}`);
+    if (snap.ok) {
+      archived = { archived: true, archiveId: snap.archiveId };
+      // Wave 2: rewrite polymorphic owner pointers on employee_documents
+      // + extended profile + emergency contacts + acknowledgements +
+      // actions so they survive the cascade and stay attached to the
+      // archive row.
+      await rewriteOwnershipToArchive(schoolId, 'staff_members', String(id), snap.archiveId);
+    } else {
+      console.error(`[staff archive] snapshot failed for staff ${id}: ${snap.error}`);
+    }
   }
   res.json({ success: true, ...archived });
 }

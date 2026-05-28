@@ -21,6 +21,12 @@ import * as accounting from '../controllers/accounting.controller';
 import * as reports from '../controllers/accountingReports.controller';
 import * as employeeDocs from '../controllers/employeeDocs.controller';
 import * as employeeProfile from '../controllers/employeeProfile.controller';
+import * as employeeExtended from '../controllers/employeeExtended.controller';
+import * as employeeEmergency from '../controllers/employeeEmergency.controller';
+import * as schoolPolicies from '../controllers/schoolPolicies.controller';
+import * as employeeAcks from '../controllers/employeeAcknowledgements.controller';
+import * as employeeActions from '../controllers/employeeActions.controller';
+import * as employeeTermination from '../controllers/employeeTermination.controller';
 import { authenticate, authorize } from '../middleware/auth';
 import type { AuthRequest } from '../middleware/auth';
 import { validate } from '../middleware/validate';
@@ -192,6 +198,36 @@ export function createRouter(io: SocketServer) {
   router.get(   '/admin/employee-documents/:id/signed-url', authenticate, authorize('admin'), validate({ params: vu.idParam }), (req, res) => employeeDocs.issueSignedUrl(req as AuthRequest, res));
   router.patch( '/admin/employee-documents/:id', authenticate, authorize('admin'), validate({ params: vu.idParam, body: vu.updateDocumentSchema }), (req, res) => employeeDocs.updateDocument(req as AuthRequest, res));
   router.delete('/admin/employee-documents/:id', authenticate, authorize('admin'), validate({ params: vu.idParam, body: vu.voidDocumentSchema   }), (req, res) => employeeDocs.voidDocument(req as AuthRequest, res));
+
+  // ── Employee extended profile (Wave 2) ──────────────────────────────────
+  router.get(  '/admin/employees/:role/:id/extended', authenticate, authorize('admin'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeExtended.getExtended(req as AuthRequest, res));
+  router.put(  '/admin/employees/:role/:id/extended', authenticate, authorize('admin'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeExtended.upsertExtended(req as AuthRequest, res));
+  router.post( '/admin/employees/:role/:id/extended/redact', authenticate, authorize('admin'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeExtended.redactExtended(req as AuthRequest, res));
+
+  // ── Emergency contacts (Wave 2) ─────────────────────────────────────────
+  router.get(  '/admin/employees/:role/:id/emergency-contacts', authenticate, authorize('admin'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeEmergency.listForEmployee(req as AuthRequest, res));
+  router.post( '/admin/employees/:role/:id/emergency-contacts', authenticate, authorize('admin'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeEmergency.createForEmployee(req as AuthRequest, res));
+  router.patch( '/admin/emergency-contacts/:id', authenticate, authorize('admin'), validate({ params: vu.idParam }), (req, res) => employeeEmergency.update(req as AuthRequest, res));
+  router.delete('/admin/emergency-contacts/:id', authenticate, authorize('admin'), validate({ params: vu.idParam }), (req, res) => employeeEmergency.remove(req as AuthRequest, res));
+
+  // ── School acknowledgement policies + employee acks (Wave 2) ────────────
+  router.get( '/admin/school-policies', authenticate, authorize('admin'), (req, res) => schoolPolicies.listPolicies(req as AuthRequest, res));
+  router.post('/admin/school-policies', authenticate, authorize('admin'), (req, res) => schoolPolicies.createOrBumpPolicy(req as AuthRequest, res));
+  router.patch( '/admin/school-policies/:id', authenticate, authorize('admin'), validate({ params: vu.idParam }), (req, res) => schoolPolicies.updatePolicyMeta(req as AuthRequest, res));
+  router.delete('/admin/school-policies/:id', authenticate, authorize('admin'), validate({ params: vu.idParam }), (req, res) => schoolPolicies.deletePolicy(req as AuthRequest, res));
+
+  router.get( '/admin/employees/:role/:id/acknowledgements', authenticate, authorize('admin'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeAcks.listForEmployee(req as AuthRequest, res));
+  router.post('/admin/employees/:role/:id/acknowledgements', authenticate, authorize('admin'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeAcks.createForEmployee(req as AuthRequest, res));
+
+  // ── Employee actions log + termination workflow (Wave 2) ────────────────
+  router.get( '/admin/employees/:role/:id/actions', authenticate, authorize('admin'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeActions.listForEmployee(req as AuthRequest, res));
+  router.post('/admin/employees/:role/:id/actions', authenticate, authorize('admin'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeActions.createForEmployee(req as AuthRequest, res));
+  router.post('/admin/employees/:role/:id/terminate', authenticate, authorize('admin'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeTermination.terminate(req as AuthRequest, res));
+
+  // ── HR officer sub-role toggle (Wave 2) ─────────────────────────────────
+  router.get( '/admin/hr-officers', authenticate, authorize('admin'), (req, res) => admin.listHrOfficers(req as AuthRequest, res));
+  router.post('/admin/users/:userId/promote-hr-officer', authenticate, authorize('admin'), validate({ params: vu.userIdParam }), (req, res) => admin.promoteHrOfficer(req as AuthRequest, res));
+  router.post('/admin/users/:userId/demote-hr-officer',  authenticate, authorize('admin'), validate({ params: vu.userIdParam }), (req, res) => admin.demoteHrOfficer(req as AuthRequest, res));
   router.get('/admin/reset-requests', authenticate, authorize('admin'), (req, res) => admin.getResetRequests(req as AuthRequest, res));
   router.post('/admin/users/:userId/reset-password', authenticate, authorize('admin'), validate({ params: vu.userIdParam, body: vu.resetUserPasswordSchema }), (req, res) => admin.resetUserPassword(req as AuthRequest, res));
   router.get('/admin/users/inactive/search', authenticate, authorize('admin'), validate({ query: vq.listQuery }), (req, res) => admin.searchInactiveUsers(req as AuthRequest, res));

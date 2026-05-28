@@ -85,6 +85,7 @@ export default function EmployeeProfilePage() {
           onEdit={onEdit}
           onExportJson={onExportJson}
           onExportPdf={onExportPdf}
+          onTerminated={() => navigate('/admin/employees')}
         />
       ) : null}
     </PageLayout>

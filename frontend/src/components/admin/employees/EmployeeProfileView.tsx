@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Download, Edit, FileJson, FileText, ShieldAlert } from 'lucide-react';
+import { Edit, FileJson, FileText, ShieldAlert, UserX } from 'lucide-react';
 import { format, parseISO, differenceInYears, differenceInMonths } from 'date-fns';
 import Card from '../../common/Card';
 import Button from '../../common/Button';
 import DocumentsTab from './DocumentsTab';
+import { ExtendedProfileTab, EmergencyContactsTab, AcknowledgementsTab, ActionsTab } from './Wave2Tabs';
+import TerminationModal from './TerminationModal';
 import type { EmployeeDocument, EmployeeProfile, EmployeeRole } from '../../../types/employeeDocs';
 
 // Shared employee profile view. Renders the header + at-a-glance strip +
@@ -13,7 +15,7 @@ import type { EmployeeDocument, EmployeeProfile, EmployeeRole } from '../../../t
 // the only difference is a `readonly` flag that hides the upload/edit
 // buttons. For now, only active employees flow through here.
 
-type Tab = 'personal' | 'employment' | 'contact' | 'documents' | 'notes';
+type Tab = 'personal' | 'extended' | 'employment' | 'contact' | 'emergency' | 'documents' | 'acknowledgements' | 'history' | 'notes';
 
 interface Props {
   profile: EmployeeProfile;
@@ -22,6 +24,7 @@ interface Props {
   onEdit?: () => void;
   onExportJson?: () => void;
   onExportPdf?: () => void;
+  onTerminated?: () => void;
   initialTab?: Tab;
 }
 
@@ -77,11 +80,12 @@ function InfoRow({ label, value, sensitive = false }: { label: string; value: st
   );
 }
 
-export default function EmployeeProfileView({ profile: p, documents: _docs, hrOfficer, onEdit, onExportJson, onExportPdf, initialTab = 'personal' }: Props) {
+export default function EmployeeProfileView({ profile: p, documents: _docs, hrOfficer, onEdit, onExportJson, onExportPdf, onTerminated, initialTab = 'personal' }: Props) {
   void _docs; // DocumentsTab refetches on its own; we don't need the prop here, but consumers pass it for symmetry / SSR.
   const { t } = useTranslation();
   const [tab, setTab] = useState<Tab>(initialTab);
   const [exporting, setExporting] = useState<'json' | 'pdf' | null>(null);
+  const [showTerminate, setShowTerminate] = useState(false);
 
   const ageStr = useMemo(() => {
     const a = computeAge(p.hr.dateOfBirth);
@@ -96,11 +100,15 @@ export default function EmployeeProfileView({ profile: p, documents: _docs, hrOf
   };
 
   const tabs: { key: Tab; label: string }[] = [
-    { key: 'personal',   label: t('admin.profile.tab_personal') },
-    { key: 'employment', label: t('admin.profile.tab_employment') },
-    { key: 'contact',    label: t('admin.profile.tab_contact') },
-    { key: 'documents',  label: t('admin.profile.tab_documents') },
-    { key: 'notes',      label: t('admin.profile.tab_notes') },
+    { key: 'personal',         label: t('admin.profile.tab_personal') },
+    { key: 'extended',         label: t('admin.profile.tab_extended') },
+    { key: 'employment',       label: t('admin.profile.tab_employment') },
+    { key: 'contact',          label: t('admin.profile.tab_contact') },
+    { key: 'emergency',        label: t('admin.profile.tab_emergency') },
+    { key: 'documents',        label: t('admin.profile.tab_documents') },
+    { key: 'acknowledgements', label: t('admin.profile.tab_acks') },
+    { key: 'history',          label: t('admin.profile.tab_history') },
+    { key: 'notes',            label: t('admin.profile.tab_notes') },
   ];
 
   return (
@@ -152,6 +160,11 @@ export default function EmployeeProfileView({ profile: p, documents: _docs, hrOf
             {onExportPdf && (
               <Button variant="outline" size="sm" icon={<FileText className="w-4 h-4" />} onClick={() => handleExport('pdf')} loading={exporting === 'pdf'}>
                 {t('admin.profile.export_pdf')}
+              </Button>
+            )}
+            {p.account.isActive !== false && (
+              <Button variant="danger" size="sm" icon={<UserX className="w-4 h-4" />} onClick={() => setShowTerminate(true)}>
+                {t('admin.profile.terminate')}
               </Button>
             )}
           </div>
@@ -296,9 +309,31 @@ export default function EmployeeProfileView({ profile: p, documents: _docs, hrOf
         </Card>
       )}
 
+      {tab === 'extended' && (
+        <ExtendedProfileTab role={p.role} employeeId={p.ownerId} />
+      )}
+
+      {tab === 'emergency' && (
+        <Card>
+          <EmergencyContactsTab role={p.role} employeeId={p.ownerId} />
+        </Card>
+      )}
+
       {tab === 'documents' && (
         <Card>
           <DocumentsTab role={p.role} employeeId={p.ownerId} />
+        </Card>
+      )}
+
+      {tab === 'acknowledgements' && (
+        <Card>
+          <AcknowledgementsTab role={p.role} employeeId={p.ownerId} />
+        </Card>
+      )}
+
+      {tab === 'history' && (
+        <Card>
+          <ActionsTab role={p.role} employeeId={p.ownerId} />
         </Card>
       )}
 
@@ -311,12 +346,14 @@ export default function EmployeeProfileView({ profile: p, documents: _docs, hrOf
         </Card>
       )}
 
-      {/* Wave-2 placeholders. Hidden until Wave 2 fills them in, but the
-          structure is laid out here so the rest of the codebase can target
-          stable tab keys when it lands. */}
-      <div className="text-[11px] text-gray-300">
-        <Download className="w-3 h-3 inline" /> {t('admin.profile.wave2_hint')}
-      </div>
+      <TerminationModal
+        isOpen={showTerminate}
+        onClose={() => setShowTerminate(false)}
+        role={p.role}
+        employeeId={p.ownerId}
+        employeeName={p.fullName}
+        onCompleted={() => { setShowTerminate(false); onTerminated?.(); }}
+      />
     </div>
   );
 }

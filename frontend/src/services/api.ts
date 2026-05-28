@@ -329,6 +329,46 @@ export const adminApi = {
     api.delete(`/admin/employee-documents/${id}`, { data: { reason } }),
   listExpiringEmployeeDocuments: (days = 30) =>
     api.get('/admin/employee-documents/expiring', { params: { days } }),
+
+  // ── Wave 2: extended profile + emergency contacts + policies + acks +
+  // actions + termination + HR officer (migration 029) ──────────────────
+  getEmployeeExtended: (role: string, id: string) =>
+    api.get(`/admin/employees/${role}/${id}/extended`),
+  upsertEmployeeExtended: (role: string, id: string, data: Record<string, unknown>) =>
+    api.put(`/admin/employees/${role}/${id}/extended`, data),
+  redactEmployeeExtended: (role: string, id: string, reason: string) =>
+    api.post(`/admin/employees/${role}/${id}/extended/redact`, { reason }),
+
+  listEmergencyContacts: (role: string, id: string) =>
+    api.get(`/admin/employees/${role}/${id}/emergency-contacts`),
+  createEmergencyContact: (role: string, id: string, data: Record<string, unknown>) =>
+    api.post(`/admin/employees/${role}/${id}/emergency-contacts`, data),
+  updateEmergencyContact: (id: string, data: Record<string, unknown>) =>
+    api.patch(`/admin/emergency-contacts/${id}`, data),
+  deleteEmergencyContact: (id: string) =>
+    api.delete(`/admin/emergency-contacts/${id}`),
+
+  listSchoolPolicies: () => api.get('/admin/school-policies'),
+  upsertSchoolPolicy: (data: Record<string, unknown>) => api.post('/admin/school-policies', data),
+  updateSchoolPolicyMeta: (id: string, data: Record<string, unknown>) =>
+    api.patch(`/admin/school-policies/${id}`, data),
+  deleteSchoolPolicy: (id: string) => api.delete(`/admin/school-policies/${id}`),
+
+  listEmployeeAcknowledgements: (role: string, id: string) =>
+    api.get(`/admin/employees/${role}/${id}/acknowledgements`),
+  createEmployeeAcknowledgement: (role: string, id: string, data: { policyId: string; signedDocumentId?: string }) =>
+    api.post(`/admin/employees/${role}/${id}/acknowledgements`, data),
+
+  listEmployeeActions: (role: string, id: string) =>
+    api.get(`/admin/employees/${role}/${id}/actions`),
+  createEmployeeAction: (role: string, id: string, data: Record<string, unknown>) =>
+    api.post(`/admin/employees/${role}/${id}/actions`, data),
+  terminateEmployee: (role: string, id: string, data: { documentId: string; summary: string; occurredOn?: string; departureDate?: string }) =>
+    api.post(`/admin/employees/${role}/${id}/terminate`, data),
+
+  listHrOfficers: () => api.get('/admin/hr-officers'),
+  promoteHrOfficer: (userId: string) => api.post(`/admin/users/${userId}/promote-hr-officer`),
+  demoteHrOfficer: (userId: string)  => api.post(`/admin/users/${userId}/demote-hr-officer`),
   deleteAccount: (userId: string, body?: { reason?: string; departureDate?: string }) =>
     api.delete(`/admin/accounts/${userId}`, { data: body ?? {} }),
   exportCredentialsPdf: (params: { role: 'parent' | 'teacher' | 'driver'; classId?: string; parentId?: string }) =>
