@@ -34,13 +34,6 @@ interface Props {
   role: EmployeeRole;
 }
 
-function extraColumnLabel(role: EmployeeRole, t: (k: string, d?: string) => string): string {
-  switch (role) {
-    case 'teacher': return t('admin.list.col_classes', 'Classes');
-    case 'staff': return t('admin.list.col_position', 'Position');
-    default: return t('admin.list.col_username', 'Username');
-  }
-}
 
 interface RawRecord {
   id: string;
@@ -148,7 +141,16 @@ export default function ActiveEmployeeList({ role }: Props) {
     },
     {
       key: 'extra',
-      label: extraColumnLabel(role, t),
+      // Role-specific column: classes (teacher), position (staff), or
+      // username (account roles). Inlined here so i18next's TFunction
+      // resolves the (key, defaultValue) overload at the call site;
+      // wrapping it in a helper that types t narrowly breaks the Vercel
+      // build under stricter TS settings.
+      label: role === 'teacher'
+        ? t('admin.list.col_classes', 'Classes')
+        : role === 'staff'
+          ? t('admin.list.col_position', 'Position')
+          : t('admin.list.col_username', 'Username'),
       render: r => <span className="text-gray-700">{r.extra || '—'}</span>,
       sortValue: r => r.extra,
     },
