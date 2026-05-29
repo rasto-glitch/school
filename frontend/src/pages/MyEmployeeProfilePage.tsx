@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'react-toastify';
-import { Plus, Trash2, Edit2, ShieldAlert } from 'lucide-react';
+import { format, parseISO } from 'date-fns';
+import { Plus, Trash2, Edit2, ShieldAlert, CheckCircle2, AlertTriangle, FileText } from 'lucide-react';
 import { meApi } from '../services/api';
 import PageLayout from '../components/layout/PageLayout';
 import Card from '../components/common/Card';
@@ -11,7 +12,9 @@ import Modal from '../components/common/Modal';
 import LoadingSpinner from '../components/common/LoadingSpinner';
 import EmptyState from '../components/common/EmptyState';
 import { REDACTED } from '../types/employeeRecords';
-import type { EmergencyContact, ExtendedProfile } from '../types/employeeRecords';
+import type { EmergencyContact, ExtendedProfile, AcknowledgementStatusItem } from '../types/employeeRecords';
+
+const fmtDate = (d?: string | null) => (d ? format(parseISO(d), 'MMM d, yyyy') : '—');
 
 // /me/profile — self-service employee record editor (Wave 2.5).
 // The employee edits their own low + medium PII fields and emergency
@@ -88,6 +91,23 @@ export default function MyEmployeeProfilePage() {
   const [contactForm, setContactForm] = useState<ContactFormState>(EMPTY_CONTACT);
   const [savingContact, setSavingContact] = useState(false);
 
+  // Wave 3: acknowledgements self-service.
+  const [acks, setAcks] = useState<AcknowledgementStatusItem[]>([]);
+  const [acksLoading, setAcksLoading] = useState(false);
+  const [signingKey, setSigningKey] = useState<string | null>(null);
+
+  const loadAcks = async () => {
+    setAcksLoading(true);
+    try {
+      const r = await meApi.listAcknowledgements();
+      setAcks(r.data?.items ?? []);
+    } catch {
+      // Don't toast — the page should still load if policies haven't been
+      // set up yet. Empty state communicates the situation.
+      setAcks([]);
+    } finally { setAcksLoading(false); }
+  };
+
   const load = async () => {
     setLoading(true);
     try {
@@ -95,6 +115,8 @@ export default function MyEmployeeProfilePage() {
       setData(r.data);
       setExtForm(shapeFromProfile(r.data?.extendedProfile ?? null));
       setForbidden(false);
+      // Acks load best-effort in parallel — don't block the page on them.
+      loadAcks();
     } catch (e) {
       const status = (e as { response?: { status?: number } }).response?.status;
       if (status === 403 || status === 404) {
@@ -105,6 +127,18 @@ export default function MyEmployeeProfilePage() {
     } finally { setLoading(false); }
   };
   useEffect(() => { load(); }, []);
+
+  const signAck = async (item: AcknowledgementStatusItem) => {
+    if (!item.activePolicyId) return;
+    setSigningKey(item.policyKey);
+    try {
+      await meApi.signAcknowledgement(item.activePolicyId);
+      toast.success(t('me.ack_signed'));
+      await loadAcks();
+    } catch (e) {
+      toast.error(errMsg(e) || t('me.ack_failed'));
+    } finally { setSigningKey(null); }
+  };
 
   const setField = <K extends keyof ExtFormState>(k: K, v: string) => setExtForm(f => ({ ...f, [k]: v }));
 
@@ -302,6 +336,63 @@ export default function MyEmployeeProfilePage() {
             </div>
           </>
         )}
+
+        {/* Acknowledgements (Wave 3) */}
+        <Card>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{t('me.acks')}</p>
+            {acksLoading && <LoadingSpinner />}
+          </div>
+          {acks.length === 0 ? (
+            <p className="text-sm text-gray-500">{t('me.acks_empty')}</p>
+          ) : (
+            <div className="space-y-2">
+              {acks.map(it => (
+                <div key={it.policyKey} className="flex items-center justify-between gap-3 py-2 border-b border-gray-50 last:border-0">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-medium text-gray-900 truncate">{it.label}</span>
+                      {it.isRequired && (
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-rose-50 text-rose-700">
+                          {t('me.ack_required')}
+                        </span>
+                      )}
+                      {it.activeVersion && <span className="text-[10px] text-gray-400">v{it.activeVersion}</span>}
+                    </div>
+                    {it.documentUrl && (
+                      <a href={it.documentUrl} target="_blank" rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs text-primary-600 hover:text-primary-700 mt-1">
+                        <FileText className="w-3 h-3" /> {t('me.ack_view_doc')}
+                      </a>
+                    )}
+                    {it.ack && (
+                      <p className="text-[11px] text-gray-500 mt-0.5">
+                        {t('me.ack_signed_on', { date: fmtDate(it.ack.acknowledgedAt) })}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {it.status === 'signed' && (
+                      <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">
+                        <CheckCircle2 className="w-3 h-3" /> {t('me.ack_status_signed')}
+                      </span>
+                    )}
+                    {it.status === 'stale' && (
+                      <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">
+                        <AlertTriangle className="w-3 h-3" /> {t('me.ack_status_stale')}
+                      </span>
+                    )}
+                    {it.activePolicyId && it.status !== 'signed' && (
+                      <Button size="sm" variant="outline" loading={signingKey === it.policyKey} onClick={() => signAck(it)}>
+                        {t('me.ack_sign')}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
 
         {/* Emergency contacts */}
         <Card>

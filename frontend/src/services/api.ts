@@ -109,6 +109,9 @@ export const meApi = {
   createEmergencyContact: (data: Record<string, unknown>) => api.post('/me/emergency-contacts', data),
   updateEmergencyContact: (id: string, data: Record<string, unknown>) => api.patch(`/me/emergency-contacts/${id}`, data),
   deleteEmergencyContact: (id: string) => api.delete(`/me/emergency-contacts/${id}`),
+  // Wave 3: self-service acknowledgements.
+  listAcknowledgements: () => api.get('/me/acknowledgements'),
+  signAcknowledgement: (policyId: string) => api.post('/me/acknowledgements', { policyId }),
 };
 
 // ---- SUPERVISOR ----

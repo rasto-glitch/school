@@ -240,6 +240,8 @@ export function createRouter(io: SocketServer) {
   router.post(  '/me/emergency-contacts', authenticate, (req, res) => meEmployee.createMyContact(req as AuthRequest, res));
   router.patch( '/me/emergency-contacts/:id', authenticate, validate({ params: vu.idParam }), (req, res) => meEmployee.updateMyContact(req as AuthRequest, res));
   router.delete('/me/emergency-contacts/:id', authenticate, validate({ params: vu.idParam }), (req, res) => meEmployee.deleteMyContact(req as AuthRequest, res));
+  router.get( '/me/acknowledgements', authenticate, (req, res) => meEmployee.listMyAcknowledgements(req as AuthRequest, res));
+  router.post('/me/acknowledgements', authenticate, (req, res) => meEmployee.createMyAcknowledgement(req as AuthRequest, res));
   router.get('/admin/reset-requests', authenticate, authorize('admin'), (req, res) => admin.getResetRequests(req as AuthRequest, res));
   router.post('/admin/users/:userId/reset-password', authenticate, authorize('admin'), validate({ params: vu.userIdParam, body: vu.resetUserPasswordSchema }), (req, res) => admin.resetUserPassword(req as AuthRequest, res));
   router.get('/admin/users/inactive/search', authenticate, authorize('admin'), validate({ query: vq.listQuery }), (req, res) => admin.searchInactiveUsers(req as AuthRequest, res));

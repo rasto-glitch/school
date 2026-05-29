@@ -1878,7 +1878,17 @@
     "ext_failed": "Failed to save profile.",
     "failed_load": "Failed to load profile.",
     "redacted_title": "Profile redacted",
-    "redacted_body": "Right-to-erasure request applied on {{date}}. Contact your HR officer to restore the record."
+    "redacted_body": "Right-to-erasure request applied on {{date}}. Contact your HR officer to restore the record.",
+    "acks": "Policy acknowledgements",
+    "acks_empty": "Your school hasn't published any policies yet.",
+    "ack_required": "Required",
+    "ack_view_doc": "View policy",
+    "ack_signed_on": "Signed on {{date}}",
+    "ack_status_signed": "Signed",
+    "ack_status_stale": "Update needed",
+    "ack_sign": "Sign",
+    "ack_signed": "Acknowledgement recorded.",
+    "ack_failed": "Failed to record acknowledgement."
   },
   "accounting": {
     "title": "Accounting",

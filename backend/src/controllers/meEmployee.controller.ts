@@ -330,3 +330,124 @@ export async function deleteMyContact(req: AuthRequest, res: Response): Promise<
   });
   res.json({ ok: true });
 }
+
+// ── /me/acknowledgements (Wave 3) ──────────────────────────────────────────
+// Mirrors the admin endpoints in employeeAcknowledgements.controller but
+// scoped to the caller's own owner. Lets the employee see required
+// policies and sign them without an admin keystroke.
+
+export async function listMyAcknowledgements(req: AuthRequest, res: Response): Promise<void> {
+  const owner = await resolveMyOwner(req);
+  if ('error' in owner) { res.status(owner.status).json({ error: owner.error }); return; }
+  const { schoolId } = req.user!;
+
+  const [policiesRes, acksRes] = await Promise.all([
+    supabase.from('school_policies')
+      .select('id, policy_key, label, version, is_required, is_active, document_url')
+      .eq('school_id', schoolId).eq('is_active', true)
+      .order('policy_key', { ascending: true }).order('version', { ascending: false }),
+    supabase.from('employee_acknowledgements')
+      .select('id, policy_id, policy_key, policy_version, acknowledged_at, signed_document_id')
+      .eq('school_id', schoolId).eq('owner_type', owner.ownerType).eq('owner_id', owner.ownerId)
+      .order('acknowledged_at', { ascending: false }),
+  ]);
+  if (policiesRes.error) { res.status(safeDbErrorStatus(policiesRes.error)).json({ error: safeDbErrorMessage(policiesRes.error) }); return; }
+  if (acksRes.error) { res.status(safeDbErrorStatus(acksRes.error)).json({ error: safeDbErrorMessage(acksRes.error) }); return; }
+
+  const activeByKey = new Map<string, { id: string; label: string; version: number; isRequired: boolean; documentUrl: string | null }>();
+  for (const p of (policiesRes.data ?? [])) {
+    if (activeByKey.has(p.policy_key)) continue;
+    activeByKey.set(p.policy_key, {
+      id: p.id, label: p.label, version: p.version,
+      isRequired: p.is_required, documentUrl: p.document_url,
+    });
+  }
+  const latestAckByKey = new Map<string, { id: string; policyVersion: number; acknowledgedAt: string; signedDocumentId: string | null }>();
+  for (const a of (acksRes.data ?? [])) {
+    if (latestAckByKey.has(a.policy_key)) continue;
+    latestAckByKey.set(a.policy_key, {
+      id: a.id, policyVersion: a.policy_version,
+      acknowledgedAt: a.acknowledged_at, signedDocumentId: a.signed_document_id,
+    });
+  }
+
+  const items: {
+    policyKey: string; label: string;
+    activePolicyId: string | null; activeVersion: number | null; documentUrl: string | null;
+    isRequired: boolean;
+    status: 'unsigned' | 'signed' | 'stale';
+    ack: { id: string; policyVersion: number; acknowledgedAt: string; signedDocumentId: string | null } | null;
+  }[] = [];
+
+  const seenKeys = new Set<string>();
+  for (const [key, p] of activeByKey) {
+    const ack = latestAckByKey.get(key) ?? null;
+    const status = !ack ? 'unsigned' : ack.policyVersion < p.version ? 'stale' : 'signed';
+    items.push({
+      policyKey: key, label: p.label,
+      activePolicyId: p.id, activeVersion: p.version, documentUrl: p.documentUrl,
+      isRequired: p.isRequired, status, ack,
+    });
+    seenKeys.add(key);
+  }
+  for (const [key, ack] of latestAckByKey) {
+    if (seenKeys.has(key)) continue;
+    items.push({
+      policyKey: key, label: key,
+      activePolicyId: null, activeVersion: null, documentUrl: null,
+      isRequired: false, status: 'signed', ack,
+    });
+  }
+
+  res.json({ items });
+}
+
+export async function createMyAcknowledgement(req: AuthRequest, res: Response): Promise<void> {
+  const owner = await resolveMyOwner(req);
+  if ('error' in owner) { res.status(owner.status).json({ error: owner.error }); return; }
+  const { schoolId, userId } = req.user!;
+
+  const policyId = String(req.body?.policyId ?? '').trim();
+  if (!policyId) { res.status(400).json({ error: 'policyId is required' }); return; }
+
+  const { data: policy } = await supabase
+    .from('school_policies').select('id, policy_key, version, is_active')
+    .eq('id', policyId).eq('school_id', schoolId).maybeSingle();
+  if (!policy) { res.status(404).json({ error: 'Policy not found' }); return; }
+  if (!policy.is_active) { res.status(400).json({ error: 'Policy is not active' }); return; }
+
+  // PENTEST H-3: XFF is attacker-controllable; we record it for the
+  // legal-record value, not for security decisions.
+  const xff = String(req.headers['x-forwarded-for'] ?? '').split(',')[0].trim();
+  const ip = xff || req.ip || null;
+  const ua = String(req.headers['user-agent'] ?? '').slice(0, 500) || null;
+
+  const insertRow = {
+    school_id: schoolId,
+    owner_type: owner.ownerType, owner_id: owner.ownerId,
+    policy_id: policyId, policy_key: policy.policy_key, policy_version: policy.version,
+    ip_address: ip, user_agent: ua,
+    signed_document_id: null,
+    recorded_by: userId,
+  };
+
+  // tenant-check-allow: insertRow.school_id sourced from req.user!.schoolId; INSERT has no .eq() shape.
+  const { data, error } = await supabase
+    .from('employee_acknowledgements').insert(insertRow)
+    .select('id, policy_id, policy_key, policy_version, acknowledged_at, signed_document_id')
+    .single();
+  if (error || !data) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+
+  await logAudit({
+    req, entityType: 'employee_acknowledgement', entityId: data.id,
+    action: 'create',
+    after: {
+      _meta: { kind: 'self_sign' },
+      policy_key: data.policy_key, policy_version: data.policy_version,
+      owner_type: owner.ownerType, owner_id: owner.ownerId,
+    },
+    label: 'acknowledgement_self_create',
+  });
+
+  res.status(201).json({ acknowledgement: toCC(data) });
+}
