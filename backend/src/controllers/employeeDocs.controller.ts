@@ -200,6 +200,13 @@ export async function uploadForEmployee(req: AuthRequest, res: Response): Promis
   const expiresOn = req.body?.expires_on ? String(req.body.expires_on).trim() || null : null;
   const notes = req.body?.notes ? String(req.body.notes).trim() || null : null;
 
+  // Scan flow (Wave 3): when EMPLOYEE_DOC_SCAN_ENABLED=true the upload
+  // queues the row for the ClamAV worker. Otherwise we mark it 'skipped'
+  // so the signed-URL endpoint serves it immediately. Either way, the
+  // download endpoint blocks 'infected' rows.
+  const scanEnabled = process.env.EMPLOYEE_DOC_SCAN_ENABLED === 'true';
+  const scanStatus: 'pending' | 'skipped' = scanEnabled ? 'pending' : 'skipped';
+
   const insertRow = {
     school_id: schoolId,
     owner_type: ownerType,
@@ -212,7 +219,7 @@ export async function uploadForEmployee(req: AuthRequest, res: Response): Promis
     mime_type: sniffed,
     byte_size: file.size,
     sha256,
-    scan_status: 'skipped' as const,
+    scan_status: scanStatus,
     document_number: documentNumber,
     issued_on: issuedOn,
     expires_on: expiresOn,
@@ -270,6 +277,13 @@ export async function issueSignedUrl(req: AuthRequest, res: Response): Promise<v
 
   if (doc.scan_status === 'infected') {
     res.status(423).json({ error: 'Document is quarantined' });
+    return;
+  }
+  // Wave 3: when scan mode is on, pending rows haven't been cleared yet —
+  // hold downloads until the worker reaches them. Admins see a clear
+  // 425 (Too Early) so the UI can render "scanning, please wait".
+  if (doc.scan_status === 'pending' && process.env.EMPLOYEE_DOC_SCAN_ENABLED === 'true') {
+    res.status(425).json({ error: 'Document is being scanned. Please try again in a moment.' });
     return;
   }
   if (!(await canReadSensitivity(userId, doc.sensitivity as 'low' | 'medium' | 'high'))) {

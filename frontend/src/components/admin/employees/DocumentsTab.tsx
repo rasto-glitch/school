@@ -244,9 +244,19 @@ export default function DocumentsTab({ role, employeeId }: Props) {
                 {documents.map(d => (
                   <tr key={d.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/60">
                     <td className="px-3 py-2">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-gray-900">{categoryLabel(d.category)}</span>
                         {sensitivityBadge(d.sensitivity, t)}
+                        {d.scanStatus === 'pending' && (
+                          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700">
+                            {t('admin.docs.scan_pending')}
+                          </span>
+                        )}
+                        {d.scanStatus === 'infected' && (
+                          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-rose-100 text-rose-700">
+                            {t('admin.docs.scan_infected')}
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className="px-3 py-2 text-gray-700">
@@ -260,11 +270,12 @@ export default function DocumentsTab({ role, employeeId }: Props) {
                     <td className="px-3 py-2 text-gray-600 whitespace-nowrap">{d.redacted ? '—' : fmtBytes(d.byteSize)}</td>
                     <td className="px-3 py-2">
                       <div className="flex justify-end gap-1">
-                        {!d.redacted && (
+                        {!d.redacted && d.scanStatus !== 'infected' && (
                           <button
                             type="button" onClick={() => onDownload(d)}
-                            title={t('admin.docs.download')}
-                            className="p-1.5 rounded-md hover:bg-gray-100 text-gray-600"
+                            title={d.scanStatus === 'pending' ? t('admin.docs.scan_pending') : t('admin.docs.download')}
+                            disabled={d.scanStatus === 'pending'}
+                            className="p-1.5 rounded-md hover:bg-gray-100 text-gray-600 disabled:opacity-40 disabled:cursor-not-allowed"
                           ><Download className="w-4 h-4" /></button>
                         )}
                         {!d.redacted && (

@@ -1584,7 +1584,9 @@
       "failed_upload": "Failed to upload document.",
       "failed_link": "Failed to generate download link.",
       "failed_save": "Failed to save changes.",
-      "failed_void": "Failed to remove document."
+      "failed_void": "Failed to remove document.",
+      "scan_pending": "Scanning…",
+      "scan_infected": "Quarantined"
     },
     "profile": {
       "title": "Employee profile",
