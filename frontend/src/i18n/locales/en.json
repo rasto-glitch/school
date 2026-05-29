@@ -127,7 +127,9 @@
     "action": {
       "create": "Created",
       "update": "Updated",
-      "delete": "Deleted"
+      "delete": "Deleted",
+      "read": "Read",
+      "export": "Exported"
     },
     "entity": {
       "student": "Student",

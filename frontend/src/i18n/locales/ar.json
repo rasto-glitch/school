@@ -127,7 +127,9 @@
     "action": {
       "create": "إنشاء",
       "update": "تحديث",
-      "delete": "حذف"
+      "delete": "حذف",
+      "read": "قراءة",
+      "export": "تم التصدير"
     },
     "entity": {
       "student": "طالب",

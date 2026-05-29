@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { History, Search, ChevronDown, ChevronRight, Plus, Pencil, Trash2, X } from 'lucide-react';
+import { History, Search, ChevronDown, ChevronRight, Plus, Pencil, Trash2, X, Eye, Download, Activity } from 'lucide-react';
 import { adminApi } from '../../services/api';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
@@ -11,12 +11,16 @@ import LoadingSpinner from '../../components/common/LoadingSpinner';
 import EmptyState from '../../components/common/EmptyState';
 import { format, parseISO } from 'date-fns';
 
+type AuditAction = 'create' | 'update' | 'delete' | 'read' | 'export';
+
 interface AuditLog {
   id: string;
   schoolId: string;
   entityType: string;
   entityId: string;
-  action: 'create' | 'update' | 'delete';
+  /** Backend may also emit other strings; rendering falls back to a generic
+   *  style so a new action value never crashes the page. */
+  action: AuditAction | string;
   changes: Record<string, unknown>;
   actorId: string | null;
   actorUsername: string | null;
@@ -37,13 +41,20 @@ const ENTITY_TYPES = [
   'staff_salary_payment',
 ] as const;
 
-const ACTIONS = ['create', 'update', 'delete'] as const;
+const ACTIONS = ['create', 'update', 'delete', 'read', 'export'] as const;
 
 const ACTION_STYLES: Record<string, { bg: string; text: string; Icon: typeof Plus }> = {
   create: { bg: 'bg-green-100', text: 'text-green-700', Icon: Plus },
   update: { bg: 'bg-blue-100', text: 'text-blue-700', Icon: Pencil },
   delete: { bg: 'bg-red-100', text: 'text-red-700', Icon: Trash2 },
+  read:   { bg: 'bg-slate-100', text: 'text-slate-700', Icon: Eye },
+  export: { bg: 'bg-amber-100', text: 'text-amber-700', Icon: Download },
 };
+
+// Fallback styling for any action the frontend hasn't been taught about yet
+// (e.g. a future backend addition). Keeps the row rendering safe instead of
+// crashing the whole audit-log page.
+const FALLBACK_STYLE = { bg: 'bg-gray-100', text: 'text-gray-700', Icon: Activity };
 
 function formatValue(v: unknown): string {
   if (v === null || v === undefined || v === '') return '—';
@@ -94,7 +105,7 @@ function flagFlipSentence(key: string, oldV: unknown, newV: unknown): string | n
 // If an update boils down to a single recognized flag flip, return the
 // friendly verb so the row header reads "Archived" instead of "Updated".
 interface AuditLogLite {
-  action: 'create' | 'update' | 'delete';
+  action: AuditAction | string;
   changes: Record<string, unknown>;
 }
 interface LogSummary {
@@ -230,7 +241,7 @@ export default function AuditLogPage() {
         <div className="space-y-2">
           {logs.map(log => {
             const isOpen = expanded.has(log.id);
-            const styles = ACTION_STYLES[log.action];
+            const styles = ACTION_STYLES[log.action] ?? FALLBACK_STYLE;
             const ActionIcon = styles.Icon;
             const summary = summarizeLog(log);
             return (
@@ -307,11 +318,17 @@ function ChangesView({ log }: { log: AuditLog }) {
     return <p className="text-sm text-gray-500 italic">{t('audit.noChanges')}</p>;
   }
 
-  if (log.action === 'create' || log.action === 'delete') {
+  // Read and export actions ship metadata under `_meta` rather than diffs;
+  // create and delete log the full row under `_row`. Both render flat.
+  if (log.action === 'create' || log.action === 'delete' || log.action === 'read' || log.action === 'export') {
+    const heading =
+      log.action === 'create' ? t('audit.created')
+      : log.action === 'delete' ? t('audit.deleted')
+      : t(`audit.action.${log.action}`);
     return (
       <div className="space-y-1.5">
         <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-          {log.action === 'create' ? t('audit.created') : t('audit.deleted')}
+          {heading}
         </div>
         {entries.map(([k, v]) => (
           <div key={k} className="grid grid-cols-3 gap-2 text-sm">
