@@ -3,15 +3,18 @@
 // role-agnostic and lock until that id exists; each writes durably through
 // its own Save button so partial completion is harmless.
 //
-// Done returns to the role tab in EmployeesManagement; Add another resets
-// the wizard for the next employee (TeacherIdentityForm remounts on a key
+// Renders bare (no PageLayout, no page title) so it can be embedded inside
+// EmployeesManagement's "Add new" top tab. The standalone /admin/employees
+// /new/:role route uses NewEmployeePage to add the page chrome.
+//
+// Done returns to /admin/employees?top=active&sub=<role>; Add another
+// resets the wizard for the next employee (identity form remounts on a key
 // change so RHF state and class checkboxes clear cleanly).
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Plus } from 'lucide-react';
-import PageLayout from '../../../layout/PageLayout';
+import { Plus } from 'lucide-react';
 import Button from '../../../common/Button';
 import WizardSection from './WizardSection';
 import TeacherIdentityForm, { type CreatedEmployee } from './TeacherIdentityForm';
@@ -26,15 +29,6 @@ import type { EmployeeRole } from '../../../../types/employeeRecords';
 interface Props {
   role: EmployeeRole;
 }
-
-const ROLE_LABELS: Record<string, { titleKey: string; fallback: string }> = {
-  teacher: { titleKey: 'admin.wizard.title_teacher', fallback: 'Add new teacher' },
-  supervisor: { titleKey: 'admin.wizard.title_supervisor', fallback: 'Add new supervisor' },
-  accountant: { titleKey: 'admin.wizard.title_accountant', fallback: 'Add new accountant' },
-  reception: { titleKey: 'admin.wizard.title_reception', fallback: 'Add new receptionist' },
-  staff: { titleKey: 'admin.wizard.title_staff', fallback: 'Add new staff member' },
-  admin: { titleKey: 'admin.wizard.title_admin', fallback: 'Add new administrator' },
-};
 
 function LockedPlaceholder({ message }: { message: string }) {
   return (
@@ -76,11 +70,7 @@ export default function NewEmployeeWizard({ role }: Props) {
   // Bumped on "Add another" so the identity form remounts and clears state.
   const [resetKey, setResetKey] = useState(0);
 
-  const labelDef = ROLE_LABELS[role] ?? ROLE_LABELS.teacher;
-  const pageTitle = t(labelDef.titleKey, labelDef.fallback);
-  const subtitle = t('admin.wizard.subtitle', 'Fill in identity, then add optional details below.');
-
-  const goToList = () => navigate(`/admin/employees?tab=${role}`);
+  const goToList = () => navigate(`/admin/employees?top=active&sub=${role}`);
   const onAddAnother = () => {
     setCreatedEmployee(null);
     setPhotoUploaded(false);
@@ -120,15 +110,7 @@ export default function NewEmployeeWizard({ role }: Props) {
   const dc = docsCount;
 
   return (
-    <PageLayout title={pageTitle} subtitle={subtitle}>
-      <div className="max-w-5xl space-y-4">
-        <button
-          onClick={goToList}
-          className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
-        >
-          <ArrowLeft className="w-4 h-4" /> {t('admin.wizard.back_to_employees', 'Back to Employees')}
-        </button>
-
+    <div className="max-w-5xl space-y-4">
         <WizardSection
           number={1}
           title={t('admin.wizard.section_identity', 'Identity')}
@@ -221,7 +203,6 @@ export default function NewEmployeeWizard({ role }: Props) {
             </Button>
           </div>
         )}
-      </div>
-    </PageLayout>
+    </div>
   );
 }

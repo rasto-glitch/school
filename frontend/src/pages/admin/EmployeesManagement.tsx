@@ -1,30 +1,55 @@
+// Restructured Employees page. Three top tabs — Add new / Active / Archived
+// — each split into the same six role sub-tabs (teacher, supervisor,
+// administration, reception, accountant, staff). Accountant and Staff
+// only show when the tuition-fees feature is on (matches the legacy gating).
+//
+// Add embeds NewEmployeeWizard directly; Active and Archived render the
+// shared SortableTable via per-role list wrappers. Click an active row to
+// open the employee profile; click an archived row to open the shared
+// detail modal.
+//
+// URL params:
+//   ?top=add|active|archived  (default: active)
+//   ?sub=<role>              (default: teacher)
+// Legacy ?tab=<role> still works and maps to ?top=active&sub=<role>.
+
+import { useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import PageLayout from '../../components/layout/PageLayout';
 import { useAuthStore } from '../../store/authStore';
-import TeacherEmployeesTab from './employees/TeacherEmployeesTab';
-import AccountEmployeesTab from './employees/AccountEmployeesTab';
-import StaffEmployeesTab from './employees/StaffEmployeesTab';
+import NewEmployeeWizard from '../../components/admin/employees/wizard/NewEmployeeWizard';
+import ActiveEmployeeList from './employees/ActiveEmployeeList';
+import ArchivedEmployeeList from './employees/ArchivedEmployeeList';
+import type { EmployeeRole } from '../../types/employeeRecords';
 
-// Unified Employees page. Replaces the old standalone /admin/teachers page.
-// Sub-tabs: Teacher · Supervisor · Administration · Staff. Each tab owns the
-// add / manage / archive flow for its employee type. (Staff lands in a later
-// phase; the accounting portal reads these employees for salaries.)
-//
-// The active tab is mirrored to the ?tab= query param so deep links and the
-// /admin/teachers → /admin/employees redirect land on the right place.
+type TopTab = 'add' | 'active' | 'archived';
+type SubTab = 'teacher' | 'supervisor' | 'admin' | 'reception' | 'accountant' | 'staff';
 
-type EmpTab = 'teacher' | 'supervisor' | 'admin' | 'reception' | 'accountant' | 'staff';
+const TOP_TABS: { key: TopTab; labelKey: string; fallback: string }[] = [
+  { key: 'add', labelKey: 'admin.employees.tab_add', fallback: 'Add new employee' },
+  { key: 'active', labelKey: 'admin.employees.tab_active', fallback: 'Active employees' },
+  { key: 'archived', labelKey: 'admin.employees.tab_archived', fallback: 'Archived' },
+];
 
 export default function EmployeesManagement() {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
-  // Staff and Accountant are backed by the accounting-premium feature; hide
-  // those sub-tabs entirely when the accounting module is off. (Accountant is
-  // a role only when accounting is enabled; Staff reads staff_members.)
   const accountingEnabled = useAuthStore(s => s.school?.features?.tuition_fees === true);
 
-  const TABS: { key: EmpTab; label: string }[] = [
+  // Legacy compat: ?tab=X gets normalised to ?top=active&sub=X on first load.
+  useEffect(() => {
+    const legacy = searchParams.get('tab');
+    if (legacy && !searchParams.get('sub')) {
+      const next = new URLSearchParams(searchParams);
+      next.delete('tab');
+      next.set('top', 'active');
+      next.set('sub', legacy);
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
+  const SUB_TABS: { key: SubTab; label: string }[] = [
     { key: 'teacher', label: t('admin.tab_teachers') },
     { key: 'supervisor', label: t('admin.tab_supervisors') },
     { key: 'admin', label: t('admin.tab_administration') },
@@ -33,36 +58,56 @@ export default function EmployeesManagement() {
     ...(accountingEnabled ? [{ key: 'staff' as const, label: t('admin.tab_staff') }] : []),
   ];
 
-  const raw = (searchParams.get('tab') || 'teacher') as EmpTab;
-  const active: EmpTab = TABS.some(t => t.key === raw) ? raw : 'teacher';
+  const rawTop = (searchParams.get('top') || 'active') as TopTab;
+  const top: TopTab = TOP_TABS.some(t => t.key === rawTop) ? rawTop : 'active';
 
-  const setTab = (key: EmpTab) => {
+  const rawSub = (searchParams.get('sub') || 'teacher') as SubTab;
+  const sub: SubTab = SUB_TABS.some(t => t.key === rawSub) ? rawSub : 'teacher';
+
+  const setTop = (key: TopTab) => {
     const next = new URLSearchParams(searchParams);
-    next.set('tab', key);
+    next.set('top', key);
+    setSearchParams(next, { replace: true });
+  };
+  const setSub = (key: SubTab) => {
+    const next = new URLSearchParams(searchParams);
+    next.set('sub', key);
     setSearchParams(next, { replace: true });
   };
 
   return (
     <PageLayout title={t('nav.employees')} subtitle={t('admin.employees_subtitle')}>
-      <div className="space-y-6">
-        <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
-          {TABS.map(t => (
+      <div className="space-y-5">
+        {/* Top tabs — primary nav between Add / Active / Archived. */}
+        <div className="border-b border-gray-200 flex gap-6 -mx-1 px-1">
+          {TOP_TABS.map(tt => (
             <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              className={`px-4 py-1.5 text-sm font-medium rounded-lg transition-colors ${active === t.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              key={tt.key}
+              onClick={() => setTop(tt.key)}
+              className={`pb-2 -mb-px text-sm font-medium border-b-2 transition-colors ${top === tt.key ? 'border-primary-600 text-primary-700' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
             >
-              {t.label}
+              {t(tt.labelKey, tt.fallback)}
             </button>
           ))}
         </div>
 
-        {active === 'teacher' && <TeacherEmployeesTab />}
-        {active === 'supervisor' && <AccountEmployeesTab role="supervisor" singular={t('admin.singular_supervisor')} />}
-        {active === 'admin' && <AccountEmployeesTab role="admin" singular={t('admin.singular_administrator')} />}
-        {active === 'reception' && <AccountEmployeesTab role="reception" singular={t('admin.singular_reception', 'Receptionist')} />}
-        {active === 'accountant' && accountingEnabled && <AccountEmployeesTab role="accountant" singular={t('admin.singular_accountant', 'Accountant')} />}
-        {active === 'staff' && accountingEnabled && <StaffEmployeesTab />}
+        {/* Sub tabs — role within the selected top tab. */}
+        <div className="flex flex-wrap gap-1 bg-gray-100 rounded-xl p-1 w-fit">
+          {SUB_TABS.map(st => (
+            <button
+              key={st.key}
+              onClick={() => setSub(st.key)}
+              className={`px-4 py-1.5 text-sm font-medium rounded-lg transition-colors ${sub === st.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              {st.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Body — switch on (top, sub). */}
+        {top === 'add' && <NewEmployeeWizard role={sub as EmployeeRole} />}
+        {top === 'active' && <ActiveEmployeeList role={sub as EmployeeRole} />}
+        {top === 'archived' && <ArchivedEmployeeList role={sub as EmployeeRole} />}
       </div>
     </PageLayout>
   );
