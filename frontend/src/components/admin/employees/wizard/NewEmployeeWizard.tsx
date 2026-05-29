@@ -15,6 +15,8 @@ import PageLayout from '../../../layout/PageLayout';
 import Button from '../../../common/Button';
 import WizardSection from './WizardSection';
 import TeacherIdentityForm, { type CreatedEmployee } from './TeacherIdentityForm';
+import AccountIdentityForm, { type AccountRole } from './AccountIdentityForm';
+import StaffIdentityForm from './StaffIdentityForm';
 import EmergencyContactsSection from './EmergencyContactsSection';
 import DocumentsSection from './DocumentsSection';
 import ExtendedProfileForm from '../ExtendedProfileForm';
@@ -94,13 +96,24 @@ export default function NewEmployeeWizard({ role }: Props) {
 
   const renderIdentity = () => {
     if (createdEmployee) return <IdentitySummary employee={createdEmployee} />;
-    if (role === 'teacher') return <TeacherIdentityForm key={resetKey} onCreated={setCreatedEmployee} />;
-    // Phase 2 ships Teacher only; the other identity forms land in Phase 3.
-    return (
-      <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-        {t('admin.wizard.role_not_ready', 'This role is not yet supported by the wizard. It will land in a follow-up phase.')}
-      </p>
-    );
+    switch (role) {
+      case 'teacher':
+        return <TeacherIdentityForm key={resetKey} onCreated={setCreatedEmployee} />;
+      case 'staff':
+        return <StaffIdentityForm key={resetKey} onCreated={setCreatedEmployee} />;
+      case 'supervisor':
+      case 'accountant':
+      case 'reception':
+      case 'admin':
+        return <AccountIdentityForm key={resetKey} role={role as AccountRole} onCreated={setCreatedEmployee} />;
+      default:
+        // Driver (and any future role) — not covered by the wizard yet.
+        return (
+          <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            {t('admin.wizard.role_not_ready', 'This role is not yet supported by the wizard.')}
+          </p>
+        );
+    }
   };
 
   const ec = contactsCount;

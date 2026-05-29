@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { History } from 'lucide-react';
+import { History, Sparkles } from 'lucide-react';
 import { adminApi } from '../../../services/api';
 import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from '../../../utils/passwordPolicy';
 import { useDebounce } from '../../../hooks/useDebounce';
@@ -244,6 +245,21 @@ export default function AccountEmployeesTab({ role, singular }: Props) {
   return (
     <>
       <div className="space-y-6">
+        {/* Phase 3 preview: link to the new wizard. Removed when Phase 4
+            restructures EmployeesManagement to the three-top-tab layout. */}
+        <div className="flex items-center gap-2 bg-primary-50 border border-primary-200 rounded-lg p-3 text-sm">
+          <Sparkles className="w-4 h-4 text-primary-600 flex-shrink-0" />
+          <span className="text-primary-900 flex-1">
+            {t('admin.wizard.preview_banner', 'Try the new Add-employee wizard (work in progress).')}
+          </span>
+          <Link
+            to={`/admin/employees/new/${role}`}
+            className="text-sm font-medium text-primary-700 hover:text-primary-800 underline"
+          >
+            {t('admin.wizard.open_wizard', 'Open wizard →')}
+          </Link>
+        </div>
+
         {/* Add — full width, two-phase (Add → attach photo → Save) */}
         <Card>
           <h2 className="font-semibold text-gray-900 mb-4">{t('admin.acct_emp.add_title', { role: singular })}</h2>

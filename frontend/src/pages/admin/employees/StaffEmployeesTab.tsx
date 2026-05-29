@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation, Trans } from 'react-i18next';
+import { Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { Info } from 'lucide-react';
+import { Info, Sparkles } from 'lucide-react';
 import { adminApi } from '../../../services/api';
 import Card from '../../../components/common/Card';
 import Input from '../../../components/common/Input';
@@ -166,6 +167,21 @@ export default function StaffEmployeesTab() {
           <span>
             <Trans i18nKey="admin.staff_emp.finance_note" components={{ b: <span className="font-medium" /> }} />
           </span>
+        </div>
+
+        {/* Phase 3 preview: link to the new wizard. Removed when Phase 4
+            restructures EmployeesManagement to the three-top-tab layout. */}
+        <div className="flex items-center gap-2 bg-primary-50 border border-primary-200 rounded-lg p-3 text-sm">
+          <Sparkles className="w-4 h-4 text-primary-600 flex-shrink-0" />
+          <span className="text-primary-900 flex-1">
+            {t('admin.wizard.preview_banner', 'Try the new Add-employee wizard (work in progress).')}
+          </span>
+          <Link
+            to="/admin/employees/new/staff"
+            className="text-sm font-medium text-primary-700 hover:text-primary-800 underline"
+          >
+            {t('admin.wizard.open_wizard', 'Open wizard →')}
+          </Link>
         </div>
 
         <div className="space-y-6">
