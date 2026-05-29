@@ -7,6 +7,7 @@ import Button from '../../common/Button';
 import DocumentsTab from './DocumentsTab';
 import { ExtendedProfileTab, EmergencyContactsTab, AcknowledgementsTab, ActionsTab } from './Wave2Tabs';
 import TerminationModal from './TerminationModal';
+import EditIdentityPanel from './EditIdentityPanel';
 import type { EmployeeDocument, EmployeeProfile, EmployeeRole } from '../../../types/employeeDocs';
 
 // Shared employee profile view. Renders the header + at-a-glance strip +
@@ -21,7 +22,8 @@ interface Props {
   profile: EmployeeProfile;
   documents: EmployeeDocument[];
   hrOfficer: boolean;
-  onEdit?: () => void;
+  /** Called after the operator saves identity edits so the page can re-fetch. */
+  onSaved?: () => void;
   onExportJson?: () => void;
   onExportPdf?: () => void;
   onTerminated?: () => void;
@@ -80,12 +82,13 @@ function InfoRow({ label, value, sensitive = false }: { label: string; value: st
   );
 }
 
-export default function EmployeeProfileView({ profile: p, documents: _docs, hrOfficer, onEdit, onExportJson, onExportPdf, onTerminated, initialTab = 'personal' }: Props) {
+export default function EmployeeProfileView({ profile: p, documents: _docs, hrOfficer, onSaved, onExportJson, onExportPdf, onTerminated, initialTab = 'personal' }: Props) {
   void _docs; // DocumentsTab refetches on its own; we don't need the prop here, but consumers pass it for symmetry / SSR.
   const { t } = useTranslation();
   const [tab, setTab] = useState<Tab>(initialTab);
   const [exporting, setExporting] = useState<'json' | 'pdf' | null>(null);
   const [showTerminate, setShowTerminate] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   const ageStr = useMemo(() => {
     const a = computeAge(p.hr.dateOfBirth);
@@ -147,9 +150,14 @@ export default function EmployeeProfileView({ profile: p, documents: _docs, hrOf
             </p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
-            {onEdit && (
-              <Button variant="ghost" size="sm" icon={<Edit className="w-4 h-4" />} onClick={onEdit}>
-                {t('admin.profile.edit')}
+            {p.account.isActive !== false && (
+              <Button
+                variant={editing ? 'outline' : 'ghost'}
+                size="sm"
+                icon={<Edit className="w-4 h-4" />}
+                onClick={() => setEditing(e => !e)}
+              >
+                {editing ? t('admin.profile.cancel_edit', 'Cancel edit') : t('admin.profile.edit')}
               </Button>
             )}
             {onExportJson && (
@@ -170,6 +178,14 @@ export default function EmployeeProfileView({ profile: p, documents: _docs, hrOf
           </div>
         </div>
       </Card>
+
+      {editing && (
+        <EditIdentityPanel
+          profile={p}
+          onSaved={() => { setEditing(false); onSaved?.(); }}
+          onCancel={() => setEditing(false)}
+        />
+      )}
 
       {/* At-a-glance */}
       <Card>

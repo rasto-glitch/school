@@ -10,8 +10,10 @@ import EmployeeProfileView from '../../components/admin/employees/EmployeeProfil
 import { adminApi } from '../../services/api';
 import type { EmployeeProfileResponse, EmployeeRole } from '../../types/employeeDocs';
 
-// /admin/employees/:role/:id — comprehensive view of one employee. The
-// Documents tab is functional in Wave 1; the rest will fill in over Wave 2.
+// /admin/employees/:role/:id — comprehensive view of one employee. Identity
+// editing happens inline via the EditIdentityPanel inside EmployeeProfileView;
+// onSaved triggers a profile re-fetch so the header / at-a-glance / extended
+// strip refresh immediately.
 
 const VALID_ROLES: EmployeeRole[] = [
   'teacher', 'driver', 'staff', 'supervisor', 'admin', 'reception', 'accountant',
@@ -29,17 +31,22 @@ export default function EmployeeProfilePage() {
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<EmployeeProfileResponse | null>(null);
 
-  useEffect(() => {
+  const load = async () => {
     if (!isValidRole(role) || !id) { setLoading(false); setError(t('admin.profile.invalid_url')); return; }
     setLoading(true);
-    adminApi.getEmployeeProfile(role, id)
-      .then(r => { setData(r.data); setError(null); })
-      .catch((e: { response?: { status?: number; data?: { error?: string } } }) => {
-        if (e.response?.status === 404) setError(t('admin.profile.not_found'));
-        else setError(e.response?.data?.error || t('admin.profile.failed_load'));
-      })
-      .finally(() => setLoading(false));
-  }, [role, id, t]);
+    try {
+      const r = await adminApi.getEmployeeProfile(role, id);
+      setData(r.data); setError(null);
+    } catch (err: unknown) {
+      const e = err as { response?: { status?: number; data?: { error?: string } } };
+      if (e.response?.status === 404) setError(t('admin.profile.not_found'));
+      else setError(e.response?.data?.error || t('admin.profile.failed_load'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { load(); }, [role, id]);
 
   const downloadBlob = (blob: Blob, filename: string) => {
     const url = URL.createObjectURL(blob);
@@ -63,12 +70,15 @@ export default function EmployeeProfilePage() {
     downloadBlob(r.data as Blob, `employee-${role}-${safe}.pdf`);
   };
 
-  const onEdit = () => navigate(`/admin/employees?tab=${editTabForRole(role)}`);
+  const goToList = () => {
+    if (isValidRole(role)) navigate(`/admin/employees?top=active&sub=${role}`);
+    else navigate('/admin/employees');
+  };
 
   return (
     <PageLayout title={data?.profile.fullName || t('admin.profile.title')} subtitle={data ? t(`admin.profile.role_${data.profile.role}`) : ''}>
       <div className="mb-4">
-        <Button variant="ghost" size="sm" icon={<ArrowLeft className="w-4 h-4" />} onClick={() => navigate('/admin/employees')}>
+        <Button variant="ghost" size="sm" icon={<ArrowLeft className="w-4 h-4" />} onClick={goToList}>
           {t('common.back')}
         </Button>
       </div>
@@ -82,29 +92,12 @@ export default function EmployeeProfilePage() {
           profile={data.profile}
           documents={data.documents}
           hrOfficer={data.hrOfficer}
-          onEdit={onEdit}
+          onSaved={load}
           onExportJson={onExportJson}
           onExportPdf={onExportPdf}
-          onTerminated={() => navigate('/admin/employees')}
+          onTerminated={goToList}
         />
       ) : null}
     </PageLayout>
   );
-}
-
-// Maps the profile role to the EmployeesManagement tab key. teacher / driver
-// have their own tabs; account-roles share the AccountEmployeesTab; staff
-// has its own tab; staff/accountant are accounting-gated and just open the
-// management page (the user lands on the closest available tab).
-function editTabForRole(r: string | undefined): string {
-  switch (r) {
-    case 'teacher': return 'teacher';
-    case 'driver': return 'teacher';        // Drivers managed under DriversManagement, but no tab in employees page
-    case 'staff': return 'staff';
-    case 'supervisor': return 'supervisor';
-    case 'admin': return 'admin';
-    case 'reception': return 'reception';
-    case 'accountant': return 'accountant';
-    default: return 'teacher';
-  }
 }
