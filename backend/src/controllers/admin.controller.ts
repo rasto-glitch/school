@@ -97,7 +97,28 @@ async function performEmployeeArchive(a: PerformEmployeeArchiveArgs): Promise<{ 
     p_archived_by_name: a.actorName,
     p_archived_by_role: a.actorRole,
   });
-  if (error) return { ok: false, error: safeDbErrorMessage(error) };
+  if (error) {
+    // Surface the RPC failure to Railway logs — safeDbErrorMessage strips
+    // detail before returning to the client, so without this the operator
+    // just sees "Invalid request" and we lose every clue about what the
+    // stored procedure rejected. No PII in the logged payload.
+    logger.error('[archive_employee_atomic] RPC failed', {
+      code: error.code,
+      message: error.message,
+      details: (error as { details?: string }).details,
+      hint: (error as { hint?: string }).hint,
+      role: a.role,
+      schoolId: a.schoolId,
+      userId: a.userId,
+      originalEmployeeId: a.originalEmployeeId,
+      hasAccountSnapshot: a.account != null,
+      hasTeachingSnapshot: a.teaching != null,
+      hasTransportSnapshot: a.transport != null,
+      hasEmploymentSnapshot: a.employment != null,
+      reason: a.reason,
+    });
+    return { ok: false, error: safeDbErrorMessage(error) };
+  }
   return { ok: true, archiveId: data as string };
 }
 
