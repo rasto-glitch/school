@@ -10,7 +10,8 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "typecheck": "tsc --noEmit",
     "check:tenant-scoping": "node scripts/check-tenant-scoping.cjs",
-    "audit:ci": "npm audit --omit=dev --audit-level=high"
+    "audit:ci": "npm audit --omit=dev --audit-level=high",
+    "rotate:pii": "ts-node scripts/rotate-pii-keys.ts"
   },
   "keywords": [],
   "author": "",
