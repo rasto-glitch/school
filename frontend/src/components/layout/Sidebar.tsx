@@ -12,6 +12,7 @@ import {
   FileText, Star, Clock, X, ClipboardCheck, MessageSquare, Archive,
   CreditCard, Wallet, History, Receipt, BookOpenCheck,
   AlertCircle, FileBarChart, BarChart3, CalendarClock, ArrowLeftRight, Scale,
+  ShieldCheck,
 } from 'lucide-react';
 import type { Dispatch, SetStateAction } from 'react';
 import type { Role } from '../../types';
@@ -56,6 +57,8 @@ const navItems: Record<Role, NavItem[]> = {
     { to: '/admin/classes', icon: BookOpen, label: 'Classes' },
     { to: '/admin/grade-review', icon: Star, label: 'Grade Review', feature: 'grades' },
     { to: '/admin/employees', icon: Users, label: 'Employees' },
+    { to: '/admin/school-policies', icon: ClipboardCheck, label: 'Policies' },
+    { to: '/admin/hr-officers', icon: ShieldCheck, label: 'HR Officers' },
     { to: '/admin/schedule', icon: Calendar, label: 'Schedule' },
     { to: '/admin/drivers', icon: Bus, label: 'Drivers', feature: 'bus_tracking' },
     { to: '/admin/announcements', icon: Megaphone, label: 'Announcements', feature: 'announcements' },
