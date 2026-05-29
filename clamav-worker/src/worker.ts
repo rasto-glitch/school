@@ -11,7 +11,7 @@
 //
 // Env vars (all required):
 //   SUPABASE_URL                  — same as the API
-//   SUPABASE_SERVICE_KEY          — service-role key (read storage + write DB)
+//   SUPABASE_SERVICE_ROLE_KEY          — service-role key (read storage + write DB)
 //   CLAMSCAN_BIN                  — path to clamscan, default 'clamscan'
 //   SCAN_POLL_INTERVAL_MS         — default 30000 (30s)
 //   SCAN_BATCH_SIZE               — default 10 rows per poll
@@ -26,14 +26,14 @@ import path from 'path';
 import crypto from 'crypto';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const CLAMSCAN_BIN = process.env.CLAMSCAN_BIN || 'clamscan';
 const POLL_MS = Number(process.env.SCAN_POLL_INTERVAL_MS || 30_000);
 const BATCH = Number(process.env.SCAN_BATCH_SIZE || 10);
 const MAX_BYTES = Number(process.env.SCAN_FILE_MAX_BYTES || 10 * 1024 * 1024);
 
 if (!SUPABASE_URL || !SUPABASE_KEY) {
-  console.error('[clamav-worker] SUPABASE_URL and SUPABASE_SERVICE_KEY must be set.');
+  console.error('[clamav-worker] SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set.');
   process.exit(1);
 }
 

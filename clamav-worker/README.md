@@ -25,7 +25,7 @@ quarantined from downloads.
 | name                       | required | default      | notes                                              |
 |----------------------------|----------|--------------|----------------------------------------------------|
 | `SUPABASE_URL`             | yes      | —            | Same as the API service.                           |
-| `SUPABASE_SERVICE_KEY`     | yes      | —            | Service-role key; reads storage + writes DB.       |
+| `SUPABASE_SERVICE_ROLE_KEY`     | yes      | —            | Service-role key; reads storage + writes DB.       |
 | `CLAMSCAN_BIN`             | no       | `clamscan`   | Path to clamscan. Override in dev/Mac as needed.   |
 | `SCAN_POLL_INTERVAL_MS`    | no       | `30000`      | 30s default.                                       |
 | `SCAN_BATCH_SIZE`          | no       | `10`         | Rows pulled per poll.                              |
@@ -37,7 +37,7 @@ quarantined from downloads.
 # Mac: brew install clamav (and set CLAMSCAN_BIN if needed).
 # Linux: apt-get install clamav.
 freshclam   # one-time, downloads the virus DB
-cp .env.example .env  # fill in SUPABASE_URL + SUPABASE_SERVICE_KEY
+cp .env.example .env  # fill in SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY
 npm install
 npm run dev
 ```
@@ -47,7 +47,7 @@ npm run dev
 1. **Create a new Railway service**, separate from the API. Point it at this
    directory (`clamav-worker/`) as the build root.
 2. **Set the env vars** above. Use the same `SUPABASE_URL` and
-   `SUPABASE_SERVICE_KEY` as the API.
+   `SUPABASE_SERVICE_ROLE_KEY` as the API.
 3. **Deploy from the Dockerfile**, not from Nixpacks — the Dockerfile
    installs ClamAV and freshclam, which Nixpacks doesn't.
 4. **Enable scan mode on the API**: set `EMPLOYEE_DOC_SCAN_ENABLED=true` in
