@@ -22,8 +22,13 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 # Disable freshclam's own background daemon — the entrypoint runs it once
-# at startup and then the scan loop takes over.
-RUN sed -i 's/^Foreground.*/Foreground true/' /etc/clamav/freshclam.conf || true
+# at startup and then the scan loop takes over. Also comment out the
+# NotifyClamd directive: freshclam tries to ping clamd after each update,
+# but we use one-shot clamscan (loads defs per invocation), so there's no
+# daemon to notify. Leaving it enabled produces a benign-but-noisy ERROR
+# line on every refresh.
+RUN sed -i 's/^Foreground.*/Foreground true/' /etc/clamav/freshclam.conf || true \
+ && sed -i 's/^NotifyClamd/#NotifyClamd/' /etc/clamav/freshclam.conf || true
 
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
