@@ -178,7 +178,7 @@ function userIsActive(joined: RawStaffRow['users']): boolean | null {
 async function fetchStaffWithLastPayment(schoolId: string): Promise<{ active: unknown[]; archived: unknown[] }> {
   const { data: staff, error } = await supabase
     .from('staff_members')
-    .select('id, school_id, user_id, full_name, position, salary_amount, currency, next_payment_date, is_active, insurance_percentage, insurance_paid_out, insurance_paid_out_at, insurance_paid_out_amount, insurance_paid_out_currency, insurance_paid_out_notes, created_at, address, hire_date, national_id, date_of_birth, marital_status, gender, employment_type, qualifications, notes, emergency_contact, official_photo, users!staff_members_user_id_fkey(is_active)')
+    .select('id, school_id, user_id, full_name, position, salary_amount, currency, next_payment_date, is_active, insurance_percentage, insurance_paid_out, insurance_paid_out_at, insurance_paid_out_amount, insurance_paid_out_currency, insurance_paid_out_notes, created_at, address, hire_date, national_id, date_of_birth, marital_status, gender, employment_type, qualifications, notes, emergency_contact, official_photo, users!staff_members_user_id_fkey(is_active,role)')
     .eq('school_id', schoolId)
     .is('voided_at', null)
     .order('is_active', { ascending: false })
@@ -217,6 +217,15 @@ async function fetchStaffWithLastPayment(schoolId: string): Promise<{ active: un
 
   for (const s of rows) {
     const userActive = s.user_id ? (userIsActive(s.users) ?? false) : null;
+    // userRole lets the new Employees > Active > Staff sub-tab filter out
+    // teachers / supervisors / admins that got linked here purely for
+    // salary tracking; the accounting portal ignores this field and
+    // continues to see every staff_members row.
+    const userRole: string | null = s.user_id
+      ? (Array.isArray(s.users)
+          ? ((s.users[0] as { role?: string } | undefined)?.role ?? null)
+          : ((s.users as { role?: string } | null)?.role ?? null))
+      : null;
     const effectiveActive = s.is_active && (userActive === null || userActive === true);
     const archiveReason = !s.is_active
       ? 'Deactivated by accounting'
@@ -231,6 +240,7 @@ async function fetchStaffWithLastPayment(schoolId: string): Promise<{ active: un
     const enriched = {
       ...(toCC(s) as Record<string, unknown>),
       userIsActive: userActive,
+      userRole,
       effectiveActive,
       archiveReason,
       lastPayment: last,

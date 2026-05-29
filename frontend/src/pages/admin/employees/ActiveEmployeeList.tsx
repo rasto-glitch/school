@@ -47,6 +47,10 @@ interface RawRecord {
   position?: string | null;
   isActive?: boolean;
   role?: string;
+  /** staff_members rows expose the linked user's role (null when the row has
+   *  no underlying user). Used to filter out teachers / admins that share
+   *  the staff_members table for salary tracking. */
+  userRole?: string | null;
   officialPhoto?: string | null;
   profilePicture?: string | null;
   teacherClasses?: { classes?: { name?: string } }[];
@@ -70,15 +74,21 @@ async function loadRows(role: EmployeeRole): Promise<Row[]> {
   }
   if (role === 'staff') {
     const r = await adminApi.getStaff('active');
-    return ((r.data || []) as RawRecord[]).map(rec => ({
-      id: rec.id,
-      role: 'staff',
-      fullName: rec.fullName || '',
-      photoUrl: rec.officialPhoto ?? null,
-      phone: rec.phoneNumber ?? rec.phone ?? null,
-      hireDate: rec.hireDate ?? null,
-      extra: rec.position ?? '',
-    }));
+    // staff_members is a union: pure staff PLUS teachers / supervisors /
+    // admins linked for salary tracking. The Active Staff sub-tab should
+    // show only the pure ones (no underlying user, or the user IS a staff
+    // role). Cross-linked teachers / admins appear in their own sub-tabs.
+    return ((r.data || []) as RawRecord[])
+      .filter(rec => rec.userRole == null || rec.userRole === 'staff')
+      .map(rec => ({
+        id: rec.id,
+        role: 'staff',
+        fullName: rec.fullName || '',
+        photoUrl: rec.officialPhoto ?? null,
+        phone: rec.phoneNumber ?? rec.phone ?? null,
+        hireDate: rec.hireDate ?? null,
+        extra: rec.position ?? '',
+      }));
   }
   const r = await adminApi.getAccounts();
   return ((r.data || []) as RawRecord[])
