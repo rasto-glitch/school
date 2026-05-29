@@ -19,6 +19,7 @@ import {
   ROLE_TO_OWNER_TYPE, type EmployeeRole, type OwnerType,
   isHrOfficer,
 } from '../utils/employeeDocs';
+import { decryptProfileRow } from '../utils/employeePiiCrypto';
 
 function roleFromParams(req: AuthRequest): EmployeeRole | null {
   const r = String(req.params.role);
@@ -281,6 +282,74 @@ function redactProfile(p: ProfileShape, hrOfficer: boolean): ProfileShape {
   return { ...p, hr: { ...p.hr, nationalId: p.hr.nationalId ? '[hr_officer_required]' : null } };
 }
 
+// Wave 2.5: Load every Wave-2 record attached to the employee. Same
+// sensitivity rules as the per-table endpoints — religion + SSN come
+// through decrypted only when hrOfficer is true. Returns null payloads
+// when the row doesn't exist so the export shape stays stable.
+async function loadWave2Bundle(
+  ownerType: OwnerType, ownerId: string, schoolId: string, hrOfficer: boolean,
+): Promise<{
+  extendedProfile: Record<string, unknown> | null;
+  emergencyContacts: Record<string, unknown>[];
+  acknowledgements: Record<string, unknown>[];
+  actions: Record<string, unknown>[];
+}> {
+  const [extRes, ecRes, ackRes, actRes] = await Promise.all([
+    supabase.from('employee_extended_profile').select(`
+      place_of_birth, nationality, blood_type, languages_spoken, dependents_count, bank_name,
+      mother_full_name_ct, father_full_name_ct, spouse_name_ct, religion_ct,
+      bank_iban_ct, tax_id_ct, social_insurance_no_ct,
+      consent_pii_at, redacted_at, redacted_reason, updated_at
+    `).eq('school_id', schoolId).eq('owner_type', ownerType).eq('owner_id', ownerId).maybeSingle(),
+    supabase.from('employee_emergency_contacts').select(
+      'id, full_name, relationship, phone, alt_phone, email, address, priority, created_at',
+    ).eq('school_id', schoolId).eq('owner_type', ownerType).eq('owner_id', ownerId)
+      .order('priority', { ascending: true }),
+    supabase.from('employee_acknowledgements').select(
+      'id, policy_key, policy_version, acknowledged_at, signed_document_id',
+    ).eq('school_id', schoolId).eq('owner_type', ownerType).eq('owner_id', ownerId)
+      .order('acknowledged_at', { ascending: false }),
+    supabase.from('employee_actions').select(
+      'id, kind, occurred_on, summary, rating, document_id, created_by_name, created_by_role, created_at',
+    ).eq('school_id', schoolId).eq('owner_type', ownerType).eq('owner_id', ownerId)
+      .order('occurred_on', { ascending: false }),
+  ]);
+
+  let extendedProfile: Record<string, unknown> | null = null;
+  if (extRes.data) {
+    const row = extRes.data;
+    if (row.redacted_at) {
+      extendedProfile = { redacted: true, redactedAt: row.redacted_at, redactedReason: row.redacted_reason };
+    } else {
+      const decrypted = decryptProfileRow(row, schoolId);
+      extendedProfile = {
+        placeOfBirth: row.place_of_birth,
+        nationality: row.nationality,
+        bloodType: row.blood_type,
+        languagesSpoken: row.languages_spoken,
+        dependentsCount: row.dependents_count,
+        bankName: row.bank_name,
+        consentPiiAt: row.consent_pii_at,
+        updatedAt: row.updated_at,
+        motherFullName: decrypted?.motherFullName ?? null,
+        fatherFullName: decrypted?.fatherFullName ?? null,
+        spouseName: decrypted?.spouseName ?? null,
+        bankIban: decrypted?.bankIban ?? null,
+        taxId: decrypted?.taxId ?? null,
+        religion: hrOfficer ? decrypted?.religion ?? null : (row.religion_ct ? '[hr_officer_required]' : null),
+        socialInsuranceNo: hrOfficer ? decrypted?.socialInsuranceNo ?? null : (row.social_insurance_no_ct ? '[hr_officer_required]' : null),
+      };
+    }
+  }
+
+  return {
+    extendedProfile,
+    emergencyContacts: toCC(ecRes.data ?? []) as Record<string, unknown>[],
+    acknowledgements: toCC(ackRes.data ?? []) as Record<string, unknown>[],
+    actions: toCC(actRes.data ?? []) as Record<string, unknown>[],
+  };
+}
+
 // ── GET /admin/employees/:role/:id ─────────────────────────────────────────
 export async function getProfile(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId, userId } = req.user!;
@@ -326,13 +395,18 @@ export async function exportProfileJson(req: AuthRequest, res: Response): Promis
   if (!profile) { res.status(404).json({ error: 'Employee not found' }); return; }
   const hrOfficer = await isHrOfficer(userId);
   const { documents } = await loadDocuments(profile.ownerType, profile.ownerId, schoolId, hrOfficer);
+  const wave2 = await loadWave2Bundle(profile.ownerType, profile.ownerId, schoolId, hrOfficer);
 
   const payload = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     generatedAt: new Date().toISOString(),
     role,
     profile: toCC(redactProfile(profile, hrOfficer)),
     documents,
+    extendedProfile: wave2.extendedProfile,
+    emergencyContacts: wave2.emergencyContacts,
+    acknowledgements: wave2.acknowledgements,
+    actions: wave2.actions,
   };
 
   await logAudit({
@@ -340,7 +414,7 @@ export async function exportProfileJson(req: AuthRequest, res: Response): Promis
     entityType: 'employee_profile',
     entityId: profile.ownerId,
     action: 'export',
-    after: { _meta: { kind: 'json_export', role } },
+    after: { _meta: { kind: 'json_export', role, schemaVersion: 2 } },
     label: 'profile_export_json',
   });
 
@@ -362,6 +436,7 @@ export async function exportProfilePdf(req: AuthRequest, res: Response): Promise
   if (!profile) { res.status(404).json({ error: 'Employee not found' }); return; }
   const hrOfficer = await isHrOfficer(userId);
   const { documents } = await loadDocuments(profile.ownerType, profile.ownerId, schoolId, hrOfficer);
+  const wave2 = await loadWave2Bundle(profile.ownerType, profile.ownerId, schoolId, hrOfficer);
   const p = redactProfile(profile, hrOfficer);
 
   await logAudit({
@@ -369,7 +444,7 @@ export async function exportProfilePdf(req: AuthRequest, res: Response): Promise
     entityType: 'employee_profile',
     entityId: profile.ownerId,
     action: 'export',
-    after: { _meta: { kind: 'pdf_export', role } },
+    after: { _meta: { kind: 'pdf_export', role, schemaVersion: 2 } },
     label: 'profile_export_pdf',
   });
 
@@ -447,6 +522,46 @@ export async function exportProfilePdf(req: AuthRequest, res: Response): Promise
     ]);
   }
 
+  // Wave 2 sections — extended profile + emergency contacts. Sensitive
+  // fields are already redacted to '[hr_officer_required]' by
+  // loadWave2Bundle when the caller isn't an HR officer.
+  const ext = wave2.extendedProfile as Record<string, unknown> | null;
+  if (ext && !ext.redacted) {
+    const ePick = (k: string) => (ext[k] == null ? null : String(ext[k]));
+    section('Extended PII', [
+      ['Mother', ePick('motherFullName')],
+      ['Father', ePick('fatherFullName')],
+      ['Spouse', ePick('spouseName')],
+      ['Place of birth', ePick('placeOfBirth')],
+      ['Nationality', ePick('nationality')],
+      ['Blood type', ePick('bloodType')],
+      ['Languages', Array.isArray(ext.languagesSpoken) ? (ext.languagesSpoken as string[]).join(', ') : null],
+      ['Dependents', ext.dependentsCount != null ? String(ext.dependentsCount) : null],
+      ['Bank', ePick('bankName')],
+      ['IBAN', ePick('bankIban')],
+      ['Tax ID', ePick('taxId')],
+      ['Religion', ePick('religion')],
+      ['Social insurance', ePick('socialInsuranceNo')],
+    ]);
+  } else if (ext?.redacted) {
+    section('Extended PII', [
+      ['Status', `Redacted (right-to-erasure) on ${ext.redactedAt ?? '—'}`],
+    ]);
+  }
+
+  if (wave2.emergencyContacts.length > 0) {
+    doc.font(fonts.bold).fontSize(11).fillColor('#666').text('EMERGENCY CONTACTS', { underline: false });
+    doc.moveDown(0.3).fillColor('#000');
+    for (const c of wave2.emergencyContacts as { fullName?: string; relationship?: string | null; phone?: string | null; altPhone?: string | null; priority?: number }[]) {
+      const line = `${c.priority ?? '?'}. ${c.fullName ?? '—'}` +
+        `${c.relationship ? ` (${c.relationship})` : ''}` +
+        `${c.phone ? ` — ${c.phone}` : ''}` +
+        `${c.altPhone ? ` / ${c.altPhone}` : ''}`;
+      doc.font(fonts.regular).fontSize(10).text(line);
+    }
+    doc.moveDown(0.6);
+  }
+
   // Documents appendix
   doc.addPage();
   doc.font(fonts.bold).fontSize(14).text('Documents on file');
@@ -473,6 +588,31 @@ export async function exportProfilePdf(req: AuthRequest, res: Response): Promise
     'This document is an exported employee HR record. The SHA-256 hashes below each document name verify chain-of-custody — the file in storage hashes to the same value at audit time.',
     { width: 495 },
   );
+
+  // Acknowledgements + actions appendix on a fresh page.
+  if (wave2.acknowledgements.length > 0 || wave2.actions.length > 0) {
+    doc.addPage();
+    if (wave2.acknowledgements.length > 0) {
+      doc.font(fonts.bold).fontSize(14).fillColor('#000').text('Policy acknowledgements');
+      doc.moveDown(0.4);
+      doc.font(fonts.regular).fontSize(9);
+      for (const a of wave2.acknowledgements as { policyKey?: string; policyVersion?: number; acknowledgedAt?: string }[]) {
+        doc.text(`· ${a.policyKey} v${a.policyVersion} — ${a.acknowledgedAt?.slice(0, 10) ?? '—'}`);
+      }
+      doc.moveDown(0.8);
+    }
+    if (wave2.actions.length > 0) {
+      doc.font(fonts.bold).fontSize(14).fillColor('#000').text('History (reviews, warnings, role changes)');
+      doc.moveDown(0.4);
+      doc.font(fonts.regular).fontSize(9);
+      for (const a of wave2.actions as { kind?: string; occurredOn?: string; summary?: string; rating?: number | null; createdByName?: string | null }[]) {
+        const head = `· ${a.kind} · ${a.occurredOn ?? '—'}${a.rating != null ? ` · ${a.rating}/5` : ''}${a.createdByName ? ` (by ${a.createdByName})` : ''}`;
+        doc.font(fonts.bold).text(head);
+        doc.font(fonts.regular).fillColor('#444').text(String(a.summary ?? '').slice(0, 800));
+        doc.fillColor('#000').moveDown(0.3);
+      }
+    }
+  }
 
   doc.end();
 }

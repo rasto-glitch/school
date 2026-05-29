@@ -102,6 +102,15 @@ export const authApi = {
   },
 };
 
+// ---- ME (self-service employee records, Wave 2.5) ----
+export const meApi = {
+  getEmployeeProfile: () => api.get('/me/employee-profile'),
+  putExtended: (data: Record<string, unknown>) => api.put('/me/extended', data),
+  createEmergencyContact: (data: Record<string, unknown>) => api.post('/me/emergency-contacts', data),
+  updateEmergencyContact: (id: string, data: Record<string, unknown>) => api.patch(`/me/emergency-contacts/${id}`, data),
+  deleteEmergencyContact: (id: string) => api.delete(`/me/emergency-contacts/${id}`),
+};
+
 // ---- SUPERVISOR ----
 export const supervisorApi = {
   getClasses: () => api.get('/supervisor/classes'),

@@ -42,6 +42,8 @@ import ArchiveManagement from './pages/admin/ArchiveManagement';
 import EmployeesManagement from './pages/admin/EmployeesManagement';
 import EmployeeProfilePage from './pages/admin/EmployeeProfilePage';
 import HrOfficersPage from './pages/admin/HrOfficersPage';
+import SchoolPoliciesPage from './pages/admin/SchoolPoliciesPage';
+import MyEmployeeProfilePage from './pages/MyEmployeeProfilePage';
 import AdminSchedulePage from './pages/admin/SchedulePage';
 import DriversManagement from './pages/admin/DriversManagement';
 import AppointmentsPage from './pages/admin/AppointmentsPage';
@@ -197,6 +199,8 @@ export default function App() {
         <Route path="/admin/employees" element={<ProtectedRoute allowedRoles={['admin']}><EmployeesManagement /></ProtectedRoute>} />
         <Route path="/admin/employees/:role/:id" element={<ProtectedRoute allowedRoles={['admin']}><EmployeeProfilePage /></ProtectedRoute>} />
         <Route path="/admin/hr-officers" element={<ProtectedRoute allowedRoles={['admin']}><HrOfficersPage /></ProtectedRoute>} />
+        <Route path="/admin/school-policies" element={<ProtectedRoute allowedRoles={['admin']}><SchoolPoliciesPage /></ProtectedRoute>} />
+        <Route path="/me/profile" element={<ProtectedRoute allowedRoles={['teacher','driver','supervisor','admin','reception','accountant']}><MyEmployeeProfilePage /></ProtectedRoute>} />
         {/* Legacy path — keep bookmarks/links working */}
         <Route path="/admin/teachers" element={<Navigate to="/admin/employees" replace />} />
         <Route path="/admin/schedule" element={<ProtectedRoute allowedRoles={['admin']}><AdminSchedulePage /></ProtectedRoute>} />

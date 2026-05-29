@@ -27,6 +27,7 @@ import * as schoolPolicies from '../controllers/schoolPolicies.controller';
 import * as employeeAcks from '../controllers/employeeAcknowledgements.controller';
 import * as employeeActions from '../controllers/employeeActions.controller';
 import * as employeeTermination from '../controllers/employeeTermination.controller';
+import * as meEmployee from '../controllers/meEmployee.controller';
 import { authenticate, authorize } from '../middleware/auth';
 import type { AuthRequest } from '../middleware/auth';
 import { validate } from '../middleware/validate';
@@ -228,6 +229,17 @@ export function createRouter(io: SocketServer) {
   router.get( '/admin/hr-officers', authenticate, authorize('admin'), (req, res) => admin.listHrOfficers(req as AuthRequest, res));
   router.post('/admin/users/:userId/promote-hr-officer', authenticate, authorize('admin'), validate({ params: vu.userIdParam }), (req, res) => admin.promoteHrOfficer(req as AuthRequest, res));
   router.post('/admin/users/:userId/demote-hr-officer',  authenticate, authorize('admin'), validate({ params: vu.userIdParam }), (req, res) => admin.demoteHrOfficer(req as AuthRequest, res));
+
+  // ── Self-service employee profile (Wave 2.5) ────────────────────────────
+  // Employees (teacher / driver / supervisor / admin / reception /
+  // accountant) read + edit their own low + medium PII fields and
+  // emergency contacts. Religion + SSN remain HR-officer-only and are
+  // stripped from inputs here. Parents 403 (not employees).
+  router.get(   '/me/employee-profile', authenticate, (req, res) => meEmployee.getMyProfile(req as AuthRequest, res));
+  router.put(   '/me/extended', authenticate, (req, res) => meEmployee.putMyExtended(req as AuthRequest, res));
+  router.post(  '/me/emergency-contacts', authenticate, (req, res) => meEmployee.createMyContact(req as AuthRequest, res));
+  router.patch( '/me/emergency-contacts/:id', authenticate, validate({ params: vu.idParam }), (req, res) => meEmployee.updateMyContact(req as AuthRequest, res));
+  router.delete('/me/emergency-contacts/:id', authenticate, validate({ params: vu.idParam }), (req, res) => meEmployee.deleteMyContact(req as AuthRequest, res));
   router.get('/admin/reset-requests', authenticate, authorize('admin'), (req, res) => admin.getResetRequests(req as AuthRequest, res));
   router.post('/admin/users/:userId/reset-password', authenticate, authorize('admin'), validate({ params: vu.userIdParam, body: vu.resetUserPasswordSchema }), (req, res) => admin.resetUserPassword(req as AuthRequest, res));
   router.get('/admin/users/inactive/search', authenticate, authorize('admin'), validate({ query: vq.listQuery }), (req, res) => admin.searchInactiveUsers(req as AuthRequest, res));
