@@ -1,16 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'react-toastify';
-import { Download, Edit2, Plus, ShieldAlert, Trash2, X } from 'lucide-react';
+import { Download, Edit2, Plus, ShieldAlert, Trash2 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { adminApi } from '../../../services/api';
 import Button from '../../common/Button';
 import Card from '../../common/Card';
 import Input from '../../common/Input';
-import Select from '../../common/Select';
 import Modal from '../../common/Modal';
 import LoadingSpinner from '../../common/LoadingSpinner';
 import EmptyState from '../../common/EmptyState';
+import DocumentUploadForm from './DocumentUploadForm';
 import type {
   EmployeeDocument, DocumentCategory, EmployeeRole, Sensitivity,
 } from '../../../types/employeeDocs';
@@ -18,9 +18,6 @@ import type {
 // Wave 1 documents tab. Lives inside EmployeeProfileView. Loads the
 // category catalog + documents in parallel on mount; refetches after every
 // mutation. Sensitive-row rendering matches the backend's redaction model.
-
-const ALLOWED_ACCEPT = 'image/jpeg,image/png,image/webp,application/pdf';
-const MAX_BYTES = 10 * 1024 * 1024;
 
 interface Props {
   role: EmployeeRole;
@@ -67,7 +64,6 @@ export default function DocumentsTab({ role, employeeId }: Props) {
   const [documents, setDocuments] = useState<EmployeeDocument[]>([]);
   const [categories, setCategories] = useState<DocumentCategory[]>([]);
   const [hrOfficer, setHrOfficer] = useState(false);
-  const [uploading, setUploading] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
 
   // Per-row metadata edit state
@@ -77,15 +73,6 @@ export default function DocumentsTab({ role, employeeId }: Props) {
   const [editIssued, setEditIssued] = useState('');
   const [editExpires, setEditExpires] = useState('');
   const [editNotes, setEditNotes] = useState('');
-
-  // Upload form state
-  const [upFile, setUpFile] = useState<File | null>(null);
-  const [upCategory, setUpCategory] = useState('');
-  const [upNumber, setUpNumber] = useState('');
-  const [upIssued, setUpIssued] = useState('');
-  const [upExpires, setUpExpires] = useState('');
-  const [upNotes, setUpNotes] = useState('');
-  const fileRef = useRef<HTMLInputElement | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -115,39 +102,6 @@ export default function DocumentsTab({ role, employeeId }: Props) {
     for (const c of categories) m.set(c.key, c.label);
     return (key: string) => m.get(key) ?? key;
   }, [categories]);
-  const selectedCategoryDef = useMemo(
-    () => activeCategories.find(c => c.key === upCategory) ?? null,
-    [activeCategories, upCategory],
-  );
-
-  const resetUploadForm = () => {
-    setUpFile(null); setUpCategory(''); setUpNumber('');
-    setUpIssued(''); setUpExpires(''); setUpNotes('');
-    if (fileRef.current) fileRef.current.value = '';
-  };
-
-  const onUpload = async () => {
-    if (!upFile) { toast.error(t('admin.docs.no_file')); return; }
-    if (!upCategory) { toast.error(t('admin.docs.no_category')); return; }
-    if (upFile.size > MAX_BYTES) { toast.error(t('admin.docs.too_large')); return; }
-    setUploading(true);
-    try {
-      await adminApi.uploadEmployeeDocument(role, employeeId, upFile, {
-        category: upCategory,
-        document_number: upNumber || undefined,
-        issued_on: upIssued || undefined,
-        expires_on: upExpires || undefined,
-        notes: upNotes || undefined,
-      });
-      toast.success(t('admin.docs.uploaded'));
-      resetUploadForm();
-      setShowUpload(false);
-      await load();
-    } catch (e: unknown) {
-      const err = e as { response?: { data?: { error?: string } } };
-      toast.error(err.response?.data?.error || t('admin.docs.failed_upload'));
-    } finally { setUploading(false); }
-  };
 
   const onDownload = async (doc: EmployeeDocument) => {
     try {
@@ -302,67 +256,19 @@ export default function DocumentsTab({ role, employeeId }: Props) {
         </Card>
       )}
 
-      {/* Upload modal */}
-      <Modal isOpen={showUpload} onClose={() => { setShowUpload(false); resetUploadForm(); }} title={t('admin.docs.upload_title')} size="md">
-        <div className="space-y-3">
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">{t('admin.docs.field_category')}</label>
-            <Select
-              value={upCategory}
-              onChange={e => setUpCategory(e.target.value)}
-              options={activeCategories.map(c => ({ value: c.key, label: c.label }))}
-              placeholder={t('admin.docs.field_category')}
-            />
-            {selectedCategoryDef?.sensitivity === 'high' && (
-              <p className="text-[11px] text-rose-600 mt-1 flex items-center gap-1">
-                <ShieldAlert className="w-3 h-3" /> {t('admin.docs.high_sensitivity_warn')}
-              </p>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">{t('admin.docs.field_file')}</label>
-            <input
-              ref={fileRef}
-              type="file"
-              accept={ALLOWED_ACCEPT}
-              onChange={e => setUpFile(e.target.files?.[0] ?? null)}
-              className="block w-full text-sm text-gray-700 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
-            />
-            <p className="text-[11px] text-gray-400 mt-1">{t('admin.docs.field_file_hint')}</p>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">{t('admin.docs.field_number')}</label>
-              <Input value={upNumber} onChange={e => setUpNumber(e.target.value)} placeholder={t('admin.docs.field_number_ph')} />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">{t('admin.docs.field_issued')}</label>
-              <Input type="date" value={upIssued} onChange={e => setUpIssued(e.target.value)} />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">
-                {t('admin.docs.field_expires')}
-                {selectedCategoryDef?.requiresExpiry && <span className="text-rose-600">*</span>}
-              </label>
-              <Input type="date" value={upExpires} onChange={e => setUpExpires(e.target.value)} />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">{t('admin.docs.field_notes')}</label>
-            <textarea
-              value={upNotes} onChange={e => setUpNotes(e.target.value)} rows={2}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-            />
-          </div>
-
-          <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
-            <Button variant="ghost" onClick={() => { setShowUpload(false); resetUploadForm(); }} icon={<X className="w-4 h-4" />}>{t('common.cancel')}</Button>
-            <Button onClick={onUpload} loading={uploading} disabled={!upFile || !upCategory}>{t('admin.docs.do_upload')}</Button>
-          </div>
-        </div>
+      {/* Upload modal — body is the extracted DocumentUploadForm so the
+          wizard can render the same flow inline. Remounting on open keeps
+          the form clean per session. */}
+      <Modal isOpen={showUpload} onClose={() => setShowUpload(false)} title={t('admin.docs.upload_title')} size="md">
+        {showUpload && (
+          <DocumentUploadForm
+            role={role}
+            employeeId={employeeId}
+            categories={activeCategories}
+            onUploaded={async () => { setShowUpload(false); await load(); }}
+            onCancel={() => setShowUpload(false)}
+          />
+        )}
       </Modal>
 
       {/* Edit metadata modal */}
