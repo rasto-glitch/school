@@ -661,8 +661,15 @@ export async function acceptIncomingTransfer(req: AuthRequest, res: Response): P
   if (!cls) { res.status(404).json({ error: 'Target class not found in this school' }); return; }
 
   // Pull the source student so we copy identifying info to the new row.
-  // Source data lives in school_id = t.school_id; this is the cross-
-  // school read that's explicitly authorised by the transfer + consent.
+  // Source data lives in school_id = t.school_id (the SOURCE school), not
+  // schoolId (the destination calling this endpoint). This is the ONE
+  // legitimate cross-school read in the system: the source admin
+  // explicitly authorised it by issuing the transfer and the parent
+  // signed consent for the destination to receive the data. The
+  // authorisation chain is: transfer row + signed consent + destination
+  // pulled via .eq('destination_school_id', schoolId) at the top of this
+  // handler. student_id is a UUID sourced from that already-scoped row.
+  // tenant-check-allow: cross-school import — student_id sourced from a transfer row already scoped by destination_school_id; t.student_id is the source-school student authorised by signed parental consent.
   const { data: srcStudent } = await supabase
     .from('students').select('*, parents(full_name, phone_number)').eq('id', t.student_id).single();
   if (!srcStudent) { res.status(404).json({ error: 'Source student no longer exists' }); return; }
