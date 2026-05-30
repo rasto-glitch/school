@@ -3,6 +3,7 @@ import multer from 'multer';
 import { login, changePassword, getSchools, forgotPassword, registerDeviceToken, removeDeviceToken, updateDeviceLanguage, uploadProfilePicture, updateMyEmail, getMe, forgotPasswordEmail, resetWithToken, confirmEmail, refreshToken, logout, logoutAll } from '../controllers/auth.controller';
 import { submitBugReport } from '../controllers/bugReport.controller';
 import * as admin from '../controllers/admin.controller';
+import * as archivedProfile from '../controllers/archivedEmployeeProfile.controller';
 import * as teacher from '../controllers/teacher.controller';
 import * as parent from '../controllers/parent.controller';
 import * as driver from '../controllers/driver.controller';
@@ -122,6 +123,7 @@ export function createRouter(io: SocketServer) {
   router.get('/admin/integrity/verify', authenticate, authorize('admin'), (req, res) => admin.verifyArchiveIntegrity(req as AuthRequest, res));
   router.get('/admin/archived-employees/:id/export.json', authenticate, authorize('admin'), (req, res) => admin.exportArchivedEmployeeRecord(req as AuthRequest, res));
   router.get('/admin/archived-employees/:id/export.pdf', authenticate, authorize('admin'), (req, res) => admin.exportArchivedEmployeePdf(req as AuthRequest, res));
+  router.get('/admin/archived-employees/:id/profile', authenticate, authorize('admin'), (req, res) => archivedProfile.getArchivedEmployeeProfile(req as AuthRequest, res));
   router.post('/admin/archived-employees/:id/restore', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => admin.restoreArchivedEmployee(req as AuthRequest, res));
   router.get('/admin/archived-employees/:id', authenticate, authorize('admin'), (req, res) => admin.getArchivedEmployee(req as AuthRequest, res));
 

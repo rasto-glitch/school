@@ -41,6 +41,7 @@ import StudentsManagement from './pages/admin/StudentsManagement';
 import ArchiveManagement from './pages/admin/ArchiveManagement';
 import EmployeesManagement from './pages/admin/EmployeesManagement';
 import EmployeeProfilePage from './pages/admin/EmployeeProfilePage';
+import ArchivedEmployeeProfilePage from './pages/admin/ArchivedEmployeeProfilePage';
 import NewEmployeePage from './pages/admin/employees/NewEmployeePage';
 import HrOfficersPage from './pages/admin/HrOfficersPage';
 import SchoolPoliciesPage from './pages/admin/SchoolPoliciesPage';
@@ -199,6 +200,7 @@ export default function App() {
         <Route path="/admin/grade-review" element={<ProtectedRoute allowedRoles={['admin']}><GradeReviewPage /></ProtectedRoute>} />
         <Route path="/admin/employees" element={<ProtectedRoute allowedRoles={['admin']}><EmployeesManagement /></ProtectedRoute>} />
         <Route path="/admin/employees/new/:role" element={<ProtectedRoute allowedRoles={['admin']}><NewEmployeePage /></ProtectedRoute>} />
+        <Route path="/admin/archived-employees/:id" element={<ProtectedRoute allowedRoles={['admin']}><ArchivedEmployeeProfilePage /></ProtectedRoute>} />
         <Route path="/admin/employees/:role/:id" element={<ProtectedRoute allowedRoles={['admin']}><EmployeeProfilePage /></ProtectedRoute>} />
         <Route path="/admin/hr-officers" element={<ProtectedRoute allowedRoles={['admin']}><HrOfficersPage /></ProtectedRoute>} />
         <Route path="/admin/school-policies" element={<ProtectedRoute allowedRoles={['admin']}><SchoolPoliciesPage /></ProtectedRoute>} />

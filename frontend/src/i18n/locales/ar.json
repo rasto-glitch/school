@@ -1193,6 +1193,11 @@
       "parent_label": "ولي الأمر: {{name}}",
       "transcript_title": "كشف درجات الطالب"
     },
+    "arch_profile": {
+      "title": "موظف مؤرشف",
+      "docs_subtitle": "عرض للقراءة فقط للمستندات الموجودة عند الأرشفة.",
+      "no_extended": "لا توجد بيانات ملف موسّع."
+    },
     "arch_emp": {
       "role_teacher": "معلم",
       "role_driver": "سائق",

@@ -1193,6 +1193,11 @@
       "parent_label": "Parent: {{name}}",
       "transcript_title": "Student Transcript"
     },
+    "arch_profile": {
+      "title": "Archived employee",
+      "docs_subtitle": "Read-only view of documents on file at the time of archive.",
+      "no_extended": "No extended profile data on file."
+    },
     "arch_emp": {
       "role_teacher": "Teacher",
       "role_driver": "Driver",

@@ -102,3 +102,25 @@ export interface HrOfficer {
   lastName: string | null;
   isActive: boolean;
 }
+
+// Bundle returned by GET /admin/archived-employees/:id/profile. Mirrors the
+// Wave 2 records that survived rewriteOwnershipToArchive. Read-only — no
+// mutation endpoints; the archived view never edits.
+export interface ArchivedAcknowledgementRecord {
+  id: string;
+  policyKey: string;
+  policyVersion: number;
+  acknowledgedAt: string;
+  signedDocumentId: string | null;
+}
+
+export interface ArchivedEmployeeProfileResponse {
+  record: import('.').ArchivedEmployee;
+  school: { name: string; logoUrl: string | null };
+  hrOfficer: boolean;
+  documents: import('./employeeDocs').EmployeeDocument[];
+  extendedProfile: ExtendedProfile | null;
+  emergencyContacts: EmergencyContact[];
+  acknowledgements: ArchivedAcknowledgementRecord[];
+  actions: EmployeeAction[];
+}

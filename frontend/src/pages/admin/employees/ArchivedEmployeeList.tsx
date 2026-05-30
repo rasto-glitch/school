@@ -8,6 +8,7 @@
 // admin bucket as a fallback.
 
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'react-toastify';
 import { format, parseISO } from 'date-fns';
@@ -18,7 +19,6 @@ import Input from '../../../components/common/Input';
 import Select from '../../../components/common/Select';
 import LoadingSpinner from '../../../components/common/LoadingSpinner';
 import SortableTable, { type SortableColumn } from '../../../components/common/SortableTable';
-import ArchivedEmployeeDetailModal from '../../../components/admin/employees/ArchivedEmployeeDetailModal';
 import type { ArchivedEmployeeListItem } from '../../../types';
 import type { EmployeeRole } from '../../../types/employeeRecords';
 
@@ -42,7 +42,7 @@ export default function ArchivedEmployeeList({ role }: Props) {
   const [search, setSearch] = useState('');
   const debounced = useDebounce(search, 350);
   const [reasonFilter, setReasonFilter] = useState('');
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   const archiveRole = mapToArchiveBucket(role);
   const isFallback = archiveRole !== role; // reception / accountant
@@ -141,18 +141,12 @@ export default function ArchivedEmployeeList({ role }: Props) {
           rows={rows}
           columns={columns}
           rowKey={r => r.id}
-          onRowClick={r => setSelectedId(r.id)}
+          onRowClick={r => navigate(`/admin/archived-employees/${r.id}`)}
           emptyMessage={t('admin.arch_emp.none')}
           emptyDescription={t('admin.arch_emp.none_hint')}
           defaultSort={{ key: 'departureDate', dir: 'desc' }}
         />
       )}
-
-      <ArchivedEmployeeDetailModal
-        employeeId={selectedId}
-        onClose={() => setSelectedId(null)}
-        onRestored={() => { setSelectedId(null); load(); }}
-      />
     </div>
   );
 }

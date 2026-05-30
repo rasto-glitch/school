@@ -269,6 +269,8 @@ export const adminApi = {
   exportArchivedEmployeeRecord: (id: string) => api.get(`/admin/archived-employees/${id}/export.json`, { responseType: 'blob' }),
   exportArchivedEmployeePdf: (id: string, lang: string) =>
     api.get(`/admin/archived-employees/${id}/export.pdf`, { responseType: 'blob', params: { lang } }),
+  getArchivedEmployeeProfile: (id: string) =>
+    api.get(`/admin/archived-employees/${id}/profile`),
   restoreArchivedEmployee: (id: string) => api.post(`/admin/archived-employees/${id}/restore`),
   searchArchivedEmployees: (name: string, role?: string) =>
     api.get('/admin/archived-employees/search', { params: { name, ...(role ? { role } : {}) } }),

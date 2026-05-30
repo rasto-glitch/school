@@ -250,7 +250,9 @@ async function loadProfile(role: EmployeeRole, id: string, schoolId: string): Pr
 }
 
 // ── document list (mirrors employeeDocs.controller's listForEmployee) ──────
-async function loadDocuments(
+// Exported so the archived-employee profile endpoint can reuse the same
+// per-document redaction rules without copying the query.
+export async function loadDocuments(
   ownerType: OwnerType, ownerId: string, schoolId: string, hrOfficer: boolean,
 ): Promise<{ documents: Record<string, unknown>[] }> {
   const { data } = await supabase
@@ -286,7 +288,9 @@ function redactProfile(p: ProfileShape, hrOfficer: boolean): ProfileShape {
 // sensitivity rules as the per-table endpoints — religion + SSN come
 // through decrypted only when hrOfficer is true. Returns null payloads
 // when the row doesn't exist so the export shape stays stable.
-async function loadWave2Bundle(
+// Exported so the archived-employee profile endpoint can reuse the same
+// decryption + HR-officer gating without copying the query.
+export async function loadWave2Bundle(
   ownerType: OwnerType, ownerId: string, schoolId: string, hrOfficer: boolean,
 ): Promise<{
   extendedProfile: Record<string, unknown> | null;

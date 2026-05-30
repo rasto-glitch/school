@@ -1,9 +1,10 @@
 // Archived employees view inside the legacy /admin/archive page. Renders
 // the search + filter chrome and a grid of employee cards; clicking a card
-// opens the shared ArchivedEmployeeDetailModal which handles the detail
-// fetch, Restore, and Download JSON actions.
+// navigates to /admin/archived-employees/:id (the dedicated read-only
+// profile page that replaced the inline detail modal).
 
 import { useEffect, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Search, Archive, FileText } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
@@ -13,7 +14,6 @@ import Card from '../../components/common/Card';
 import Input from '../../components/common/Input';
 import Select from '../../components/common/Select';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
-import ArchivedEmployeeDetailModal from '../../components/admin/employees/ArchivedEmployeeDetailModal';
 import type { ArchivedEmployeeListItem } from '../../types';
 
 // values are i18n keys, resolved with t() at render
@@ -57,7 +57,7 @@ export default function ArchivedEmployeesTab() {
   const [reasonFilter, setReasonFilter] = useState('');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   const debouncedSearch = useDebounce(search, 400);
 
@@ -128,7 +128,7 @@ export default function ArchivedEmployeesTab() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {rows.map(e => (
-            <button key={e.id} onClick={() => setSelectedId(e.id)} className="text-left w-full">
+            <button key={e.id} onClick={() => navigate(`/admin/archived-employees/${e.id}`)} className="text-left w-full">
               <Card className="hover:shadow-md hover:border-primary-200 transition-all cursor-pointer h-full">
                 <div className="flex items-start gap-3">
                   <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center flex-shrink-0">
@@ -155,12 +155,6 @@ export default function ArchivedEmployeesTab() {
           ))}
         </div>
       )}
-
-      <ArchivedEmployeeDetailModal
-        employeeId={selectedId}
-        onClose={() => setSelectedId(null)}
-        onRestored={load}
-      />
     </div>
   );
 }
