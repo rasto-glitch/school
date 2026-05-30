@@ -4,6 +4,7 @@ import { login, changePassword, getSchools, forgotPassword, registerDeviceToken,
 import { submitBugReport } from '../controllers/bugReport.controller';
 import * as admin from '../controllers/admin.controller';
 import * as archivedProfile from '../controllers/archivedEmployeeProfile.controller';
+import * as transfer from '../controllers/studentTransfer.controller';
 import * as teacher from '../controllers/teacher.controller';
 import * as parent from '../controllers/parent.controller';
 import * as driver from '../controllers/driver.controller';
@@ -109,6 +110,17 @@ export function createRouter(io: SocketServer) {
   router.post('/admin/classes/:id/promote-class', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => admin.commitPromoteClass(req as AuthRequest, res));
   router.get('/admin/enrollments/backfill/preview', authenticate, authorize('admin'), (req, res) => admin.previewEnrollmentBackfill(req as AuthRequest, res));
   router.post('/admin/enrollments/backfill', authenticate, authorize('admin'), (req, res) => admin.commitEnrollmentBackfill(req as AuthRequest, res));
+
+  // ---- STUDENT TRANSFERS (migration 032 — phase A: non-Scholify) ----
+  router.get('/admin/transfers', authenticate, authorize('admin'), (req, res) => transfer.listTransfers(req as AuthRequest, res));
+  router.post('/admin/transfers', authenticate, authorize('admin'), (req, res) => transfer.startTransfer(req as AuthRequest, res));
+  router.get('/admin/transfers/:id', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => transfer.getTransfer(req as AuthRequest, res));
+  router.get('/admin/transfers/:id/consent', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => transfer.getTransferConsentPreview(req as AuthRequest, res));
+  router.post('/admin/transfers/:id/consent', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => transfer.captureConsent(req as AuthRequest, res));
+  router.get('/admin/transfers/:id/bundle.json', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => transfer.downloadBundleJson(req as AuthRequest, res));
+  router.get('/admin/transfers/:id/bundle.pdf', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => transfer.downloadBundlePdf(req as AuthRequest, res));
+  router.post('/admin/transfers/:id/complete', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => transfer.completeTransfer(req as AuthRequest, res));
+  router.post('/admin/transfers/:id/cancel', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => transfer.cancelTransfer(req as AuthRequest, res));
   router.get('/admin/grades/pending', authenticate, authorize('admin'), (req, res) => admin.listPendingGrades(req as AuthRequest, res));
   router.get('/admin/grades/overview', authenticate, authorize('admin'), (req, res) => admin.getGradeReviewOverview(req as AuthRequest, res));
   router.put('/admin/grades/:id', authenticate, authorize('admin'), validate({ params: vp.idParam, body: vp.updateGradeSchema }), (req, res) => admin.updateGrade(req as AuthRequest, res));

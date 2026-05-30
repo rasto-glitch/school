@@ -38,7 +38,9 @@ export type AuditEntityType =
   | 'archived_employee'
   | 'archived_student'
   // Class-level admin actions (e.g. year-end promote wizard, migration 030)
-  | 'class';
+  | 'class'
+  // Cross-school student transfer (migration 032, phase A)
+  | 'student_transfer';
 
 interface LogParams {
   req: AuthRequest;

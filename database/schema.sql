@@ -279,6 +279,52 @@ CREATE INDEX IF NOT EXISTS idx_student_enrollments_class_year
   WHERE class_id IS NOT NULL;
 
 -- ============================================================
+-- STUDENT TRANSFERS — outgoing cross-school transfer wizard
+-- (see migration 032). One row per transfer initiation. Drives the
+-- consent-capture + signed-bundle-export flow that produces a JSON +
+-- PDF pack the parent walks to a non-Scholify destination. Phase B
+-- (Scholify↔Scholify push) will add destination_school_id +
+-- destination_tenant fields once master.elkurdi.co identity DB lands.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS student_transfers (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  student_id UUID REFERENCES students(id) ON DELETE SET NULL,
+  student_name_snapshot TEXT NOT NULL,
+  destination_kind TEXT NOT NULL DEFAULT 'non_scholify'
+    CHECK (destination_kind IN ('non_scholify', 'scholify')),
+  destination_school_name TEXT NOT NULL,
+  destination_city TEXT,
+  destination_country TEXT,
+  destination_contact TEXT,
+  consent_parent_name TEXT,
+  consent_text_version TEXT,
+  consent_signed_at TIMESTAMPTZ,
+  consent_witness_name TEXT,
+  consent_witness_role TEXT,
+  consent_hash TEXT,
+  bundle_signature TEXT,
+  bundle_sha256 TEXT,
+  bundle_generated_at TIMESTAMPTZ,
+  bundle_format_version INTEGER NOT NULL DEFAULT 1,
+  status TEXT NOT NULL DEFAULT 'pending_consent'
+    CHECK (status IN ('pending_consent', 'consented', 'bundle_generated', 'completed', 'cancelled')),
+  cancelled_reason TEXT,
+  completed_at TIMESTAMPTZ,
+  initiated_by UUID,
+  initiated_by_name TEXT,
+  initiated_by_role TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_student_transfers_school
+  ON student_transfers(school_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_student_transfers_status
+  ON student_transfers(school_id, status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_student_transfers_student
+  ON student_transfers(student_id) WHERE student_id IS NOT NULL;
+
+-- ============================================================
 -- HOMEWORK
 -- ============================================================
 CREATE TABLE IF NOT EXISTS homework (
@@ -731,6 +777,7 @@ CREATE TABLE IF NOT EXISTS archived_students (
   parent_phone TEXT,
   classes_attended JSONB DEFAULT '[]',           -- LEGACY (migration 030): attendance-derived class list, no longer populated (always []). NOT REMOVED because migration 019's tamper-evidence hash _canon_archived_student includes classes_attended::text in its canonical input — dropping the column would invalidate the integrity chain on every existing archive. Reads come from enrollment_history below.
   enrollment_history JSONB NOT NULL DEFAULT '[]', -- per-year academic progression snapshot; see migration 030. Source of truth for the archive's academic record.
+  transfer_id UUID,                              -- migration 032: links back to student_transfers row when reason='transferred' was driven by the transfer wizard. NOT in _canon_archived_student.
   grades JSONB DEFAULT '[]',
   payment_history JSONB DEFAULT '[]',
   archived_by UUID,  -- FK-less actor ref (append-only/hashed row): keeps its value when the user is deleted; text copies below stay readable
@@ -763,7 +810,8 @@ CREATE OR REPLACE FUNCTION archive_student_atomic(
   p_archived_by_name TEXT,
   p_archived_by_role TEXT,
   p_original_parent_id UUID,
-  p_enrollment_history JSONB DEFAULT '[]'::jsonb   -- migration 031
+  p_enrollment_history JSONB DEFAULT '[]'::jsonb,  -- migration 031
+  p_transfer_id UUID DEFAULT NULL                  -- migration 033
 ) RETURNS UUID
 LANGUAGE plpgsql
 AS $$
@@ -774,7 +822,8 @@ BEGIN
     school_id, original_student_id, full_name, date_of_birth, enrollment_date,
     departure_date, reason, parent_full_name, parent_phone,
     classes_attended, enrollment_history, grades, payment_history,
-    archived_by, archived_by_name, archived_by_role, original_parent_id
+    archived_by, archived_by_name, archived_by_role, original_parent_id,
+    transfer_id
   ) VALUES (
     p_school_id, p_student_id, p_full_name, p_date_of_birth, p_enrollment_date,
     p_departure_date, p_reason, p_parent_full_name, p_parent_phone,
@@ -782,7 +831,8 @@ BEGIN
     COALESCE(p_enrollment_history, '[]'::jsonb),
     COALESCE(p_grades, '[]'::jsonb),
     COALESCE(p_payment_history, '[]'::jsonb),
-    p_archived_by, p_archived_by_name, p_archived_by_role, p_original_parent_id
+    p_archived_by, p_archived_by_name, p_archived_by_role, p_original_parent_id,
+    p_transfer_id
   )
   RETURNING id INTO v_archive_id;
 

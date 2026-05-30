@@ -262,6 +262,32 @@ export const adminApi = {
   ) => api.post(`/admin/classes/${classId}/promote-class`, data),
   previewEnrollmentBackfill: () => api.get('/admin/enrollments/backfill/preview'),
   commitEnrollmentBackfill: () => api.post('/admin/enrollments/backfill'),
+  // Student transfers (migration 032 — phase A: non-Scholify only)
+  listTransfers: (status?: string) =>
+    api.get('/admin/transfers', { params: status ? { status } : {} }),
+  getTransfer: (id: string) => api.get(`/admin/transfers/${id}`),
+  startTransfer: (data: {
+    studentId: string;
+    destinationKind?: 'non_scholify';
+    destinationSchoolName: string;
+    destinationCity?: string;
+    destinationCountry?: string;
+    destinationContact?: string;
+  }) => api.post('/admin/transfers', data),
+  getTransferConsent: (id: string) => api.get(`/admin/transfers/${id}/consent`),
+  captureTransferConsent: (id: string, data: {
+    parentName: string; witnessName: string; witnessRole?: string;
+  }) => api.post(`/admin/transfers/${id}/consent`, data),
+  downloadTransferJson: (id: string) =>
+    api.get(`/admin/transfers/${id}/bundle.json`, { responseType: 'blob' }),
+  downloadTransferPdf: (id: string, lang?: string) =>
+    api.get(`/admin/transfers/${id}/bundle.pdf`, {
+      params: lang ? { lang } : {},
+      responseType: 'blob',
+    }),
+  completeTransfer: (id: string) => api.post(`/admin/transfers/${id}/complete`),
+  cancelTransfer: (id: string, reason?: string) =>
+    api.post(`/admin/transfers/${id}/cancel`, reason ? { reason } : {}),
   // Grade review & release gate
   getPendingGrades: () => api.get('/admin/grades/pending'),
   getGradeReviewOverview: (term?: string) => api.get('/admin/grades/overview', { params: term ? { term } : {} }),
