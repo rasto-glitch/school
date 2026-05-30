@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import i18n from '../../i18n';
 import { Search, Archive, FileText, Download, RotateCcw } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { toast } from 'react-toastify';
@@ -85,11 +86,11 @@ export default function ArchivedStudentsTab() {
   const exportRecord = async () => {
     if (!detail) return;
     try {
-      const r = await adminApi.exportArchivedStudentRecord(detail.id);
+      const r = await adminApi.exportArchivedStudentPdf(detail.id, i18n.language || 'en');
       const url = URL.createObjectURL(r.data as Blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `archived-student-${(detail.fullName || 'student').replace(/[^a-z0-9-_]+/gi, '_')}.json`;
+      a.download = `archived-student-${(detail.fullName || 'student').replace(/[^a-z0-9-_]+/gi, '_')}.pdf`;
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (e: any) {
@@ -361,7 +362,7 @@ export default function ArchivedStudentsTab() {
                 onClick={exportRecord}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"
               >
-                <Download className="w-4 h-4" /> {t('admin.arch_students.download_json')}
+                <Download className="w-4 h-4" /> {t('admin.arch_students.download_pdf', 'Download PDF')}
               </button>
               <button
                 onClick={restore}

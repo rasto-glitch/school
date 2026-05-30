@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'react-toastify';
 import { Download, RotateCcw } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
+import i18n from '../../../i18n';
 import { adminApi } from '../../../services/api';
 import Modal from '../../common/Modal';
 import LoadingSpinner from '../../common/LoadingSpinner';
@@ -70,11 +71,11 @@ export default function ArchivedEmployeeDetailModal({ employeeId, onClose, onRes
   const exportRecord = async () => {
     if (!detail) return;
     try {
-      const r = await adminApi.exportArchivedEmployeeRecord(detail.id);
+      const r = await adminApi.exportArchivedEmployeePdf(detail.id, i18n.language || 'en');
       const url = URL.createObjectURL(r.data as Blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `archived-employee-${(detail.fullName || 'employee').replace(/[^a-z0-9-_]+/gi, '_')}.json`;
+      a.download = `archived-employee-${(detail.fullName || 'employee').replace(/[^a-z0-9-_]+/gi, '_')}.pdf`;
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (err: unknown) {
@@ -314,7 +315,7 @@ export default function ArchivedEmployeeDetailModal({ employeeId, onClose, onRes
               onClick={exportRecord}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"
             >
-              <Download className="w-4 h-4" /> {t('admin.arch_emp.download_json')}
+              <Download className="w-4 h-4" /> {t('admin.arch_emp.download_pdf', 'Download PDF')}
             </button>
             <button
               onClick={restore}

@@ -256,6 +256,8 @@ export const adminApi = {
     api.get('/admin/archived-students', { params: params ?? {} }),
   getArchivedStudent: (id: string) => api.get(`/admin/archived-students/${id}`),
   exportArchivedStudentRecord: (id: string) => api.get(`/admin/archived-students/${id}/export.json`, { responseType: 'blob' }),
+  exportArchivedStudentPdf: (id: string, lang: string) =>
+    api.get(`/admin/archived-students/${id}/export.pdf`, { responseType: 'blob', params: { lang } }),
   restoreArchivedStudent: (id: string) => api.post(`/admin/archived-students/${id}/restore`),
   searchArchivedStudents: (name: string, dob?: string) =>
     api.get('/admin/archived-students/search', { params: { name, ...(dob ? { dob } : {}) } }),
@@ -265,6 +267,8 @@ export const adminApi = {
     api.get('/admin/archived-employees', { params: params ?? {} }),
   getArchivedEmployee: (id: string) => api.get(`/admin/archived-employees/${id}`),
   exportArchivedEmployeeRecord: (id: string) => api.get(`/admin/archived-employees/${id}/export.json`, { responseType: 'blob' }),
+  exportArchivedEmployeePdf: (id: string, lang: string) =>
+    api.get(`/admin/archived-employees/${id}/export.pdf`, { responseType: 'blob', params: { lang } }),
   restoreArchivedEmployee: (id: string) => api.post(`/admin/archived-employees/${id}/restore`),
   searchArchivedEmployees: (name: string, role?: string) =>
     api.get('/admin/archived-employees/search', { params: { name, ...(role ? { role } : {}) } }),

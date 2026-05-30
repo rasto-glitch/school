@@ -19,6 +19,9 @@ import { loadEmployeeArchiveSnapshot, streamPdf as streamEmployeePdf, buildXlsx 
 import { streamCredentialsPdf, type CredentialEntry } from '../utils/credentialsPdf';
 import { logAudit } from '../utils/audit';
 import { hasArchiveFeature, normalizeArchiveReason, resolveEmployeeArchiveId, rewriteOwnershipToArchive } from '../utils/employeeArchive';
+import { loadArchivedEmployeeForPdf, streamArchivedEmployeePdf } from '../utils/archivedEmployeePdf';
+import { loadArchivedStudentForPdf, streamArchivedStudentPdf } from '../utils/archivedStudentPdf';
+import { pickLang } from '../utils/archivePdfShared';
 import { hrColumns, hrSnapshot } from '../utils/employeeHr';
 import { isUrlSafeToFetch } from '../utils/urlSafety';
 import { logger } from '../utils/logger';
@@ -1243,6 +1246,59 @@ export async function exportArchivedEmployeeRecord(req: AuthRequest, res: Respon
     generatedAt: new Date().toISOString(),
     record: toCC(data),
   });
+}
+
+// Per-record PDF export. The detail-modal Download button hits this; the
+// JSON sibling above stays alive for programmatic backup callers (the
+// master pre-disable backup flow uses it).
+export async function exportArchivedEmployeePdf(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { id } = req.params;
+  if (!(await hasArchiveFeature(schoolId))) { res.status(403).json({ error: 'Archive feature is not enabled for this school' }); return; }
+
+  const data = await loadArchivedEmployeeForPdf(String(id), schoolId);
+  if (!data) { res.status(404).json({ error: 'Archived record not found' }); return; }
+  data.generatedBy = req.user!.username;
+  data.generatedByRole = req.user!.role;
+
+  await logAudit({
+    req,
+    entityType: 'archived_employee',
+    entityId: String(id),
+    action: 'export',
+    after: { _meta: { kind: 'pdf_export', schemaVersion: data.record.snapshot_version ?? 1, lang: pickLang(req.query.lang) } },
+    label: data.record.full_name,
+  });
+
+  const safe = String(data.record.full_name || 'employee').replace(/[^a-z0-9-_]+/gi, '_');
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="archived-employee-${safe}.pdf"`);
+  await streamArchivedEmployeePdf(data, pickLang(req.query.lang), res);
+}
+
+export async function exportArchivedStudentPdf(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { id } = req.params;
+  if (!(await hasArchiveFeature(schoolId))) { res.status(403).json({ error: 'Archive feature is not enabled for this school' }); return; }
+
+  const data = await loadArchivedStudentForPdf(String(id), schoolId);
+  if (!data) { res.status(404).json({ error: 'Archived record not found' }); return; }
+  data.generatedBy = req.user!.username;
+  data.generatedByRole = req.user!.role;
+
+  await logAudit({
+    req,
+    entityType: 'archived_student',
+    entityId: String(id),
+    action: 'export',
+    after: { _meta: { kind: 'pdf_export', schemaVersion: data.record.snapshot_version ?? 1, lang: pickLang(req.query.lang) } },
+    label: data.record.full_name,
+  });
+
+  const safe = String(data.record.full_name || 'student').replace(/[^a-z0-9-_]+/gi, '_');
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="archived-student-${safe}.pdf"`);
+  await streamArchivedStudentPdf(data, pickLang(req.query.lang), res);
 }
 
 // ---- RESTORE / UN-ARCHIVE (finding F12) ----

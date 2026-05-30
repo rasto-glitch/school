@@ -109,6 +109,7 @@ export function createRouter(io: SocketServer) {
   router.get('/admin/archived-students', authenticate, authorize('admin'), (req, res) => admin.getArchivedStudents(req as AuthRequest, res));
   router.get('/admin/archived-students/search', authenticate, authorize('admin'), validate({ query: vq.listQuery }), (req, res) => admin.searchArchivedStudents(req as AuthRequest, res));
   router.get('/admin/archived-students/:id/export.json', authenticate, authorize('admin'), (req, res) => admin.exportArchivedStudentRecord(req as AuthRequest, res));
+  router.get('/admin/archived-students/:id/export.pdf', authenticate, authorize('admin'), (req, res) => admin.exportArchivedStudentPdf(req as AuthRequest, res));
   router.post('/admin/archived-students/:id/restore', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => admin.restoreArchivedStudent(req as AuthRequest, res));
   router.get('/admin/archived-students/:id', authenticate, authorize('admin'), (req, res) => admin.getArchivedStudent(req as AuthRequest, res));
   router.get('/admin/archive/export.pdf', authenticate, authorize('admin'), (req, res) => admin.exportArchivePdf(req as AuthRequest, res));
@@ -120,6 +121,7 @@ export function createRouter(io: SocketServer) {
   router.get('/admin/archive/full-backup.json', authenticate, authorize('admin'), (req, res) => admin.exportFullArchiveBackup(req as AuthRequest, res));
   router.get('/admin/integrity/verify', authenticate, authorize('admin'), (req, res) => admin.verifyArchiveIntegrity(req as AuthRequest, res));
   router.get('/admin/archived-employees/:id/export.json', authenticate, authorize('admin'), (req, res) => admin.exportArchivedEmployeeRecord(req as AuthRequest, res));
+  router.get('/admin/archived-employees/:id/export.pdf', authenticate, authorize('admin'), (req, res) => admin.exportArchivedEmployeePdf(req as AuthRequest, res));
   router.post('/admin/archived-employees/:id/restore', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => admin.restoreArchivedEmployee(req as AuthRequest, res));
   router.get('/admin/archived-employees/:id', authenticate, authorize('admin'), (req, res) => admin.getArchivedEmployee(req as AuthRequest, res));
 

@@ -34,7 +34,9 @@ export type AuditEntityType =
   | 'school_policy'
   | 'employee_acknowledgement'
   | 'employee_action'
-  | 'hr_officer';
+  | 'hr_officer'
+  | 'archived_employee'
+  | 'archived_student';
 
 interface LogParams {
   req: AuthRequest;
