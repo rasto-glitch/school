@@ -32,30 +32,59 @@ interface Props {
   onCompleted?: () => void;
 }
 
-type Step = 'destination' | 'consent' | 'download' | 'complete';
+type Step = 'destination' | 'consent' | 'download' | 'send' | 'complete';
+
+type TransferStatus =
+  | 'pending_consent' | 'consented' | 'bundle_generated'
+  | 'awaiting_destination' | 'destination_imported' | 'destination_rejected'
+  | 'completed' | 'cancelled';
 
 interface TransferRow {
   id: string;
-  status: 'pending_consent' | 'consented' | 'bundle_generated' | 'completed' | 'cancelled';
+  status: TransferStatus;
   studentNameSnapshot: string;
   destinationKind: 'non_scholify' | 'scholify';
   destinationSchoolName: string;
+  destinationSchoolId: string | null;
   destinationCity: string | null;
   destinationCountry: string | null;
   destinationContact: string | null;
+  destinationRejectedReason: string | null;
   consentParentName: string | null;
   consentSignedAt: string | null;
   bundleSha256: string | null;
   bundleGeneratedAt: string | null;
 }
 
-function statusToStep(status: TransferRow['status']): Step {
-  switch (status) {
-    case 'pending_consent':  return 'consent';
-    case 'consented':        return 'download';
-    case 'bundle_generated': return 'complete';
-    case 'completed':        return 'complete';
-    case 'cancelled':        return 'destination';
+interface DirectoryEntry {
+  id: string;
+  name: string;
+  abbreviation: string | null;
+  slug: string;
+}
+
+function statusToStep(row: TransferRow): Step {
+  // Non-Scholify keeps the 4-step flow it shipped with.
+  if (row.destinationKind === 'non_scholify') {
+    switch (row.status) {
+      case 'pending_consent':  return 'consent';
+      case 'consented':        return 'download';
+      case 'bundle_generated': return 'complete';
+      case 'completed':        return 'complete';
+      default:                 return 'destination';
+    }
+  }
+  // Scholify gains a 'send' step between download and complete; complete
+  // is gated on destination acceptance.
+  switch (row.status) {
+    case 'pending_consent':       return 'consent';
+    case 'consented':             return 'download';
+    case 'bundle_generated':      return 'send';
+    case 'awaiting_destination':  return 'send';
+    case 'destination_rejected':  return 'send';
+    case 'destination_imported':  return 'complete';
+    case 'completed':             return 'complete';
+    default:                      return 'destination';
   }
 }
 
@@ -77,7 +106,10 @@ export default function TransferWizard({ isOpen, onClose, studentId, studentName
   const [busy, setBusy] = useState(false);
 
   // Step 1 — destination form state
-  const [destSchool, setDestSchool] = useState('');
+  const [destKind, setDestKind] = useState<'non_scholify' | 'scholify'>('non_scholify');
+  const [directory, setDirectory] = useState<DirectoryEntry[]>([]);
+  const [destSchoolId, setDestSchoolId] = useState<string>('');   // for scholify
+  const [destSchool, setDestSchool] = useState('');               // free-text for non_scholify; auto-filled for scholify
   const [destCity, setDestCity] = useState('');
   const [destCountry, setDestCountry] = useState('');
   const [destContact, setDestContact] = useState('');
@@ -92,8 +124,14 @@ export default function TransferWizard({ isOpen, onClose, studentId, studentName
   useEffect(() => {
     if (!isOpen) {
       setStep('destination'); setTransfer(null);
+      setDestKind('non_scholify'); setDirectory([]); setDestSchoolId('');
       setDestSchool(''); setDestCity(''); setDestCountry(''); setDestContact('');
       setParentName(''); setWitnessName(''); setWitnessRole(''); setConsentText(null);
+    } else {
+      // Eagerly load the Scholify directory so the toggle is responsive.
+      adminApi.listTransferDestinations()
+        .then(r => setDirectory((r.data || []) as DirectoryEntry[]))
+        .catch(() => setDirectory([]));
     }
   }, [isOpen]);
 
@@ -101,7 +139,7 @@ export default function TransferWizard({ isOpen, onClose, studentId, studentName
   // consent text if we're heading into the consent step.
   useEffect(() => {
     if (!transfer) return;
-    const s = statusToStep(transfer.status);
+    const s = statusToStep(transfer);
     setStep(s);
     if (s === 'consent') {
       const load = async () => {
@@ -118,16 +156,27 @@ export default function TransferWizard({ isOpen, onClose, studentId, studentName
 
   const onStart = async () => {
     if (!studentId) return;
-    if (!destSchool.trim()) {
-      toast.error(t('admin.transfer.dest_name_required', 'Destination school name is required'));
-      return;
+    if (destKind === 'scholify') {
+      if (!destSchoolId) {
+        toast.error(t('admin.transfer.scholify_required', 'Pick a Scholify destination school'));
+        return;
+      }
+    } else {
+      if (!destSchool.trim()) {
+        toast.error(t('admin.transfer.dest_name_required', 'Destination school name is required'));
+        return;
+      }
     }
     setBusy(true);
     try {
+      const pickedName = destKind === 'scholify'
+        ? (directory.find(d => d.id === destSchoolId)?.name || '')
+        : destSchool.trim();
       const r = await adminApi.startTransfer({
         studentId,
-        destinationKind: 'non_scholify',
-        destinationSchoolName: destSchool.trim(),
+        destinationKind: destKind,
+        destinationSchoolName: pickedName,
+        destinationSchoolId: destKind === 'scholify' ? destSchoolId : undefined,
         destinationCity: destCity.trim() || undefined,
         destinationCountry: destCountry.trim() || undefined,
         destinationContact: destContact.trim() || undefined,
@@ -135,6 +184,34 @@ export default function TransferWizard({ isOpen, onClose, studentId, studentName
       setTransfer(r.data as TransferRow);
     } catch (e: any) {
       toast.error(e?.response?.data?.error || t('admin.transfer.failed_start', 'Failed to start transfer'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onSendToDestination = async () => {
+    if (!transfer) return;
+    setBusy(true);
+    try {
+      const r = await adminApi.sendTransferToDestination(transfer.id);
+      setTransfer(r.data as TransferRow);
+      toast.success(t('admin.transfer.sent_to_destination', 'Sent to destination — they will see it in their Incoming inbox.'));
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error || t('admin.transfer.failed_send', 'Failed to send to destination'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onRecall = async () => {
+    if (!transfer) return;
+    if (!confirm(t('admin.transfer.confirm_recall', 'Recall the transfer? Destination will no longer see it; you can re-send or cancel.'))) return;
+    setBusy(true);
+    try {
+      const r = await adminApi.recallTransfer(transfer.id);
+      setTransfer(r.data as TransferRow);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error || t('admin.transfer.failed_recall', 'Failed to recall'));
     } finally {
       setBusy(false);
     }
@@ -226,44 +303,108 @@ export default function TransferWizard({ isOpen, onClose, studentId, studentName
     defaultValue: `Transfer · ${studentName || transfer?.studentNameSnapshot || ''}`,
   });
 
+  const stepperKind: 'non_scholify' | 'scholify' = transfer?.destinationKind ?? destKind;
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={title} size="xl">
       <div className="space-y-4">
-        <Stepper step={step} t={t} />
+        <Stepper step={step} kind={stepperKind} t={t} />
 
         {step === 'destination' && (
           <div className="space-y-3">
-            <div className="flex items-start gap-2 p-3 bg-sky-50 border border-sky-200 rounded-xl text-sm">
-              <Send className="w-4 h-4 text-sky-600 flex-shrink-0 mt-0.5" />
-              <span className="text-sky-800">
-                {t('admin.transfer.intro_non_scholify',
-                  'Phase A handles transfers to non-Scholify schools. You will generate a signed JSON + PDF pack for the parent to walk to the destination. Scholify↔Scholify push lands in a later phase.')}
-              </span>
+            {/* Destination type toggle */}
+            <div className="flex gap-2 p-1 bg-gray-100 rounded-xl">
+              <button
+                onClick={() => setDestKind('non_scholify')}
+                className={`flex-1 text-sm font-medium px-3 py-2 rounded-lg transition-colors ${
+                  destKind === 'non_scholify' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                {t('admin.transfer.kind_non_scholify', 'Non-Scholify school')}
+              </button>
+              <button
+                onClick={() => setDestKind('scholify')}
+                className={`flex-1 text-sm font-medium px-3 py-2 rounded-lg transition-colors ${
+                  destKind === 'scholify' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                {t('admin.transfer.kind_scholify', 'Another Scholify school')}
+              </button>
             </div>
-            <Input
-              label={t('admin.transfer.dest_school', 'Destination school *')}
-              placeholder={t('admin.transfer.dest_school_ph', 'e.g. Baghdad International School')}
-              value={destSchool} onChange={e => setDestSchool(e.target.value)}
-            />
-            <div className="grid grid-cols-2 gap-3">
-              <Input
-                label={t('admin.transfer.dest_city', 'City')}
-                value={destCity} onChange={e => setDestCity(e.target.value)}
-              />
-              <Input
-                label={t('admin.transfer.dest_country', 'Country')}
-                value={destCountry} onChange={e => setDestCountry(e.target.value)}
-              />
-            </div>
-            <Input
-              label={t('admin.transfer.dest_contact', 'Contact (email / phone)')}
-              value={destContact} onChange={e => setDestContact(e.target.value)}
-            />
+
+            {destKind === 'non_scholify' ? (
+              <>
+                <div className="flex items-start gap-2 p-3 bg-sky-50 border border-sky-200 rounded-xl text-sm">
+                  <Send className="w-4 h-4 text-sky-600 flex-shrink-0 mt-0.5" />
+                  <span className="text-sky-800">
+                    {t('admin.transfer.intro_non_scholify',
+                      'For non-Scholify destinations you generate a signed JSON + PDF pack the parent walks to the school.')}
+                  </span>
+                </div>
+                <Input
+                  label={t('admin.transfer.dest_school', 'Destination school *')}
+                  placeholder={t('admin.transfer.dest_school_ph', 'e.g. Baghdad International School')}
+                  value={destSchool} onChange={e => setDestSchool(e.target.value)}
+                />
+                <div className="grid grid-cols-2 gap-3">
+                  <Input
+                    label={t('admin.transfer.dest_city', 'City')}
+                    value={destCity} onChange={e => setDestCity(e.target.value)}
+                  />
+                  <Input
+                    label={t('admin.transfer.dest_country', 'Country')}
+                    value={destCountry} onChange={e => setDestCountry(e.target.value)}
+                  />
+                </div>
+                <Input
+                  label={t('admin.transfer.dest_contact', 'Contact (email / phone)')}
+                  value={destContact} onChange={e => setDestContact(e.target.value)}
+                />
+              </>
+            ) : (
+              <>
+                <div className="flex items-start gap-2 p-3 bg-violet-50 border border-violet-200 rounded-xl text-sm">
+                  <Send className="w-4 h-4 text-violet-600 flex-shrink-0 mt-0.5" />
+                  <span className="text-violet-800">
+                    {t('admin.transfer.intro_scholify',
+                      'For Scholify destinations the bundle goes straight to their Incoming inbox. The destination admin accepts and places the student in a class; you then archive on your end.')}
+                  </span>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    {t('admin.transfer.scholify_school', 'Destination Scholify school *')}
+                  </label>
+                  {directory.length === 0 ? (
+                    <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                      {t('admin.transfer.no_scholify_destinations', 'No other Scholify schools are available on this platform yet.')}
+                    </p>
+                  ) : (
+                    <select
+                      value={destSchoolId}
+                      onChange={e => setDestSchoolId(e.target.value)}
+                      className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    >
+                      <option value="">{t('admin.transfer.pick_school', '— pick a school —')}</option>
+                      {directory.map(d => (
+                        <option key={d.id} value={d.id}>
+                          {d.name}{d.abbreviation ? ` (${d.abbreviation})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              </>
+            )}
+
             <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
               <Button variant="outline" onClick={onClose} disabled={busy}>
                 {t('common.cancel', 'Cancel')}
               </Button>
-              <Button onClick={onStart} loading={busy} disabled={!destSchool.trim()} icon={<Send className="w-4 h-4" />}>
+              <Button
+                onClick={onStart} loading={busy}
+                disabled={destKind === 'scholify' ? !destSchoolId : !destSchool.trim()}
+                icon={<Send className="w-4 h-4" />}
+              >
                 {t('admin.transfer.next', 'Next')}
               </Button>
             </div>
@@ -311,7 +452,9 @@ export default function TransferWizard({ isOpen, onClose, studentId, studentName
               </span>
             </div>
             <p className="text-sm text-gray-700">
-              {t('admin.transfer.download_intro', 'Generate the signed transfer pack. The JSON is the canonical artefact (machine-readable); the PDF is the human-readable companion the parent can carry.')}
+              {transfer.destinationKind === 'scholify'
+                ? t('admin.transfer.download_intro_scholify', 'Generate the bundle, then send it to the destination Scholify school. They will see it in their Incoming inbox.')
+                : t('admin.transfer.download_intro', 'Generate the signed transfer pack. The JSON is the canonical artefact (machine-readable); the PDF is the human-readable companion the parent can carry.')}
             </p>
             <div className="grid grid-cols-2 gap-3">
               <Button onClick={onDownloadJson} loading={busy} icon={<Download className="w-4 h-4" />}>
@@ -325,9 +468,57 @@ export default function TransferWizard({ isOpen, onClose, studentId, studentName
               <Button variant="outline" onClick={onCancel} disabled={busy} icon={<XIcon className="w-4 h-4" />}>
                 {t('admin.transfer.cancel_transfer', 'Cancel transfer')}
               </Button>
-              <Button onClick={() => setStep('complete')} disabled={!transfer.bundleSha256}>
+              <Button
+                onClick={() => setStep(transfer.destinationKind === 'scholify' ? 'send' : 'complete')}
+                disabled={!transfer.bundleSha256}
+              >
                 {t('admin.transfer.next', 'Next')}
               </Button>
+            </div>
+          </div>
+        )}
+
+        {step === 'send' && transfer && (
+          <div className="space-y-3">
+            {transfer.status === 'destination_rejected' && (
+              <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-xl text-sm">
+                <AlertTriangle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
+                <div className="text-red-800">
+                  <p className="font-medium">{t('admin.transfer.destination_rejected_title', 'Destination rejected the transfer')}</p>
+                  {transfer.destinationRejectedReason && <p className="mt-1">{transfer.destinationRejectedReason}</p>}
+                </div>
+              </div>
+            )}
+            {transfer.status === 'awaiting_destination' && (
+              <div className="flex items-start gap-2 p-3 bg-violet-50 border border-violet-200 rounded-xl text-sm">
+                <Send className="w-4 h-4 text-violet-600 flex-shrink-0 mt-0.5" />
+                <span className="text-violet-800">
+                  {t('admin.transfer.awaiting_destination', { name: transfer.destinationSchoolName,
+                    defaultValue: `Sent to ${transfer.destinationSchoolName} — waiting for them to accept.` })}
+                </span>
+              </div>
+            )}
+            {(transfer.status === 'bundle_generated' || transfer.status === 'destination_rejected') && (
+              <p className="text-sm text-gray-700">
+                {t('admin.transfer.send_intro', { name: transfer.destinationSchoolName,
+                  defaultValue: `Send the bundle to ${transfer.destinationSchoolName}. They will see it in their Incoming inbox; once they accept and import, you can archive on your end.` })}
+              </p>
+            )}
+            <div className="flex justify-between gap-2 pt-2 border-t border-gray-100">
+              <Button variant="outline" onClick={onCancel} disabled={busy} icon={<XIcon className="w-4 h-4" />}>
+                {t('admin.transfer.cancel_transfer', 'Cancel transfer')}
+              </Button>
+              {transfer.status === 'awaiting_destination' ? (
+                <Button onClick={onRecall} loading={busy} variant="outline">
+                  {t('admin.transfer.recall', 'Recall')}
+                </Button>
+              ) : (
+                <Button onClick={onSendToDestination} loading={busy} icon={<Send className="w-4 h-4" />}>
+                  {transfer.status === 'destination_rejected'
+                    ? t('admin.transfer.resend', 'Re-send')
+                    : t('admin.transfer.send', 'Send to destination')}
+                </Button>
+              )}
             </div>
           </div>
         )}
@@ -337,7 +528,10 @@ export default function TransferWizard({ isOpen, onClose, studentId, studentName
             <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl text-sm">
               <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
               <span className="text-amber-800">
-                {t('admin.transfer.complete_warning', 'The next action archives the student as "Transferred" and removes their live row. Make sure you have already downloaded the JSON + PDF pack and given them to the parent.')}
+                {transfer.destinationKind === 'scholify'
+                  ? t('admin.transfer.complete_warning_scholify', { name: transfer.destinationSchoolName,
+                      defaultValue: `${transfer.destinationSchoolName} has accepted and the student now exists in their roster. Archiving on your end finalises the transfer.` })
+                  : t('admin.transfer.complete_warning', 'The next action archives the student as "Transferred" and removes their live row. Make sure you have already downloaded the JSON + PDF pack and given them to the parent.')}
               </span>
             </div>
             {transfer.bundleSha256 && (
@@ -361,9 +555,16 @@ export default function TransferWizard({ isOpen, onClose, studentId, studentName
 }
 
 // Small step indicator. Kept inline because it's only used by the wizard.
+// Scholify destinations add a "Send" step between Download and Complete.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function Stepper({ step, t }: { step: Step; t: any }) {
-  const steps: Array<{ key: Step; label: string }> = [
+function Stepper({ step, kind, t }: { step: Step; kind: 'non_scholify' | 'scholify'; t: any }) {
+  const steps: Array<{ key: Step; label: string }> = kind === 'scholify' ? [
+    { key: 'destination', label: t('admin.transfer.step_destination', 'Destination') },
+    { key: 'consent',     label: t('admin.transfer.step_consent', 'Consent') },
+    { key: 'download',    label: t('admin.transfer.step_download', 'Download') },
+    { key: 'send',        label: t('admin.transfer.step_send', 'Send') },
+    { key: 'complete',    label: t('admin.transfer.step_complete', 'Complete') },
+  ] : [
     { key: 'destination', label: t('admin.transfer.step_destination', 'Destination') },
     { key: 'consent',     label: t('admin.transfer.step_consent', 'Consent') },
     { key: 'download',    label: t('admin.transfer.step_download', 'Download') },

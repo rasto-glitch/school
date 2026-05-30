@@ -268,12 +268,23 @@ export const adminApi = {
   getTransfer: (id: string) => api.get(`/admin/transfers/${id}`),
   startTransfer: (data: {
     studentId: string;
-    destinationKind?: 'non_scholify';
+    destinationKind?: 'non_scholify' | 'scholify';
     destinationSchoolName: string;
+    destinationSchoolId?: string;
     destinationCity?: string;
     destinationCountry?: string;
     destinationContact?: string;
   }) => api.post('/admin/transfers', data),
+  listTransferDestinations: () => api.get('/admin/transfers/directory'),
+  sendTransferToDestination: (id: string) => api.post(`/admin/transfers/${id}/send-to-destination`),
+  recallTransfer: (id: string) => api.post(`/admin/transfers/${id}/recall`),
+  listIncomingTransfers: (status?: string) =>
+    api.get('/admin/transfers/incoming/list', { params: status ? { status } : {} }),
+  getIncomingTransfer: (id: string) => api.get(`/admin/transfers/incoming/${id}`),
+  acceptIncomingTransfer: (id: string, data: { classId: string; parentLink?: 'create_new' | 'none' }) =>
+    api.post(`/admin/transfers/incoming/${id}/accept`, data),
+  rejectIncomingTransfer: (id: string, reason: string) =>
+    api.post(`/admin/transfers/incoming/${id}/reject`, { reason }),
   getTransferConsent: (id: string) => api.get(`/admin/transfers/${id}/consent`),
   captureTransferConsent: (id: string, data: {
     parentName: string; witnessName: string; witnessRole?: string;

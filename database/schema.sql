@@ -297,6 +297,17 @@ CREATE TABLE IF NOT EXISTS student_transfers (
   destination_city TEXT,
   destination_country TEXT,
   destination_contact TEXT,
+  -- Migration 034: addressing for Scholify destinations (the recipient
+  -- school in this same Supabase). NULL for non_scholify rows.
+  destination_school_id UUID REFERENCES schools(id) ON DELETE SET NULL,
+  destination_admin_id UUID,
+  destination_admin_name TEXT,
+  destination_admin_role TEXT,
+  destination_viewed_at TIMESTAMPTZ,
+  destination_accepted_at TIMESTAMPTZ,
+  destination_rejected_at TIMESTAMPTZ,
+  destination_rejected_reason TEXT,
+  destination_imported_student_id UUID REFERENCES students(id) ON DELETE SET NULL,
   consent_parent_name TEXT,
   consent_text_version TEXT,
   consent_signed_at TIMESTAMPTZ,
@@ -308,7 +319,11 @@ CREATE TABLE IF NOT EXISTS student_transfers (
   bundle_generated_at TIMESTAMPTZ,
   bundle_format_version INTEGER NOT NULL DEFAULT 1,
   status TEXT NOT NULL DEFAULT 'pending_consent'
-    CHECK (status IN ('pending_consent', 'consented', 'bundle_generated', 'completed', 'cancelled')),
+    CHECK (status IN (
+      'pending_consent', 'consented', 'bundle_generated',
+      'awaiting_destination', 'destination_imported', 'destination_rejected',
+      'completed', 'cancelled'
+    )),
   cancelled_reason TEXT,
   completed_at TIMESTAMPTZ,
   initiated_by UUID,
@@ -323,6 +338,13 @@ CREATE INDEX IF NOT EXISTS idx_student_transfers_status
   ON student_transfers(school_id, status, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_student_transfers_student
   ON student_transfers(student_id) WHERE student_id IS NOT NULL;
+-- Migration 034: inbox query at destination + reverse lookup by imported student.
+CREATE INDEX IF NOT EXISTS idx_student_transfers_destination_inbox
+  ON student_transfers(destination_school_id, status, created_at DESC)
+  WHERE destination_school_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_student_transfers_destination_student
+  ON student_transfers(destination_imported_student_id)
+  WHERE destination_imported_student_id IS NOT NULL;
 
 -- ============================================================
 -- HOMEWORK

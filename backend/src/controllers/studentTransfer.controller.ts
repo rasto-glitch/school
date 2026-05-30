@@ -20,7 +20,7 @@ import { safeDbErrorMessage, safeDbErrorStatus } from '../utils/dbErrors';
 import { toCC } from '../utils/transform';
 import { logAudit } from '../utils/audit';
 import { hasArchiveFeature } from '../utils/employeeArchive';
-import { closeCurrentEnrollment } from '../utils/studentEnrollments';
+import { closeCurrentEnrollment, openEnrollmentForCurrentYear } from '../utils/studentEnrollments';
 import {
   buildTransferBundle,
   hashConsent,
@@ -86,6 +86,7 @@ interface StartBody {
   studentId?: string;
   destinationKind?: 'non_scholify' | 'scholify';
   destinationSchoolName?: string;
+  destinationSchoolId?: string;       // required when destinationKind=scholify
   destinationCity?: string;
   destinationCountry?: string;
   destinationContact?: string;
@@ -101,14 +102,25 @@ export async function startTransfer(req: AuthRequest, res: Response): Promise<vo
   if (!body.destinationSchoolName || !body.destinationSchoolName.trim()) {
     res.status(400).json({ error: 'destinationSchoolName is required' }); return;
   }
-  // Phase A only supports non_scholify; reject scholify so callers don't
-  // think the Scholify↔Scholify path is wired.
   const destinationKind = body.destinationKind === 'scholify' ? 'scholify' : 'non_scholify';
+
+  // For Scholify destinations we need a concrete recipient school_id from
+  // the platform directory. Self-targeting is rejected up-front.
+  let destinationSchoolId: string | null = null;
   if (destinationKind === 'scholify') {
-    res.status(400).json({
-      error: 'Scholify↔Scholify transfers are not yet available. Phase B (master.elkurdi.co identity DB) is required.',
-    });
-    return;
+    if (!body.destinationSchoolId) {
+      res.status(400).json({ error: 'destinationSchoolId is required for Scholify destinations' }); return;
+    }
+    if (body.destinationSchoolId === schoolId) {
+      res.status(400).json({ error: 'Source and destination cannot be the same school' }); return;
+    }
+    const { data: dest } = await supabase
+      .from('schools').select('id, name, features').eq('id', body.destinationSchoolId).single();
+    if (!dest) { res.status(404).json({ error: 'Destination school not found in the platform directory' }); return; }
+    if (!((dest as any).features as Record<string, boolean> | null)?.archive) {
+      res.status(409).json({ error: 'Destination school does not have the archive/transfer feature enabled' }); return;
+    }
+    destinationSchoolId = body.destinationSchoolId;
   }
 
   const { data: student } = await supabase
@@ -122,7 +134,7 @@ export async function startTransfer(req: AuthRequest, res: Response): Promise<vo
     .select('id, status')
     .eq('school_id', schoolId)
     .eq('student_id', body.studentId)
-    .in('status', ['pending_consent', 'consented', 'bundle_generated']);
+    .in('status', ['pending_consent', 'consented', 'bundle_generated', 'awaiting_destination', 'destination_imported', 'destination_rejected']);
   if (existing && existing.length > 0) {
     res.status(409).json({ error: 'A transfer is already in progress for this student. Cancel it before starting another.' });
     return;
@@ -135,6 +147,7 @@ export async function startTransfer(req: AuthRequest, res: Response): Promise<vo
       student_name_snapshot: (student as any).full_name,
       destination_kind: destinationKind,
       destination_school_name: body.destinationSchoolName.trim(),
+      destination_school_id: destinationSchoolId,
       destination_city: body.destinationCity?.trim() || null,
       destination_country: body.destinationCountry?.trim() || null,
       destination_contact: body.destinationContact?.trim() || null,
@@ -300,9 +313,22 @@ export async function completeTransfer(req: AuthRequest, res: Response): Promise
     .from('student_transfers').select('*').eq('id', id).eq('school_id', schoolId).single();
   if (!transfer) { res.status(404).json({ error: 'Transfer not found' }); return; }
   const t = transfer as any;
-  if (t.status !== 'bundle_generated') {
-    res.status(409).json({ error: `Transfer cannot be completed from status: ${t.status}` });
-    return;
+
+  // Completion gating: non_scholify can complete straight from
+  // bundle_generated; scholify must wait until destination has imported.
+  const isScholify = t.destination_kind === 'scholify';
+  if (isScholify) {
+    if (t.status !== 'destination_imported') {
+      res.status(409).json({
+        error: `Scholify transfer requires destination acceptance before archiving (current status: ${t.status})`,
+      });
+      return;
+    }
+  } else {
+    if (t.status !== 'bundle_generated') {
+      res.status(409).json({ error: `Transfer cannot be completed from status: ${t.status}` });
+      return;
+    }
   }
   if (!t.student_id) {
     res.status(409).json({ error: 'Source student no longer exists' });
@@ -442,3 +468,298 @@ export async function cancelTransfer(req: AuthRequest, res: Response): Promise<v
   res.json(toCC(data));
 }
 
+// ─── PHASE B — Scholify↔Scholify ──────────────────────────────────────
+//
+// Source-side: directory of eligible destination schools, send-to-
+// destination, recall. Destination-side: incoming inbox, view, accept
+// (with import), reject. State machine evolution:
+//   bundle_generated → awaiting_destination → destination_imported → completed
+//                                          ↘ destination_rejected ↗
+//                                                                (back to bundle_generated on recall)
+
+// Directory of eligible Scholify destinations. Lists every school in the
+// platform that:
+//   1. Is not the caller's own school.
+//   2. Is active.
+//   3. Has the `archive` feature enabled (required to accept transfers).
+// Output is intentionally minimal — name + abbreviation + slug + id —
+// so a directory leak reveals nothing sensitive about other tenants.
+export async function listTransferDestinations(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { data } = await supabase
+    .from('schools')
+    .select('id, name, abbreviation, slug, features')
+    .eq('is_active', true)
+    .neq('id', schoolId)
+    .order('name');
+  const eligible = (data || []).filter(
+    s => ((s as any).features as Record<string, boolean> | null)?.archive === true,
+  );
+  res.json(eligible.map(s => ({
+    id: (s as any).id,
+    name: (s as any).name,
+    abbreviation: (s as any).abbreviation,
+    slug: (s as any).slug,
+  })));
+}
+
+// Source sends a bundle to the named destination. Requires the bundle to
+// already be generated. After this the destination admin sees it in
+// their inbox.
+export async function sendToDestination(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const id = String(req.params.id);
+  const { data: transfer } = await supabase
+    .from('student_transfers').select('*').eq('id', id).eq('school_id', schoolId).single();
+  if (!transfer) { res.status(404).json({ error: 'Transfer not found' }); return; }
+  const t = transfer as any;
+  if (t.destination_kind !== 'scholify') {
+    res.status(409).json({ error: 'Only Scholify destinations can be sent in-platform' }); return;
+  }
+  if (!t.destination_school_id) {
+    res.status(409).json({ error: 'Transfer is missing a Scholify destination' }); return;
+  }
+  if (t.status !== 'bundle_generated' && t.status !== 'destination_rejected') {
+    res.status(409).json({ error: `Cannot send from status: ${t.status}` }); return;
+  }
+  const { data, error } = await supabase.from('student_transfers').update({
+    status: 'awaiting_destination',
+    // Clear any rejection state when re-sending.
+    destination_rejected_at: null,
+    destination_rejected_reason: null,
+  }).eq('id', id).eq('school_id', schoolId).select().single();
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+  await logAudit({
+    req, entityType: 'student_transfer', entityId: id, action: 'update',
+    after: { _meta: { kind: 'sent_to_destination', destination_school_id: t.destination_school_id } } as Record<string, unknown>,
+    label: t.student_name_snapshot, reason: 'Sent to destination',
+  });
+  res.json(toCC(data));
+}
+
+// Source recalls a transfer that the destination hasn't yet imported. The
+// row goes back to bundle_generated so the source can re-send, cancel,
+// or change destination.
+export async function recallTransfer(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const id = String(req.params.id);
+  const { data: transfer } = await supabase
+    .from('student_transfers').select('*').eq('id', id).eq('school_id', schoolId).single();
+  if (!transfer) { res.status(404).json({ error: 'Transfer not found' }); return; }
+  const t = transfer as any;
+  if (t.status !== 'awaiting_destination' && t.status !== 'destination_rejected') {
+    res.status(409).json({ error: `Cannot recall from status: ${t.status}` }); return;
+  }
+  const { data, error } = await supabase.from('student_transfers').update({
+    status: 'bundle_generated',
+    destination_viewed_at: null,
+  }).eq('id', id).eq('school_id', schoolId).select().single();
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+  await logAudit({
+    req, entityType: 'student_transfer', entityId: id, action: 'update',
+    after: { _meta: { kind: 'recalled' } } as Record<string, unknown>,
+    label: t.student_name_snapshot, reason: 'Recalled by source',
+  });
+  res.json(toCC(data));
+}
+
+// Destination's incoming list. Authorisation scopes by destination_school_id
+// (NOT school_id) — this is the only cross-tenant read in the system.
+export async function listIncomingTransfers(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const status = (req.query.status as string | undefined) || undefined;
+  let query = supabase
+    .from('student_transfers')
+    .select('id, status, student_name_snapshot, destination_kind, destination_school_id, destination_school_name, school_id, consent_signed_at, bundle_generated_at, destination_viewed_at, destination_accepted_at, destination_rejected_at, destination_rejected_reason, destination_imported_student_id, created_at')
+    .eq('destination_school_id', schoolId)
+    .order('created_at', { ascending: false })
+    .limit(200);
+  if (status) query = query.eq('status', status);
+  const { data, error } = await query;
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+
+  // Enrich with the source school name so the inbox shows where the
+  // student is coming from.
+  const sourceIds = Array.from(new Set((data || []).map((r: any) => r.school_id)));
+  const sourceNames: Record<string, string> = {};
+  if (sourceIds.length) {
+    const { data: srcs } = await supabase
+      .from('schools').select('id, name').in('id', sourceIds);
+    for (const s of srcs || []) sourceNames[(s as any).id] = (s as any).name;
+  }
+  res.json((data || []).map((r: any) => ({
+    ...(toCC(r) as Record<string, unknown>),
+    sourceSchoolName: sourceNames[r.school_id] || null,
+  })));
+}
+
+// Destination views one incoming transfer. First view stamps
+// destination_viewed_at so the source's outgoing list reflects activity.
+export async function getIncomingTransfer(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId, userId, username, role } = req.user!;
+  const id = String(req.params.id);
+  const { data: transfer } = await supabase
+    .from('student_transfers').select('*').eq('id', id).eq('destination_school_id', schoolId).single();
+  if (!transfer) { res.status(404).json({ error: 'Incoming transfer not found' }); return; }
+  const t = transfer as any;
+
+  // Stamp first-view metadata once. Idempotent for re-opens.
+  if (!t.destination_viewed_at && t.status === 'awaiting_destination') {
+    await supabase.from('student_transfers').update({
+      destination_viewed_at: new Date().toISOString(),
+      destination_admin_id: userId,
+      destination_admin_name: username,
+      destination_admin_role: role,
+    }).eq('id', id).eq('destination_school_id', schoolId);
+    await logAudit({
+      req, entityType: 'student_transfer', entityId: id, action: 'read',
+      after: { _meta: { kind: 'destination_viewed' } } as Record<string, unknown>,
+      label: t.student_name_snapshot, reason: 'Destination first view',
+    });
+  }
+
+  // Enrich with source school + the bundle (academic record) so the
+  // detail UI has everything it needs to render the preview.
+  const { data: sourceSchool } = await supabase
+    .from('schools').select('name, abbreviation').eq('id', t.school_id).single();
+  const built = await buildTransferBundle(t.school_id, id);
+  res.json({
+    transfer: toCC(transfer),
+    sourceSchool: sourceSchool ? toCC(sourceSchool) : null,
+    bundle: built?.bundle ?? null,
+  });
+}
+
+// Destination accepts the transfer. Creates a new student row in the
+// destination's school_id namespace + an enrollment row for the current
+// year at the chosen class. Past years from the bundle are NOT
+// materialised as live enrollments — they're the "external transcript"
+// (queryable from the transfer row via destination_imported_student_id).
+interface AcceptBody {
+  classId?: string;
+  parentLink?: 'create_new' | 'none';   // phase B prep: keep it minimal
+}
+
+export async function acceptIncomingTransfer(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId, userId, username, role } = req.user!;
+  const id = String(req.params.id);
+  const body = (req.body || {}) as AcceptBody;
+
+  const { data: transfer } = await supabase
+    .from('student_transfers').select('*').eq('id', id).eq('destination_school_id', schoolId).single();
+  if (!transfer) { res.status(404).json({ error: 'Incoming transfer not found' }); return; }
+  const t = transfer as any;
+  if (t.status !== 'awaiting_destination') {
+    res.status(409).json({ error: `Cannot accept from status: ${t.status}` }); return;
+  }
+  if (!body.classId) {
+    res.status(400).json({ error: 'classId is required to place the student' }); return;
+  }
+  // Verify the class belongs to this destination.
+  const { data: cls } = await supabase
+    .from('classes').select('id, name, grade_level').eq('id', body.classId).eq('school_id', schoolId).single();
+  if (!cls) { res.status(404).json({ error: 'Target class not found in this school' }); return; }
+
+  // Pull the source student so we copy identifying info to the new row.
+  // Source data lives in school_id = t.school_id; this is the cross-
+  // school read that's explicitly authorised by the transfer + consent.
+  const { data: srcStudent } = await supabase
+    .from('students').select('*, parents(full_name, phone_number)').eq('id', t.student_id).single();
+  if (!srcStudent) { res.status(404).json({ error: 'Source student no longer exists' }); return; }
+
+  // Optionally create a placeholder parent row at destination. We never
+  // auto-create a parent user account — that's a follow-up step the
+  // destination admin can take from the Students screen.
+  let parentId: string | null = null;
+  if (body.parentLink === 'create_new' && (srcStudent as any).parents?.full_name) {
+    const { data: newParent } = await supabase.from('parents').insert({
+      school_id: schoolId,
+      full_name: (srcStudent as any).parents.full_name,
+      phone_number: (srcStudent as any).parents.phone_number ?? null,
+    }).select('id').single();
+    parentId = (newParent as any)?.id ?? null;
+  }
+
+  // Materialise the new student in destination's namespace.
+  const { data: newStudent, error: newErr } = await supabase.from('students').insert({
+    school_id: schoolId,
+    full_name: (srcStudent as any).full_name,
+    date_of_birth: (srcStudent as any).date_of_birth ?? null,
+    phone_number: (srcStudent as any).phone_number ?? null,
+    emergency_contact: (srcStudent as any).emergency_contact ?? null,
+    home_address: (srcStudent as any).home_address ?? null,
+    class_id: body.classId,
+    parent_id: parentId,
+  }).select().single();
+  if (newErr || !newStudent) { res.status(safeDbErrorStatus(newErr)).json({ error: safeDbErrorMessage(newErr) }); return; }
+
+  // Open an enrollment row for the current year at the chosen class.
+  await openEnrollmentForCurrentYear({
+    schoolId, studentId: (newStudent as any).id, classId: body.classId,
+  });
+
+  // Flip the transfer to destination_imported. Source can now archive.
+  const { data: updatedTransfer, error: updErr } = await supabase.from('student_transfers').update({
+    status: 'destination_imported',
+    destination_accepted_at: new Date().toISOString(),
+    destination_imported_student_id: (newStudent as any).id,
+    destination_admin_id: userId,
+    destination_admin_name: username,
+    destination_admin_role: role,
+  }).eq('id', id).eq('destination_school_id', schoolId).select().single();
+  if (updErr) { res.status(safeDbErrorStatus(updErr)).json({ error: safeDbErrorMessage(updErr) }); return; }
+
+  await logAudit({
+    req, entityType: 'student_transfer', entityId: id, action: 'update',
+    after: { _meta: {
+      kind: 'destination_imported',
+      new_student_id: (newStudent as any).id,
+      class_id: body.classId,
+    } } as Record<string, unknown>,
+    label: t.student_name_snapshot, reason: 'Destination imported student',
+  });
+  await logAudit({
+    req, entityType: 'student', entityId: (newStudent as any).id, action: 'create',
+    after: newStudent as Record<string, unknown>,
+    label: (newStudent as any).full_name,
+    reason: `Imported via transfer ${id}`,
+  });
+
+  res.json({
+    ok: true,
+    transfer: toCC(updatedTransfer),
+    newStudentId: (newStudent as any).id,
+  });
+}
+
+// Destination rejects with a reason. The source's outgoing list reflects
+// the rejection; source admin can recall + cancel or change destination.
+export async function rejectIncomingTransfer(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId, userId, username, role } = req.user!;
+  const id = String(req.params.id);
+  const reason = ((req.body || {}) as { reason?: string }).reason?.trim() || '';
+  if (!reason) { res.status(400).json({ error: 'reason is required' }); return; }
+
+  const { data: transfer } = await supabase
+    .from('student_transfers').select('*').eq('id', id).eq('destination_school_id', schoolId).single();
+  if (!transfer) { res.status(404).json({ error: 'Incoming transfer not found' }); return; }
+  const t = transfer as any;
+  if (t.status !== 'awaiting_destination') {
+    res.status(409).json({ error: `Cannot reject from status: ${t.status}` }); return;
+  }
+  const { data, error } = await supabase.from('student_transfers').update({
+    status: 'destination_rejected',
+    destination_rejected_at: new Date().toISOString(),
+    destination_rejected_reason: reason,
+    destination_admin_id: userId,
+    destination_admin_name: username,
+    destination_admin_role: role,
+  }).eq('id', id).eq('destination_school_id', schoolId).select().single();
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+  await logAudit({
+    req, entityType: 'student_transfer', entityId: id, action: 'update',
+    after: { _meta: { kind: 'destination_rejected', reason } } as Record<string, unknown>,
+    label: t.student_name_snapshot, reason: 'Destination rejected transfer',
+  });
+  res.json(toCC(data));
+}

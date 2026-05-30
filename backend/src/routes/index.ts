@@ -111,8 +111,10 @@ export function createRouter(io: SocketServer) {
   router.get('/admin/enrollments/backfill/preview', authenticate, authorize('admin'), (req, res) => admin.previewEnrollmentBackfill(req as AuthRequest, res));
   router.post('/admin/enrollments/backfill', authenticate, authorize('admin'), (req, res) => admin.commitEnrollmentBackfill(req as AuthRequest, res));
 
-  // ---- STUDENT TRANSFERS (migration 032 — phase A: non-Scholify) ----
+  // ---- STUDENT TRANSFERS (migrations 032 + 034) ----
+  // Outgoing (source-side).
   router.get('/admin/transfers', authenticate, authorize('admin'), (req, res) => transfer.listTransfers(req as AuthRequest, res));
+  router.get('/admin/transfers/directory', authenticate, authorize('admin'), (req, res) => transfer.listTransferDestinations(req as AuthRequest, res));
   router.post('/admin/transfers', authenticate, authorize('admin'), (req, res) => transfer.startTransfer(req as AuthRequest, res));
   router.get('/admin/transfers/:id', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => transfer.getTransfer(req as AuthRequest, res));
   router.get('/admin/transfers/:id/consent', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => transfer.getTransferConsentPreview(req as AuthRequest, res));
@@ -121,6 +123,13 @@ export function createRouter(io: SocketServer) {
   router.get('/admin/transfers/:id/bundle.pdf', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => transfer.downloadBundlePdf(req as AuthRequest, res));
   router.post('/admin/transfers/:id/complete', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => transfer.completeTransfer(req as AuthRequest, res));
   router.post('/admin/transfers/:id/cancel', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => transfer.cancelTransfer(req as AuthRequest, res));
+  router.post('/admin/transfers/:id/send-to-destination', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => transfer.sendToDestination(req as AuthRequest, res));
+  router.post('/admin/transfers/:id/recall', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => transfer.recallTransfer(req as AuthRequest, res));
+  // Incoming (destination-side — scoped by destination_school_id).
+  router.get('/admin/transfers/incoming/list', authenticate, authorize('admin'), (req, res) => transfer.listIncomingTransfers(req as AuthRequest, res));
+  router.get('/admin/transfers/incoming/:id', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => transfer.getIncomingTransfer(req as AuthRequest, res));
+  router.post('/admin/transfers/incoming/:id/accept', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => transfer.acceptIncomingTransfer(req as AuthRequest, res));
+  router.post('/admin/transfers/incoming/:id/reject', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => transfer.rejectIncomingTransfer(req as AuthRequest, res));
   router.get('/admin/grades/pending', authenticate, authorize('admin'), (req, res) => admin.listPendingGrades(req as AuthRequest, res));
   router.get('/admin/grades/overview', authenticate, authorize('admin'), (req, res) => admin.getGradeReviewOverview(req as AuthRequest, res));
   router.put('/admin/grades/:id', authenticate, authorize('admin'), validate({ params: vp.idParam, body: vp.updateGradeSchema }), (req, res) => admin.updateGrade(req as AuthRequest, res));
