@@ -12,6 +12,16 @@ import type { Student, Report, Grade } from '../../types';
 import { getMarkNames, getMarkValue, gradeTotal } from '../../utils/marks';
 import { format, parseISO, differenceInYears } from 'date-fns';
 
+interface EnrollmentHistoryEntry {
+  academicYear: string;
+  gradeLevel: string;
+  classId: string | null;
+  className: string | null;
+  status: string;
+  startedOn: string | null;
+  endedOn: string | null;
+}
+
 interface ArchivedSnapshot {
   id: string;
   fullName: string;
@@ -21,7 +31,10 @@ interface ArchivedSnapshot {
   reason: string;
   parentFullName: string | null;
   parentPhone: string | null;
-  classesAttended: { year: string; classId: string; className: string }[];
+  // Migration 030: prefer enrollmentHistory; classesAttended kept for
+  // pre-backfill archives.
+  enrollmentHistory?: EnrollmentHistoryEntry[];
+  classesAttended?: { year: string; classId: string; className: string }[];
 }
 
 export default function StudentBriefPage() {
@@ -273,9 +286,14 @@ export default function StudentBriefPage() {
                     <div className="font-semibold text-gray-900">{t('admin.student_brief.prev_enrollment')}</div>
                     <div className="text-sm text-gray-700 mt-0.5">
                       {t('admin.student_brief.prev_line', { name: previousEnrollment.fullName, reason: previousEnrollment.reason, date: previousEnrollment.departureDate })}
-                      {previousEnrollment.classesAttended.length > 0 && (
-                        <> · {t('admin.student_brief.last_class', { name: previousEnrollment.classesAttended[previousEnrollment.classesAttended.length - 1].className })}</>
-                      )}
+                      {(() => {
+                        const history = previousEnrollment.enrollmentHistory ?? [];
+                        const legacy = previousEnrollment.classesAttended ?? [];
+                        const lastLabel = history.length
+                          ? (history[history.length - 1]?.gradeLevel || history[history.length - 1]?.className || null)
+                          : (legacy.length ? legacy[legacy.length - 1]?.className : null);
+                        return lastLabel ? <> · {t('admin.student_brief.last_class', { name: lastLabel })}</> : null;
+                      })()}
                     </div>
                     <div className="text-xs text-gray-500 mt-0.5">
                       {previousEnrollment.parentFullName && <>{t('admin.student_brief.parent_on_file', { name: previousEnrollment.parentFullName })}{previousEnrollment.parentPhone && ` · ${previousEnrollment.parentPhone}`}</>}

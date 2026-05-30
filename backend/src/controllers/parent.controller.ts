@@ -45,7 +45,7 @@ export async function getArchivedChildren(req: AuthRequest, res: Response): Prom
 
   const { data, error } = await req.db!
     .from('archived_students')
-    .select('id, full_name, reason, departure_date, classes_attended, created_at')
+    .select('id, full_name, reason, departure_date, enrollment_history, classes_attended, created_at')
     .eq('school_id', schoolId)
     .eq('original_parent_id', parent.id)
     .order('created_at', { ascending: false });
@@ -61,7 +61,7 @@ export async function getArchivedChild(req: AuthRequest, res: Response): Promise
 
   const { data, error } = await req.db!
     .from('archived_students')
-    .select('id, full_name, date_of_birth, enrollment_date, departure_date, reason, classes_attended, grades, payment_history, created_at')
+    .select('id, full_name, date_of_birth, enrollment_date, departure_date, reason, enrollment_history, classes_attended, grades, payment_history, created_at')
     .eq('id', id)
     .eq('school_id', schoolId)
     .eq('original_parent_id', parent.id)  // ownership: parent can only read their own child

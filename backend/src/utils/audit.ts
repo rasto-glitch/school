@@ -36,7 +36,9 @@ export type AuditEntityType =
   | 'employee_action'
   | 'hr_officer'
   | 'archived_employee'
-  | 'archived_student';
+  | 'archived_student'
+  // Class-level admin actions (e.g. year-end promote wizard, migration 030)
+  | 'class';
 
 interface LogParams {
   req: AuthRequest;

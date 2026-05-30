@@ -1922,16 +1922,20 @@ export async function listArchivePaymentRecords(req: AuthRequest, res: Response)
   // Archived
   const { data: archivedRows } = await supabase
     .from('archived_students')
-    .select('id, full_name, departure_date, reason, parent_full_name, parent_phone, classes_attended, payment_history, created_at')
+    .select('id, full_name, departure_date, reason, parent_full_name, parent_phone, enrollment_history, classes_attended, payment_history, created_at')
     .eq('school_id', schoolId)
     .order('created_at', { ascending: false });
 
   const archived: ArchiveListItem[] = (archivedRows ?? []).map((r: any) => {
     const plans = plansFromSnapshot(r.payment_history);
     const sum = summarisePlans(plans);
-    const lastClass = Array.isArray(r.classes_attended) && r.classes_attended.length
-      ? r.classes_attended[r.classes_attended.length - 1].className ?? null
-      : null;
+    // Prefer enrollment_history (migration 030); fall back to the legacy
+    // classes_attended JSONB for pre-backfill archives.
+    const history = Array.isArray(r.enrollment_history) ? r.enrollment_history : [];
+    const legacy = Array.isArray(r.classes_attended) ? r.classes_attended : [];
+    const lastClass = history.length
+      ? (history[history.length - 1]?.className ?? history[history.length - 1]?.gradeLevel ?? null)
+      : (legacy.length ? (legacy[legacy.length - 1]?.className ?? null) : null);
     return {
       kind: 'archived',
       id: r.id,
@@ -2048,14 +2052,16 @@ async function loadArchiveDetail(schoolId: string, kind: 'archived' | 'graduated
   if (kind === 'archived') {
     const { data: row } = await supabase
       .from('archived_students')
-      .select('id, full_name, departure_date, reason, parent_full_name, parent_phone, classes_attended, payment_history')
+      .select('id, full_name, departure_date, reason, parent_full_name, parent_phone, enrollment_history, classes_attended, payment_history')
       .eq('id', id)
       .eq('school_id', schoolId)
       .single();
     if (!row) return null;
-    const lastClass = Array.isArray((row as any).classes_attended) && (row as any).classes_attended.length
-      ? (row as any).classes_attended[(row as any).classes_attended.length - 1].className ?? null
-      : null;
+    const history = Array.isArray((row as any).enrollment_history) ? (row as any).enrollment_history : [];
+    const legacy = Array.isArray((row as any).classes_attended) ? (row as any).classes_attended : [];
+    const lastClass = history.length
+      ? (history[history.length - 1]?.className ?? history[history.length - 1]?.gradeLevel ?? null)
+      : (legacy.length ? (legacy[legacy.length - 1]?.className ?? null) : null);
     return {
       schoolName,
       schoolLogoUrl,

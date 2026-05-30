@@ -102,6 +102,13 @@ export function createRouter(io: SocketServer) {
   router.delete('/admin/students/:id', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => admin.deleteStudent(req as AuthRequest, res));
   router.get('/admin/students/graduated', authenticate, authorize('admin'), (req, res) => admin.getGraduatedStudents(req as AuthRequest, res));
   router.get('/admin/students/:id/brief', authenticate, authorize('admin'), (req, res) => admin.getStudentBrief(req as AuthRequest, res));
+  router.get('/admin/students/:id/enrollments', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => admin.getStudentEnrollmentHistory(req as AuthRequest, res));
+  router.post('/admin/students/:id/leave', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => admin.markStudentOnLeave(req as AuthRequest, res));
+  router.post('/admin/students/:id/return', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => admin.returnStudentFromLeave(req as AuthRequest, res));
+  router.get('/admin/classes/:id/promote-class/preview', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => admin.previewPromoteClass(req as AuthRequest, res));
+  router.post('/admin/classes/:id/promote-class', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => admin.commitPromoteClass(req as AuthRequest, res));
+  router.get('/admin/enrollments/backfill/preview', authenticate, authorize('admin'), (req, res) => admin.previewEnrollmentBackfill(req as AuthRequest, res));
+  router.post('/admin/enrollments/backfill', authenticate, authorize('admin'), (req, res) => admin.commitEnrollmentBackfill(req as AuthRequest, res));
   router.get('/admin/grades/pending', authenticate, authorize('admin'), (req, res) => admin.listPendingGrades(req as AuthRequest, res));
   router.get('/admin/grades/overview', authenticate, authorize('admin'), (req, res) => admin.getGradeReviewOverview(req as AuthRequest, res));
   router.put('/admin/grades/:id', authenticate, authorize('admin'), validate({ params: vp.idParam, body: vp.updateGradeSchema }), (req, res) => admin.updateGrade(req as AuthRequest, res));

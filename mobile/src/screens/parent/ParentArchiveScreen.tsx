@@ -12,11 +12,24 @@ import { spacing, radius, font, shadow } from '../../theme';
 // backend only links snapshots captured with original_parent_id (migration
 // 017 onward); older archives stay admin/accountant-only.
 
+interface EnrollmentHistoryEntry {
+  academicYear: string;
+  gradeLevel: string;
+  classId: string | null;
+  className: string | null;
+  status: string;
+  startedOn: string | null;
+  endedOn: string | null;
+}
+
 interface ArchivedChildSummary {
   id: string;
   fullName: string;
   reason: string;
   departureDate: string | null;
+  // Migration 030: prefer enrollmentHistory; classesAttended kept for
+  // pre-backfill archives.
+  enrollmentHistory?: EnrollmentHistoryEntry[];
   classesAttended?: { year: string; classId: string; className: string }[];
 }
 
@@ -176,18 +189,29 @@ export default function ParentArchiveScreen() {
             {REASON_LABEL[detail.reason] || detail.reason}{detail.departureDate ? ` · ${detail.departureDate}` : ''}
           </Text>
 
-          {detail.classesAttended && detail.classesAttended.length > 0 && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>{t('past_records.classes', 'Classes attended')}</Text>
-              <View style={styles.chipWrap}>
-                {detail.classesAttended.map((c, i) => (
-                  <View key={i} style={styles.chip}>
-                    <Text style={styles.chipText}>{c.year}: {c.className}</Text>
-                  </View>
-                ))}
+          {(() => {
+            const history = detail.enrollmentHistory ?? [];
+            const legacy = detail.classesAttended ?? [];
+            const rows = history.length
+              ? history.map(e => ({
+                  academicYear: e.academicYear,
+                  label: e.gradeLevel + (e.className ? ` · ${e.className}` : ''),
+                }))
+              : legacy.map(c => ({ academicYear: c.year, label: c.className }));
+            if (rows.length === 0) return null;
+            return (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>{t('past_records.academic_progression', 'Academic progression')}</Text>
+                <View style={styles.chipWrap}>
+                  {rows.map((r, i) => (
+                    <View key={i} style={styles.chip}>
+                      <Text style={styles.chipText}>{r.academicYear}: {r.label}</Text>
+                    </View>
+                  ))}
+                </View>
               </View>
-            </View>
-          )}
+            );
+          })()}
 
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>{t('past_records.grades', 'Grades')}</Text>

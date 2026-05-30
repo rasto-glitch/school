@@ -37,6 +37,31 @@ const REASON_COLOR: Record<string, string> = {
   withdrew:    'bg-amber-100 text-amber-700',
 };
 
+// Color treatment for enrollment status pills (migration 030).
+const STATUS_PILL: Record<string, string> = {
+  enrolled:    'bg-sky-50 text-sky-700',
+  promoted:    'bg-emerald-50 text-emerald-700',
+  retained:    'bg-amber-50 text-amber-700',
+  on_leave:    'bg-violet-50 text-violet-700',
+  withdrew:    'bg-gray-100 text-gray-600',
+  transferred: 'bg-blue-50 text-blue-700',
+  graduated:   'bg-purple-50 text-purple-700',
+};
+
+// Human-readable label fallback when the i18n key isn't translated yet.
+function defaultStatusLabel(status: string): string {
+  switch (status) {
+    case 'enrolled':    return 'Enrolled';
+    case 'promoted':    return 'Promoted';
+    case 'retained':    return 'Retained';
+    case 'on_leave':    return 'On leave';
+    case 'withdrew':    return 'Withdrew';
+    case 'transferred': return 'Transferred';
+    case 'graduated':   return 'Graduated';
+    default:            return status;
+  }
+}
+
 export default function ArchivedStudentsTab() {
   const { t } = useTranslation();
   const [students, setStudents]     = useState<any[]>([]);
@@ -57,9 +82,20 @@ export default function ArchivedStudentsTab() {
   }, []);
 
   const selectedClassName = classes.find(c => c.id === classFilter)?.name;
+  // Filter by class membership at any point in the student's progression.
+  // Prefer the new enrollment_history entries; fall back to the legacy
+  // classes_attended JSONB for pre-backfill archives.
   const filtered = classFilter
-    ? students.filter(s => Array.isArray(s.classesAttended) && s.classesAttended.some((c: any) =>
-        c.classId ? c.classId === classFilter : c.className === selectedClassName))
+    ? students.filter(s => {
+        const history: any[] = Array.isArray(s.enrollmentHistory) ? s.enrollmentHistory : [];
+        if (history.length > 0) {
+          return history.some(e =>
+            e.classId ? e.classId === classFilter : e.className === selectedClassName);
+        }
+        const legacy: any[] = Array.isArray(s.classesAttended) ? s.classesAttended : [];
+        return legacy.some(c =>
+          c.classId ? c.classId === classFilter : c.className === selectedClassName);
+      })
     : students;
 
   const load = useCallback(() => {
@@ -116,13 +152,37 @@ export default function ArchivedStudentsTab() {
   const gradeMap     = detail ? buildGradeMap(detail.grades || []) : {};
   const academicYears = Object.keys(gradeMap).sort();
 
-  // Group classesAttended by year for display
-  const classesByYear: Record<string, string[]> = {};
-  for (const c of (detail?.classesAttended || [])) {
-    if (!classesByYear[c.year]) classesByYear[c.year] = [];
-    if (!classesByYear[c.year].includes(c.className)) classesByYear[c.year].push(c.className);
-  }
-  const classYears = Object.keys(classesByYear).sort();
+  // Academic progression — prefer enrollment_history (migration 030);
+  // fall back to synthesising from the legacy classes_attended JSONB for
+  // pre-backfill archives so the UI still shows what it can.
+  const progression: Array<{
+    academicYear: string;
+    gradeLevel: string;
+    className: string | null;
+    status: string;
+  }> = (() => {
+    const history: any[] = Array.isArray(detail?.enrollmentHistory) ? detail.enrollmentHistory : [];
+    if (history.length > 0) {
+      return history
+        .map(e => ({
+          academicYear: String(e.academicYear),
+          gradeLevel: String(e.gradeLevel || '—'),
+          className: e.className ?? null,
+          status: String(e.status || 'enrolled'),
+        }))
+        .sort((a, b) => a.academicYear.localeCompare(b.academicYear));
+    }
+    const legacy: any[] = Array.isArray(detail?.classesAttended) ? detail.classesAttended : [];
+    return legacy
+      .filter(c => c?.year)
+      .sort((a, b) => String(a.year).localeCompare(String(b.year)))
+      .map(c => ({
+        academicYear: String(c.year),
+        gradeLevel: c.className ? String(c.className) : '—',
+        className: c.className ?? null,
+        status: 'enrolled',
+      }));
+  })();
 
   const fmt = (d?: string) => d ? format(parseISO(d), 'MMM d, yyyy') : '—';
 
@@ -249,20 +309,24 @@ export default function ArchivedStudentsTab() {
                 </dl>
               </div>
 
-              {/* Classes attended */}
+              {/* Academic progression (migration 030) */}
               <div>
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">{t('admin.arch_students.classes_attended')}</p>
-                {classYears.length === 0 ? (
-                  <p className="text-sm text-gray-400">{t('admin.arch_students.no_attendance')}</p>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">{t('admin.arch_students.academic_progression', 'Academic progression')}</p>
+                {progression.length === 0 ? (
+                  <p className="text-sm text-gray-400">{t('admin.arch_students.no_progression', 'No progression recorded.')}</p>
                 ) : (
                   <div className="space-y-2">
-                    {classYears.map(year => (
-                      <div key={year} className="flex items-start gap-2">
-                        <span className="text-xs font-medium text-gray-500 w-24 shrink-0 pt-0.5">{year}</span>
-                        <div className="flex flex-wrap gap-1">
-                          {classesByYear[year].map(cn => (
-                            <span key={cn} className="text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full">{cn}</span>
-                          ))}
+                    {progression.map(row => (
+                      <div key={row.academicYear} className="flex items-start gap-2">
+                        <span className="text-xs font-medium text-gray-500 w-24 shrink-0 pt-0.5">{row.academicYear}</span>
+                        <div className="flex flex-wrap items-center gap-1">
+                          <span className="text-xs font-medium text-gray-900">{row.gradeLevel}</span>
+                          {row.className && (
+                            <span className="text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full">{row.className}</span>
+                          )}
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_PILL[row.status] || 'bg-gray-100 text-gray-600'}`}>
+                            {t(`admin.arch_students.status_${row.status}`, defaultStatusLabel(row.status))}
+                          </span>
                         </div>
                       </div>
                     ))}

@@ -26,6 +26,22 @@ import { hrColumns, hrSnapshot } from '../utils/employeeHr';
 import { isUrlSafeToFetch } from '../utils/urlSafety';
 import { logger } from '../utils/logger';
 import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from '../utils/passwordPolicy';
+import {
+  openEnrollmentForCurrentYear,
+  updateClassForCurrentYear,
+  closeCurrentEnrollment,
+  markOnLeaveForCurrentYear,
+  returnFromLeave as returnFromLeaveHelper,
+  loadEnrollmentHistory,
+  rowsToSnapshot,
+  closeEnrollmentForYear,
+  openEnrollmentForYear,
+  loadEnrolledRosterForClass,
+  nextAcademicYear,
+  academicYearOf,
+  type EnrollmentSnapshotEntry,
+} from '../utils/studentEnrollments';
+import { backfillSchoolEnrollments } from '../utils/studentEnrollmentsBackfill';
 
 // ---- EMPLOYEE ARCHIVE (teacher / driver / supervisor; staff in staff.controller) ----
 // Mirrors the student archive: the controller assembles the role-specific
@@ -317,6 +333,10 @@ export async function createStudent(req: AuthRequest, res: Response): Promise<vo
 
   if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   await logAudit({ req, entityType: 'student', entityId: data.id, action: 'create', after: data, label: data.full_name });
+  // Open the per-year enrollment record (migration 030). Best-effort: a
+  // failure here is logged but doesn't fail the create — the year-end
+  // promote wizard / backfill can repair gaps.
+  await openEnrollmentForCurrentYear({ schoolId, studentId: data.id, classId: data.class_id });
   res.status(201).json({ ...(toCC(data) as Record<string, unknown>), parentAccountCreated });
 }
 
@@ -382,9 +402,17 @@ export async function assignStudent(req: AuthRequest, res: Response): Promise<vo
 
   if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   await logAudit({ req, entityType: 'student', entityId: studentId, action: 'update', before: before || undefined, after: data, label: data.full_name, reason: graduated ? 'Graduated' : null });
+
+  // Keep the per-year enrollment record in sync (migration 030).
+  // Mid-year section change → update the current year's row's class.
+  // (Year-end promotion is the dedicated wizard, not this endpoint.)
+  if (newClassId && !graduated) {
+    await updateClassForCurrentYear({ schoolId, studentId, classId: String(newClassId) });
+  }
   // Freeze a graduated snapshot (archive on — the no-archive branch above
   // already returned). Best-effort; never blocks the response.
   if (graduated) {
+    await closeCurrentEnrollment({ schoolId, studentId, status: 'graduated' });
     await snapshotGraduatedStudent(schoolId, studentId, { id: req.user!.userId, name: req.user!.username, role: req.user!.role });
   }
   res.json(toCC(data));
@@ -820,12 +848,20 @@ export async function bulkUploadStudents(req: AuthRequest, res: Response): Promi
     const { data: inserted, error: studentsErr } = await supabase
       .from('students')
       .insert(studentInserts)
-      .select('id');
+      .select('id, class_id');
 
     if (studentsErr) {
       errors.push(`Failed to insert students: ${studentsErr.message}`);
     } else {
       created = (inserted || []).length;
+      // Open per-year enrollment rows for each new student that landed in a
+      // class. Sequential rather than batched to keep helper semantics
+      // identical to single-create (logged failures don't fail the upload).
+      for (const s of inserted || []) {
+        await openEnrollmentForCurrentYear({
+          schoolId, studentId: String((s as any).id), classId: (s as any).class_id ?? null,
+        });
+      }
     }
   }
 
@@ -833,13 +869,6 @@ export async function bulkUploadStudents(req: AuthRequest, res: Response): Promi
 }
 
 // ---- ARCHIVE STUDENTS ----
-
-// Derive academic year from a date string: Sept-Dec = year/year+1, Jan-Aug = (year-1)/year
-function toAcademicYear(dateStr: string): string {
-  const d = new Date(dateStr);
-  const y = d.getFullYear();
-  return d.getMonth() >= 8 ? `${y}-${y + 1}` : `${y - 1}-${y}`;
-}
 
 // Build the frozen snapshot payload for a student: classes attended per
 // academic year, grades (marks[] + legacy columns), and full tuition
@@ -852,6 +881,7 @@ function toAcademicYear(dateStr: string): string {
 async function buildStudentArchiveSnapshot(schoolId: string, studentId: string): Promise<{
   student: any;
   classesAttended: { year: string; classId: string; className: string }[];
+  enrollmentHistory: EnrollmentSnapshotEntry[];
   gradesSnapshot: any[];
   paymentHistory: any[];
 } | null> {
@@ -870,25 +900,15 @@ async function buildStudentArchiveSnapshot(schoolId: string, studentId: string):
     .eq('school_id', schoolId)
     .order('academic_year');
 
-  const { data: attendanceRows } = await supabase
-    .from('attendance')
-    .select('date, class_id, classes(name)')
-    .eq('student_id', studentId)
-    .eq('school_id', schoolId);
-
-  const classYearMap = new Map<string, Map<string, string>>();
-  for (const row of (attendanceRows || [])) {
-    const classId = (row as any).class_id;
-    const className = (row as any).classes?.name;
-    if (!classId || !className) continue;
-    const yr = toAcademicYear(row.date);
-    if (!classYearMap.has(yr)) classYearMap.set(yr, new Map());
-    classYearMap.get(yr)!.set(classId, className);
-  }
-  const classesAttended = Array.from(classYearMap.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .flatMap(([year, idToName]) =>
-      Array.from(idToName.entries()).map(([classId, className]) => ({ year, classId, className })));
+  // Legacy classes_attended JSONB. As of migration 030 + the Phase 5/6
+  // rewrite, the academic record lives in enrollment_history (sourced
+  // below from student_enrollments). We keep WRITING an empty array to
+  // the column because migration 019's tamper-evidence hash
+  // (_canon_archived_student) includes classes_attended::text in its
+  // canonical input — dropping or changing it would break integrity
+  // verification on every existing archive. The shape stays []; the
+  // hash stays valid; readers ignore it.
+  const classesAttended: { year: string; classId: string; className: string }[] = [];
 
   const gradesSnapshot = (grades || []).map((g) => ({
     academicYear: g.academic_year,
@@ -960,7 +980,14 @@ async function buildStudentArchiveSnapshot(schoolId: string, studentId: string):
     };
   });
 
-  return { student, classesAttended, gradesSnapshot, paymentHistory };
+  // Per-year academic progression (migration 030). Source of truth for the
+  // archive's academic record. classesAttended above stays at [] because
+  // migration 019's tamper-evidence hash includes classes_attended in the
+  // canonical input — dropping it would invalidate every existing archive.
+  const enrollmentRows = await loadEnrollmentHistory(schoolId, studentId);
+  const enrollmentHistory = rowsToSnapshot(enrollmentRows);
+
+  return { student, classesAttended, enrollmentHistory, gradesSnapshot, paymentHistory };
 }
 
 // Freeze a graduated student into archived_students (reason='graduated')
@@ -998,6 +1025,7 @@ async function snapshotGraduatedStudent(
       parent_full_name: (student as any).parents?.full_name ?? null,
       parent_phone: (student as any).parents?.phone_number ?? null,
       classes_attended: snap.classesAttended,
+      enrollment_history: snap.enrollmentHistory,
       grades: snap.gradesSnapshot,
       payment_history: snap.paymentHistory,
       archived_by: actor.id,
@@ -1025,12 +1053,24 @@ export async function archiveStudent(req: AuthRequest, res: Response): Promise<v
     return;
   }
 
+  // Close the current year's enrollment row with the matching status BEFORE
+  // building the snapshot — the snapshot reads the freshly-closed row so the
+  // archive sees the final state. After this point the student row is
+  // deleted, which CASCADEs the enrollment rows, so the snapshot is the
+  // only durable copy.
+  await closeCurrentEnrollment({
+    schoolId,
+    studentId: String(id),
+    status: reason as 'transferred' | 'withdrew',
+    endedOn: departureDate,
+  });
+
   const snap = await buildStudentArchiveSnapshot(schoolId, String(id));
   if (!snap) { res.status(404).json({ error: 'Student not found' }); return; }
   const { student } = snap;
 
   // Atomic archive: insert into archived_students + delete from students
-  // in one transaction (PL/pgSQL function from migration 010).
+  // in one transaction (PL/pgSQL function from migration 010 / 031).
   const { error: rpcErr } = await supabase.rpc('archive_student_atomic', {
     p_school_id: schoolId,
     p_student_id: id,
@@ -1042,6 +1082,7 @@ export async function archiveStudent(req: AuthRequest, res: Response): Promise<v
     p_parent_full_name: (student as any).parents?.full_name ?? null,
     p_parent_phone: (student as any).parents?.phone_number ?? null,
     p_classes_attended: snap.classesAttended,
+    p_enrollment_history: snap.enrollmentHistory,
     p_grades: snap.gradesSnapshot,
     p_payment_history: snap.paymentHistory,
     p_archived_by: req.user!.userId,
@@ -1059,6 +1100,281 @@ export async function archiveStudent(req: AuthRequest, res: Response): Promise<v
   res.json({ message: 'Student archived successfully' });
 }
 
+// Mark a currently-enrolled student as on leave for the CURRENT academic
+// year (migration 030). The Phase-3 wizard will let admins pre-declare a
+// multi-year leave; for now one academic year at a time. Returns the
+// updated/created enrollment row.
+export async function markStudentOnLeave(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { id } = req.params;
+  const { endedOn } = (req.body || {}) as { endedOn?: string };
+
+  const { data: before } = await supabase
+    .from('students').select('id, full_name')
+    .eq('id', id).eq('school_id', schoolId).single();
+  if (!before) { res.status(404).json({ error: 'Student not found' }); return; }
+
+  const result = await markOnLeaveForCurrentYear({ schoolId, studentId: String(id), endedOn });
+  if (!result.ok) { res.status(400).json({ error: result.error }); return; }
+
+  await logAudit({
+    req, entityType: 'student', entityId: String(id), action: 'update',
+    after: { enrollment: result.row } as Record<string, unknown>,
+    label: (before as { full_name?: string }).full_name, reason: 'Marked on leave',
+  });
+  res.json({ enrollment: result.row });
+}
+
+// Return a student from leave / re-enrol from a prior archived row. Opens a
+// new 'enrolled' row for the current academic year, defaulting grade_level
+// to the last enrollment row's value (completion-based progression — admin
+// can pass gradeLevelOverride if the school wants to credit a completed
+// year and bump them up).
+export async function returnStudentFromLeave(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { id } = req.params;
+  const { classId, gradeLevelOverride } = (req.body || {}) as {
+    classId?: string;
+    gradeLevelOverride?: string;
+  };
+
+  if (!classId || typeof classId !== 'string') {
+    res.status(400).json({ error: 'classId is required' });
+    return;
+  }
+
+  const { data: before } = await supabase
+    .from('students').select('id, full_name')
+    .eq('id', id).eq('school_id', schoolId).single();
+  if (!before) { res.status(404).json({ error: 'Student not found' }); return; }
+
+  const result = await returnFromLeaveHelper({
+    schoolId, studentId: String(id), classId, gradeLevelOverride,
+  });
+  if (!result.ok) { res.status(400).json({ error: result.error }); return; }
+
+  // Reflect the placement on the student row too (current class_id).
+  await supabase.from('students').update({ class_id: classId })
+    .eq('id', id).eq('school_id', schoolId);
+
+  await logAudit({
+    req, entityType: 'student', entityId: String(id), action: 'update',
+    after: { enrollment: result.row } as Record<string, unknown>,
+    label: (before as { full_name?: string }).full_name, reason: 'Returned from leave',
+  });
+  res.json({ enrollment: result.row });
+}
+
+// Read the enrollment history for one student. Used by the live student
+// profile page (Phase 5) to render the Academic progression tab.
+export async function getStudentEnrollmentHistory(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { id } = req.params;
+  const rows = await loadEnrollmentHistory(schoolId, String(id));
+  res.json({ enrollments: rowsToSnapshot(rows) });
+}
+
+// ─── ENROLLMENT HISTORY BACKFILL (migration 030, Phase 4) ─────────────────
+//
+// One-off admin action: walk every live + archived student and reconstruct
+// their per-year academic progression rows from existing grades / attendance
+// / legacy classes_attended JSONB. Idempotent (skips students already
+// covered). The dryRun flag returns the computed report without committing.
+
+export async function previewEnrollmentBackfill(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const result = await backfillSchoolEnrollments(schoolId, { dryRun: true });
+  res.json(result);
+}
+
+export async function commitEnrollmentBackfill(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const result = await backfillSchoolEnrollments(schoolId, { dryRun: false });
+  await logAudit({
+    req, entityType: 'class', entityId: schoolId, action: 'update',
+    after: {
+      _meta: {
+        kind: 'enrollment_backfill',
+        live_rows: result.liveRowsInserted,
+        live_students: result.liveStudentsProcessed,
+        issues: result.issues.length,
+      },
+    } as Record<string, unknown>,
+    label: 'enrollment_backfill',
+  });
+  res.json(result);
+}
+
+// ─── YEAR-END PROMOTE CLASS WIZARD (migration 030, Phase 3) ───────────────
+//
+// The wizard operates on ONE class at a time. The preview returns the class
+// + its enrolled roster + the suggested next class (from classes.next_class_id)
+// so the UI can default each student to "promote to next class". The commit
+// endpoint takes a per-student outcome map and applies it: closing the
+// current year's row + (for promote/retain) opening the next year's row.
+
+// GET /admin/classes/:id/promote-class/preview?academicYear=YYYY-YYYY
+export async function previewPromoteClass(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { id } = req.params;
+  const academicYear = String(req.query.academicYear || academicYearOf());
+
+  const { data: cls } = await supabase
+    .from('classes')
+    .select('id, name, grade_level, academic_year, next_class_id')
+    .eq('id', id).eq('school_id', schoolId).single();
+  if (!cls) { res.status(404).json({ error: 'Class not found' }); return; }
+
+  // Suggested target — classes.next_class_id (manually wired by admin).
+  // The UI falls back to "pick a class" when this is null.
+  let nextClass: { id: string; name: string; gradeLevel: string | null } | null = null;
+  if ((cls as any).next_class_id) {
+    const { data: nc } = await supabase
+      .from('classes').select('id, name, grade_level')
+      .eq('id', (cls as any).next_class_id).eq('school_id', schoolId).single();
+    if (nc) nextClass = { id: nc.id, name: nc.name, gradeLevel: (nc as any).grade_level ?? null };
+  }
+
+  const roster = await loadEnrolledRosterForClass(schoolId, String(id), academicYear);
+
+  res.json({
+    sourceClass: {
+      id: cls.id, name: cls.name,
+      gradeLevel: (cls as any).grade_level ?? null,
+      academicYear: (cls as any).academic_year ?? null,
+    },
+    nextClass,
+    nextAcademicYear: nextAcademicYear(academicYear),
+    academicYear,
+    roster: roster.map(r => ({
+      studentId: r.enrollment.studentId,
+      studentName: r.studentName,
+      enrollmentId: r.enrollment.id,
+      gradeLevel: r.enrollment.gradeLevel,
+      classNameSnapshot: r.enrollment.classNameSnapshot,
+    })),
+  });
+}
+
+type PromoteAction = 'promote' | 'retain' | 'on_leave' | 'withdrew' | 'graduate';
+
+interface PromoteOutcome {
+  studentId: string;
+  action: PromoteAction;
+  targetClassId?: string;
+}
+
+// POST /admin/classes/:id/promote-class
+// Body: { academicYear, nextAcademicYear, yearEndDate, outcomes: [...] }
+export async function commitPromoteClass(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { id } = req.params;
+  const body = (req.body || {}) as {
+    academicYear?: string;
+    nextAcademicYear?: string;
+    yearEndDate?: string;
+    outcomes?: PromoteOutcome[];
+  };
+
+  const academicYear = String(body.academicYear || academicYearOf());
+  const nextYear = String(body.nextAcademicYear || nextAcademicYear(academicYear));
+  const yearEndDate = String(body.yearEndDate || new Date().toISOString().slice(0, 10));
+  const outcomes = Array.isArray(body.outcomes) ? body.outcomes : [];
+
+  if (outcomes.length === 0) {
+    res.status(400).json({ error: 'outcomes must be a non-empty array' });
+    return;
+  }
+
+  // Verify the source class belongs to this school (defensive — the route
+  // is authenticated but we still scope by schoolId for safety).
+  const { data: cls } = await supabase
+    .from('classes').select('id').eq('id', id).eq('school_id', schoolId).single();
+  if (!cls) { res.status(404).json({ error: 'Class not found' }); return; }
+
+  const results: Array<{ studentId: string; ok: boolean; action: PromoteAction; error?: string }> = [];
+
+  for (const outcome of outcomes) {
+    const { studentId, action, targetClassId } = outcome;
+    if (!studentId || !action) {
+      results.push({ studentId: studentId || '(missing)', ok: false, action: action || 'promote' as PromoteAction, error: 'studentId and action are required' });
+      continue;
+    }
+
+    try {
+      // Map wizard action → terminal status for the closing row.
+      const closingStatus =
+        action === 'promote' ? 'promoted' :
+        action === 'retain'  ? 'retained' :
+        action === 'graduate' ? 'graduated' :
+        action; // on_leave, withdrew
+
+      const close = await closeEnrollmentForYear({
+        schoolId, studentId, academicYear, status: closingStatus as any, endedOn: yearEndDate,
+      });
+      if (!close.ok) {
+        results.push({ studentId, ok: false, action, error: close.error });
+        continue;
+      }
+
+      if (action === 'promote' || action === 'retain') {
+        if (!targetClassId) {
+          results.push({ studentId, ok: false, action, error: 'targetClassId is required for promote/retain' });
+          continue;
+        }
+        const open = await openEnrollmentForYear({
+          schoolId, studentId, academicYear: nextYear, classId: targetClassId,
+        });
+        if (!open.ok) {
+          results.push({ studentId, ok: false, action, error: open.error });
+          continue;
+        }
+        // Reflect placement on students.class_id so the live roster shows
+        // them in their new class for the new year.
+        await supabase.from('students')
+          .update({ class_id: targetClassId })
+          .eq('id', studentId).eq('school_id', schoolId);
+      }
+
+      if (action === 'graduate') {
+        await supabase.from('students')
+          .update({ is_graduated: true })
+          .eq('id', studentId).eq('school_id', schoolId);
+        await snapshotGraduatedStudent(
+          schoolId, studentId,
+          { id: req.user!.userId, name: req.user!.username, role: req.user!.role },
+        );
+      }
+
+      results.push({ studentId, ok: true, action });
+    } catch (e) {
+      results.push({ studentId, ok: false, action, error: (e as Error).message });
+    }
+  }
+
+  await logAudit({
+    req, entityType: 'class', entityId: String(id), action: 'update',
+    after: {
+      _meta: {
+        kind: 'promote_class',
+        academic_year: academicYear,
+        next_academic_year: nextYear,
+        processed: results.filter(r => r.ok).length,
+        failed: results.filter(r => !r.ok).length,
+      },
+    } as Record<string, unknown>,
+    label: 'promote_class',
+  });
+
+  res.json({
+    academicYear,
+    nextAcademicYear: nextYear,
+    processed: results.filter(r => r.ok).length,
+    failed: results.filter(r => !r.ok).length,
+    results,
+  });
+}
+
 export async function getArchivedStudents(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
   const { search, reason, departureFrom, departureTo } = req.query as Record<string, string>;
@@ -1074,7 +1390,7 @@ export async function getArchivedStudents(req: AuthRequest, res: Response): Prom
 
   let query = supabase
     .from('archived_students')
-    .select('id, full_name, date_of_birth, enrollment_date, departure_date, reason, parent_full_name, parent_phone, classes_attended, created_at')
+    .select('id, full_name, date_of_birth, enrollment_date, departure_date, reason, parent_full_name, parent_phone, enrollment_history, classes_attended, created_at')
     .eq('school_id', schoolId)
     .order('created_at', { ascending: false })
     .limit(limit);
@@ -1440,7 +1756,7 @@ export async function searchArchivedStudents(req: AuthRequest, res: Response): P
   const safeName = name.replace(/[%_\\]/g, '\\$&');
   let query = supabase
     .from('archived_students')
-    .select('id, full_name, date_of_birth, departure_date, reason, parent_full_name, parent_phone, classes_attended')
+    .select('id, full_name, date_of_birth, departure_date, reason, parent_full_name, parent_phone, enrollment_history, classes_attended')
     .eq('school_id', schoolId)
     .ilike('full_name', `%${safeName}%`)
     .order('departure_date', { ascending: false })

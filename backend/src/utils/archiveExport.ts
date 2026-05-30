@@ -14,6 +14,21 @@ export interface ArchiveSnapshot {
   graduated: GraduatedRecord[];
 }
 
+// Per-year academic progression entry. Mirrors the EnrollmentSnapshotEntry
+// shape stored on archived_students.enrollment_history (migration 030).
+// For pre-backfill archives whose enrollment_history is still empty, we
+// synthesise minimal entries from the legacy classes_attended JSONB so the
+// export still has *something* to show.
+interface EnrollmentEntry {
+  academicYear: string;
+  gradeLevel: string;
+  classId: string | null;
+  className: string | null;
+  status: string;
+  startedOn: string | null;
+  endedOn: string | null;
+}
+
 interface ArchivedRecord {
   fullName: string;
   dateOfBirth: string | null;
@@ -22,7 +37,7 @@ interface ArchivedRecord {
   reason: string | null;
   parentFullName: string | null;
   parentPhone: string | null;
-  classesAttended: { year: string; classId: string; className: string }[];
+  enrollmentHistory: EnrollmentEntry[];
   grades: GradeRow[];
 }
 
@@ -33,7 +48,7 @@ interface GraduatedRecord {
   className: string | null;
   parentFullName: string | null;
   parentPhone: string | null;
-  classesAttended: { year: string; classId: string; className: string }[];
+  enrollmentHistory: EnrollmentEntry[];
   grades: GradeRow[];
 }
 
@@ -49,14 +64,55 @@ interface GradeRow {
   termExamGrade: number | null;
 }
 
-function toAcademicYear(date: string | null): string {
-  if (!date) return '';
-  const d = new Date(date);
-  const y = d.getUTCFullYear();
-  const m = d.getUTCMonth() + 1;
-  // Academic year starts in September. Sept-Dec belongs to year-(year+1);
-  // Jan-Aug belongs to (year-1)-year.
-  return m >= 9 ? `${y}-${y + 1}` : `${y - 1}-${y}`;
+// Legacy classes_attended → minimal EnrollmentEntry shape. Only used as a
+// graceful fallback for archives that pre-date the migration 030 backfill.
+function synthesiseFromLegacy(
+  legacy: Array<{ year?: string; classId?: string; className?: string }>,
+): EnrollmentEntry[] {
+  return legacy
+    .filter(c => c && c.year)
+    .sort((a, b) => (a.year || '').localeCompare(b.year || ''))
+    .map(c => ({
+      academicYear: String(c.year),
+      gradeLevel: c.className ? String(c.className) : '(unknown)',
+      classId: c.classId ? String(c.classId) : null,
+      className: c.className ? String(c.className) : null,
+      status: 'enrolled',
+      startedOn: null,
+      endedOn: null,
+    }));
+}
+
+// Compact, human-readable status label for export rendering. Kept here
+// rather than in i18n because exports are downloaded artefacts and need
+// to be language-agnostic / English.
+function formatStatus(status: string): string {
+  switch (status) {
+    case 'enrolled':    return 'Enrolled';
+    case 'promoted':    return 'Promoted';
+    case 'retained':    return 'Retained';
+    case 'on_leave':    return 'On leave';
+    case 'withdrew':    return 'Withdrew';
+    case 'transferred': return 'Transferred';
+    case 'graduated':   return 'Graduated';
+    default:            return status;
+  }
+}
+
+function normaliseHistory(raw: unknown): EnrollmentEntry[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((r: any) => r && typeof r === 'object' && r.academicYear)
+    .map((r: any) => ({
+      academicYear: String(r.academicYear),
+      gradeLevel: r.gradeLevel ? String(r.gradeLevel) : '(unknown)',
+      classId: r.classId ? String(r.classId) : null,
+      className: r.className ? String(r.className) : null,
+      status: r.status ? String(r.status) : 'enrolled',
+      startedOn: r.startedOn ? String(r.startedOn) : null,
+      endedOn: r.endedOn ? String(r.endedOn) : null,
+    }))
+    .sort((a, b) => a.academicYear.localeCompare(b.academicYear));
 }
 
 export async function loadArchiveSnapshot(schoolId: string): Promise<ArchiveSnapshot> {
@@ -65,21 +121,30 @@ export async function loadArchiveSnapshot(schoolId: string): Promise<ArchiveSnap
 
   const { data: archivedRows } = await supabase
     .from('archived_students')
-    .select('full_name, date_of_birth, enrollment_date, departure_date, reason, parent_full_name, parent_phone, classes_attended, grades, created_at')
+    .select('full_name, date_of_birth, enrollment_date, departure_date, reason, parent_full_name, parent_phone, enrollment_history, classes_attended, grades, created_at')
     .eq('school_id', schoolId)
     .order('created_at', { ascending: false });
 
-  const archived: ArchivedRecord[] = (archivedRows ?? []).map((r: any) => ({
-    fullName: r.full_name,
-    dateOfBirth: r.date_of_birth,
-    enrollmentDate: r.enrollment_date,
-    departureDate: r.departure_date,
-    reason: r.reason,
-    parentFullName: r.parent_full_name,
-    parentPhone: r.parent_phone,
-    classesAttended: Array.isArray(r.classes_attended) ? r.classes_attended : [],
-    grades: Array.isArray(r.grades) ? r.grades : [],
-  }));
+  const archived: ArchivedRecord[] = (archivedRows ?? []).map((r: any) => {
+    // Prefer the new column (migration 030). Fall back to synthesising from
+    // the legacy classes_attended JSONB for pre-backfill archives so the
+    // export still shows what it can.
+    const fromNew = normaliseHistory(r.enrollment_history);
+    const enrollmentHistory = fromNew.length > 0
+      ? fromNew
+      : synthesiseFromLegacy(Array.isArray(r.classes_attended) ? r.classes_attended : []);
+    return {
+      fullName: r.full_name,
+      dateOfBirth: r.date_of_birth,
+      enrollmentDate: r.enrollment_date,
+      departureDate: r.departure_date,
+      reason: r.reason,
+      parentFullName: r.parent_full_name,
+      parentPhone: r.parent_phone,
+      enrollmentHistory,
+      grades: Array.isArray(r.grades) ? r.grades : [],
+    };
+  });
 
   const { data: gradStudents } = await supabase
     .from('students')
@@ -90,9 +155,11 @@ export async function loadArchiveSnapshot(schoolId: string): Promise<ArchiveSnap
 
   const gradIds = (gradStudents ?? []).map((s: any) => s.id);
 
-  // Pull live grades + attendance for graduated students; fold them into per-student records.
+  // Pull live grades + per-year enrollment history for graduated students.
+  // The enrollment history now comes from the first-class student_enrollments
+  // table (migration 030) instead of being derived from the attendance table.
   const gradesByStudent = new Map<string, GradeRow[]>();
-  const classesByStudent = new Map<string, Map<string, Map<string, string>>>();
+  const historyByStudent = new Map<string, EnrollmentEntry[]>();
 
   if (gradIds.length > 0) {
     const { data: grades } = await supabase
@@ -117,35 +184,29 @@ export async function loadArchiveSnapshot(schoolId: string): Promise<ArchiveSnap
       gradesByStudent.set(g.student_id, list);
     }
 
-    const { data: attendance } = await supabase
-      .from('attendance')
-      .select('student_id, date, class_id, classes(name)')
+    const { data: enrollments } = await supabase
+      .from('student_enrollments')
+      .select('student_id, academic_year, class_id, class_name_snapshot, grade_level, status, started_on, ended_on')
       .in('student_id', gradIds)
-      .eq('school_id', schoolId);
+      .eq('school_id', schoolId)
+      .order('academic_year', { ascending: true });
 
-    for (const a of (attendance ?? []) as any[]) {
-      const classId = a.class_id;
-      const className = a.classes?.name;
-      if (!classId || !className) continue;
-      const yr = toAcademicYear(a.date);
-      let perStudent = classesByStudent.get(a.student_id);
-      if (!perStudent) { perStudent = new Map(); classesByStudent.set(a.student_id, perStudent); }
-      let perYear = perStudent.get(yr);
-      if (!perYear) { perYear = new Map(); perStudent.set(yr, perYear); }
-      perYear.set(classId, className);
+    for (const e of (enrollments ?? []) as any[]) {
+      const list = historyByStudent.get(e.student_id) ?? [];
+      list.push({
+        academicYear: String(e.academic_year),
+        gradeLevel: e.grade_level ? String(e.grade_level) : '(unknown)',
+        classId: e.class_id ?? null,
+        className: e.class_name_snapshot ?? null,
+        status: e.status ? String(e.status) : 'enrolled',
+        startedOn: e.started_on ?? null,
+        endedOn: e.ended_on ?? null,
+      });
+      historyByStudent.set(e.student_id, list);
     }
   }
 
   const graduated: GraduatedRecord[] = (gradStudents ?? []).map((s: any) => {
-    const classesAttended: { year: string; classId: string; className: string }[] = [];
-    const perStudent = classesByStudent.get(s.id);
-    if (perStudent) {
-      for (const [year, idToName] of Array.from(perStudent.entries()).sort(([a], [b]) => a.localeCompare(b))) {
-        for (const [classId, className] of idToName.entries()) {
-          classesAttended.push({ year, classId, className });
-        }
-      }
-    }
     return {
       fullName: s.full_name,
       dateOfBirth: s.date_of_birth,
@@ -153,7 +214,7 @@ export async function loadArchiveSnapshot(schoolId: string): Promise<ArchiveSnap
       className: s.classes?.name ?? null,
       parentFullName: s.parents?.full_name ?? null,
       parentPhone: s.parents?.phone_number ?? null,
-      classesAttended,
+      enrollmentHistory: historyByStudent.get(s.id) ?? [],
       grades: gradesByStudent.get(s.id) ?? [],
     };
   });
@@ -234,13 +295,16 @@ function writeStudentSection(
   }
   if (s.parentFullName) doc.font(F.pick(s.parentFullName)).text(`Parent: ${s.parentFullName}${s.parentPhone ? ` (${s.parentPhone})` : ''}`);
 
-  // Classes attended
-  if (s.classesAttended.length > 0) {
+  // Academic progression (migration 030). One line per year showing
+  // grade level, class, and outcome.
+  if (s.enrollmentHistory.length > 0) {
     doc.moveDown(0.5);
-    doc.fontSize(11).fillColor('black').text('Classes attended');
+    doc.fontSize(11).fillColor('black').text('Academic progression');
     doc.fontSize(10).fillColor('#374151');
-    for (const c of s.classesAttended) {
-      doc.text(`  • ${c.year} — ${c.className}`);
+    for (const e of s.enrollmentHistory) {
+      const cls = e.className ? ` (${e.className})` : '';
+      const status = e.status ? ` — ${formatStatus(e.status)}` : '';
+      doc.text(`  • ${e.academicYear} — ${e.gradeLevel}${cls}${status}`);
     }
   }
 
@@ -355,7 +419,7 @@ export function buildXlsx(snapshot: ArchiveSnapshot): Buffer {
   // Always emit the headers — XLSX.utils.json_to_sheet([]) yields a sheet
   // with no header row, which some viewers render as missing/empty. Use
   // aoa_to_sheet for the empty case so the columns are always visible.
-  const archivedHeaders = ['Full name', 'Date of birth', 'Enrolled', 'Departed', 'Reason', 'Parent name', 'Parent phone', 'Classes attended'];
+  const archivedHeaders = ['Full name', 'Date of birth', 'Enrolled', 'Departed', 'Reason', 'Parent name', 'Parent phone', 'Academic progression'];
   const archivedRows = snapshot.archived.map(s => ({
     'Full name': s.fullName,
     'Date of birth': s.dateOfBirth ?? '',
@@ -364,14 +428,14 @@ export function buildXlsx(snapshot: ArchiveSnapshot): Buffer {
     'Reason': s.reason ?? '',
     'Parent name': s.parentFullName ?? '',
     'Parent phone': s.parentPhone ?? '',
-    'Classes attended': s.classesAttended.map(c => `${c.year}: ${c.className}`).join(' | '),
+    'Academic progression': s.enrollmentHistory.map(e => `${e.academicYear}: ${e.gradeLevel} (${formatStatus(e.status)})`).join(' | '),
   }));
   const archivedSheet = archivedRows.length > 0
     ? XLSX.utils.json_to_sheet(archivedRows)
     : XLSX.utils.aoa_to_sheet([archivedHeaders]);
   XLSX.utils.book_append_sheet(wb, archivedSheet, 'Archived');
 
-  const graduatedHeaders = ['Full name', 'Date of birth', 'Enrolled', 'Final class', 'Parent name', 'Parent phone', 'Classes attended'];
+  const graduatedHeaders = ['Full name', 'Date of birth', 'Enrolled', 'Final class', 'Parent name', 'Parent phone', 'Academic progression'];
   const graduatedRows = snapshot.graduated.map(s => ({
     'Full name': s.fullName,
     'Date of birth': s.dateOfBirth ?? '',
@@ -379,7 +443,7 @@ export function buildXlsx(snapshot: ArchiveSnapshot): Buffer {
     'Final class': s.className ?? '',
     'Parent name': s.parentFullName ?? '',
     'Parent phone': s.parentPhone ?? '',
-    'Classes attended': s.classesAttended.map(c => `${c.year}: ${c.className}`).join(' | '),
+    'Academic progression': s.enrollmentHistory.map(e => `${e.academicYear}: ${e.gradeLevel} (${formatStatus(e.status)})`).join(' | '),
   }));
   const graduatedSheet = graduatedRows.length > 0
     ? XLSX.utils.json_to_sheet(graduatedRows)

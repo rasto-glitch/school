@@ -247,6 +247,38 @@ CREATE TABLE IF NOT EXISTS students (
 );
 
 -- ============================================================
+-- STUDENT ENROLLMENTS — per-year academic progression
+-- (see migration 030). One row per (student, academic_year). Replaces
+-- the attendance-derived `classes_attended` snapshot on archived_students
+-- with a first-class history of grade-level progression and outcome.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS student_enrollments (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  academic_year TEXT NOT NULL,
+  class_id UUID REFERENCES classes(id) ON DELETE SET NULL,
+  class_name_snapshot TEXT,                      -- frozen for resilience; NULL for on_leave
+  grade_level TEXT NOT NULL,                     -- frozen; always known (paused level for on_leave)
+  status TEXT NOT NULL CHECK (status IN (
+    'enrolled', 'promoted', 'retained',
+    'on_leave', 'withdrew', 'transferred', 'graduated'
+  )),
+  started_on DATE NOT NULL,
+  ended_on DATE,                                 -- NULL while status='enrolled'
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (student_id, academic_year)
+);
+CREATE INDEX IF NOT EXISTS idx_student_enrollments_student
+  ON student_enrollments(school_id, student_id, academic_year DESC);
+CREATE INDEX IF NOT EXISTS idx_student_enrollments_year_status
+  ON student_enrollments(school_id, academic_year, status);
+CREATE INDEX IF NOT EXISTS idx_student_enrollments_class_year
+  ON student_enrollments(school_id, class_id, academic_year)
+  WHERE class_id IS NOT NULL;
+
+-- ============================================================
 -- HOMEWORK
 -- ============================================================
 CREATE TABLE IF NOT EXISTS homework (
@@ -697,7 +729,8 @@ CREATE TABLE IF NOT EXISTS archived_students (
   reason TEXT NOT NULL CHECK (reason IN ('transferred', 'withdrew', 'graduated')),
   parent_full_name TEXT,
   parent_phone TEXT,
-  classes_attended JSONB DEFAULT '[]',
+  classes_attended JSONB DEFAULT '[]',           -- LEGACY (migration 030): attendance-derived class list, no longer populated (always []). NOT REMOVED because migration 019's tamper-evidence hash _canon_archived_student includes classes_attended::text in its canonical input — dropping the column would invalidate the integrity chain on every existing archive. Reads come from enrollment_history below.
+  enrollment_history JSONB NOT NULL DEFAULT '[]', -- per-year academic progression snapshot; see migration 030. Source of truth for the archive's academic record.
   grades JSONB DEFAULT '[]',
   payment_history JSONB DEFAULT '[]',
   archived_by UUID,  -- FK-less actor ref (append-only/hashed row): keeps its value when the user is deleted; text copies below stay readable
@@ -729,7 +762,8 @@ CREATE OR REPLACE FUNCTION archive_student_atomic(
   p_archived_by UUID,
   p_archived_by_name TEXT,
   p_archived_by_role TEXT,
-  p_original_parent_id UUID
+  p_original_parent_id UUID,
+  p_enrollment_history JSONB DEFAULT '[]'::jsonb   -- migration 031
 ) RETURNS UUID
 LANGUAGE plpgsql
 AS $$
@@ -739,12 +773,13 @@ BEGIN
   INSERT INTO archived_students (
     school_id, original_student_id, full_name, date_of_birth, enrollment_date,
     departure_date, reason, parent_full_name, parent_phone,
-    classes_attended, grades, payment_history,
+    classes_attended, enrollment_history, grades, payment_history,
     archived_by, archived_by_name, archived_by_role, original_parent_id
   ) VALUES (
     p_school_id, p_student_id, p_full_name, p_date_of_birth, p_enrollment_date,
     p_departure_date, p_reason, p_parent_full_name, p_parent_phone,
     COALESCE(p_classes_attended, '[]'::jsonb),
+    COALESCE(p_enrollment_history, '[]'::jsonb),
     COALESCE(p_grades, '[]'::jsonb),
     COALESCE(p_payment_history, '[]'::jsonb),
     p_archived_by, p_archived_by_name, p_archived_by_role, p_original_parent_id

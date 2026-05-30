@@ -83,7 +83,16 @@ export interface Labels {
   sec_enrollment: string;
   sec_parent: string;
   sec_class_history: string;
+  sec_academic_progression: string;  // migration 030 — supersedes sec_class_history
   sec_grades: string;
+  // Enrollment status labels (migration 030)
+  status_enrolled: string;
+  status_promoted: string;
+  status_retained: string;
+  status_on_leave: string;
+  status_withdrew: string;
+  status_transferred: string;
+  status_graduated: string;
   // field labels
   full_name: string;
   date_of_birth: string;
@@ -200,7 +209,15 @@ export const L: Record<Lang, Labels> = {
     sec_enrollment: 'Enrollment',
     sec_parent: 'Parent / guardian',
     sec_class_history: 'Class history',
+    sec_academic_progression: 'Academic progression',
     sec_grades: 'Grades',
+    status_enrolled: 'Enrolled',
+    status_promoted: 'Promoted',
+    status_retained: 'Retained',
+    status_on_leave: 'On leave',
+    status_withdrew: 'Withdrew',
+    status_transferred: 'Transferred',
+    status_graduated: 'Graduated',
     full_name: 'Full name',
     date_of_birth: 'Date of birth',
     age: 'Age',
@@ -309,7 +326,15 @@ export const L: Record<Lang, Labels> = {
     sec_enrollment: 'التسجيل',
     sec_parent: 'ولي الأمر',
     sec_class_history: 'سجل الفصول',
+    sec_academic_progression: 'المسار الأكاديمي',
     sec_grades: 'الدرجات',
+    status_enrolled: 'مسجَّل',
+    status_promoted: 'انتقل للصف التالي',
+    status_retained: 'أعاد الصف',
+    status_on_leave: 'في إجازة',
+    status_withdrew: 'انسحب',
+    status_transferred: 'منقول',
+    status_graduated: 'متخرج',
     full_name: 'الاسم الكامل',
     date_of_birth: 'تاريخ الميلاد',
     age: 'العمر',
@@ -418,7 +443,15 @@ export const L: Record<Lang, Labels> = {
     sec_enrollment: 'تۆمارکردن',
     sec_parent: 'دایک یان باوک',
     sec_class_history: 'مێژووی پۆلەکان',
+    sec_academic_progression: 'پێشکەوتنی خوێندن',
     sec_grades: 'نمرەکان',
+    status_enrolled: 'تۆمارکراو',
+    status_promoted: 'پاژۆ بۆ پۆلی دواتر',
+    status_retained: 'پۆل دووبارە کردنەوە',
+    status_on_leave: 'لە مۆڵەتدا',
+    status_withdrew: 'دەرچوون',
+    status_transferred: 'گواستراوەتەوە',
+    status_graduated: 'دەرچوو',
     full_name: 'ناوی تەواو',
     date_of_birth: 'بەرواری لەدایکبوون',
     age: 'تەمەن',

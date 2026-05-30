@@ -244,6 +244,24 @@ export const adminApi = {
     return api.post('/admin/students/bulk-upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
   },
   getStudentBrief: (id: string) => api.get(`/admin/students/${id}/brief`),
+  // Per-year academic progression (migration 030)
+  getStudentEnrollments: (id: string) => api.get(`/admin/students/${id}/enrollments`),
+  markStudentOnLeave: (id: string, data?: { endedOn?: string }) => api.post(`/admin/students/${id}/leave`, data ?? {}),
+  returnStudentFromLeave: (id: string, data: { classId: string; gradeLevelOverride?: string }) =>
+    api.post(`/admin/students/${id}/return`, data),
+  previewPromoteClass: (classId: string, academicYear?: string) =>
+    api.get(`/admin/classes/${classId}/promote-class/preview`, { params: academicYear ? { academicYear } : {} }),
+  commitPromoteClass: (
+    classId: string,
+    data: {
+      academicYear: string;
+      nextAcademicYear: string;
+      yearEndDate: string;
+      outcomes: Array<{ studentId: string; action: 'promote' | 'retain' | 'on_leave' | 'withdrew' | 'graduate'; targetClassId?: string }>;
+    },
+  ) => api.post(`/admin/classes/${classId}/promote-class`, data),
+  previewEnrollmentBackfill: () => api.get('/admin/enrollments/backfill/preview'),
+  commitEnrollmentBackfill: () => api.post('/admin/enrollments/backfill'),
   // Grade review & release gate
   getPendingGrades: () => api.get('/admin/grades/pending'),
   getGradeReviewOverview: (term?: string) => api.get('/admin/grades/overview', { params: term ? { term } : {} }),

@@ -9,11 +9,24 @@ import Card from '../../components/common/Card';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import EmptyState from '../../components/common/EmptyState';
 
+interface EnrollmentHistoryEntry {
+  academicYear: string;
+  gradeLevel: string;
+  classId: string | null;
+  className: string | null;
+  status: string;
+  startedOn: string | null;
+  endedOn: string | null;
+}
+
 interface ArchivedChildSummary {
   id: string;
   fullName: string;
   reason: string;
   departureDate: string | null;
+  // Migration 030: prefer enrollmentHistory; classesAttended kept for
+  // pre-backfill archives.
+  enrollmentHistory?: EnrollmentHistoryEntry[];
   classesAttended?: { year: string; classId: string; className: string }[];
   createdAt: string;
 }
@@ -109,19 +122,40 @@ export default function ParentArchivePage() {
 
         {detailLoading ? <LoadingSpinner /> : (
           <div className="space-y-6">
-            {/* Classes attended */}
-            {detail.classesAttended && detail.classesAttended.length > 0 && (
-              <Card>
-                <h2 className="font-semibold text-gray-900 mb-3">{t('archive.classes_attended')}</h2>
-                <div className="flex flex-wrap gap-2">
-                  {detail.classesAttended.map((c, i) => (
-                    <span key={i} className="text-xs bg-gray-100 text-gray-700 rounded-full px-3 py-1">
-                      {c.year}: {c.className}
-                    </span>
-                  ))}
-                </div>
-              </Card>
-            )}
+            {/* Academic progression (migration 030) */}
+            {(() => {
+              const history = detail.enrollmentHistory ?? [];
+              const legacy = detail.classesAttended ?? [];
+              const rows = history.length
+                ? history.map(e => ({
+                    academicYear: e.academicYear,
+                    label: e.gradeLevel + (e.className ? ` · ${e.className}` : ''),
+                    status: e.status,
+                  }))
+                : legacy.map(c => ({
+                    academicYear: c.year,
+                    label: c.className,
+                    status: 'enrolled',
+                  }));
+              if (rows.length === 0) return null;
+              const statusLabel = (s: string) => t(`archive.status_${s}`, { defaultValue: s });
+              return (
+                <Card>
+                  <h2 className="font-semibold text-gray-900 mb-3">{t('archive.academic_progression', { defaultValue: 'Academic progression' })}</h2>
+                  <div className="flex flex-col gap-1.5">
+                    {rows.map((r, i) => (
+                      <div key={i} className="flex items-center gap-2 text-sm">
+                        <span className="text-xs font-medium text-gray-500 w-20 shrink-0">{r.academicYear}</span>
+                        <span className="text-gray-800">{r.label}</span>
+                        {r.status !== 'enrolled' && (
+                          <span className="text-xs bg-gray-100 text-gray-600 rounded-full px-2 py-0.5">{statusLabel(r.status)}</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              );
+            })()}
 
             {/* Grades report */}
             <Card>

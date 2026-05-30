@@ -20,7 +20,21 @@ interface ArchivedStudentRow {
   reason: string | null;
   parent_full_name: string | null;
   parent_phone: string | null;
+  // Legacy per-archive JSONB (migration 030): attendance-derived class
+  // list. Still present on the row because of the tamper-evidence hash
+  // contract (see migration 019 _canon_archived_student). Reads should
+  // prefer enrollment_history below; we only fall back to this when the
+  // new column is empty (pre-backfill archives).
   classes_attended: Array<{ year: string | null; classId: string; className: string }> | null;
+  enrollment_history: Array<{
+    academicYear: string;
+    gradeLevel: string;
+    classId: string | null;
+    className: string | null;
+    status: string;
+    startedOn: string | null;
+    endedOn: string | null;
+  }> | null;
   grades: Array<{ academicYear: string | null; subject: string | null; className: string | null; termExamGrade: number | null; monthlyExamGrade: number | null; quizGrade: number | null; dailyGrade: number | null }> | null;
   snapshot_version: number | null;
   archived_by_name?: string | null;
@@ -48,6 +62,19 @@ export async function loadArchivedStudentForPdf(archiveId: string, schoolId: str
     generatedBy: '',
     generatedByRole: '',
   };
+}
+
+function formatPdfStatus(status: string, l: Labels): string {
+  switch (status) {
+    case 'enrolled':    return l.status_enrolled;
+    case 'promoted':    return l.status_promoted;
+    case 'retained':    return l.status_retained;
+    case 'on_leave':    return l.status_on_leave;
+    case 'withdrew':    return l.status_withdrew;
+    case 'transferred': return l.status_transferred;
+    case 'graduated':   return l.status_graduated;
+    default:            return status;
+  }
 }
 
 function studentReasonLabel(reason: string | null, l: Labels): string {
@@ -134,16 +161,29 @@ export async function streamArchivedStudentPdf(
     [l.parent_phone, r.parent_phone],
   ]);
 
-  // Classes attended
-  const classes = r.classes_attended ?? [];
-  if (classes.length > 0) {
-    doc.font(F.bold).fontSize(9).fillColor(COLORS.muted).text(l.sec_class_history.toUpperCase(), 40, y);
+  // Academic progression (migration 030). Prefer enrollment_history; for
+  // pre-backfill archives fall back to the legacy classes_attended view
+  // so the PDF still says something.
+  const history = Array.isArray(r.enrollment_history) ? r.enrollment_history : [];
+  const legacy = Array.isArray(r.classes_attended) ? r.classes_attended : [];
+  const useHistory = history.length > 0;
+  if (useHistory || legacy.length > 0) {
+    doc.font(F.bold).fontSize(9).fillColor(COLORS.muted).text(l.sec_academic_progression.toUpperCase(), 40, y);
     y += 14;
     doc.font(F.regular).fontSize(10).fillColor(COLORS.body);
-    for (const c of classes) {
-      const line = `  • ${c.year ?? l.em_dash}: ${c.className}`;
-      doc.font(F.pick(line)).text(line, 40, y, { width: 515 });
-      y = doc.y + 2;
+    if (useHistory) {
+      for (const e of history) {
+        const cls = e.className ? ` (${e.className})` : '';
+        const line = `  • ${e.academicYear} — ${e.gradeLevel}${cls} — ${formatPdfStatus(e.status, l)}`;
+        doc.font(F.pick(line)).text(line, 40, y, { width: 515 });
+        y = doc.y + 2;
+      }
+    } else {
+      for (const c of legacy) {
+        const line = `  • ${c.year ?? l.em_dash}: ${c.className}`;
+        doc.font(F.pick(line)).text(line, 40, y, { width: 515 });
+        y = doc.y + 2;
+      }
     }
     y += 10;
     doc.moveTo(40, y - 6).lineTo(555, y - 6).strokeColor(COLORS.border).stroke();

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation, Trans } from 'react-i18next';
 import { toast } from 'react-toastify';
-import { BookOpen, Plus, Search, Tag, Trash2, GraduationCap, X } from 'lucide-react';
+import { BookOpen, Plus, Search, Tag, Trash2, GraduationCap, X, Rocket, Database } from 'lucide-react';
 import { adminApi } from '../../services/api';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
@@ -10,6 +10,8 @@ import Input from '../../components/common/Input';
 import Select from '../../components/common/Select';
 import Button from '../../components/common/Button';
 import Modal from '../../components/common/Modal';
+import PromoteClassModal from '../../components/admin/PromoteClassModal';
+import EnrollmentBackfillModal from '../../components/admin/EnrollmentBackfillModal';
 import type { Class, Student, Teacher } from '../../types';
 
 interface Subject { id: string; name: string; teachers?: { id: string; fullName: string; classes?: { id: string; name: string }[] }[] }
@@ -33,6 +35,10 @@ export default function ClassesPage() {
   const [newCstSubjectId, setNewCstSubjectId] = useState('');
   const [newCstTeacherId, setNewCstTeacherId] = useState('');
   const [addingCst, setAddingCst] = useState(false);
+  // Year-end promote wizard (migration 030)
+  const [promoteClassId, setPromoteClassId] = useState<string | null>(null);
+  // One-off enrollment-history backfill (migration 030)
+  const [backfillOpen, setBackfillOpen] = useState(false);
 
   const { register, handleSubmit, reset } = useForm<{ name: string; gradeLevel: string; academicYear: string; assignStudents: string }>();
 
@@ -178,9 +184,18 @@ export default function ClassesPage() {
 
           {/* Existing classes */}
           <Card>
-            <h2 className="font-semibold text-gray-900 mb-3">
-              {t('admin.cls.existing_classes', { count: classes.length })}
-            </h2>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-semibold text-gray-900">
+                {t('admin.cls.existing_classes', { count: classes.length })}
+              </h2>
+              <button
+                onClick={() => setBackfillOpen(true)}
+                title={t('admin.bf.tooltip', 'Reconstruct per-year enrollment history for existing students')}
+                className="flex items-center gap-1 text-xs text-sky-700 hover:bg-sky-50 rounded-lg px-2 py-1 whitespace-nowrap"
+              >
+                <Database className="w-3.5 h-3.5" /> {t('admin.bf.button', 'Backfill history')}
+              </button>
+            </div>
             {classes.length === 0 ? (
               <p className="text-sm text-gray-500 text-center py-4">{t('admin.cls.no_classes')}</p>
             ) : (
@@ -200,6 +215,13 @@ export default function ClassesPage() {
                             className="flex items-center gap-1 text-xs text-primary-600 hover:bg-primary-50 rounded-lg px-2 py-1 whitespace-nowrap"
                           >
                             <GraduationCap className="w-3.5 h-3.5" /> {t('admin.cls.curriculum_count', { count: rows.length })}
+                          </button>
+                          <button
+                            onClick={() => setPromoteClassId(c.id)}
+                            title={t('admin.promote.button_title', 'Run year-end promotion for this class')}
+                            className="flex items-center gap-1 text-xs text-emerald-700 hover:bg-emerald-50 rounded-lg px-2 py-1 whitespace-nowrap"
+                          >
+                            <Rocket className="w-3.5 h-3.5" /> {t('admin.promote.button', 'Promote')}
                           </button>
                           <span className="text-xs text-gray-400 whitespace-nowrap">{t('admin.cls.next_class')}</span>
                           <select
@@ -338,6 +360,21 @@ export default function ClassesPage() {
           </div>
         )}
       </Modal>
+
+      {/* Year-end Promote Class wizard (migration 030) */}
+      <PromoteClassModal
+        isOpen={!!promoteClassId}
+        onClose={() => setPromoteClassId(null)}
+        sourceClassId={promoteClassId}
+        allClasses={classes.map(c => ({ id: c.id, name: c.name, gradeLevel: (c as any).gradeLevel ?? null }))}
+        onCompleted={loadClasses}
+      />
+
+      {/* Enrollment-history backfill (migration 030) */}
+      <EnrollmentBackfillModal
+        isOpen={backfillOpen}
+        onClose={() => setBackfillOpen(false)}
+      />
     </PageLayout>
   );
 }
