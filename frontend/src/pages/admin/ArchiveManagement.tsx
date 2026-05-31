@@ -7,16 +7,14 @@ import { adminApi } from '../../services/api';
 import PageLayout from '../../components/layout/PageLayout';
 import ArchivedStudentsTab from './ArchivedStudentsTab';
 import GraduatedStudentsTab from './GraduatedStudentsTab';
-import ArchivedEmployeesTab from './ArchivedEmployeesTab';
 
-type ArchiveTab = 'archived' | 'graduated' | 'employees';
+type ArchiveTab = 'archived' | 'graduated';
 
 export default function ArchiveManagement() {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
   const rawTab = searchParams.get('tab') as ArchiveTab | null;
-  const activeTab: ArchiveTab =
-    rawTab === 'graduated' || rawTab === 'employees' ? rawTab : 'archived';
+  const activeTab: ArchiveTab = rawTab === 'graduated' ? 'graduated' : 'archived';
   const setActiveTab = (tab: ArchiveTab) => {
     const next = new URLSearchParams(searchParams);
     next.set('tab', tab);
@@ -24,7 +22,6 @@ export default function ArchiveManagement() {
   };
   const [pdfBusy, setPdfBusy] = useState(false);
   const [xlsxBusy, setXlsxBusy] = useState(false);
-  const isEmployees = activeTab === 'employees';
 
   const triggerDownload = (blob: Blob, filename: string) => {
     const url = URL.createObjectURL(blob);
@@ -42,8 +39,8 @@ export default function ArchiveManagement() {
   const downloadPdf = async () => {
     setPdfBusy(true);
     try {
-      const res = isEmployees ? await adminApi.exportEmployeeArchivePdf() : await adminApi.exportArchivePdf();
-      triggerDownload(res.data, `${isEmployees ? 'employee-archive' : 'archive'}-${stamp()}.pdf`);
+      const res = await adminApi.exportArchivePdf();
+      triggerDownload(res.data, `archive-${stamp()}.pdf`);
     } catch (err: any) {
       toast.error(err.response?.data?.error || t('admin.archive_mgmt.failed_pdf'));
     } finally {
@@ -54,8 +51,8 @@ export default function ArchiveManagement() {
   const downloadXlsx = async () => {
     setXlsxBusy(true);
     try {
-      const res = isEmployees ? await adminApi.exportEmployeeArchiveXlsx() : await adminApi.exportArchiveXlsx();
-      triggerDownload(res.data, `${isEmployees ? 'employee-archive' : 'archive'}-${stamp()}.xlsx`);
+      const res = await adminApi.exportArchiveXlsx();
+      triggerDownload(res.data, `archive-${stamp()}.xlsx`);
     } catch (err: any) {
       toast.error(err.response?.data?.error || t('admin.archive_mgmt.failed_excel'));
     } finally {
@@ -115,12 +112,6 @@ export default function ArchiveManagement() {
           >
             {t('admin.archive_mgmt.tab_graduated')}
           </button>
-          <button
-            onClick={() => setActiveTab('employees')}
-            className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${activeTab === 'employees' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
-          >
-            {t('admin.archive_mgmt.tab_employees')}
-          </button>
         </div>
         <div className="flex gap-2">
           <button
@@ -162,7 +153,6 @@ export default function ArchiveManagement() {
 
       {activeTab === 'archived' && <ArchivedStudentsTab />}
       {activeTab === 'graduated' && <GraduatedStudentsTab />}
-      {activeTab === 'employees' && <ArchivedEmployeesTab />}
     </PageLayout>
   );
 }
