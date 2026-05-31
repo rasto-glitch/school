@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'react-toastify';
 import { FileText, FileSpreadsheet, DatabaseBackup, ShieldCheck } from 'lucide-react';
@@ -8,9 +9,19 @@ import ArchivedStudentsTab from './ArchivedStudentsTab';
 import GraduatedStudentsTab from './GraduatedStudentsTab';
 import ArchivedEmployeesTab from './ArchivedEmployeesTab';
 
+type ArchiveTab = 'archived' | 'graduated' | 'employees';
+
 export default function ArchiveManagement() {
   const { t } = useTranslation();
-  const [activeTab, setActiveTab] = useState<'archived' | 'graduated' | 'employees'>('archived');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const rawTab = searchParams.get('tab') as ArchiveTab | null;
+  const activeTab: ArchiveTab =
+    rawTab === 'graduated' || rawTab === 'employees' ? rawTab : 'archived';
+  const setActiveTab = (tab: ArchiveTab) => {
+    const next = new URLSearchParams(searchParams);
+    next.set('tab', tab);
+    setSearchParams(next, { replace: true });
+  };
   const [pdfBusy, setPdfBusy] = useState(false);
   const [xlsxBusy, setXlsxBusy] = useState(false);
   const isEmployees = activeTab === 'employees';

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'react-toastify';
@@ -28,7 +29,14 @@ interface ArchivedCandidate {
 export default function StudentsManagement() {
   const { t } = useTranslation();
   const archiveEnabled = useAuthStore(s => s.school?.features?.archive === true);
-  const [activeTab, setActiveTab] = useState<'active' | 'new'>('active');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const rawTab = searchParams.get('tab');
+  const activeTab: 'active' | 'new' = rawTab === 'new' ? 'new' : 'active';
+  const setActiveTab = (tab: 'active' | 'new') => {
+    const next = new URLSearchParams(searchParams);
+    next.set('tab', tab);
+    setSearchParams(next, { replace: true });
+  };
   const [students, setStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
   const [parents, setParents] = useState<Parent[]>([]);

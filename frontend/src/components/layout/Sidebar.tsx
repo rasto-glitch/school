@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../../store/authStore';
 import { useNotificationStore } from '../../store/notificationStore';
@@ -8,11 +8,11 @@ import { parentApi, adminApi, teacherApi, chatApi, receptionApi } from '../../se
 import {
   Home, BookOpen, ClipboardList, Megaphone, BarChart2,
   MapPin, Bell, User, Users, GraduationCap, Bus,
-  Calendar, Settings, UserCog, LogOut, ChevronLeft, ChevronRight,
+  Calendar, Settings, UserCog, LogOut, ChevronLeft, ChevronRight, ChevronDown,
   FileText, Star, Clock, X, ClipboardCheck, MessageSquare, Archive,
   CreditCard, Wallet, History, Receipt, BookOpenCheck,
   AlertCircle, FileBarChart, BarChart3, CalendarClock, ArrowLeftRight, Scale,
-  ShieldCheck,
+  ShieldCheck, UserPlus,
   // Send,                            // re-add when transfers UI is restored — see FEATURE.md
 } from 'lucide-react';
 import type { Dispatch, SetStateAction } from 'react';
@@ -20,7 +20,164 @@ import type { Role } from '../../types';
 
 type NavItem = { to: string; icon: React.ElementType; label: string; feature?: string; end?: boolean };
 
-const navItems: Record<Role, NavItem[]> = {
+// Admin nav supports nested, collapsible groups. Other roles stay flat.
+// Single-open accordion: the group(s) on the active leaf's path expand; siblings collapse.
+type LeafNode = {
+  kind: 'leaf';
+  path: string;                       // pathname
+  params?: Record<string, string>;    // search params required for "active" match (and used when building the href)
+  icon: React.ElementType;
+  labelKey: string;
+  labelFallback: string;
+  feature?: string;
+  // When the URL has none of the param keys set, the leaf flagged isDefault wins.
+  isDefault?: boolean;
+  end?: boolean;
+};
+type GroupNode = {
+  kind: 'group';
+  key: string;
+  icon: React.ElementType;
+  labelKey: string;
+  labelFallback: string;
+  feature?: string;
+  children: AdminNavNode[];
+};
+type AdminNavNode = LeafNode | GroupNode;
+
+const ROLE_LEAVES = (top: 'add' | 'active' | 'archived'): LeafNode[] => [
+  { kind: 'leaf', path: '/admin/employees', params: { top, sub: 'teacher' }, icon: GraduationCap, labelKey: 'nav.role_teachers', labelFallback: 'Teachers', ...(top === 'active' ? { isDefault: true } : {}) },
+  { kind: 'leaf', path: '/admin/employees', params: { top, sub: 'supervisor' }, icon: ShieldCheck, labelKey: 'nav.role_supervisors', labelFallback: 'Supervisors' },
+  { kind: 'leaf', path: '/admin/employees', params: { top, sub: 'admin' }, icon: UserCog, labelKey: 'nav.role_administration', labelFallback: 'Administration' },
+  { kind: 'leaf', path: '/admin/employees', params: { top, sub: 'reception' }, icon: Bell, labelKey: 'nav.role_reception', labelFallback: 'Reception' },
+  { kind: 'leaf', path: '/admin/employees', params: { top, sub: 'accountant' }, icon: Wallet, labelKey: 'nav.role_accountant', labelFallback: 'Accountant', feature: 'tuition_fees' },
+  { kind: 'leaf', path: '/admin/employees', params: { top, sub: 'staff' }, icon: Users, labelKey: 'nav.role_staff', labelFallback: 'Staff', feature: 'tuition_fees' },
+];
+
+const adminNav: AdminNavNode[] = [
+  { kind: 'leaf', path: '/admin/dashboard', icon: Home, labelKey: 'nav.dashboard', labelFallback: 'Dashboard' },
+  {
+    kind: 'group', key: 'students', icon: GraduationCap,
+    labelKey: 'nav.students', labelFallback: 'Students',
+    children: [
+      { kind: 'leaf', path: '/admin/students', params: { tab: 'active' }, isDefault: true, icon: Users, labelKey: 'nav.students_active', labelFallback: 'Active Students' },
+      { kind: 'leaf', path: '/admin/students', params: { tab: 'new' }, icon: UserPlus, labelKey: 'nav.students_new', labelFallback: 'New Students' },
+      {
+        kind: 'group', key: 'students.archived', icon: Archive,
+        labelKey: 'nav.archived', labelFallback: 'Archived',
+        feature: 'archive',
+        children: [
+          { kind: 'leaf', path: '/admin/archive', params: { tab: 'archived' }, isDefault: true, icon: Archive, labelKey: 'nav.archived', labelFallback: 'Archived' },
+          { kind: 'leaf', path: '/admin/archive', params: { tab: 'graduated' }, icon: GraduationCap, labelKey: 'nav.graduated', labelFallback: 'Graduated' },
+        ],
+      },
+    ],
+  },
+  {
+    kind: 'group', key: 'classes', icon: BookOpen,
+    labelKey: 'nav.classes', labelFallback: 'Classes',
+    children: [
+      { kind: 'leaf', path: '/admin/classes', params: { tab: 'classes' }, isDefault: true, icon: BookOpen, labelKey: 'nav.classes', labelFallback: 'Classes' },
+      { kind: 'leaf', path: '/admin/classes', params: { tab: 'subjects' }, icon: BookOpenCheck, labelKey: 'nav.subjects', labelFallback: 'Subjects' },
+    ],
+  },
+  { kind: 'leaf', path: '/admin/schedule', icon: Calendar, labelKey: 'nav.schedule', labelFallback: 'Schedule' },
+  { kind: 'leaf', path: '/admin/grade-review', icon: Star, labelKey: 'nav.grade_review', labelFallback: 'Grade Review', feature: 'grades' },
+  { kind: 'leaf', path: '/admin/announcements', icon: Megaphone, labelKey: 'nav.announcements', labelFallback: 'Announcements', feature: 'announcements' },
+  {
+    kind: 'group', key: 'employees', icon: Users,
+    labelKey: 'nav.employees', labelFallback: 'Employees',
+    children: [
+      { kind: 'group', key: 'employees.add', icon: UserPlus, labelKey: 'nav.employees_add', labelFallback: 'Add New Employee', children: ROLE_LEAVES('add') },
+      { kind: 'group', key: 'employees.active', icon: Users, labelKey: 'nav.employees_active', labelFallback: 'Active Employees', children: ROLE_LEAVES('active') },
+      { kind: 'group', key: 'employees.archived', icon: Archive, labelKey: 'nav.employees_archived', labelFallback: 'Archived', children: ROLE_LEAVES('archived') },
+    ],
+  },
+  { kind: 'leaf', path: '/admin/drivers', icon: Bus, labelKey: 'nav.drivers', labelFallback: 'Drivers', feature: 'bus_tracking' },
+  {
+    kind: 'group', key: 'hr', icon: ClipboardCheck,
+    labelKey: 'nav.hr', labelFallback: 'HR',
+    children: [
+      { kind: 'leaf', path: '/admin/school-policies', icon: ClipboardCheck, labelKey: 'nav.policies', labelFallback: 'Policies' },
+      { kind: 'leaf', path: '/admin/hr-officers', icon: ShieldCheck, labelKey: 'nav.hr_officers', labelFallback: 'HR Officers' },
+    ],
+  },
+  { kind: 'leaf', path: '/admin/accounts', icon: UserCog, labelKey: 'nav.accounts', labelFallback: 'Accounts' },
+  { kind: 'leaf', path: '/admin/audit-log', icon: History, labelKey: 'nav.audit_log', labelFallback: 'Audit Log' },
+  { kind: 'leaf', path: '/admin/notifications', icon: Bell, labelKey: 'nav.notifications', labelFallback: 'Notifications' },
+  { kind: 'leaf', path: '/admin/settings', icon: Settings, labelKey: 'nav.settings', labelFallback: 'Settings' },
+  { kind: 'leaf', path: '/admin/profile', icon: User, labelKey: 'nav.profile', labelFallback: 'Profile' },
+];
+
+function filterAdminTree(node: AdminNavNode, isEnabled: (f?: string) => boolean): AdminNavNode | null {
+  if (node.kind === 'leaf') return isEnabled(node.feature) ? node : null;
+  if (!isEnabled(node.feature)) return null;
+  const kids = node.children
+    .map(c => filterAdminTree(c, isEnabled))
+    .filter((n): n is AdminNavNode => !!n);
+  return kids.length ? { ...node, children: kids } : null;
+}
+
+function leafHref(leaf: LeafNode): string {
+  const q = leaf.params ? new URLSearchParams(leaf.params).toString() : '';
+  return q ? `${leaf.path}?${q}` : leaf.path;
+}
+
+function firstLeafOf(node: AdminNavNode): LeafNode | null {
+  if (node.kind === 'leaf') return node;
+  for (const c of node.children) {
+    const f = firstLeafOf(c);
+    if (f) return f;
+  }
+  return null;
+}
+
+function collectSamePathLeaves(nodes: AdminNavNode[], path: string): LeafNode[] {
+  const out: LeafNode[] = [];
+  const walk = (ns: AdminNavNode[]) => {
+    for (const n of ns) {
+      if (n.kind === 'leaf') { if (n.path === path) out.push(n); }
+      else walk(n.children);
+    }
+  };
+  walk(nodes);
+  return out;
+}
+
+function isLeafActive(leaf: LeafNode, pathname: string, search: URLSearchParams, siblings: LeafNode[]): boolean {
+  if (pathname !== leaf.path) return false;
+  if (!leaf.params) return true;
+  const allMatch = Object.entries(leaf.params).every(([k, v]) => search.get(k) === v);
+  if (allMatch) return true;
+  // Fallback: URL is on the right page but none of the tab params are set → the default leaf wins.
+  const keys = Array.from(new Set(siblings.flatMap(l => Object.keys(l.params ?? {}))));
+  const noneSet = keys.length > 0 && keys.every(k => search.get(k) === null);
+  return !!leaf.isDefault && noneSet;
+}
+
+function activeGroupChain(nodes: AdminNavNode[], pathname: string, search: URLSearchParams, root: AdminNavNode[]): string[] {
+  let result: string[] = [];
+  const walk = (ns: AdminNavNode[], path: string[]): boolean => {
+    for (const n of ns) {
+      if (n.kind === 'leaf') {
+        if (isLeafActive(n, pathname, search, collectSamePathLeaves(root, n.path))) {
+          result = path;
+          return true;
+        }
+      } else {
+        if (walk(n.children, [...path, n.key])) return true;
+      }
+    }
+    return false;
+  };
+  walk(nodes, []);
+  return result;
+}
+
+const INDENT_LTR = ['', 'ml-3', 'ml-6', 'ml-9'];
+const INDENT_RTL = ['', 'mr-3', 'mr-6', 'mr-9'];
+
+const navItems: Partial<Record<Role, NavItem[]>> = {
   parent: [
     { to: '/parent/dashboard', icon: Home, label: 'Dashboard' },
     { to: '/parent/homework', icon: BookOpen, label: 'Homework', feature: 'homework' },
@@ -51,28 +208,7 @@ const navItems: Record<Role, NavItem[]> = {
     { to: '/teacher/notifications', icon: Bell, label: 'Notifications' },
     { to: '/teacher/profile', icon: User, label: 'Profile' },
   ],
-  admin: [
-    { to: '/admin/dashboard', icon: Home, label: 'Dashboard' },
-    { to: '/admin/students', icon: GraduationCap, label: 'Students' },
-    { to: '/admin/archive', icon: Archive, label: 'Archive', feature: 'archive' },
-    // Transfers UI hidden until Phase C ships (platform-wide STU_*).
-    // Backend + page still wired; re-add this line + the StudentBriefPage
-    // button to bring it back. See FEATURE.md.
-    // { to: '/admin/transfers', icon: Send, label: 'Transfers', feature: 'archive' },
-    { to: '/admin/classes', icon: BookOpen, label: 'Classes' },
-    { to: '/admin/grade-review', icon: Star, label: 'Grade Review', feature: 'grades' },
-    { to: '/admin/employees', icon: Users, label: 'Employees' },
-    { to: '/admin/school-policies', icon: ClipboardCheck, label: 'Policies' },
-    { to: '/admin/hr-officers', icon: ShieldCheck, label: 'HR Officers' },
-    { to: '/admin/schedule', icon: Calendar, label: 'Schedule' },
-    { to: '/admin/drivers', icon: Bus, label: 'Drivers', feature: 'bus_tracking' },
-    { to: '/admin/announcements', icon: Megaphone, label: 'Announcements', feature: 'announcements' },
-    { to: '/admin/notifications', icon: Bell, label: 'Notifications' },
-    { to: '/admin/accounts', icon: UserCog, label: 'Accounts' },
-    { to: '/admin/audit-log', icon: History, label: 'Audit Log' },
-    { to: '/admin/settings', icon: Settings, label: 'Settings' },
-    { to: '/admin/profile', icon: User, label: 'Profile' },
-  ],
+  // Admin nav is the nested `adminNav` tree above. Transfers UI is shelved (see FEATURE.md).
   reception: [
     { to: '/reception/dashboard', icon: Home, label: 'Dashboard' },
     { to: '/reception/appointments', icon: Calendar, label: 'Appointments', feature: 'appointments' },
@@ -232,7 +368,96 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
     if (PREMIUM_FEATURES.includes(feature)) return school?.features?.[feature] === true;
     return school?.features?.[feature] !== false;
   };
-  const items = user ? navItems[user.role].filter(item => isFeatureEnabled(item.feature)) : [];
+  const isAdmin = user?.role === 'admin';
+  const items = user && !isAdmin ? (navItems[user.role] ?? []).filter(item => isFeatureEnabled(item.feature)) : [];
+
+  // Admin: filter the tree by features, then compute which group keys are on the active leaf's path.
+  const adminItems: AdminNavNode[] = isAdmin
+    ? adminNav
+        .map(n => filterAdminTree(n, isFeatureEnabled))
+        .filter((n): n is AdminNavNode => !!n)
+    : [];
+  const adminSearchParams = new URLSearchParams(location.search);
+  const activeGroupKeys = new Set(
+    isAdmin ? activeGroupChain(adminItems, location.pathname, adminSearchParams, adminItems) : [],
+  );
+  const chevronCollapsedRotate = isRTL ? 'rotate-90' : '-rotate-90';
+
+  const renderAdminNode = (node: AdminNavNode, depth: number): React.ReactNode => {
+    const indentClass = (isRTL ? INDENT_RTL : INDENT_LTR)[Math.min(depth, 3)];
+
+    if (node.kind === 'leaf') {
+      const Icon = node.icon;
+      const href = leafHref(node);
+      const samePath = collectSamePathLeaves(adminItems, node.path);
+      const active = isLeafActive(node, location.pathname, adminSearchParams, samePath);
+      const showResetBadge = node.path === '/admin/accounts' && adminResetRequestCount > 0;
+      const label = t(node.labelKey, node.labelFallback);
+      return (
+        <NavLink
+          key={`leaf:${href}`}
+          to={href}
+          end={node.end}
+          onClick={() => {
+            setMobileOpen(false);
+            if (showResetBadge) setAdminResetRequestCount(0);
+          }}
+          className={`
+            flex items-center gap-3 px-3 py-2 mx-2 rounded-xl transition-colors duration-150 ${indentClass}
+            ${active ? 'bg-primary-50 text-primary-700 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}
+          `}
+          title={collapsed ? label : undefined}
+        >
+          <div className="relative flex-shrink-0">
+            <Icon className="w-5 h-5" />
+            {showResetBadge && collapsed && (
+              <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full" />
+            )}
+          </div>
+          {!collapsed && <span className="text-sm flex-1 truncate">{label}</span>}
+          {!collapsed && showResetBadge && (
+            <span className="bg-red-500 text-white text-xs font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+              {adminResetRequestCount > 99 ? '99+' : adminResetRequestCount}
+            </span>
+          )}
+        </NavLink>
+      );
+    }
+
+    // group
+    const GroupIcon = node.icon;
+    const expanded = activeGroupKeys.has(node.key);
+    const first = firstLeafOf(node);
+    const label = t(node.labelKey, node.labelFallback);
+    return (
+      <div key={`group:${node.key}`}>
+        {first && (
+          <Link
+            to={leafHref(first)}
+            onClick={() => setMobileOpen(false)}
+            className={`
+              flex items-center gap-3 px-3 py-2 mx-2 rounded-xl transition-colors duration-150 ${indentClass}
+              ${expanded ? 'text-gray-900 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}
+            `}
+            title={collapsed ? label : undefined}
+          >
+            <GroupIcon className="w-5 h-5 flex-shrink-0" />
+            {!collapsed && <span className="text-sm flex-1 truncate">{label}</span>}
+            {!collapsed && (
+              <ChevronDown
+                className={`w-4 h-4 transition-transform ${expanded ? 'rotate-0' : chevronCollapsedRotate}`}
+              />
+            )}
+          </Link>
+        )}
+        {expanded && !collapsed && (
+          <div className="mt-0.5 space-y-0.5">
+            {node.children.map(c => renderAdminNode(c, depth + 1))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <aside className={`
@@ -278,7 +503,8 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
 
       {/* Nav links */}
       <nav className="flex-1 overflow-y-auto py-2">
-        {items.map(({ to, icon: Icon, label, end }) => {
+        {isAdmin && adminItems.map(node => renderAdminNode(node, 0))}
+        {!isAdmin && items.map(({ to, icon: Icon, label, end }) => {
           const showNotifBadge = to === '/parent/notifications' && user?.role === 'parent' && unreadCount > 0;
           const showTeacherNotifBadge = to === '/teacher/notifications' && user?.role === 'teacher' && teacherUnreadCount > 0;
           const showApptBadge = (

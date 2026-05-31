@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { useTranslation, Trans } from 'react-i18next';
 import { toast } from 'react-toastify';
@@ -20,7 +21,14 @@ interface CurriculumRow { id: string; classId: string; className: string | null;
 
 export default function ClassesPage() {
   const { t } = useTranslation();
-  const [activeTab, setActiveTab] = useState<'classes' | 'subjects'>('classes');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const rawTab = searchParams.get('tab');
+  const activeTab: 'classes' | 'subjects' = rawTab === 'subjects' ? 'subjects' : 'classes';
+  const setActiveTab = (tab: 'classes' | 'subjects') => {
+    const next = new URLSearchParams(searchParams);
+    next.set('tab', tab);
+    setSearchParams(next, { replace: true });
+  };
   const [classes, setClasses] = useState<Class[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
