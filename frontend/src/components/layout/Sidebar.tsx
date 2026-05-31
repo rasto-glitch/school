@@ -67,8 +67,8 @@ const adminNav: AdminNavNode[] = [
         labelKey: 'nav.archived', labelFallback: 'Archived',
         feature: 'archive',
         children: [
-          { kind: 'leaf', path: '/admin/archive', params: { tab: 'archived' }, isDefault: true, icon: Archive, labelKey: 'nav.archived', labelFallback: 'Archived' },
-          { kind: 'leaf', path: '/admin/archive', params: { tab: 'graduated' }, icon: GraduationCap, labelKey: 'nav.graduated', labelFallback: 'Graduated' },
+          { kind: 'leaf', path: '/admin/students', params: { tab: 'archived', sub: 'archived' }, isDefault: true, icon: Archive, labelKey: 'nav.archived', labelFallback: 'Archived' },
+          { kind: 'leaf', path: '/admin/students', params: { tab: 'archived', sub: 'graduated' }, icon: GraduationCap, labelKey: 'nav.graduated', labelFallback: 'Graduated' },
         ],
       },
     ],
@@ -144,15 +144,53 @@ function collectSamePathLeaves(nodes: AdminNavNode[], path: string): LeafNode[] 
   return out;
 }
 
+// A leaf "agrees" with the URL if, for every param the leaf names, the URL
+// either has that exact value or is missing the key entirely. A param the URL
+// sets to a different value is a disagreement and disqualifies the leaf.
+function leafAgrees(leaf: LeafNode, search: URLSearchParams): boolean {
+  if (!leaf.params) return true;
+  for (const [k, v] of Object.entries(leaf.params)) {
+    const urlV = search.get(k);
+    if (urlV !== null && urlV !== v) return false;
+  }
+  return true;
+}
+
+function matchedParamCount(leaf: LeafNode, search: URLSearchParams): number {
+  if (!leaf.params) return 0;
+  let n = 0;
+  for (const [k, v] of Object.entries(leaf.params)) {
+    if (search.get(k) === v) n += 1;
+  }
+  return n;
+}
+
 function isLeafActive(leaf: LeafNode, pathname: string, search: URLSearchParams, siblings: LeafNode[]): boolean {
   if (pathname !== leaf.path) return false;
-  if (!leaf.params) return true;
-  const allMatch = Object.entries(leaf.params).every(([k, v]) => search.get(k) === v);
-  if (allMatch) return true;
-  // Fallback: URL is on the right page but none of the tab params are set → the default leaf wins.
-  const keys = Array.from(new Set(siblings.flatMap(l => Object.keys(l.params ?? {}))));
-  const noneSet = keys.length > 0 && keys.every(k => search.get(k) === null);
-  return !!leaf.isDefault && noneSet;
+  if (!leafAgrees(leaf, search)) return false;
+
+  const total = Object.keys(leaf.params ?? {}).length;
+  if (total === 0) return true;
+  const matched = matchedParamCount(leaf, search);
+  if (matched === total) return true;
+
+  // Partial match — only an isDefault leaf can claim the URL, and among
+  // multiple isDefault candidates we want the most specific that still agrees.
+  // Tiebreak: prefer the leaf with fewer total params (it is the "more general"
+  // default for this URL). So bare /admin/students prefers Active Students
+  // (1 param) over Students > Archived > Archived (2 params).
+  if (!leaf.isDefault) return false;
+  const defaults = siblings.filter(l => l.isDefault && leafAgrees(l, search));
+  if (defaults.length === 0) return false;
+  let best = defaults[0];
+  for (const c of defaults) {
+    const cm = matchedParamCount(c, search);
+    const cp = Object.keys(c.params ?? {}).length;
+    const bm = matchedParamCount(best, search);
+    const bp = Object.keys(best.params ?? {}).length;
+    if (cm > bm || (cm === bm && cp < bp)) best = c;
+  }
+  return best === leaf;
 }
 
 function activeGroupChain(nodes: AdminNavNode[], pathname: string, search: URLSearchParams, root: AdminNavNode[]): string[] {

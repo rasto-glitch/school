@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'react-toastify';
-import { Search, Paperclip, History, X } from 'lucide-react';
+import { Search, Paperclip, History, X, FileText, FileSpreadsheet, DatabaseBackup, ShieldCheck } from 'lucide-react';
 import { adminApi } from '../../services/api';
 import { useDebounce } from '../../hooks/useDebounce';
 import { useAuthStore } from '../../store/authStore';
@@ -12,6 +12,8 @@ import Card from '../../components/common/Card';
 import Input from '../../components/common/Input';
 import Select from '../../components/common/Select';
 import Button from '../../components/common/Button';
+import ArchivedStudentsTab from './ArchivedStudentsTab';
+import GraduatedStudentsTab from './GraduatedStudentsTab';
 import type { Student, Class } from '../../types';
 
 interface Parent { id: string; fullName: string; phoneNumber?: string; }
@@ -31,12 +33,27 @@ export default function StudentsManagement() {
   const archiveEnabled = useAuthStore(s => s.school?.features?.archive === true);
   const [searchParams, setSearchParams] = useSearchParams();
   const rawTab = searchParams.get('tab');
-  const activeTab: 'active' | 'new' = rawTab === 'new' ? 'new' : 'active';
-  const setActiveTab = (tab: 'active' | 'new') => {
+  const activeTab: 'active' | 'new' | 'archived' =
+    rawTab === 'new' ? 'new' : rawTab === 'archived' && archiveEnabled ? 'archived' : 'active';
+  const setActiveTab = (tab: 'active' | 'new' | 'archived') => {
     const next = new URLSearchParams(searchParams);
     next.set('tab', tab);
+    if (tab !== 'archived') next.delete('sub');
     setSearchParams(next, { replace: true });
   };
+  const rawSub = searchParams.get('sub');
+  const archivedSub: 'archived' | 'graduated' = rawSub === 'graduated' ? 'graduated' : 'archived';
+  const setArchivedSub = (sub: 'archived' | 'graduated') => {
+    const next = new URLSearchParams(searchParams);
+    next.set('tab', 'archived');
+    next.set('sub', sub);
+    setSearchParams(next, { replace: true });
+  };
+
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [xlsxBusy, setXlsxBusy] = useState(false);
+  const [backupBusy, setBackupBusy] = useState(false);
+  const [verifyBusy, setVerifyBusy] = useState(false);
   const [students, setStudents] = useState<Student[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
   const [parents, setParents] = useState<Parent[]>([]);
@@ -271,6 +288,67 @@ export default function StudentsManagement() {
     }
   };
 
+  // Archive export helpers (moved here from the standalone Archive page now that
+  // the archive views live as a tab under Students).
+  const triggerDownload = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+  const stamp = () => new Date().toISOString().split('T')[0];
+
+  const downloadArchivePdf = async () => {
+    setPdfBusy(true);
+    try {
+      const res = await adminApi.exportArchivePdf();
+      triggerDownload(res.data, `archive-${stamp()}.pdf`);
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || t('admin.archive_mgmt.failed_pdf'));
+    } finally { setPdfBusy(false); }
+  };
+  const downloadArchiveXlsx = async () => {
+    setXlsxBusy(true);
+    try {
+      const res = await adminApi.exportArchiveXlsx();
+      triggerDownload(res.data, `archive-${stamp()}.xlsx`);
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || t('admin.archive_mgmt.failed_excel'));
+    } finally { setXlsxBusy(false); }
+  };
+  const downloadFullBackup = async () => {
+    setBackupBusy(true);
+    try {
+      const res = await adminApi.exportFullArchiveBackup();
+      triggerDownload(res.data, `archive-backup-${stamp()}.json`);
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || t('admin.archive_mgmt.failed_backup'));
+    } finally { setBackupBusy(false); }
+  };
+  const verifyIntegrity = async () => {
+    setVerifyBusy(true);
+    try {
+      const res = await adminApi.verifyArchiveIntegrity();
+      const d = res.data as { ok: boolean; tamperedCount: number; unhashedCount: number };
+      if (d.ok) {
+        toast.success(
+          d.unhashedCount > 0
+            ? t('admin.archive_mgmt.integrity_ok_unhashed', { count: d.unhashedCount })
+            : t('admin.archive_mgmt.integrity_ok'),
+          { autoClose: 7000 },
+        );
+      } else {
+        toast.error(t('admin.archive_mgmt.integrity_failed', { count: d.tamperedCount }), { autoClose: 12000 });
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || t('admin.archive_mgmt.failed_verify'));
+    } finally { setVerifyBusy(false); }
+  };
+
 
   return (
     <PageLayout title={t('admin.students_mgmt.title')}>
@@ -288,7 +366,74 @@ export default function StudentsManagement() {
         >
           {t('admin.students_mgmt.tab_new')}
         </button>
+        {archiveEnabled && (
+          <button
+            onClick={() => setActiveTab('archived')}
+            className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${activeTab === 'archived' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            {t('admin.students_mgmt.tab_archived', 'Archived')}
+          </button>
+        )}
       </div>
+
+      {activeTab === 'archived' && (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
+              <button
+                onClick={() => setArchivedSub('archived')}
+                className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${archivedSub === 'archived' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              >
+                {t('admin.archive_mgmt.tab_archived')}
+              </button>
+              <button
+                onClick={() => setArchivedSub('graduated')}
+                className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${archivedSub === 'graduated' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+              >
+                {t('admin.archive_mgmt.tab_graduated')}
+              </button>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={downloadArchivePdf}
+                disabled={pdfBusy}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+              >
+                <FileText className="w-4 h-4" />
+                {pdfBusy ? t('admin.archive_mgmt.preparing') : t('admin.archive_mgmt.download_pdf')}
+              </button>
+              <button
+                onClick={downloadArchiveXlsx}
+                disabled={xlsxBusy}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                {xlsxBusy ? t('admin.archive_mgmt.preparing') : t('admin.archive_mgmt.download_excel')}
+              </button>
+              <button
+                onClick={downloadFullBackup}
+                disabled={backupBusy}
+                title={t('admin.archive_mgmt.backup_title')}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+              >
+                <DatabaseBackup className="w-4 h-4" />
+                {backupBusy ? t('admin.archive_mgmt.preparing') : t('admin.archive_mgmt.full_backup')}
+              </button>
+              <button
+                onClick={verifyIntegrity}
+                disabled={verifyBusy}
+                title={t('admin.archive_mgmt.verify_title')}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+              >
+                <ShieldCheck className="w-4 h-4" />
+                {verifyBusy ? t('admin.archive_mgmt.checking') : t('admin.archive_mgmt.verify_integrity')}
+              </button>
+            </div>
+          </div>
+          {archivedSub === 'archived' && <ArchivedStudentsTab />}
+          {archivedSub === 'graduated' && <GraduatedStudentsTab />}
+        </div>
+      )}
 
       {activeTab === 'new' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

@@ -905,6 +905,7 @@
       "title": "Students Management",
       "tab_active": "Active Students",
       "tab_new": "New Student",
+      "tab_archived": "Archived",
       "add_student": "Add Student",
       "full_name": "Full Name",
       "linking_previous": "Linking to previous enrollment",

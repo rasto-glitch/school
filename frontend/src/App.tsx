@@ -38,7 +38,6 @@ import TeacherNotificationsPage from './pages/teacher/TeacherNotificationsPage';
 // Admin
 import AdminDashboard from './pages/admin/AdminDashboard';
 import StudentsManagement from './pages/admin/StudentsManagement';
-import ArchiveManagement from './pages/admin/ArchiveManagement';
 import EmployeesManagement from './pages/admin/EmployeesManagement';
 import EmployeeProfilePage from './pages/admin/EmployeeProfilePage';
 import ArchivedEmployeeProfilePage from './pages/admin/ArchivedEmployeeProfilePage';
@@ -196,7 +195,8 @@ export default function App() {
         <Route path="/admin/list/teachers" element={<ProtectedRoute allowedRoles={['admin']}><AdminTeachersListPage /></ProtectedRoute>} />
         <Route path="/admin/list/drivers" element={<ProtectedRoute allowedRoles={['admin']}><AdminDriversListPage /></ProtectedRoute>} />
         <Route path="/admin/students" element={<ProtectedRoute allowedRoles={['admin']}><StudentsManagement /></ProtectedRoute>} />
-        <Route path="/admin/archive" element={<ProtectedRoute allowedRoles={['admin']}><ArchiveManagement /></ProtectedRoute>} />
+        {/* Archive views moved under Students > Archived. Kept as a redirect so old links still work. */}
+        <Route path="/admin/archive" element={<Navigate to="/admin/students?tab=archived" replace />} />
         <Route path="/admin/classes" element={<ProtectedRoute allowedRoles={['admin']}><ClassesPage /></ProtectedRoute>} />
         <Route path="/admin/grade-review" element={<ProtectedRoute allowedRoles={['admin']}><GradeReviewPage /></ProtectedRoute>} />
         <Route path="/admin/employees" element={<ProtectedRoute allowedRoles={['admin']}><EmployeesManagement /></ProtectedRoute>} />
