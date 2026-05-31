@@ -1,14 +1,18 @@
 import { useEffect, useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams, Link } from 'react-router-dom';
-import { Search, User, History, Send } from 'lucide-react';
+import { Search, User, History } from 'lucide-react';
+// Transfer wizard hidden until Phase C ships — see FEATURE.md.
+// Re-add `Send` to the lucide import, the import below, and the JSX
+// `transferOpen` state + button + <TransferWizard /> mount to restore.
+// import { Send } from 'lucide-react';
+// import TransferWizard from '../../components/admin/TransferWizard';
 import { adminApi } from '../../services/api';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
 import Select from '../../components/common/Select';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import EmptyState from '../../components/common/EmptyState';
-import TransferWizard from '../../components/admin/TransferWizard';
 import type { Student, Report, Grade } from '../../types';
 import { getMarkNames, getMarkValue, gradeTotal } from '../../utils/marks';
 import { format, parseISO, differenceInYears } from 'date-fns';
@@ -50,7 +54,8 @@ export default function StudentBriefPage() {
   const [search, setSearch] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [transferOpen, setTransferOpen] = useState(false);
+  // Transfer wizard hidden — see FEATURE.md.
+  // const [transferOpen, setTransferOpen] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -229,6 +234,8 @@ export default function StudentBriefPage() {
           <div className="space-y-6">
             {/* Profile card */}
             <Card>
+              {/* Transfer student button hidden until Phase C ships — see FEATURE.md.
+                  Restore by un-commenting the imports above + the block below.
               <div className="flex items-start justify-end mb-2">
                 <button
                   onClick={() => setTransferOpen(true)}
@@ -238,6 +245,7 @@ export default function StudentBriefPage() {
                   <Send className="w-3.5 h-3.5" /> {t('admin.transfer.button', 'Transfer student')}
                 </button>
               </div>
+              */}
               <div className="flex items-start gap-6">
                 <div className="w-24 h-24 bg-primary-100 rounded-2xl flex items-center justify-center flex-shrink-0">
                   {picture ? (
@@ -471,7 +479,7 @@ export default function StudentBriefPage() {
         )}
       </div>
 
-      {/* Cross-school transfer wizard (migration 032 — phase A) */}
+      {/* Cross-school transfer wizard hidden — see FEATURE.md.
       <TransferWizard
         isOpen={transferOpen}
         onClose={() => setTransferOpen(false)}
@@ -479,6 +487,7 @@ export default function StudentBriefPage() {
         studentName={name !== '—' ? name : null}
         onCompleted={() => { setSelectedStudentId(''); setBrief(null); }}
       />
+      */}
     </PageLayout>
   );
 }

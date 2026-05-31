@@ -12,7 +12,8 @@ import {
   FileText, Star, Clock, X, ClipboardCheck, MessageSquare, Archive,
   CreditCard, Wallet, History, Receipt, BookOpenCheck,
   AlertCircle, FileBarChart, BarChart3, CalendarClock, ArrowLeftRight, Scale,
-  ShieldCheck, Send,
+  ShieldCheck,
+  // Send,                            // re-add when transfers UI is restored — see FEATURE.md
 } from 'lucide-react';
 import type { Dispatch, SetStateAction } from 'react';
 import type { Role } from '../../types';
@@ -54,7 +55,10 @@ const navItems: Record<Role, NavItem[]> = {
     { to: '/admin/dashboard', icon: Home, label: 'Dashboard' },
     { to: '/admin/students', icon: GraduationCap, label: 'Students' },
     { to: '/admin/archive', icon: Archive, label: 'Archive', feature: 'archive' },
-    { to: '/admin/transfers', icon: Send, label: 'Transfers', feature: 'archive' },
+    // Transfers UI hidden until Phase C ships (platform-wide STU_*).
+    // Backend + page still wired; re-add this line + the StudentBriefPage
+    // button to bring it back. See FEATURE.md.
+    // { to: '/admin/transfers', icon: Send, label: 'Transfers', feature: 'archive' },
     { to: '/admin/classes', icon: BookOpen, label: 'Classes' },
     { to: '/admin/grade-review', icon: Star, label: 'Grade Review', feature: 'grades' },
     { to: '/admin/employees', icon: Users, label: 'Employees' },
