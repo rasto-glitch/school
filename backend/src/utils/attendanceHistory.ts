@@ -13,6 +13,8 @@
 import { adminDb as supabase } from './db';
 import {
   loadEnrollmentHistory,
+  academicYearOf,
+  academicYearStartDate,
   type EnrollmentStatus,
 } from './studentEnrollments';
 import {
@@ -44,12 +46,16 @@ export interface AttendanceHistory {
 // Build the year-by-year history for one student. Active years and any
 // closed year that's still missing frozen totals get computed live; the
 // rest are pulled from the stored aggregate.
+//
+// Resilience: students created before migration 030 (or created without a
+// class) may not have a `student_enrollments` row for the current year
+// even though they have raw attendance. When the live student is still
+// active, we synthesize a current-year row so the page reflects the day's
+// marks instead of showing the "no history" empty state.
 export async function buildAttendanceHistory(
   schoolId: string, studentId: string,
 ): Promise<AttendanceHistory> {
   const rows = await loadEnrollmentHistory(schoolId, studentId);
-  if (rows.length === 0) return { years: [] };
-
   const tz = await getSchoolTimezone(schoolId);
   const today = todayInTimezone(tz);
 
@@ -79,6 +85,35 @@ export async function buildAttendanceHistory(
       frozen,
     });
   }
+
+  // Synthesize a current-year entry if one's missing and the student is
+  // still active. Keeps the page useful for pre-backfill students who
+  // already have attendance rows but no per-year enrollment record.
+  const currentYear = academicYearOf();
+  if (!years.some(y => y.academicYear === currentYear)) {
+    const { data: liveStudent } = await supabase
+      .from('students')
+      .select('id, is_graduated, class_id, classes(name, grade_level)')
+      .eq('id', studentId).eq('school_id', schoolId).maybeSingle();
+    const isActive = liveStudent && !(liveStudent as { is_graduated?: boolean }).is_graduated;
+    if (isActive) {
+      const cls = (liveStudent as { classes?: { name?: string; grade_level?: string } }).classes;
+      const startedOn = academicYearStartDate(currentYear);
+      const totals = await computeAttendanceTotals(schoolId, studentId, startedOn, today);
+      years.push({
+        academicYear: currentYear,
+        gradeLevel: cls?.grade_level ?? '—',
+        classId: (liveStudent as { class_id?: string | null }).class_id ?? null,
+        className: cls?.name ?? null,
+        status: 'enrolled',
+        startedOn,
+        endedOn: null,
+        totals,
+        frozen: false,
+      });
+    }
+  }
+
   return { years };
 }
 
@@ -99,16 +134,29 @@ export async function loadAttendanceDaysForYear(
 ): Promise<{ academicYear: string; startedOn: string | null; endedOn: string | null; days: AttendanceDay[] } | null> {
   const rows = await loadEnrollmentHistory(schoolId, studentId);
   const enrollment = rows.find(r => r.academicYear === academicYear);
-  if (!enrollment) return null;
+
+  let startedOn: string;
+  let endedOn: string | null;
+  if (enrollment) {
+    startedOn = enrollment.startedOn;
+    endedOn = enrollment.endedOn;
+  } else if (academicYear === academicYearOf()) {
+    // Synthesized current-year fallback — matches buildAttendanceHistory
+    // so the calendar still shows today's marks for pre-backfill students.
+    startedOn = academicYearStartDate(academicYear);
+    endedOn = null;
+  } else {
+    return null;
+  }
 
   const tz = await getSchoolTimezone(schoolId);
-  const upper = enrollment.endedOn ?? todayInTimezone(tz);
+  const upper = endedOn ?? todayInTimezone(tz);
   const { data } = await supabase
     .from('attendance')
     .select('date, status, notes, class_id, classes(name)')
     .eq('school_id', schoolId)
     .eq('student_id', studentId)
-    .gte('date', enrollment.startedOn)
+    .gte('date', startedOn)
     .lte('date', upper)
     .order('date', { ascending: true });
 
@@ -122,8 +170,8 @@ export async function loadAttendanceDaysForYear(
 
   return {
     academicYear,
-    startedOn: enrollment.startedOn,
-    endedOn: enrollment.endedOn,
+    startedOn,
+    endedOn,
     days,
   };
 }
