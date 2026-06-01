@@ -1292,6 +1292,11 @@ export async function commitPromoteClass(req: AuthRequest, res: Response): Promi
     .from('classes').select('id').eq('id', id).eq('school_id', schoolId).single();
   if (!cls) { res.status(404).json({ error: 'Class not found' }); return; }
 
+  // Schools without the archive feature can't retain past students — the
+  // 'graduate' outcome below becomes a hard delete instead of a flag +
+  // snapshot, matching assignStudent and the year-end bulk advance.
+  const archiveOn = await hasArchiveFeature(schoolId);
+
   const results: Array<{ studentId: string; ok: boolean; action: PromoteAction; error?: string }> = [];
 
   for (const outcome of outcomes) {
@@ -1337,13 +1342,19 @@ export async function commitPromoteClass(req: AuthRequest, res: Response): Promi
       }
 
       if (action === 'graduate') {
-        await supabase.from('students')
-          .update({ is_graduated: true })
-          .eq('id', studentId).eq('school_id', schoolId);
-        await snapshotGraduatedStudent(
-          schoolId, studentId,
-          { id: req.user!.userId, name: req.user!.username, role: req.user!.role },
-        );
+        if (archiveOn) {
+          await supabase.from('students')
+            .update({ is_graduated: true })
+            .eq('id', studentId).eq('school_id', schoolId);
+          await snapshotGraduatedStudent(
+            schoolId, studentId,
+            { id: req.user!.userId, name: req.user!.username, role: req.user!.role },
+          );
+        } else {
+          await supabase.from('students')
+            .delete()
+            .eq('id', studentId).eq('school_id', schoolId);
+        }
       }
 
       results.push({ studentId, ok: true, action });
