@@ -13,12 +13,13 @@ import { spacing, radius, font, shadow } from '../../theme';
 
 interface ClassItem { id: string; name: string }
 interface StudentItem { id: string; fullName: string }
-type AttStatus = 'present' | 'absent' | 'late';
+type AttStatus = 'present' | 'absent' | 'late' | 'excused';
 
 const STATUS_COLORS: Record<AttStatus, string> = {
   present: '#10B981',
   absent: '#EF4444',
   late: '#F59E0B',
+  excused: '#8B5CF6',
 };
 
 function todayInTz(tz: string | undefined): string {
@@ -95,6 +96,16 @@ export default function TeacherAttendanceScreen() {
 
   const handleSave = async () => {
     if (!selectedClass) return;
+    // Belt-and-braces: the Save button is hidden when locked, but a stale
+    // render or programmatic press shouldn't surface a generic 403 to the
+    // user. Backend stays source of truth.
+    if (selectedDate < todayInTz(tz)) {
+      Alert.alert(
+        t('teacher.attendance_locked', 'Locked'),
+        t('teacher.attendance_locked_hint', 'This day is locked. Ask a supervisor to make any changes.'),
+      );
+      return;
+    }
     setSaving(true);
     try {
       const records = students.map(s => ({
@@ -124,6 +135,7 @@ export default function TeacherAttendanceScreen() {
   const present = students.filter(s => (statuses[s.id] ?? 'present') === 'present').length;
   const absent = students.filter(s => statuses[s.id] === 'absent').length;
   const late = students.filter(s => statuses[s.id] === 'late').length;
+  const excused = students.filter(s => statuses[s.id] === 'excused').length;
 
   // Past days are locked at midnight in the school's TZ (backend enforces).
   const today = todayInTz(tz);
@@ -210,6 +222,11 @@ export default function TeacherAttendanceScreen() {
               <Text style={[styles.statText, { color: colors.warning }]}>{t('teacher.n_late', { count: late })}</Text>
             </View>
           )}
+          {excused > 0 && (
+            <View style={[styles.statPill, { backgroundColor: '#F3E8FF' }]}>
+              <Text style={[styles.statText, { color: '#8B5CF6' }]}>{t('supervisor.n_excused', { count: excused, defaultValue: `${excused} excused` })}</Text>
+            </View>
+          )}
         </View>
       )}
 
@@ -250,7 +267,7 @@ export default function TeacherAttendanceScreen() {
             <View key={student.id} style={styles.studentCard}>
               <Text style={styles.studentName}>{student.fullName}</Text>
               <View style={styles.statusBtns}>
-                {(['present', 'absent', 'late'] as AttStatus[]).map(s => {
+                {(['present', 'absent', 'late', 'excused'] as AttStatus[]).map(s => {
                   const active = status === s;
                   const color = STATUS_COLORS[s];
                   return (

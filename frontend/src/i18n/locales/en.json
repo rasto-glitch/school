@@ -90,6 +90,7 @@
     "address": "Address",
     "call": "Call",
     "absent": "Absent",
+    "excused": "Excused",
     "portal": "{{role}} Portal",
     "previous": "Previous",
     "next": "Next",

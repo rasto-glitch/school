@@ -80,6 +80,38 @@ export async function computeAttendanceTotals(
   return totals;
 }
 
+// Notification helper. Builds a single parent-facing notification when a
+// student's attendance status transitions INTO absent or late. Skips when
+// the status hasn't changed (de-spams teacher re-saves) and when the new
+// status is present/excused (no surprise to parents on those). Returns the
+// rows to insert into `notifications`; the caller batches them.
+//
+// `oldStatus` is null when the row didn't exist before (a fresh mark).
+export type AttendanceWriteStatus = 'present' | 'absent' | 'late' | 'excused';
+
+export function shouldNotifyAttendanceChange(
+  oldStatus: AttendanceWriteStatus | null, newStatus: AttendanceWriteStatus,
+): boolean {
+  if (newStatus !== 'absent' && newStatus !== 'late') return false;
+  return oldStatus !== newStatus;
+}
+
+export function buildAttendanceNotificationCopy(
+  fullName: string, status: AttendanceWriteStatus, date: string, notes?: string | null,
+): { title: string; message: string } {
+  if (status === 'late') {
+    return {
+      title: `${fullName} Arrived Late`,
+      message: `${fullName} was marked late for class on ${date}.`,
+    };
+  }
+  // status === 'absent'
+  return {
+    title: `${fullName} Marked Absent`,
+    message: `${fullName} was marked absent from class on ${date}.${notes ? ' Note: ' + notes : ''}`,
+  };
+}
+
 // Recompute and persist totals for any CLOSED enrollment row whose
 // [started_on, ended_on] interval contains `date`. Used by the supervisor
 // attendance-override paths so a corrected past day flows back into the

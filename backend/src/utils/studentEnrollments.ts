@@ -284,7 +284,11 @@ export async function closeCurrentEnrollment(args: {
       const cls = await loadClassInfo(schoolId, String(stu.class_id));
       if (cls) { classId = cls.id; className = cls.name; gradeLevel = cls.gradeLevel; }
     }
-    const started = todayIso();
+    // Anchor started_on at the start of the academic year so the row
+    // represents the FULL year, not just today. Otherwise the frozen
+    // totals (and the snapshot) would cover only the close-day window and
+    // miss attendance the student had earlier in the year.
+    const started = academicYearStartDate(year);
     const synthInsert: Record<string, unknown> = {
       school_id: schoolId,
       student_id: studentId,
@@ -322,16 +326,22 @@ export async function markOnLeaveForCurrentYear(args: {
 }): Promise<{ ok: true; row: EnrollmentRow } | { ok: false; error: string }> {
   const { schoolId, studentId, endedOn } = args;
   const year = academicYearOf();
+  const ended = endedOn || todayIso();
+  const archiveOn = await hasArchiveFeature(schoolId);
   const existing = await findRow(schoolId, studentId, year);
   if (existing) {
+    // Phase B parity — freeze totals on the closing row when archive is on
+    // so the on-leave year survives a future archive snapshot with counts
+    // intact, matching closeEnrollmentForYear / closeCurrentEnrollment.
+    const update: Record<string, unknown> = { status: 'on_leave', ended_on: ended };
+    if (archiveOn) {
+      update.attendance_totals = await computeAttendanceTotals(
+        schoolId, studentId, existing.startedOn, ended,
+      );
+    }
     const { data, error } = await supabase
       .from('student_enrollments')
-      .update({
-        status: 'on_leave',
-        ended_on: endedOn || todayIso(),
-        // class_id stays for reference (they were in this class when paused);
-        // the timeline reader displays it as "paused at" context.
-      })
+      .update(update)
       .eq('id', existing.id)
       .select()
       .single();
@@ -344,19 +354,28 @@ export async function markOnLeaveForCurrentYear(args: {
   if (!gradeLevel) {
     return { ok: false, error: 'Cannot mark on leave — no prior enrollment to inherit grade level from' };
   }
+  const started = academicYearStartDate(year);
+  const insert: Record<string, unknown> = {
+    school_id: schoolId,
+    student_id: studentId,
+    academic_year: year,
+    class_id: null,
+    class_name_snapshot: last?.classNameSnapshot ?? null,
+    grade_level: gradeLevel,
+    status: 'on_leave',
+    started_on: started,
+    ended_on: endedOn || null,
+  };
+  if (archiveOn && endedOn) {
+    // Only freeze totals when the leave is closed (endedOn set). Open
+    // leaves stay null and will be computed live by buildAttendanceHistory.
+    insert.attendance_totals = await computeAttendanceTotals(
+      schoolId, studentId, started, endedOn,
+    );
+  }
   const { data, error } = await supabase
     .from('student_enrollments')
-    .insert({
-      school_id: schoolId,
-      student_id: studentId,
-      academic_year: year,
-      class_id: null,
-      class_name_snapshot: last?.classNameSnapshot ?? null,
-      grade_level: gradeLevel,
-      status: 'on_leave',
-      started_on: academicYearStartDate(year),
-      ended_on: endedOn || null,
-    })
+    .insert(insert)
     .select()
     .single();
   if (error || !data) return { ok: false, error: error?.message || 'Failed to mark on leave' };

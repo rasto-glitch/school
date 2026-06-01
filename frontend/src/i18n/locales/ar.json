@@ -90,6 +90,7 @@
     "address": "العنوان",
     "call": "اتصال",
     "absent": "غائب",
+    "excused": "غياب بعذر",
     "portal": "بوابة {{role}}",
     "previous": "السابق",
     "next": "التالي",

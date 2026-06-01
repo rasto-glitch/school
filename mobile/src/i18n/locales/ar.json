@@ -536,6 +536,7 @@
     "att_present": "حاضر",
     "att_absent": "غائب",
     "att_late": "متأخر",
+    "att_excused": "غياب بعذر",
     "save_attendance": "حفظ الحضور",
     "attendance_saved": "تم حفظ الحضور بنجاح.",
     "attendance_save_failed": "تعذر حفظ الحضور.",

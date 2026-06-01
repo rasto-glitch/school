@@ -68,7 +68,7 @@ export const markAttendanceSchema = z.object({
   date: isoDate,
   records: z.array(z.object({
     studentId: uuid,
-    status: z.enum(['present', 'absent', 'late']),
+    status: z.enum(['present', 'absent', 'late', 'excused']),
     notes: optText(1000),
   })).min(1).max(1000),
 });
@@ -97,7 +97,7 @@ export const createAttendanceRecordSchema = z.object({
   notes: optText(1000),
 });
 export const updateAttendanceRecordSchema = z.object({
-  status: attendanceStatus.optional(),
+  status: attendanceStatus,
   notes: optText(1000),
 });
 export const openPeriodSchema = z.object({

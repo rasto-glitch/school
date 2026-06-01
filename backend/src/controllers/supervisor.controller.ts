@@ -3,7 +3,49 @@ import { Response } from 'express';
 import type { AuthRequest } from '../middleware/auth';
 import { toCC } from '../utils/transform';
 import { logAudit } from '../utils/audit';
-import { isAttendanceLocked, refreshAttendanceTotalsForDate } from '../utils/attendance';
+import {
+  isAttendanceLocked,
+  refreshAttendanceTotalsForDate,
+  shouldNotifyAttendanceChange,
+  buildAttendanceNotificationCopy,
+  getSchoolTimezone,
+  todayInTimezone,
+  type AttendanceWriteStatus,
+} from '../utils/attendance';
+
+// Insert one parent-facing notification per linked parent for a single
+// student × attendance row. Used by the supervisor create/update paths
+// so manual corrections still surface to the parent (the teacher batch
+// has its own pipeline). No-op for non-transitions.
+async function notifyParentsOfAttendanceTransition(
+  req: AuthRequest,
+  studentId: string,
+  oldStatus: AttendanceWriteStatus | null,
+  newStatus: AttendanceWriteStatus,
+  date: string,
+  notes: string | null,
+): Promise<void> {
+  if (!shouldNotifyAttendanceChange(oldStatus, newStatus)) return;
+  const { schoolId } = req.user!;
+  const { data: student } = await req.db!
+    .from('students')
+    .select('id, full_name, parents(user_id)')
+    .eq('id', studentId).eq('school_id', schoolId).maybeSingle();
+  if (!student) return;
+  const parents = (student as { parents?: Array<{ user_id: string }> | { user_id: string } }).parents;
+  const parentUserIds: string[] = Array.isArray(parents)
+    ? parents.map(p => p.user_id)
+    : parents?.user_id ? [parents.user_id] : [];
+  if (parentUserIds.length === 0) return;
+  const { title, message } = buildAttendanceNotificationCopy(
+    (student as { full_name: string }).full_name, newStatus, date, notes,
+  );
+  await req.db!.from('notifications').insert(
+    parentUserIds.map(uid => ({
+      school_id: schoolId, user_id: uid, title, message, notification_type: 'general',
+    })),
+  );
+}
 
 // ---- CLASSES (all classes in the school) ----
 export async function getClasses(req: AuthRequest, res: Response): Promise<void> {
@@ -48,7 +90,10 @@ export async function getAllStudents(req: AuthRequest, res: Response): Promise<v
 // ---- ABSENT TODAY (across all classes) ----
 export async function getAbsentToday(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
-  const today = new Date().toISOString().split('T')[0];
+  // "Today" in the school's timezone so it stays in sync with the daily
+  // lock (around midnight in Asia/Baghdad, UTC-derived 'today' would jump
+  // a day early or late and surface the wrong roster).
+  const today = todayInTimezone(await getSchoolTimezone(schoolId));
 
   const { data, error } = await req.db!
     .from('attendance')
@@ -83,7 +128,7 @@ export async function getAttendanceByClass(req: AuthRequest, res: Response): Pro
 export async function getAttendanceSummary(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
   const { date } = req.query as Record<string, string>;
-  const targetDate = date || new Date().toISOString().split('T')[0];
+  const targetDate = date || todayInTimezone(await getSchoolTimezone(schoolId));
 
   // Get all classes
   const { data: classes } = await req.db!
@@ -120,7 +165,7 @@ export async function getAttendanceSummary(req: AuthRequest, res: Response): Pro
 export async function getBusRideRecords(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
   const { date } = req.query as Record<string, string>;
-  const targetDate = date || new Date().toISOString().split('T')[0];
+  const targetDate = date || todayInTimezone(await getSchoolTimezone(schoolId));
 
   const { data, error } = await req.db!
     .from('bus_ride_records')
@@ -237,6 +282,12 @@ export async function createAttendanceRecord(req: AuthRequest, res: Response): P
     await refreshAttendanceTotalsForDate(schoolId, studentId, date);
   }
 
+  // Notify the parents on the supervisor-side too, so a fresh absent/late
+  // mark surfaces even when the teacher missed the student.
+  await notifyParentsOfAttendanceTransition(
+    req, studentId, null, status as AttendanceWriteStatus, date, notes || null,
+  );
+
   res.json(toCC(data));
 }
 
@@ -309,6 +360,18 @@ export async function updateAttendanceRecord(req: AuthRequest, res: Response): P
     .select()
     .single();
   if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+
+  // Notify on a real status transition into absent/late even when the day
+  // isn't locked — the teacher's batch notify won't fire for supervisor
+  // corrections, so without this the parent never hears.
+  await notifyParentsOfAttendanceTransition(
+    req,
+    String((before as { student_id: string }).student_id),
+    (before as { status: AttendanceWriteStatus }).status,
+    status as AttendanceWriteStatus,
+    String((before as { date: string }).date),
+    notes || null,
+  );
 
   if (locked) {
     await logAudit({

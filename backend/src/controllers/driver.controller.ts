@@ -4,6 +4,7 @@ import type { AuthRequest } from '../middleware/auth';
 import { Server as SocketServer } from 'socket.io';
 import { toCC } from '../utils/transform';
 import { notifyMany } from '../utils/notify';
+import { getSchoolTimezone, todayInTimezone } from '../utils/attendance';
 
 // Proximity threshold levels (in ascending urgency)
 type ProxThreshold = '10min' | '5min' | '2min' | 'arriving';
@@ -167,7 +168,7 @@ export async function updateLocation(req: AuthRequest, res: Response, io?: Socke
 // ---- TODAY'S SCHOOL ATTENDANCE FOR DRIVER'S STUDENTS ----
 export async function getTodayAttendance(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId, userId } = req.user!;
-  const today = new Date().toISOString().split('T')[0];
+  const today = todayInTimezone(await getSchoolTimezone(schoolId));
 
   const { data: driver } = await req.db!.from('drivers').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
   if (!driver) { res.status(404).json({ error: 'Driver not found' }); return; }
@@ -207,7 +208,7 @@ export async function startDrive(req: AuthRequest, res: Response): Promise<void>
   const { data: driver } = await req.db!.from('drivers').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
   if (!driver) { res.status(404).json({ error: 'Driver not found' }); return; }
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = todayInTimezone(await getSchoolTimezone(schoolId));
 
   // SECURITY (M-3): the body's studentRides[] previously took every
   // studentId at face value. Combined with `onConflict: student_id,date`,

@@ -536,6 +536,7 @@
     "att_present": "ئامادە",
     "att_absent": "غایب",
     "att_late": "دواکەوتوو",
+    "att_excused": "بە مۆڵەت",
     "save_attendance": "پاشەکەوتکردنی ئامادەبوون",
     "attendance_saved": "ئامادەبوون بە سەرکەوتوویی پاشەکەوتکرا.",
     "attendance_save_failed": "نەتوانرا ئامادەبوون پاشەکەوت بکرێت.",

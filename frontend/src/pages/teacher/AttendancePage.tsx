@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'react-toastify';
-import { CheckCircle2, XCircle, Clock, Save, ChevronLeft, ChevronRight, Lock } from 'lucide-react';
+import { CheckCircle2, XCircle, Clock, Save, ChevronLeft, ChevronRight, Lock, CalendarOff } from 'lucide-react';
 import { teacherApi } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import PageLayout from '../../components/layout/PageLayout';
@@ -11,7 +11,7 @@ import Button from '../../components/common/Button';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import type { Class, Student } from '../../types';
 
-type AttendanceStatus = 'present' | 'absent' | 'late';
+type AttendanceStatus = 'present' | 'absent' | 'late' | 'excused';
 
 interface AttendanceRecord {
   studentId: string;
@@ -199,6 +199,9 @@ export default function AttendancePage() {
               <span className="flex items-center gap-1.5 text-sm text-amber-700 bg-amber-50 px-3 py-1 rounded-full">
                 <Clock className="w-3.5 h-3.5" /> {statusCounts.late || 0} {t('common.late')}
               </span>
+              <span className="flex items-center gap-1.5 text-sm text-violet-700 bg-violet-50 px-3 py-1 rounded-full">
+                <CalendarOff className="w-3.5 h-3.5" /> {statusCounts.excused || 0} {t('common.excused', 'Excused')}
+              </span>
               {alreadySaved && (
                 <span className="ml-auto text-xs text-gray-400 italic self-center">{t('teacher.previously_saved')}</span>
               )}
@@ -229,7 +232,7 @@ export default function AttendancePage() {
 
                     {/* Status toggle */}
                     <div className="flex gap-1">
-                      {(['present', 'absent', 'late'] as AttendanceStatus[]).map(s => (
+                      {(['present', 'absent', 'late', 'excused'] as AttendanceStatus[]).map(s => (
                         <button
                           key={s}
                           onClick={() => !locked && setStatus(student.id, s)}
@@ -238,11 +241,12 @@ export default function AttendancePage() {
                             rec.status === s
                               ? s === 'present' ? 'bg-green-500 text-white'
                                 : s === 'absent' ? 'bg-red-500 text-white'
-                                : 'bg-amber-500 text-white'
+                                : s === 'late'   ? 'bg-amber-500 text-white'
+                                : 'bg-violet-500 text-white'
                               : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                           } ${locked ? 'cursor-not-allowed opacity-80' : ''}`}
                         >
-                          {t(`common.${s}`)}
+                          {s === 'excused' ? t('common.excused', 'Excused') : t(`common.${s}`)}
                         </button>
                       ))}
                     </div>

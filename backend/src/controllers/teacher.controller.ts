@@ -5,7 +5,12 @@ import type { AuthRequest } from '../middleware/auth';
 import { toCC } from '../utils/transform';
 import { notify, notifyMany } from '../utils/notify';
 import { subjectAllowedForClass } from '../utils/curriculum';
-import { isAttendanceLocked } from '../utils/attendance';
+import {
+  isAttendanceLocked,
+  shouldNotifyAttendanceChange,
+  buildAttendanceNotificationCopy,
+  type AttendanceWriteStatus,
+} from '../utils/attendance';
 // Elevated client for STORAGE-only operations — see chat.controller.ts
 // for the rationale.
 import { adminDb } from '../utils/db';
@@ -424,7 +429,7 @@ export async function markAttendance(req: AuthRequest, res: Response): Promise<v
   const { classId, date, records } = req.body as {
     classId: string;
     date: string; // YYYY-MM-DD
-    records: { studentId: string; status: 'present' | 'absent' | 'late'; notes?: string }[];
+    records: { studentId: string; status: AttendanceWriteStatus; notes?: string }[];
   };
 
   if (!classId || !date || !Array.isArray(records) || records.length === 0) {
@@ -442,6 +447,22 @@ export async function markAttendance(req: AuthRequest, res: Response): Promise<v
   const { data: teacher } = await req.db!.from('teachers').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
   if (!teacher) { res.status(404).json({ error: 'Teacher not found' }); return; }
 
+  // Read the existing rows for this (class, date) so we can decide which
+  // status transitions are NEW. Re-saving the same status mustn't trigger
+  // a duplicate parent notification.
+  const studentIds = records.map(r => r.studentId);
+  const { data: existingRows } = await req.db!
+    .from('attendance')
+    .select('student_id, status')
+    .eq('school_id', schoolId)
+    .eq('class_id', classId)
+    .eq('date', date)
+    .in('student_id', studentIds);
+  const existingByStudent = new Map<string, AttendanceWriteStatus>();
+  for (const r of (existingRows || []) as { student_id: string; status: AttendanceWriteStatus }[]) {
+    existingByStudent.set(r.student_id, r.status);
+  }
+
   // Upsert all records for this class+date
   const rows = records.map(r => ({
     school_id: schoolId,
@@ -457,14 +478,18 @@ export async function markAttendance(req: AuthRequest, res: Response): Promise<v
     .upsert(rows, { onConflict: 'student_id,class_id,date' });
   if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
-  // Notify parents of absent/late students
-  const absentOrLate = records.filter(r => r.status !== 'present');
-  if (absentOrLate.length > 0) {
-    const absentIds = absentOrLate.map(r => r.studentId);
+  // Notify parents only for genuine transitions INTO absent or late. This
+  // skips re-saves where the status didn't change and skips returns to
+  // present (no surprise to the parent).
+  const transitions = records.filter(r =>
+    shouldNotifyAttendanceChange(existingByStudent.get(r.studentId) ?? null, r.status),
+  );
+  if (transitions.length > 0) {
+    const transIds = transitions.map(r => r.studentId);
     const { data: students } = await req.db!
       .from('students')
       .select('id, full_name, parents(user_id)')
-      .in('id', absentIds)
+      .in('id', transIds)
       .eq('school_id', schoolId);
 
     if (students) {
@@ -472,15 +497,16 @@ export async function markAttendance(req: AuthRequest, res: Response): Promise<v
         const parentUserIds = Array.isArray(s.parents)
           ? s.parents.map((p: any) => p.user_id)
           : s.parents?.user_id ? [s.parents.user_id] : [];
-        const record = absentOrLate.find(r => r.studentId === s.id);
-        const isLate = record?.status === 'late';
+        const record = transitions.find(r => r.studentId === s.id);
+        if (!record) return [];
+        const { title, message } = buildAttendanceNotificationCopy(
+          s.full_name, record.status, date, record.notes,
+        );
         return parentUserIds.map((uid: string) => ({
           school_id: schoolId,
           user_id: uid,
-          title: isLate ? `${s.full_name} Arrived Late` : `${s.full_name} Marked Absent`,
-          message: isLate
-            ? `${s.full_name} was marked late for class on ${date}.`
-            : `${s.full_name} was marked absent from class on ${date}.${record?.notes ? ' Note: ' + record.notes : ''}`,
+          title,
+          message,
           notification_type: 'general',
         }));
       });
