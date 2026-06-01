@@ -378,27 +378,49 @@ export async function backfillSchoolEnrollments(
       });
     }
   }
-  result.liveRowsInserted = liveInserts.length;
-
   // Commit phase. Live students only — archived rows are append-only and
   // their display already falls back to the legacy classes_attended JSONB
   // in the UI.
-  if (!dryRun) {
-    if (liveInserts.length > 0) {
-      // Batch in chunks to keep payloads bounded.
-      const CHUNK = 500;
-      for (let i = 0; i < liveInserts.length; i += CHUNK) {
-        const slice = liveInserts.slice(i, i + CHUNK);
-        const { error } = await supabase.from('student_enrollments').insert(slice);
-        if (error) {
-          logger.error('[backfill] insert failed', { schoolId, error: error.message, count: slice.length });
-          result.issues.push({
-            studentId: '', studentName: '',
-            kind: 'insert_failed',
-            details: `Batch insert failed: ${error.message}`,
-          });
-        }
+  //
+  // Race-safe insert. Between the initial "students with no rows" SELECT
+  // and this commit, other flows can insert a row for one of those
+  // students (createStudent, class change, etc. → openEnrollmentForCurrentYear).
+  // A plain INSERT would atomically fail the whole batch on the first
+  // collision and lose the other 70+ rows. Use `ON CONFLICT DO NOTHING`
+  // (Supabase: upsert + ignoreDuplicates) so colliding rows are skipped
+  // silently and the rest commit. The returned rows reflect ONLY newly
+  // inserted rows, so we count those for an accurate report.
+  if (dryRun) {
+    result.liveRowsInserted = liveInserts.length;
+  } else if (liveInserts.length > 0) {
+    const CHUNK = 500;
+    let inserted = 0;
+    for (let i = 0; i < liveInserts.length; i += CHUNK) {
+      const slice = liveInserts.slice(i, i + CHUNK);
+      const { data, error } = await supabase
+        .from('student_enrollments')
+        .upsert(slice, { onConflict: 'student_id,academic_year', ignoreDuplicates: true })
+        .select('id');
+      if (error) {
+        logger.error('[backfill] insert failed', { schoolId, error: error.message, count: slice.length });
+        result.issues.push({
+          studentId: '', studentName: '',
+          kind: 'insert_failed',
+          details: `Batch insert failed: ${error.message}`,
+        });
+      } else {
+        inserted += data?.length ?? 0;
       }
+    }
+    result.liveRowsInserted = inserted;
+    // Flag when concurrent inserts cost us rows so the operator can re-run.
+    const skipped = liveInserts.length - inserted;
+    if (skipped > 0 && result.issues.every(i => i.kind !== 'insert_failed')) {
+      result.issues.push({
+        studentId: '', studentName: '',
+        kind: 'insert_failed',
+        details: `${skipped} planned row(s) collided with concurrent inserts and were skipped. Re-run to retry the affected students.`,
+      });
     }
   }
 
