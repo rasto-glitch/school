@@ -8,6 +8,7 @@ import { Search, User, History } from 'lucide-react';
 // import { Send } from 'lucide-react';
 // import TransferWizard from '../../components/admin/TransferWizard';
 import { adminApi } from '../../services/api';
+import { useAuthStore } from '../../store/authStore';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
 import Select from '../../components/common/Select';
@@ -45,6 +46,7 @@ interface ArchivedSnapshot {
 export default function StudentBriefPage() {
   const { t } = useTranslation();
   const [searchParams] = useSearchParams();
+  const archiveEnabled = useAuthStore(s => s.school?.features?.archive === true);
   const [students, setStudents] = useState<Student[]>([]);
   const [selectedStudentId, setSelectedStudentId] = useState(searchParams.get('id') || '');
   const [selectedSubject, setSelectedSubject] = useState('');
@@ -293,14 +295,16 @@ export default function StudentBriefPage() {
                   </div>
                 </div>
               </div>
-              <div className="mt-3 pt-3 border-t border-gray-100">
-                <Link
-                  to={`/admin/students/${selectedStudentId}/attendance-history`}
-                  className="inline-flex items-center gap-1.5 text-sm text-primary-600 font-medium hover:underline"
-                >
-                  {t('attendance_history.view_link', 'View attendance history')}
-                </Link>
-              </div>
+              {archiveEnabled && (
+                <div className="mt-3 pt-3 border-t border-gray-100">
+                  <Link
+                    to={`/admin/students/${selectedStudentId}/attendance-history`}
+                    className="inline-flex items-center gap-1.5 text-sm text-primary-600 font-medium hover:underline"
+                  >
+                    {t('attendance_history.view_link', 'View attendance history')}
+                  </Link>
+                </div>
+              )}
             </Card>
 
             {previousEnrollment && (

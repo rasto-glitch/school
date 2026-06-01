@@ -72,13 +72,6 @@ function attendanceRate(t: AttendanceTotals): number | null {
   return Math.round(((t.present + t.late) / total) * 1000) / 10;
 }
 
-function ymd(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-
 function monthLabel(year: number, month: number, locale: string): string {
   return new Date(year, month, 1).toLocaleDateString(locale, { month: 'long', year: 'numeric' });
 }
