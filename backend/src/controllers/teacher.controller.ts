@@ -5,6 +5,7 @@ import type { AuthRequest } from '../middleware/auth';
 import { toCC } from '../utils/transform';
 import { notify, notifyMany } from '../utils/notify';
 import { subjectAllowedForClass } from '../utils/curriculum';
+import { isAttendanceLocked } from '../utils/attendance';
 // Elevated client for STORAGE-only operations — see chat.controller.ts
 // for the rationale.
 import { adminDb } from '../utils/db';
@@ -428,6 +429,14 @@ export async function markAttendance(req: AuthRequest, res: Response): Promise<v
 
   if (!classId || !date || !Array.isArray(records) || records.length === 0) {
     res.status(400).json({ error: 'classId, date, and records are required' }); return;
+  }
+
+  // Phase A — daily lock. At midnight in the school's timezone, the day's
+  // attendance freezes for teachers. Only supervisors can correct past days
+  // (via supervisor.create/updateAttendanceRecord, which audit-log the override).
+  if (await isAttendanceLocked(schoolId, date)) {
+    res.status(403).json({ error: 'This day’s attendance is locked. Ask a supervisor to make any changes.' });
+    return;
   }
 
   const { data: teacher } = await req.db!.from('teachers').select('id').eq('user_id', userId).eq('school_id', schoolId).single();

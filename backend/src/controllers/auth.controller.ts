@@ -224,7 +224,7 @@ export async function login(req: Request, res: Response): Promise<void> {
   const safeAbbrev = abbreviation.replace(/[\\%_]/g, '\\$&');
   const { data: school, error: schoolErr } = await supabase
     .from('schools')
-    .select('id, name, slug, logo_url, primary_color, secondary_color, features, features_version')
+    .select('id, name, slug, logo_url, primary_color, secondary_color, features, features_version, timezone')
     .ilike('abbreviation', safeAbbrev)
     .eq('is_active', true)
     .single();
@@ -295,6 +295,7 @@ export async function login(req: Request, res: Response): Promise<void> {
       primaryColor: school.primary_color,
       secondaryColor: school.secondary_color,
       features: school.features ?? {},
+      timezone: school.timezone || 'Asia/Baghdad',
     },
   });
 

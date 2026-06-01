@@ -293,6 +293,14 @@ export default function StudentBriefPage() {
                   </div>
                 </div>
               </div>
+              <div className="mt-3 pt-3 border-t border-gray-100">
+                <Link
+                  to={`/admin/students/${selectedStudentId}/attendance-history`}
+                  className="inline-flex items-center gap-1.5 text-sm text-primary-600 font-medium hover:underline"
+                >
+                  {t('attendance_history.view_link', 'View attendance history')}
+                </Link>
+              </div>
             </Card>
 
             {previousEnrollment && (

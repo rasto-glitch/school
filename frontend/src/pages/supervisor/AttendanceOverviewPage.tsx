@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { ChevronLeft, ChevronRight, CheckCircle2, XCircle, Clock } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CheckCircle2, XCircle, Clock, Lock } from 'lucide-react';
 import { supervisorApi } from '../../services/api';
+import { useAuthStore } from '../../store/authStore';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
 import Select from '../../components/common/Select';
@@ -12,7 +13,12 @@ import type { Class, Attendance } from '../../types';
 
 type AttendanceStatus = 'present' | 'absent' | 'late';
 
-function todayStr() { return new Date().toISOString().split('T')[0]; }
+function todayInTz(tz: string | undefined): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz || 'Asia/Baghdad',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date());
+}
 function offsetDate(base: string, days: number) {
   const d = new Date(base); d.setDate(d.getDate() + days); return d.toISOString().split('T')[0];
 }
@@ -29,10 +35,12 @@ const STATUS_ICONS: Record<AttendanceStatus, React.ElementType> = {
 export default function AttendanceOverviewPage() {
   const { t } = useTranslation();
   const [searchParams] = useSearchParams();
+  const tz = useAuthStore(s => s.school?.timezone);
+  const today = todayInTz(tz);
   const [classes, setClasses] = useState<Class[]>([]);
   const [records, setRecords] = useState<Attendance[]>([]);
   const [selectedClass, setSelectedClass] = useState(searchParams.get('classId') || '');
-  const [date, setDate] = useState(searchParams.get('date') || todayStr());
+  const [date, setDate] = useState(searchParams.get('date') || today);
   const [loading, setLoading] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editStatus, setEditStatus] = useState<AttendanceStatus>('present');
@@ -54,7 +62,18 @@ export default function AttendanceOverviewPage() {
       .finally(() => setLoading(false));
   }, [selectedClass, date]);
 
+  // Past days are locked for teachers. Supervisor edits still go through,
+  // but the backend writes an audit-log entry — confirm before saving so
+  // it's clear this is an override.
+  const locked = date < today;
+
   const saveEdit = async (id: string) => {
+    if (locked) {
+      const ok = window.confirm(
+        t('supervisor.attendance_override_confirm', 'This day is locked. Your change will be recorded in the audit log. Continue?'),
+      );
+      if (!ok) return;
+    }
     try {
       await supervisorApi.updateAttendanceRecord(id, editStatus);
       toast.success(t('supervisor.attendance_updated'));
@@ -88,13 +107,18 @@ export default function AttendanceOverviewPage() {
                 <button onClick={() => setDate(d => offsetDate(d, -1))} className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-50">
                   <ChevronLeft className="w-4 h-4 text-gray-500" />
                 </button>
-                <input type="date" value={date} max={todayStr()} onChange={e => setDate(e.target.value)}
+                <input type="date" value={date} max={today} onChange={e => setDate(e.target.value)}
                   className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
-                <button onClick={() => setDate(d => offsetDate(d, 1))} disabled={date >= todayStr()} className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-40">
+                <button onClick={() => setDate(d => offsetDate(d, 1))} disabled={date >= today} className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-40">
                   <ChevronRight className="w-4 h-4 text-gray-500" />
                 </button>
               </div>
             </div>
+            {locked && (
+              <span className="ml-auto flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 bg-amber-50 text-amber-700 rounded-full">
+                <Lock className="w-3.5 h-3.5" /> {t('supervisor.attendance_locked_badge', 'Locked · edits audit-logged')}
+              </span>
+            )}
           </div>
           {records.length > 0 && (
             <div className="flex gap-3 mt-4 pt-4 border-t border-gray-100">

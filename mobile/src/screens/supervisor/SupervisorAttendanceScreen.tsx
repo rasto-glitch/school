@@ -6,8 +6,9 @@ import {
 import { CardListSkeleton } from '../../components/Skeleton';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
-import { ChevronLeft, ChevronRight, CheckCircle, XCircle, Clock, Edit2, CalendarOff } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, CheckCircle, XCircle, Clock, Edit2, CalendarOff, Lock } from 'lucide-react-native';
 import { supervisorApi } from '../../services/api';
+import { useAuthStore } from '../../store/authStore';
 import { useColors, useIsDark } from '../../store/themeStore';
 import { spacing, radius, font, shadow } from '../../theme';
 
@@ -38,6 +39,13 @@ const STATUS_ICON: Record<AttendanceStatus, any> = {
   excused: CalendarOff,
 };
 
+function todayInTz(tz: string | undefined): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz || 'Asia/Baghdad',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date());
+}
+
 export default function SupervisorAttendanceScreen() {
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
@@ -46,10 +54,11 @@ export default function SupervisorAttendanceScreen() {
   const colors = useColors();
   const isDark = useIsDark();
   const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
+  const tz = useAuthStore(s => s.school?.timezone);
 
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [selectedClass, setSelectedClass] = useState<ClassItem | null>(null);
-  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(() => todayInTz(tz));
   const [calViewDate, setCalViewDate] = useState(() => { const d = new Date(); d.setDate(1); return d; });
   const [showCal, setShowCal] = useState(false);
 
@@ -99,12 +108,12 @@ export default function SupervisorAttendanceScreen() {
     setNewNotes(record?.notes ?? '');
   };
 
-  const handleSave = async () => {
+  // Past days are locked; supervisor edits go through but are audit-logged.
+  const today = todayInTz(tz);
+  const locked = selectedDate < today;
+
+  const performSave = async () => {
     if (!modalStudent || !selectedClass) return;
-    if (newStatus === 'excused' && !newNotes.trim()) {
-      Alert.alert(t('supervisor.reason_required_title'), t('supervisor.reason_required_body'));
-      return;
-    }
     setSaving(true);
     try {
       if (modalRecord) {
@@ -120,6 +129,26 @@ export default function SupervisorAttendanceScreen() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleSave = async () => {
+    if (!modalStudent || !selectedClass) return;
+    if (newStatus === 'excused' && !newNotes.trim()) {
+      Alert.alert(t('supervisor.reason_required_title'), t('supervisor.reason_required_body'));
+      return;
+    }
+    if (locked) {
+      Alert.alert(
+        t('supervisor.attendance_override_title', 'Override locked day?'),
+        t('supervisor.attendance_override_body', 'This day is locked. Your change will be recorded in the audit log.'),
+        [
+          { text: t('common.cancel'), style: 'cancel' },
+          { text: t('common.confirm', 'Continue'), onPress: () => { void performSave(); } },
+        ],
+      );
+      return;
+    }
+    void performSave();
   };
 
   const present = records.filter(r => r.status === 'present').length;
@@ -172,6 +201,13 @@ export default function SupervisorAttendanceScreen() {
         <Text style={styles.dateBtnText}>{displayDate}</Text>
         <ChevronRight size={14} color={colors.textMuted} style={{ transform: [{ rotate: showCal ? '90deg' : '0deg' }] }} />
       </TouchableOpacity>
+
+      {locked && (
+        <View style={styles.lockedBanner}>
+          <Lock size={14} color="#B45309" />
+          <Text style={styles.lockedBannerText}>{t('supervisor.attendance_locked_badge', 'Locked · edits audit-logged')}</Text>
+        </View>
+      )}
 
       {showCal && (
         <View style={styles.calendar}>
@@ -392,4 +428,6 @@ const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').u
   saveBtnText: { fontSize: font.md, fontWeight: '700', color: '#fff' },
   cancelBtn: { padding: spacing.sm, alignItems: 'center' },
   cancelBtnText: { fontSize: font.sm, color: colors.textMuted },
+  lockedBanner: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: '#FEF3C7', borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: 8, marginBottom: spacing.md },
+  lockedBannerText: { flex: 1, fontSize: font.xs, color: '#B45309', fontWeight: '700' },
 });

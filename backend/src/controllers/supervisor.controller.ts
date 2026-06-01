@@ -2,6 +2,8 @@ import { safeDbErrorMessage, safeDbErrorStatus } from '../utils/dbErrors';
 import { Response } from 'express';
 import type { AuthRequest } from '../middleware/auth';
 import { toCC } from '../utils/transform';
+import { logAudit } from '../utils/audit';
+import { isAttendanceLocked, refreshAttendanceTotalsForDate } from '../utils/attendance';
 
 // ---- CLASSES (all classes in the school) ----
 export async function getClasses(req: AuthRequest, res: Response): Promise<void> {
@@ -205,6 +207,10 @@ export async function createAttendanceRecord(req: AuthRequest, res: Response): P
     return;
   }
 
+  // Phase A — daily lock. Supervisors are allowed to create attendance for
+  // past (locked) days, but every override gets an audit-log entry.
+  const locked = await isAttendanceLocked(schoolId, date);
+
   const { data, error } = await req.db!
     .from('attendance')
     .insert({
@@ -219,6 +225,18 @@ export async function createAttendanceRecord(req: AuthRequest, res: Response): P
     .select()
     .single();
   if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+
+  if (locked) {
+    await logAudit({
+      req, entityType: 'attendance', entityId: String((data as { id: string }).id),
+      action: 'create', after: data as Record<string, unknown>,
+      label: `${date} · ${status}`, reason: 'Attendance override (locked day) — created',
+    });
+    // Phase B — if the override falls inside a closed academic year and
+    // the school keeps history (archive on), refresh that year's totals.
+    await refreshAttendanceTotalsForDate(schoolId, studentId, date);
+  }
+
   res.json(toCC(data));
 }
 
@@ -270,6 +288,19 @@ export async function updateAttendanceRecord(req: AuthRequest, res: Response): P
     res.status(400).json({ error: 'Valid status (present, absent, late, excused) is required' }); return;
   }
 
+  // Phase A — daily lock. Read the row's date first so we can decide
+  // whether this edit is an override of a locked day (audit-logged) or a
+  // normal same-day correction.
+  const { data: before } = await req.db!
+    .from('attendance')
+    .select('*')
+    .eq('id', id)
+    .eq('school_id', schoolId)
+    .single();
+  if (!before) { res.status(404).json({ error: 'Attendance record not found' }); return; }
+
+  const locked = await isAttendanceLocked(schoolId, (before as { date: string }).date);
+
   const { data, error } = await req.db!
     .from('attendance')
     .update({ status, notes: notes || null })
@@ -278,5 +309,24 @@ export async function updateAttendanceRecord(req: AuthRequest, res: Response): P
     .select()
     .single();
   if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+
+  if (locked) {
+    await logAudit({
+      req, entityType: 'attendance', entityId: String(id),
+      action: 'update',
+      before: before as Record<string, unknown>,
+      after: data as Record<string, unknown>,
+      label: `${(before as { date: string }).date} · ${(before as { status: string }).status} → ${status}`,
+      reason: 'Attendance override (locked day) — edited',
+    });
+    // Phase B — refresh the per-year frozen totals if archive is on and
+    // this date sits within a closed enrollment row.
+    await refreshAttendanceTotalsForDate(
+      schoolId,
+      String((before as { student_id: string }).student_id),
+      String((before as { date: string }).date),
+    );
+  }
+
   res.json(toCC(data));
 }

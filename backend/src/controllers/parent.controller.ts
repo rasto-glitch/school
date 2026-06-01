@@ -7,10 +7,14 @@ import { parseCursorParams, buildPage } from '../utils/pagination';
 import { emitToAdmins } from '../utils/notify';
 import { decorateAnnouncements } from './admin.controller';
 import { getLocksForStudents, isFeatureLocked } from '../utils/locks';
+import { hasArchiveFeature } from '../utils/employeeArchive';
+import { buildAttendanceHistory, loadAttendanceDaysForYear } from '../utils/attendanceHistory';
 
 // Module-level helper — receives the per-request db client from the caller
 // so it runs under the same RLS context as the rest of the route.
-async function getParentAndChildren(db: SupabaseClient, userId: string, schoolId: string) {
+async function getParentAndChildren(
+  db: SupabaseClient, userId: string, schoolId: string,
+): Promise<{ parent: { id: string } | null; studentIds: string[] }> {
   const { data: parent } = await db.from('parents').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
   if (!parent) return { parent: null, studentIds: [] };
   const { data: students } = await db.from('students').select('id').eq('parent_id', parent.id).eq('school_id', schoolId);
@@ -51,6 +55,44 @@ export async function getArchivedChildren(req: AuthRequest, res: Response): Prom
     .order('created_at', { ascending: false });
   if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data ?? []));
+}
+
+// Phase C — per-child attendance history for parents. Archive-gated;
+// parents of schools without the archive feature don't get a history view.
+// Ownership is enforced by checking the requested student belongs to the
+// authenticated parent's children list.
+export async function getChildAttendanceHistory(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId, userId } = req.user!;
+  const { id } = req.params;
+  if (!(await hasArchiveFeature(schoolId))) {
+    res.status(403).json({ error: 'Archive feature is not enabled for this school' });
+    return;
+  }
+  const { studentIds } = await getParentAndChildren(req.db!, userId, schoolId);
+  if (!studentIds.includes(String(id))) { res.status(404).json({ error: 'Child not found' }); return; }
+  const { data: student } = await req.db!
+    .from('students')
+    .select('id, full_name, is_graduated, class_id, classes(name)')
+    .eq('id', id).eq('school_id', schoolId).maybeSingle();
+  if (!student) { res.status(404).json({ error: 'Child not found' }); return; }
+  const history = await buildAttendanceHistory(schoolId, String(id));
+  res.json({ student: toCC(student), ...history });
+}
+
+export async function getChildAttendanceDays(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId, userId } = req.user!;
+  const { id } = req.params;
+  const year = String((req.query as Record<string, string>).year || '');
+  if (!year) { res.status(400).json({ error: 'year is required' }); return; }
+  if (!(await hasArchiveFeature(schoolId))) {
+    res.status(403).json({ error: 'Archive feature is not enabled for this school' });
+    return;
+  }
+  const { studentIds } = await getParentAndChildren(req.db!, userId, schoolId);
+  if (!studentIds.includes(String(id))) { res.status(404).json({ error: 'Child not found' }); return; }
+  const result = await loadAttendanceDaysForYear(schoolId, String(id), year);
+  if (!result) { res.status(404).json({ error: 'No enrollment for that academic year' }); return; }
+  res.json(result);
 }
 
 export async function getArchivedChild(req: AuthRequest, res: Response): Promise<void> {

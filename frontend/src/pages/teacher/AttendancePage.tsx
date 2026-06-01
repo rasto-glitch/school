@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'react-toastify';
-import { CheckCircle2, XCircle, Clock, Save, ChevronLeft, ChevronRight } from 'lucide-react';
+import { CheckCircle2, XCircle, Clock, Save, ChevronLeft, ChevronRight, Lock } from 'lucide-react';
 import { teacherApi } from '../../services/api';
+import { useAuthStore } from '../../store/authStore';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
 import Select from '../../components/common/Select';
@@ -18,8 +19,13 @@ interface AttendanceRecord {
   notes: string;
 }
 
-function todayStr() {
-  return new Date().toISOString().split('T')[0];
+// Today's date in the school's timezone (YYYY-MM-DD). Falls back to
+// Asia/Baghdad for users whose cached payload predates the timezone field.
+function todayInTz(tz: string | undefined): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz || 'Asia/Baghdad',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date());
 }
 
 function offsetDate(base: string, days: number) {
@@ -30,10 +36,12 @@ function offsetDate(base: string, days: number) {
 
 export default function AttendancePage() {
   const { t } = useTranslation();
+  const tz = useAuthStore(s => s.school?.timezone);
+  const today = todayInTz(tz);
   const [classes, setClasses] = useState<Class[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [selectedClass, setSelectedClass] = useState('');
-  const [date, setDate] = useState(todayStr());
+  const [date, setDate] = useState(today);
   const [records, setRecords] = useState<Record<string, AttendanceRecord>>({});
   const [loadingStudents, setLoadingStudents] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -116,6 +124,11 @@ export default function AttendancePage() {
     {} as Record<string, number>
   );
 
+  // Past days are locked at midnight in the school's timezone (backend is
+  // source of truth — this is just UI guidance). Teachers must ask a
+  // supervisor to correct any record on a locked day.
+  const locked = date < today;
+
   return (
     <PageLayout title={t('teacher.attendance_title')} subtitle={t('teacher.attendance_subtitle')}>
       <div className="space-y-4 max-w-3xl">
@@ -143,13 +156,13 @@ export default function AttendancePage() {
                   <input
                     type="date"
                     value={date}
-                    max={todayStr()}
+                    max={today}
                     onChange={e => setDate(e.target.value)}
                     className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                   />
                   <button
                     onClick={() => setDate(d => offsetDate(d, 1))}
-                    disabled={date >= todayStr()}
+                    disabled={date >= today}
                     className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors disabled:opacity-40"
                   >
                     <ChevronRight className="w-4 h-4 text-gray-500" />
@@ -157,7 +170,7 @@ export default function AttendancePage() {
                 </div>
               </div>
             </div>
-            {students.length > 0 && (
+            {students.length > 0 && !locked && (
               <div className="flex gap-2 ml-auto">
                 <button onClick={() => markAll('present')} className="text-xs px-3 py-1.5 bg-green-50 text-green-700 hover:bg-green-100 rounded-lg font-medium transition-colors">
                   {t('teacher.all_present')}
@@ -166,6 +179,11 @@ export default function AttendancePage() {
                   {t('teacher.all_absent')}
                 </button>
               </div>
+            )}
+            {locked && (
+              <span className="ml-auto flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 bg-gray-100 text-gray-600 rounded-full">
+                <Lock className="w-3.5 h-3.5" /> {t('teacher.attendance_locked', 'Locked')}
+              </span>
             )}
           </div>
 
@@ -214,14 +232,15 @@ export default function AttendancePage() {
                       {(['present', 'absent', 'late'] as AttendanceStatus[]).map(s => (
                         <button
                           key={s}
-                          onClick={() => setStatus(student.id, s)}
+                          onClick={() => !locked && setStatus(student.id, s)}
+                          disabled={locked}
                           className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors ${
                             rec.status === s
                               ? s === 'present' ? 'bg-green-500 text-white'
                                 : s === 'absent' ? 'bg-red-500 text-white'
                                 : 'bg-amber-500 text-white'
                               : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                          }`}
+                          } ${locked ? 'cursor-not-allowed opacity-80' : ''}`}
                         >
                           {t(`common.${s}`)}
                         </button>
@@ -234,8 +253,9 @@ export default function AttendancePage() {
                         type="text"
                         value={rec.notes}
                         onChange={e => setNotes(student.id, e.target.value)}
+                        disabled={locked}
                         placeholder={t('teacher.note_optional')}
-                        className="w-36 text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        className="w-36 text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:bg-gray-50 disabled:text-gray-500"
                       />
                     )}
                   </div>
@@ -245,10 +265,16 @@ export default function AttendancePage() {
           </Card>
         )}
 
-        {students.length > 0 && (
+        {students.length > 0 && !locked && (
           <Button fullWidth loading={saving} icon={<Save className="w-4 h-4" />} onClick={onSave}>
             {t('teacher.save_attendance')}
           </Button>
+        )}
+        {students.length > 0 && locked && (
+          <div className="flex items-center justify-center gap-2 py-3 px-4 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-600">
+            <Lock className="w-4 h-4" />
+            <span>{t('teacher.attendance_locked_hint', 'This day is locked. Ask a supervisor to make any changes.')}</span>
+          </div>
         )}
       </div>
     </PageLayout>

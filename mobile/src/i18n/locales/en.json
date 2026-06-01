@@ -87,6 +87,7 @@
     "search": "Search",
     "save": "Save",
     "cancel": "Cancel",
+    "confirm": "Continue",
     "back": "Back",
     "loading": "Loading...",
     "no_data": "No data available",
@@ -537,7 +538,9 @@
     "att_late": "Late",
     "save_attendance": "Save Attendance",
     "attendance_saved": "Attendance saved successfully.",
-    "attendance_save_failed": "Could not save attendance."
+    "attendance_save_failed": "Could not save attendance.",
+    "attendance_locked": "Locked",
+    "attendance_locked_hint": "This day is locked. Ask a supervisor to make any changes."
   },
   "detail": {
     "due_date": "Due date",
@@ -657,6 +660,9 @@
     "reason_required_title": "Reason required",
     "reason_required_body": "Please enter the reason for excused absence.",
     "attendance_save_failed": "Could not save attendance record.",
+    "attendance_locked_badge": "Locked · edits audit-logged",
+    "attendance_override_title": "Override locked day?",
+    "attendance_override_body": "This day is locked. Your change will be recorded in the audit log.",
     "type_student_name": "Type student name…",
     "search_above": "Search for a student above",
     "n_records": "{{count}} records",

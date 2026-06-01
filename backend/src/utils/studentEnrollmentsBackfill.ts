@@ -232,6 +232,9 @@ function buildHistory(input: StudentBuildInput): BuildResult {
       status,
       startedOn: academicYearStartDate(cur.year),
       endedOn,
+      // Backfilled rows have no frozen totals — they were built from
+      // grade-level signals, not from a real attendance count.
+      attendanceTotals: null,
     });
   }
 
@@ -259,6 +262,7 @@ function buildHistory(input: StudentBuildInput): BuildResult {
           status: 'enrolled',
           startedOn: academicYearStartDate(currentYear),
           endedOn: null,
+          attendanceTotals: null,
         });
       }
     }

@@ -38,6 +38,7 @@ import TeacherNotificationsPage from './pages/teacher/TeacherNotificationsPage';
 // Admin
 import AdminDashboard from './pages/admin/AdminDashboard';
 import StudentsManagement from './pages/admin/StudentsManagement';
+import StudentAttendanceHistoryPage from './pages/admin/StudentAttendanceHistoryPage';
 import EmployeesManagement from './pages/admin/EmployeesManagement';
 import EmployeeProfilePage from './pages/admin/EmployeeProfilePage';
 import ArchivedEmployeeProfilePage from './pages/admin/ArchivedEmployeeProfilePage';
@@ -101,6 +102,7 @@ import SupervisorNotificationsPage from './pages/supervisor/SupervisorNotificati
 // Parent Grades
 import GradesPage from './pages/parent/GradesPage';
 import ParentArchivePage from './pages/parent/ParentArchivePage';
+import ParentAttendanceHistoryPage from './pages/parent/ParentAttendanceHistoryPage';
 
 // Teacher Attendance
 import AttendancePage from './pages/teacher/AttendancePage';
@@ -173,6 +175,7 @@ export default function App() {
         <Route path="/parent/tuition" element={<ProtectedRoute allowedRoles={['parent']}><ParentTuitionPage /></ProtectedRoute>} />
         <Route path="/parent/grades" element={<ProtectedRoute allowedRoles={['parent']}><GradesPage /></ProtectedRoute>} />
         <Route path="/parent/archive" element={<ProtectedRoute allowedRoles={['parent']}><ParentArchivePage /></ProtectedRoute>} />
+        <Route path="/parent/attendance" element={<ProtectedRoute allowedRoles={['parent']}><ParentAttendanceHistoryPage /></ProtectedRoute>} />
         <Route path="/parent/schedule" element={<ProtectedRoute allowedRoles={['parent']}><ParentSchedulePage /></ProtectedRoute>} />
         <Route path="/parent/profile" element={<ProtectedRoute allowedRoles={['parent']}><ProfilePage /></ProtectedRoute>} />
 
@@ -195,6 +198,7 @@ export default function App() {
         <Route path="/admin/list/teachers" element={<ProtectedRoute allowedRoles={['admin']}><AdminTeachersListPage /></ProtectedRoute>} />
         <Route path="/admin/list/drivers" element={<ProtectedRoute allowedRoles={['admin']}><AdminDriversListPage /></ProtectedRoute>} />
         <Route path="/admin/students" element={<ProtectedRoute allowedRoles={['admin']}><StudentsManagement /></ProtectedRoute>} />
+        <Route path="/admin/students/:id/attendance-history" element={<ProtectedRoute allowedRoles={['admin']}><StudentAttendanceHistoryPage /></ProtectedRoute>} />
         {/* Archive views moved under Students > Archived. Kept as a redirect so old links still work. */}
         <Route path="/admin/archive" element={<Navigate to="/admin/students?tab=archived" replace />} />
         <Route path="/admin/classes" element={<ProtectedRoute allowedRoles={['admin']}><ClassesPage /></ProtectedRoute>} />

@@ -223,6 +223,7 @@ const navItems: Partial<Record<Role, NavItem[]>> = {
     { to: '/parent/announcements', icon: Megaphone, label: 'Announcements', feature: 'announcements' },
     { to: '/parent/grades', icon: Star, label: 'Grades', feature: 'grades' },
     { to: '/parent/reports', icon: BarChart2, label: 'Reports', feature: 'reports' },
+    { to: '/parent/attendance', icon: ClipboardCheck, label: 'Attendance', feature: 'archive' },
     { to: '/parent/archive', icon: Archive, label: 'Past Records', feature: 'archive' },
     { to: '/parent/bus', icon: MapPin, label: 'Track Bus', feature: 'bus_tracking' },
     { to: '/parent/appointments', icon: Calendar, label: 'Appointments', feature: 'appointments' },

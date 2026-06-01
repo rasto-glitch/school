@@ -104,6 +104,8 @@ export function createRouter(io: SocketServer) {
   router.get('/admin/students/graduated', authenticate, authorize('admin'), (req, res) => admin.getGraduatedStudents(req as AuthRequest, res));
   router.get('/admin/students/:id/brief', authenticate, authorize('admin'), (req, res) => admin.getStudentBrief(req as AuthRequest, res));
   router.get('/admin/students/:id/enrollments', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => admin.getStudentEnrollmentHistory(req as AuthRequest, res));
+  router.get('/admin/students/:id/attendance-history', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => admin.getStudentAttendanceHistory(req as AuthRequest, res));
+  router.get('/admin/students/:id/attendance-history/days', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => admin.getStudentAttendanceDays(req as AuthRequest, res));
   router.post('/admin/students/:id/leave', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => admin.markStudentOnLeave(req as AuthRequest, res));
   router.post('/admin/students/:id/return', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => admin.returnStudentFromLeave(req as AuthRequest, res));
   router.get('/admin/classes/:id/promote-class/preview', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => admin.previewPromoteClass(req as AuthRequest, res));
@@ -360,6 +362,8 @@ export function createRouter(io: SocketServer) {
   router.get('/parent/children', authenticate, authorize('parent'), (req, res) => parent.getChildren(req as AuthRequest, res));
   router.get('/parent/archived-children', authenticate, authorize('parent'), (req, res) => parent.getArchivedChildren(req as AuthRequest, res));
   router.get('/parent/archived-children/:id', authenticate, authorize('parent'), (req, res) => parent.getArchivedChild(req as AuthRequest, res));
+  router.get('/parent/children/:id/attendance-history', authenticate, authorize('parent'), validate({ params: vp.idParam }), (req, res) => parent.getChildAttendanceHistory(req as AuthRequest, res));
+  router.get('/parent/children/:id/attendance-history/days', authenticate, authorize('parent'), validate({ params: vp.idParam }), (req, res) => parent.getChildAttendanceDays(req as AuthRequest, res));
   router.get('/parent/homework', authenticate, authorize('parent'), (req, res) => parent.getHomework(req as AuthRequest, res));
   router.get('/parent/homework/:id', authenticate, authorize('parent'), (req, res) => parent.getHomeworkById(req as AuthRequest, res));
   router.get('/parent/assignments', authenticate, authorize('parent'), (req, res) => parent.getAssignments(req as AuthRequest, res));

@@ -5,8 +5,9 @@ import {
 } from 'react-native';
 import { CardListSkeleton } from '../../components/Skeleton';
 import { useTranslation } from 'react-i18next';
-import { ChevronLeft, ChevronRight, CheckCircle, XCircle, Clock, Save } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight, CheckCircle, XCircle, Clock, Save, Lock } from 'lucide-react-native';
 import { teacherApi } from '../../services/api';
+import { useAuthStore } from '../../store/authStore';
 import { useColors, useIsDark } from '../../store/themeStore';
 import { spacing, radius, font, shadow } from '../../theme';
 
@@ -20,16 +21,24 @@ const STATUS_COLORS: Record<AttStatus, string> = {
   late: '#F59E0B',
 };
 
+function todayInTz(tz: string | undefined): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz || 'Asia/Baghdad',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date());
+}
+
 export default function TeacherAttendanceScreen() {
   const { t } = useTranslation();
   const calDays = t('teacher.weekday_short', { returnObjects: true }) as string[];
   const colors = useColors();
   const isDark = useIsDark();
   const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
+  const tz = useAuthStore(s => s.school?.timezone);
 
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [selectedClass, setSelectedClass] = useState<ClassItem | null>(null);
-  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(() => todayInTz(tz));
   const [showCal, setShowCal] = useState(false);
   const [calViewDate, setCalViewDate] = useState(() => { const d = new Date(); d.setDate(1); return d; });
 
@@ -116,6 +125,10 @@ export default function TeacherAttendanceScreen() {
   const absent = students.filter(s => statuses[s.id] === 'absent').length;
   const late = students.filter(s => statuses[s.id] === 'late').length;
 
+  // Past days are locked at midnight in the school's TZ (backend enforces).
+  const today = todayInTz(tz);
+  const locked = selectedDate < today;
+
   return (
     <ScrollView
       style={styles.container}
@@ -201,7 +214,7 @@ export default function TeacherAttendanceScreen() {
       )}
 
       {/* Mark all buttons */}
-      {students.length > 0 && (
+      {students.length > 0 && !locked && (
         <View style={styles.markAllRow}>
           <TouchableOpacity style={[styles.markAllBtn, { borderColor: colors.success }]} onPress={() => setAllStatus('present')}>
             <CheckCircle size={14} color={colors.success} />
@@ -211,6 +224,14 @@ export default function TeacherAttendanceScreen() {
             <XCircle size={14} color={colors.danger} />
             <Text style={[styles.markAllText, { color: colors.danger }]}>{t('teacher.all_absent')}</Text>
           </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Locked banner — shown in place of save and edit controls */}
+      {locked && students.length > 0 && (
+        <View style={styles.lockedBanner}>
+          <Lock size={14} color={colors.textMuted} />
+          <Text style={styles.lockedBannerText}>{t('teacher.attendance_locked_hint', 'This day is locked. Ask a supervisor to make any changes.')}</Text>
         </View>
       )}
 
@@ -239,8 +260,10 @@ export default function TeacherAttendanceScreen() {
                         styles.statusBtn,
                         { borderColor: color },
                         active && { backgroundColor: color },
+                        locked && { opacity: 0.6 },
                       ]}
-                      onPress={() => setStudentStatus(student.id, s)}
+                      onPress={() => !locked && setStudentStatus(student.id, s)}
+                      disabled={locked}
                     >
                       <Text style={[styles.statusBtnText, active && { color: '#fff' }]}>
                         {t(`teacher.att_${s}`)}
@@ -255,7 +278,7 @@ export default function TeacherAttendanceScreen() {
       )}
 
       {/* Save button */}
-      {students.length > 0 && (
+      {students.length > 0 && !locked && (
         <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={saving}>
           {saving
             ? <ActivityIndicator color="#fff" size="small" />
@@ -317,4 +340,6 @@ const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').u
   statusBtnText: { fontSize: font.xs, fontWeight: '700', color: colors.text },
   saveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, backgroundColor: colors.primary, borderRadius: radius.md, padding: spacing.md, marginTop: spacing.md },
   saveBtnText: { fontSize: font.md, fontWeight: '700', color: '#fff' },
+  lockedBanner: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border },
+  lockedBannerText: { flex: 1, fontSize: font.xs, color: colors.textMuted, fontWeight: '600' },
 });

@@ -149,6 +149,11 @@ export const parentApi = {
   getChildren: () => api.get('/parent/children'),
   getArchivedChildren: () => api.get('/parent/archived-children'),
   getArchivedChild: (id: string) => api.get(`/parent/archived-children/${id}`),
+  // Per-child attendance history (Phase C — archive-gated)
+  getChildAttendanceHistory: (id: string) =>
+    api.get(`/parent/children/${id}/attendance-history`),
+  getChildAttendanceDays: (id: string, year: string) =>
+    api.get(`/parent/children/${id}/attendance-history/days`, { params: { year } }),
   getHomework: (params?: Record<string, string>) => api.get('/parent/homework', { params }),
   getAssignments: (params?: Record<string, string>) => api.get('/parent/assignments', { params }),
   getAnnouncements: (cursor?: string | null) =>
@@ -246,6 +251,11 @@ export const adminApi = {
   getStudentBrief: (id: string) => api.get(`/admin/students/${id}/brief`),
   // Per-year academic progression (migration 030)
   getStudentEnrollments: (id: string) => api.get(`/admin/students/${id}/enrollments`),
+  // Per-student attendance history (Phase C — archive-gated)
+  getStudentAttendanceHistory: (id: string) =>
+    api.get(`/admin/students/${id}/attendance-history`),
+  getStudentAttendanceDays: (id: string, year: string) =>
+    api.get(`/admin/students/${id}/attendance-history/days`, { params: { year } }),
   markStudentOnLeave: (id: string, data?: { endedOn?: string }) => api.post(`/admin/students/${id}/leave`, data ?? {}),
   returnStudentFromLeave: (id: string, data: { classId: string; gradeLevelOverride?: string }) =>
     api.post(`/admin/students/${id}/return`, data),

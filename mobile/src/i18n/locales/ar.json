@@ -87,6 +87,7 @@
     "search": "بحث",
     "save": "حفظ",
     "cancel": "إلغاء",
+    "confirm": "متابعة",
     "back": "رجوع",
     "loading": "جارٍ التحميل...",
     "no_data": "لا توجد بيانات",
@@ -537,7 +538,9 @@
     "att_late": "متأخر",
     "save_attendance": "حفظ الحضور",
     "attendance_saved": "تم حفظ الحضور بنجاح.",
-    "attendance_save_failed": "تعذر حفظ الحضور."
+    "attendance_save_failed": "تعذر حفظ الحضور.",
+    "attendance_locked": "مقفل",
+    "attendance_locked_hint": "هذا اليوم مقفل. يجب على المشرف إجراء أي تغييرات."
   },
   "detail": {
     "due_date": "تاريخ الاستحقاق",
@@ -657,6 +660,9 @@
     "reason_required_title": "السبب مطلوب",
     "reason_required_body": "يرجى إدخال سبب الغياب بعذر.",
     "attendance_save_failed": "تعذر حفظ سجل الحضور.",
+    "attendance_locked_badge": "مقفل · يتم تسجيل التعديلات",
+    "attendance_override_title": "تجاوز اليوم المقفل؟",
+    "attendance_override_body": "هذا اليوم مقفل. سيتم تسجيل التغيير في سجل التدقيق.",
     "type_student_name": "اكتب اسم الطالب…",
     "search_above": "ابحث عن طالب أعلاه",
     "n_records": "{{count}} سجل",

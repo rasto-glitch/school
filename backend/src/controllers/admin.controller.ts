@@ -26,6 +26,7 @@ import { hrColumns, hrSnapshot } from '../utils/employeeHr';
 import { isUrlSafeToFetch } from '../utils/urlSafety';
 import { logger } from '../utils/logger';
 import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from '../utils/passwordPolicy';
+import { buildAttendanceHistory, loadAttendanceDaysForYear } from '../utils/attendanceHistory';
 import {
   openEnrollmentForCurrentYear,
   updateClassForCurrentYear,
@@ -1172,6 +1173,44 @@ export async function getStudentEnrollmentHistory(req: AuthRequest, res: Respons
   const { id } = req.params;
   const rows = await loadEnrollmentHistory(schoolId, String(id));
   res.json({ enrollments: rowsToSnapshot(rows) });
+}
+
+// Phase C — per-student attendance history. Admin-facing. Archive-gated:
+// schools without the archive feature don't accumulate per-year totals,
+// so this view is meaningless for them. Returns 403 in that case.
+export async function getStudentAttendanceHistory(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { id } = req.params;
+  if (!(await hasArchiveFeature(schoolId))) {
+    res.status(403).json({ error: 'Archive feature is not enabled for this school' });
+    return;
+  }
+  const { data: student } = await supabase
+    .from('students')
+    .select('id, full_name, is_graduated, class_id, classes(name)')
+    .eq('id', id).eq('school_id', schoolId).maybeSingle();
+  if (!student) { res.status(404).json({ error: 'Student not found' }); return; }
+  const history = await buildAttendanceHistory(schoolId, String(id));
+  res.json({ student: toCC(student), ...history });
+}
+
+// Day-by-day attendance for one student × one academic year. Read from
+// raw `attendance` rows in the row's date range. Archive-gated.
+export async function getStudentAttendanceDays(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { id } = req.params;
+  const year = String((req.query as Record<string, string>).year || '');
+  if (!year) { res.status(400).json({ error: 'year is required' }); return; }
+  if (!(await hasArchiveFeature(schoolId))) {
+    res.status(403).json({ error: 'Archive feature is not enabled for this school' });
+    return;
+  }
+  const { data: student } = await supabase
+    .from('students').select('id').eq('id', id).eq('school_id', schoolId).maybeSingle();
+  if (!student) { res.status(404).json({ error: 'Student not found' }); return; }
+  const result = await loadAttendanceDaysForYear(schoolId, String(id), year);
+  if (!result) { res.status(404).json({ error: 'No enrollment for that academic year' }); return; }
+  res.json(result);
 }
 
 // ─── ENROLLMENT HISTORY BACKFILL (migration 030, Phase 4) ─────────────────

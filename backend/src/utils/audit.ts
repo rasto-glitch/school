@@ -40,7 +40,9 @@ export type AuditEntityType =
   // Class-level admin actions (e.g. year-end promote wizard, migration 030)
   | 'class'
   // Cross-school student transfer (migration 032, phase A)
-  | 'student_transfer';
+  | 'student_transfer'
+  // Supervisor overrides on locked-day attendance (Phase A daily lock)
+  | 'attendance';
 
 interface LogParams {
   req: AuthRequest;

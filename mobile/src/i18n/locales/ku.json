@@ -87,6 +87,7 @@
     "search": "گەڕان",
     "save": "پاشکەوتکردن",
     "cancel": "هەڵوەشاندنەوە",
+    "confirm": "بەردەوامبوون",
     "back": "گەڕانەوە",
     "loading": "چاوەڕوان بە...",
     "no_data": "زانیارییەک نییە",
@@ -537,7 +538,9 @@
     "att_late": "دواکەوتوو",
     "save_attendance": "پاشەکەوتکردنی ئامادەبوون",
     "attendance_saved": "ئامادەبوون بە سەرکەوتوویی پاشەکەوتکرا.",
-    "attendance_save_failed": "نەتوانرا ئامادەبوون پاشەکەوت بکرێت."
+    "attendance_save_failed": "نەتوانرا ئامادەبوون پاشەکەوت بکرێت.",
+    "attendance_locked": "داخراو",
+    "attendance_locked_hint": "ئەم ڕۆژە داخراوە. داوا لە سەرپەرشتیار بکە بۆ هەر گۆڕانکارییەک."
   },
   "detail": {
     "due_date": "بەرواری کۆتایی",
@@ -657,6 +660,9 @@
     "reason_required_title": "هۆکار پێویستە",
     "reason_required_body": "تکایە هۆکاری نەهاتنی بە بیانوو بنووسە.",
     "attendance_save_failed": "نەتوانرا تۆماری ئامادەبوون پاشەکەوت بکرێت.",
+    "attendance_locked_badge": "داخراو · گۆڕانکارییەکان تۆمار دەکرێن",
+    "attendance_override_title": "تێپەڕاندنی ڕۆژی داخراو؟",
+    "attendance_override_body": "ئەم ڕۆژە داخراوە. گۆڕانکارییەکەت لە لۆگی پشکنیندا تۆمار دەکرێت.",
     "type_student_name": "ناوی خوێندکار بنووسە…",
     "search_above": "لە سەرەوە بەدوای خوێندکاردا بگەڕێ",
     "n_records": "{{count}} تۆمار",

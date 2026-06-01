@@ -9,6 +9,7 @@ export interface School {
   primaryColor: string;
   secondaryColor: string;
   features?: Record<string, boolean>;
+  timezone?: string;
 }
 
 export interface AuthUser {

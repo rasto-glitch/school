@@ -19,6 +19,8 @@
 
 import { adminDb as supabase } from './db';
 import { logger } from './logger';
+import { computeAttendanceTotals, type AttendanceTotals } from './attendance';
+import { hasArchiveFeature } from './employeeArchive';
 
 export type EnrollmentStatus =
   | 'enrolled'
@@ -40,6 +42,10 @@ export interface EnrollmentRow {
   status: EnrollmentStatus;
   startedOn: string;
   endedOn: string | null;
+  // Phase B — frozen per-year attendance summary, set at close time when
+  // the archive feature is on. NULL while the row is open or for
+  // archive-off schools. See migration 035 + utils/attendance.ts.
+  attendanceTotals: AttendanceTotals | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -130,6 +136,7 @@ function rowToCC(r: Record<string, unknown>): EnrollmentRow {
     status: r.status as EnrollmentStatus,
     startedOn: String(r.started_on),
     endedOn: (r.ended_on as string | null) ?? null,
+    attendanceTotals: (r.attendance_totals as AttendanceTotals | null) ?? null,
     createdAt: String(r.created_at),
     updatedAt: String(r.updated_at),
   };
@@ -246,11 +253,20 @@ export async function closeCurrentEnrollment(args: {
   const { schoolId, studentId, status, endedOn } = args;
   try {
     const year = academicYearOf();
+    const ended = endedOn || todayIso();
+    const archiveOn = await hasArchiveFeature(schoolId);
     const existing = await findRow(schoolId, studentId, year);
     if (existing) {
+      // Phase B — freeze per-year attendance totals on archive-on schools.
+      const update: Record<string, unknown> = { status, ended_on: ended };
+      if (archiveOn) {
+        update.attendance_totals = await computeAttendanceTotals(
+          schoolId, studentId, existing.startedOn, ended,
+        );
+      }
       await supabase
         .from('student_enrollments')
-        .update({ status, ended_on: endedOn || todayIso() })
+        .update(update)
         .eq('id', existing.id);
       return;
     }
@@ -268,7 +284,8 @@ export async function closeCurrentEnrollment(args: {
       const cls = await loadClassInfo(schoolId, String(stu.class_id));
       if (cls) { classId = cls.id; className = cls.name; gradeLevel = cls.gradeLevel; }
     }
-    await supabase.from('student_enrollments').insert({
+    const started = todayIso();
+    const synthInsert: Record<string, unknown> = {
       school_id: schoolId,
       student_id: studentId,
       academic_year: year,
@@ -276,9 +293,15 @@ export async function closeCurrentEnrollment(args: {
       class_name_snapshot: className,
       grade_level: gradeLevel,
       status,
-      started_on: todayIso(),
-      ended_on: endedOn || todayIso(),
-    });
+      started_on: started,
+      ended_on: ended,
+    };
+    if (archiveOn) {
+      synthInsert.attendance_totals = await computeAttendanceTotals(
+        schoolId, studentId, started, ended,
+      );
+    }
+    await supabase.from('student_enrollments').insert(synthInsert);
   } catch (e) {
     logger.warn('[student_enrollments] closeCurrentEnrollment failed', {
       studentId, status, err: (e as Error).message,
@@ -412,9 +435,19 @@ export async function closeEnrollmentForYear(args: {
   const { schoolId, studentId, academicYear, status, endedOn } = args;
   const existing = await findRow(schoolId, studentId, academicYear);
   if (!existing) return { ok: false, rowExisted: false, error: 'No enrollment row for this academic year' };
+
+  // Phase B — when archive is on, freeze the per-year attendance totals
+  // onto the closing row so the history survives a future student delete.
+  const update: Record<string, unknown> = { status, ended_on: endedOn };
+  if (await hasArchiveFeature(schoolId)) {
+    update.attendance_totals = await computeAttendanceTotals(
+      schoolId, studentId, existing.startedOn, endedOn,
+    );
+  }
+
   const { error } = await supabase
     .from('student_enrollments')
-    .update({ status, ended_on: endedOn })
+    .update(update)
     .eq('id', existing.id);
   if (error) return { ok: false, rowExisted: true, error: error.message };
   return { ok: true, rowExisted: true };
@@ -536,6 +569,10 @@ export interface EnrollmentSnapshotEntry {
   status: EnrollmentStatus;
   startedOn: string;
   endedOn: string | null;
+  // Phase B — frozen per-year attendance summary copied from the
+  // enrollment row at archive time. NULL for archive-off (legacy) rows
+  // and for rows that were closed before the totals column existed.
+  attendanceTotals: AttendanceTotals | null;
 }
 
 export function rowsToSnapshot(rows: EnrollmentRow[]): EnrollmentSnapshotEntry[] {
@@ -547,5 +584,6 @@ export function rowsToSnapshot(rows: EnrollmentRow[]): EnrollmentSnapshotEntry[]
     status: r.status,
     startedOn: r.startedOn,
     endedOn: r.endedOn,
+    attendanceTotals: r.attendanceTotals,
   }));
 }
