@@ -92,11 +92,27 @@ export default function EnrollmentBackfillModal({ isOpen, onClose }: Props) {
         <div className="flex justify-center py-12"><LoadingSpinner /></div>
       ) : (
         <div className="space-y-4">
-          {committed ? (
+          {committing ? (
+            <div className="flex items-start gap-3 p-4 bg-sky-50 border border-sky-200 rounded-xl">
+              <LoadingSpinner />
+              <div className="text-sm">
+                <p className="font-semibold text-sky-900">
+                  {t('admin.bf.processing_title', { count: report.liveStudentsProcessed, defaultValue: `Processing ${report.liveStudentsProcessed} student(s)…` })}
+                </p>
+                <p className="text-sky-800 mt-0.5">
+                  {t('admin.bf.processing_body', 'Writing per-year enrollment rows. Please keep this window open — it usually takes a few seconds.')}
+                </p>
+              </div>
+            </div>
+          ) : committed ? (
             <div className="flex items-start gap-2 p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-sm">
               <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
               <span className="text-emerald-800">
-                {t('admin.bf.committed_msg', 'Backfill complete. The report below reflects what was applied.')}
+                {t('admin.bf.committed_msg_v2', {
+                  students: report.liveStudentsProcessed,
+                  rows: report.liveRowsInserted,
+                  defaultValue: `Backfill complete. ${report.liveStudentsProcessed} student(s) processed · ${report.liveRowsInserted} enrollment row(s) written.`,
+                })}
               </span>
             </div>
           ) : (
@@ -111,15 +127,24 @@ export default function EnrollmentBackfillModal({ isOpen, onClose }: Props) {
           <div className="p-3 bg-gray-50 rounded-xl text-sm">
             <p className="text-xs text-gray-500 uppercase tracking-wide">{t('admin.bf.live_students', 'Live students')}</p>
             <p className="font-medium text-gray-900 mt-0.5">
-              {t('admin.bf.live_summary', {
-                processed: report.liveStudentsProcessed,
-                skipped: report.liveSkippedAlreadyHasRows,
-                total: report.liveStudentsScanned,
-                defaultValue: `${report.liveStudentsProcessed} to process · ${report.liveSkippedAlreadyHasRows} already done · ${report.liveStudentsScanned} total`,
-              })}
+              {committed
+                ? t('admin.bf.live_summary_done', {
+                    processed: report.liveStudentsProcessed,
+                    skipped: report.liveSkippedAlreadyHasRows,
+                    total: report.liveStudentsScanned,
+                    defaultValue: `${report.liveStudentsProcessed} processed · ${report.liveSkippedAlreadyHasRows} already done · ${report.liveStudentsScanned} total`,
+                  })
+                : t('admin.bf.live_summary', {
+                    processed: report.liveStudentsProcessed,
+                    skipped: report.liveSkippedAlreadyHasRows,
+                    total: report.liveStudentsScanned,
+                    defaultValue: `${report.liveStudentsProcessed} to process · ${report.liveSkippedAlreadyHasRows} already done · ${report.liveStudentsScanned} total`,
+                  })}
             </p>
             <p className="text-xs text-gray-500 mt-1">
-              {t('admin.bf.live_rows', { count: report.liveRowsInserted, defaultValue: `${report.liveRowsInserted} enrollment rows` })}
+              {committed
+                ? t('admin.bf.live_rows_written', { count: report.liveRowsInserted, defaultValue: `${report.liveRowsInserted} enrollment rows written` })
+                : t('admin.bf.live_rows', { count: report.liveRowsInserted, defaultValue: `${report.liveRowsInserted} enrollment rows` })}
             </p>
             <p className="text-xs text-gray-400 mt-2">
               {t('admin.bf.archived_note', 'Archived students are not modified — they remain append-only. The archive viewer uses the legacy class list for those rows.')}
