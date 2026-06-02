@@ -362,8 +362,15 @@
     "email_save": "پاشەکەوت",
     "email_save_failed_title": "نەتوانرا پاشەکەوت بکرێت",
     "email_save_failed_body": "تکایە دوای چەند چرکەیەک هەوڵ بدەرەوە.",
-    "email_pending_title": "بەستەری پشتڕاستکردنەوە نێردرا",
-    "email_pending_body": "بەستەرێکمان نارد بۆ {{email}}. کلیکی لێ بکە بۆ تەواوکردنی گۆڕینی ئیمەیڵەکەت — گۆڕانکارییەکە چالاک نابێت تا پشتڕاستی نەکەیتەوە."
+    "email_verify_title": "پشتڕاستکردنەوەی ئیمەیڵی نوێ",
+    "email_verify_body": "کۆدێکی ٦ ژمارەییمان نارد بۆ {{email}}. لێرە دایبنووسە بۆ تەواوکردنی گۆڕینی ئیمەیڵ. کۆد لە ١٠ خولەکدا کۆتایی دێت.",
+    "email_verification_code": "کۆدی پشتڕاستکردنەوە",
+    "email_verify_action": "پشتڕاستکردنەوە",
+    "email_resend_code": "دووبارە ناردنی کۆد",
+    "email_resend_in": "دووبارە ناردن لە",
+    "email_code_invalid_format": "کۆدی ٦ ژمارەیی بنووسە.",
+    "email_code_verify_failed": "ناتوانرێت کۆد پشتڕاست بکرێتەوە.",
+    "email_attempts_remaining": "هەوڵی ماوە"
   },
   "bug": {
     "title": "ڕاپۆرتی هەڵە",

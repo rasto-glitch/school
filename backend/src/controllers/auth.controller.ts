@@ -19,9 +19,13 @@ import type { AuthRequest } from '../middleware/auth';
 // First value is treated as canonical; the rest are accepted at runtime
 // (kept consistent with server.ts's allowedOrigins parsing).
 const LANDING_URL = (process.env.LANDING_URL || 'http://localhost:5175').split(',')[0].trim();
+// Portal host where the account recovery page lives. Same trim convention.
+const PORTAL_URL = (process.env.FRONTEND_URL || 'http://localhost:5173').split(',')[0].trim();
 
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;          // 1 hour
-const EMAIL_CHANGE_TTL_MS = 24 * 60 * 60 * 1000;    // 24 hours
+const EMAIL_CHANGE_TTL_MS = 10 * 60 * 1000;         // 10 minutes — 6-digit OTP
+const EMAIL_CHANGE_MAX_ATTEMPTS = 5;                // burn the token after this many wrong codes
+const ACCOUNT_RECOVERY_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7-day anchor window
 
 // Access token is deliberately short-lived: a leaked one dies fast. The
 // 7-day user-visible session is preserved by the rotating refresh token.
@@ -185,6 +189,10 @@ const hashToken = (raw: string): string =>
 
 const generateToken = (): string =>
   crypto.randomBytes(32).toString('hex');
+
+// 6-digit zero-padded OTP. crypto.randomInt is uniform across the range.
+const generateOtpCode = (): string =>
+  crypto.randomInt(0, 1_000_000).toString().padStart(6, '0');
 
 const escapeHtml = (s: string): string =>
   s.replace(/[&<>"']/g, c =>
@@ -520,7 +528,7 @@ export async function updateMyEmail(req: AuthRequest, res: Response): Promise<vo
     .eq('user_id', userId)
     .is('used_at', null);
 
-  const raw = generateToken();
+  const code = generateOtpCode();
   const expiresAt = new Date(Date.now() + EMAIL_CHANGE_TTL_MS).toISOString();
   // tenant-check-allow: email_change_tokens is user-keyed (no school_id by design)
   const { error: insErr } = await supabase
@@ -528,8 +536,9 @@ export async function updateMyEmail(req: AuthRequest, res: Response): Promise<vo
     .insert({
       user_id: userId,
       new_email: cleaned,
-      token_hash: hashToken(raw),
+      token_hash: hashToken(code),
       expires_at: expiresAt,
+      attempts: 0,
     });
   if (insErr) {
     res.status(safeDbErrorStatus(insErr)).json({ error: safeDbErrorMessage(insErr) });
@@ -537,17 +546,16 @@ export async function updateMyEmail(req: AuthRequest, res: Response): Promise<vo
   }
 
   const firstName = (userRow as { first_name?: string })?.first_name || '';
-  const link = `${LANDING_URL}/confirm-email?token=${raw}`;
-  const subject = 'Confirm your new Scholify email';
+  const subject = 'Your Scholify verification code';
   const text = [
     `Hi ${firstName || 'there'},`,
     '',
-    'Click the link below to confirm this email address for your Scholify account:',
+    `Your verification code is: ${code}`,
     '',
-    link,
+    'Enter it in Scholify to finish confirming this email address.',
+    'This code expires in 10 minutes.',
     '',
     'If you did not request this change, you can ignore this email.',
-    'This link expires in 24 hours.',
   ].join('\n');
   const html = `
     <div style="font-family:-apple-system,BlinkMacSystemFont,Inter,sans-serif;background:#f8fafc;padding:24px">
@@ -558,14 +566,11 @@ export async function updateMyEmail(req: AuthRequest, res: Response): Promise<vo
         </div>
         <div style="padding:24px;color:#0f172a">
           <p style="margin:0 0 12px;font-size:14px">Hi ${escapeHtml(firstName) || 'there'},</p>
-          <p style="margin:0 0 16px;font-size:14px;line-height:1.55">Click the button below to confirm this email address for your Scholify account.</p>
-          <p style="margin:0 0 16px">
-            <a href="${link}" style="display:inline-block;background:#6366F1;color:#fff;text-decoration:none;padding:10px 18px;border-radius:10px;font-weight:600">Confirm email</a>
-          </p>
-          <p style="margin:0 0 8px;font-size:12px;color:#64748b">If the button doesn't work, paste this URL into your browser:</p>
-          <p style="margin:0;font-size:12px;color:#64748b;word-break:break-all">${escapeHtml(link)}</p>
-          <hr style="border:none;border-top:1px solid #e2e8f0;margin:20px 0">
-          <p style="margin:0;font-size:12px;color:#64748b">Didn't request this change? You can safely ignore this email. The link expires in 24 hours.</p>
+          <p style="margin:0 0 16px;font-size:14px;line-height:1.55">Enter this code in Scholify to confirm this email address for your account.</p>
+          <div style="margin:0 0 16px;padding:18px 24px;background:#f1f5f9;border-radius:12px;text-align:center">
+            <div style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:32px;font-weight:700;letter-spacing:.18em;color:#0f172a">${code}</div>
+          </div>
+          <p style="margin:0;font-size:12px;color:#64748b">This code expires in 10 minutes. If you didn't request this change, you can ignore this email.</p>
         </div>
       </div>
     </div>`;
@@ -576,7 +581,7 @@ export async function updateMyEmail(req: AuthRequest, res: Response): Promise<vo
     // SECURITY: don't echo mailer error detail (SMTP rejection reason,
     // domain auth state, etc.) to the caller. Operator triages via logs.
     logger.error('email-change confirmation send failed', { err, target: cleaned });
-    res.status(502).json({ error: 'Could not send confirmation email. Please try again later.' });
+    res.status(502).json({ error: 'Could not send verification code. Please try again later.' });
     return;
   }
 
@@ -584,6 +589,9 @@ export async function updateMyEmail(req: AuthRequest, res: Response): Promise<vo
 }
 
 // Confirms an email change. Public endpoint — the token IS the auth.
+// Kept for backwards compatibility; the live flow is the OTP path
+// (verifyEmailCode). If no email is currently being sent to /confirm-email
+// this is unreachable and can be removed later.
 export async function confirmEmail(req: Request, res: Response): Promise<void> {
   const { token } = req.body as { token?: string };
   if (!token || typeof token !== 'string') {
@@ -611,13 +619,9 @@ export async function confirmEmail(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  // tenant-check-allow: user_id sourced from token row above (token uniquely identifies the user)
-  const { error: upErr } = await supabase
-    .from('users')
-    .update({ email: r.new_email })
-    .eq('id', r.user_id);
-  if (upErr) {
-    res.status(safeDbErrorStatus(upErr)).json({ error: safeDbErrorMessage(upErr) });
+  const swap = await applyEmailSwapAndAnchor(r.user_id, r.new_email);
+  if (!swap.ok) {
+    res.status(swap.status).json({ error: swap.error });
     return;
   }
   // tenant-check-allow: email_change_tokens is user-keyed (no school_id by design)
@@ -627,6 +631,258 @@ export async function confirmEmail(req: Request, res: Response): Promise<void> {
     .eq('id', r.id);
 
   res.json({ email: r.new_email });
+}
+
+// OTP path: authenticated user submits the 6-digit code we sent to the
+// new address. We hash and look up the most recent active change token for
+// this user, compare, enforce the per-token attempt cap, and on success
+// apply the email swap + recovery anchor.
+export async function verifyEmailCode(req: AuthRequest, res: Response): Promise<void> {
+  const userId = req.user?.userId;
+  if (!userId) {
+    res.status(401).json({ error: 'Not authenticated' });
+    return;
+  }
+  const { code } = req.body as { code?: string };
+  if (!code || typeof code !== 'string' || !/^\d{6}$/.test(code)) {
+    res.status(400).json({ error: 'A 6-digit code is required.' });
+    return;
+  }
+  // tenant-check-allow: email_change_tokens is user-keyed (no school_id by design)
+  const { data: row } = await supabase
+    .from('email_change_tokens')
+    .select('id, user_id, new_email, expires_at, used_at, attempts, token_hash')
+    .eq('user_id', userId)
+    .is('used_at', null)
+    .order('expires_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!row) {
+    res.status(400).json({ error: 'No pending email change. Request a new code.' });
+    return;
+  }
+  const r = row as { id: string; user_id: string; new_email: string; expires_at: string; used_at: string | null; attempts: number; token_hash: string };
+  if (new Date(r.expires_at) <= new Date()) {
+    res.status(400).json({ error: 'This code has expired. Request a new one.' });
+    return;
+  }
+
+  if (hashToken(code) !== r.token_hash) {
+    const nextAttempts = r.attempts + 1;
+    const exhausted = nextAttempts >= EMAIL_CHANGE_MAX_ATTEMPTS;
+    // tenant-check-allow: id sourced from row above
+    await supabase.from('email_change_tokens')
+      .update(exhausted ? { attempts: nextAttempts, used_at: new Date().toISOString() } : { attempts: nextAttempts })
+      .eq('id', r.id);
+    if (exhausted) {
+      res.status(400).json({ error: 'Too many wrong attempts. Request a new code.' });
+      return;
+    }
+    res.status(400).json({ error: 'Wrong code.', attemptsRemaining: EMAIL_CHANGE_MAX_ATTEMPTS - nextAttempts });
+    return;
+  }
+
+  const swap = await applyEmailSwapAndAnchor(r.user_id, r.new_email);
+  if (!swap.ok) {
+    res.status(swap.status).json({ error: swap.error });
+    return;
+  }
+  // tenant-check-allow: id sourced from row above
+  await supabase.from('email_change_tokens')
+    .update({ used_at: new Date().toISOString() })
+    .eq('id', r.id);
+
+  res.json({ email: r.new_email });
+}
+
+// Applies the email swap on users + manages the 7-day recovery anchor and
+// alert. First successful change in a window pins anchor_email to whatever
+// was there before; chained changes inside the window keep that anchor,
+// rotate the token hash + expiry, and re-send the alert to the same
+// anchor address. This means a chain A -> B -> C -> ... still recovers to
+// A regardless of how many hops the attacker tries.
+async function applyEmailSwapAndAnchor(
+  userId: string,
+  newEmail: string,
+): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
+  // 1. Fetch the previous email + first name for the alert body
+  const { data: userRow } = await supabase
+    .from('users')
+    .select('email, first_name')
+    .eq('id', userId)
+    .single();
+  const previousEmail = (userRow as { email?: string | null })?.email || null;
+  const firstName = (userRow as { first_name?: string })?.first_name || '';
+
+  // 2. Apply the swap
+  const { error: upErr } = await supabase
+    .from('users')
+    .update({ email: newEmail })
+    .eq('id', userId);
+  if (upErr) {
+    return { ok: false, status: safeDbErrorStatus(upErr), error: safeDbErrorMessage(upErr) };
+  }
+
+  // 3. If there's no previous email, there's no inbox to send the alert
+  //    to. Skip the anchor (the user has no "true" address to revert to).
+  if (!previousEmail) return { ok: true };
+
+  // 4. Find an active anchor (unused, unexpired) for this user
+  // tenant-check-allow: account_recovery_tokens is user-keyed (no school_id by design)
+  const { data: existing } = await supabase
+    .from('account_recovery_tokens')
+    .select('id, anchor_email')
+    .eq('user_id', userId)
+    .is('used_at', null)
+    .gte('expires_at', new Date().toISOString())
+    .order('expires_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const raw = generateToken();
+  const expiresAt = new Date(Date.now() + ACCOUNT_RECOVERY_TTL_MS).toISOString();
+  let anchorEmail: string;
+
+  if (existing) {
+    // Chain change: keep the original anchor, rotate token + extend expiry
+    anchorEmail = (existing as { anchor_email: string }).anchor_email;
+    // tenant-check-allow: id sourced from row above
+    await supabase.from('account_recovery_tokens')
+      .update({
+        latest_email: newEmail,
+        token_hash: hashToken(raw),
+        expires_at: expiresAt,
+      })
+      .eq('id', (existing as { id: string }).id);
+  } else {
+    // First change in this window: pin the anchor
+    anchorEmail = previousEmail;
+    // tenant-check-allow: account_recovery_tokens is user-keyed (no school_id by design)
+    await supabase.from('account_recovery_tokens').insert({
+      user_id: userId,
+      anchor_email: anchorEmail,
+      latest_email: newEmail,
+      token_hash: hashToken(raw),
+      expires_at: expiresAt,
+    });
+  }
+
+  // 5. Send the alert to the anchor address. Best-effort: if the mailer
+  //    fails we don't reverse the swap (the user can still recover via
+  //    admin reset), but we log it loudly so operators can investigate.
+  try {
+    const recoveryLink = `${PORTAL_URL}/recover-account?token=${raw}`;
+    const subject = existing ? 'Your Scholify email was changed again' : 'Your Scholify email was changed';
+    const text = [
+      `Hi ${firstName || 'there'},`,
+      '',
+      existing
+        ? `Your Scholify account email was changed again — the latest address on file is now ${newEmail}.`
+        : `Your Scholify account email was just changed to ${newEmail}.`,
+      '',
+      'If this was you, no action is needed.',
+      '',
+      "If this wasn't you, click the link below to revert your email and reset your password:",
+      recoveryLink,
+      '',
+      'This link expires in 7 days.',
+    ].join('\n');
+    const html = `
+      <div style="font-family:-apple-system,BlinkMacSystemFont,Inter,sans-serif;background:#f8fafc;padding:24px">
+        <div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden">
+          <div style="background:#b91c1c;padding:20px 24px;color:#fff">
+            <div style="font-size:12px;opacity:.8;letter-spacing:.06em;text-transform:uppercase">Scholify · Security alert</div>
+            <div style="font-size:20px;font-weight:800;margin-top:4px">${escapeHtml(subject)}</div>
+          </div>
+          <div style="padding:24px;color:#0f172a">
+            <p style="margin:0 0 12px;font-size:14px">Hi ${escapeHtml(firstName) || 'there'},</p>
+            <p style="margin:0 0 16px;font-size:14px;line-height:1.55">
+              ${existing
+                ? `Your Scholify account email was changed again — the latest address on file is now <strong>${escapeHtml(newEmail)}</strong>.`
+                : `Your Scholify account email was just changed to <strong>${escapeHtml(newEmail)}</strong>.`}
+            </p>
+            <p style="margin:0 0 16px;font-size:14px;line-height:1.55">If this was you, no action is needed.</p>
+            <p style="margin:0 0 8px;font-size:14px;line-height:1.55"><strong>If this wasn't you</strong>, click below to revert your email to <strong>${escapeHtml(anchorEmail)}</strong> and reset your password. This also signs out every device using your account.</p>
+            <p style="margin:0 0 16px">
+              <a href="${recoveryLink}" style="display:inline-block;background:#b91c1c;color:#fff;text-decoration:none;padding:10px 18px;border-radius:10px;font-weight:600">Reset password &amp; undo</a>
+            </p>
+            <p style="margin:0 0 8px;font-size:12px;color:#64748b">If the button doesn't work, paste this URL into your browser:</p>
+            <p style="margin:0;font-size:12px;color:#64748b;word-break:break-all">${escapeHtml(recoveryLink)}</p>
+            <hr style="border:none;border-top:1px solid #e2e8f0;margin:20px 0">
+            <p style="margin:0;font-size:12px;color:#64748b">This recovery link expires in 7 days.</p>
+          </div>
+        </div>
+      </div>`;
+    await sendMail(anchorEmail, subject, html, text);
+  } catch (err) {
+    logger.error('email-change recovery alert send failed', { err, userId, anchorEmail });
+  }
+  return { ok: true };
+}
+
+// Public — the recovery link in the security alert email lands here.
+// Token is the auth. Reverts email to the anchor, sets a new password, and
+// invalidates every refresh token so the attacker is kicked out.
+export async function recoverAccount(req: Request, res: Response): Promise<void> {
+  const { token, newPassword } = req.body as { token?: string; newPassword?: string };
+  if (!token || typeof token !== 'string') {
+    res.status(400).json({ error: 'token is required' });
+    return;
+  }
+  if (!newPassword || typeof newPassword !== 'string' || !isStrongPassword(newPassword)) {
+    res.status(400).json({ error: PASSWORD_POLICY_MESSAGE });
+    return;
+  }
+
+  // tenant-check-allow: account_recovery_tokens is user-keyed (no school_id by design)
+  const { data: row } = await supabase
+    .from('account_recovery_tokens')
+    .select('id, user_id, anchor_email, expires_at, used_at')
+    .eq('token_hash', hashToken(token))
+    .single();
+  if (!row) {
+    res.status(400).json({ error: 'Invalid or expired link.' });
+    return;
+  }
+  const r = row as { id: string; user_id: string; anchor_email: string; expires_at: string; used_at: string | null };
+  if (r.used_at) {
+    res.status(400).json({ error: 'This link has already been used.' });
+    return;
+  }
+  if (new Date(r.expires_at) <= new Date()) {
+    res.status(400).json({ error: 'This link has expired.' });
+    return;
+  }
+
+  const passwordHash = await bcrypt.hash(newPassword, 12);
+  // tenant-check-allow: user_id sourced from token row above
+  const { error: upErr } = await supabase
+    .from('users')
+    .update({ email: r.anchor_email, password_hash: passwordHash })
+    .eq('id', r.user_id);
+  if (upErr) {
+    res.status(safeDbErrorStatus(upErr)).json({ error: safeDbErrorMessage(upErr) });
+    return;
+  }
+  // tenant-check-allow: account_recovery_tokens is user-keyed
+  await supabase.from('account_recovery_tokens')
+    .update({ used_at: new Date().toISOString() })
+    .eq('id', r.id);
+  // tenant-check-allow: refresh_tokens is user-keyed; sign out all sessions
+  await supabase.from('refresh_tokens')
+    .update({ revoked_at: new Date().toISOString() })
+    .eq('user_id', r.user_id)
+    .is('revoked_at', null);
+  // Also burn any in-flight email change tokens so the attacker can't
+  // resume a confirmation that's mid-flight.
+  // tenant-check-allow: email_change_tokens is user-keyed
+  await supabase.from('email_change_tokens')
+    .update({ used_at: new Date().toISOString() })
+    .eq('user_id', r.user_id)
+    .is('used_at', null);
+
+  res.json({ email: r.anchor_email });
 }
 
 // Self-service password reset by email. Always returns 200 so callers

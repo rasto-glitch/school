@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import multer from 'multer';
-import { login, changePassword, getSchools, forgotPassword, registerDeviceToken, removeDeviceToken, updateDeviceLanguage, uploadProfilePicture, updateMyEmail, getMe, forgotPasswordEmail, resetWithToken, confirmEmail, refreshToken, logout, logoutAll } from '../controllers/auth.controller';
+import { login, changePassword, getSchools, forgotPassword, registerDeviceToken, removeDeviceToken, updateDeviceLanguage, uploadProfilePicture, updateMyEmail, verifyEmailCode, getMe, forgotPasswordEmail, resetWithToken, confirmEmail, recoverAccount, refreshToken, logout, logoutAll } from '../controllers/auth.controller';
 import { submitBugReport } from '../controllers/bugReport.controller';
 import * as admin from '../controllers/admin.controller';
 import * as archivedProfile from '../controllers/archivedEmployeeProfile.controller';
@@ -72,7 +72,9 @@ export function createRouter(io: SocketServer) {
   router.post('/auth/change-password', authenticate, validate({ body: v.changePasswordSchema }), (req, res) => changePassword(req as AuthRequest, res));
   router.get('/auth/me', authenticate, (req, res) => getMe(req as AuthRequest, res));
   router.patch('/auth/me/email', authenticate, validate({ body: v.updateMyEmailSchema }), (req, res) => updateMyEmail(req as AuthRequest, res));
+  router.post('/auth/me/email/verify-code', authenticate, validate({ body: v.verifyEmailCodeSchema }), (req, res) => verifyEmailCode(req as AuthRequest, res));
   router.post('/auth/confirm-email', validate({ body: v.confirmEmailSchema }), (req, res) => confirmEmail(req, res));
+  router.post('/auth/recover-account', validate({ body: v.recoverAccountSchema }), (req, res) => recoverAccount(req, res));
   router.post('/auth/forgot-password-email', validate({ body: v.forgotPasswordSchema }), (req, res) => forgotPasswordEmail(req, res));
   router.post('/auth/reset-with-token', validate({ body: v.resetWithTokenSchema }), (req, res) => resetWithToken(req, res));
 

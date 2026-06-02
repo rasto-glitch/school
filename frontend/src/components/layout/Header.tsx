@@ -32,7 +32,7 @@ export default function Header({ title, subtitle, onMenuClick }: HeaderProps) {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const {
-    unreadCount, pendingAppointmentCount, teacherUnreadCount, adminResetRequestCount,
+    unreadCount, pendingAppointmentCount, teacherUnreadCount, adminUnreadCount, adminResetRequestCount,
   } = useNotificationStore();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [bellOpen, setBellOpen] = useState(false);
@@ -44,7 +44,7 @@ export default function Header({ title, subtitle, onMenuClick }: HeaderProps) {
   // Per-role pip count
   const bellCount = (() => {
     if (!showBell) return 0;
-    if (role === 'admin') return pendingAppointmentCount + adminResetRequestCount;
+    if (role === 'admin') return adminUnreadCount + pendingAppointmentCount + adminResetRequestCount;
     if (role === 'parent') return unreadCount;
     if (role === 'teacher') return teacherUnreadCount;
     if (role === 'reception') return pendingAppointmentCount;

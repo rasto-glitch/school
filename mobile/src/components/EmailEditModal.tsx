@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { X, CheckCircle, Mail } from 'lucide-react-native';
+import { X, CheckCircle, Mail, ShieldCheck } from 'lucide-react-native';
 import { useColors } from '../store/themeStore';
 import { useAuthStore } from '../store/authStore';
 import { authApi } from '../services/api';
@@ -17,10 +17,12 @@ interface Props {
   currentEmail: string | null;
 }
 
-// Shared modal for setting / changing the user's email from Settings. The
-// ReportBugScreen has its own copy because it needs to auto-retry the bug
-// submission after saving — the two flows have different success behaviour
-// and we don't want to couple them.
+const RESEND_COOLDOWN_SECONDS = 30;
+
+// Shared modal for setting / changing the user's email from Settings.
+// First-time set is one shot (backend applies immediately). Changing an
+// existing email is two-step: PATCH sends a 6-digit code to the new
+// address, then POST /auth/me/email/verify-code applies it.
 
 export default function EmailEditModal({ visible, onClose, currentEmail }: Props) {
   const { t } = useTranslation();
@@ -30,10 +32,27 @@ export default function EmailEditModal({ visible, onClose, currentEmail }: Props
 
   const [draft, setDraft] = useState(currentEmail || '');
   const [saving, setSaving] = useState(false);
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
+  const [code, setCode] = useState('');
+  const [verifying, setVerifying] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
 
+  // Reset on open / when current email changes
   useEffect(() => {
-    if (visible) setDraft(currentEmail || '');
+    if (visible) {
+      setDraft(currentEmail || '');
+      setPendingEmail(null);
+      setCode('');
+      setResendCooldown(0);
+    }
   }, [visible, currentEmail]);
+
+  // Cooldown tick
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const id = setTimeout(() => setResendCooldown(s => s - 1), 1000);
+    return () => clearTimeout(id);
+  }, [resendCooldown]);
 
   const styles = makeStyles(colors);
 
@@ -50,21 +69,17 @@ export default function EmailEditModal({ visible, onClose, currentEmail }: Props
     setSaving(true);
     try {
       const r = await authApi.updateMyEmail(clean);
-      // Backend returns `pending: true` when the user has an existing email
-      // (change requires confirmation link sent to the NEW address) or
-      // `pending: false` for first-time set (applied immediately).
-      const pending = (r.data as { pending?: boolean }).pending;
+      const { pending, email: applied } = r.data || {};
       if (pending) {
-        Alert.alert(
-          t('settings.email_pending_title'),
-          t('settings.email_pending_body', { email: clean }),
-        );
-        // Don't update the local store; the new email isn't live until
-        // the user clicks the link. Next /me fetch will reflect it.
+        // Change confirmation — switch to code-input state
+        setPendingEmail(clean);
+        setCode('');
+        setResendCooldown(RESEND_COOLDOWN_SECONDS);
       } else {
-        setEmail(clean);
+        // First-time set — backend applied immediately
+        setEmail(applied || clean);
+        onClose();
       }
-      onClose();
     } catch (e: any) {
       Alert.alert(
         t('settings.email_save_failed_title'),
@@ -75,60 +90,151 @@ export default function EmailEditModal({ visible, onClose, currentEmail }: Props
     }
   };
 
+  const verify = async () => {
+    if (!/^\d{6}$/.test(code)) {
+      Alert.alert(t('settings.email_code_invalid_format'));
+      return;
+    }
+    setVerifying(true);
+    try {
+      const r = await authApi.verifyEmailCode(code);
+      setEmail(r.data?.email || pendingEmail || '');
+      onClose();
+    } catch (e: any) {
+      const data = e?.response?.data;
+      const msg = data?.attemptsRemaining != null
+        ? `${data.error} (${data.attemptsRemaining} ${t('settings.email_attempts_remaining')})`
+        : data?.error || t('settings.email_code_verify_failed');
+      Alert.alert(t('settings.email_save_failed_title'), msg);
+      // If the token is dead, back out so the user can request a new code
+      const low = (data?.error || '').toLowerCase();
+      if (low.includes('expired') || low.includes('too many')) {
+        setPendingEmail(null);
+        setCode('');
+      }
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const cancelPending = () => {
+    setPendingEmail(null);
+    setCode('');
+  };
+
   return (
     <Modal
       visible={visible}
       animationType="slide"
       presentationStyle="pageSheet"
-      onRequestClose={onClose}
+      onRequestClose={pendingEmail ? cancelPending : onClose}
     >
       <View style={[styles.modal, { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 24 }]}>
         <View style={styles.header}>
           <View style={styles.titleRow}>
-            <Mail size={20} color={colors.primary} />
+            {pendingEmail ? (
+              <ShieldCheck size={20} color={colors.primary} />
+            ) : (
+              <Mail size={20} color={colors.primary} />
+            )}
             <Text style={styles.title}>
-              {currentEmail ? t('settings.email_change_title') : t('settings.email_set_title')}
+              {pendingEmail
+                ? t('settings.email_verify_title')
+                : currentEmail
+                  ? t('settings.email_change_title')
+                  : t('settings.email_set_title')}
             </Text>
           </View>
-          <TouchableOpacity onPress={onClose} disabled={saving}>
+          <TouchableOpacity onPress={pendingEmail ? cancelPending : onClose} disabled={saving || verifying}>
             <X size={22} color={colors.textMuted} />
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.body}>
-          {currentEmail
-            ? t('settings.email_change_body')
-            : t('settings.email_set_body')}
-        </Text>
+        {pendingEmail ? (
+          <>
+            <Text style={styles.body}>
+              {t('settings.email_verify_body', { email: pendingEmail })}
+            </Text>
+            <Text style={styles.label}>{t('settings.email_verification_code')}</Text>
+            <TextInput
+              style={[styles.input, styles.codeInput]}
+              placeholder="123456"
+              placeholderTextColor={colors.textMuted}
+              value={code}
+              onChangeText={v => setCode(v.replace(/\D/g, '').slice(0, 6))}
+              keyboardType="number-pad"
+              maxLength={6}
+              autoFocus
+              textContentType="oneTimeCode"
+              autoComplete="one-time-code"
+            />
+            <TouchableOpacity
+              style={[styles.saveBtn, (verifying || code.length !== 6) && styles.saveBtnDisabled]}
+              onPress={verify}
+              disabled={verifying || code.length !== 6}
+              activeOpacity={0.85}
+            >
+              {verifying ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+                  <CheckCircle size={18} color="#fff" />
+                  <Text style={styles.saveBtnText}>{t('settings.email_verify_action')}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
 
-        <Text style={styles.label}>{t('settings.email_field_label')}</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="you@example.com"
-          placeholderTextColor={colors.textMuted}
-          value={draft}
-          onChangeText={setDraft}
-          autoCapitalize="none"
-          keyboardType="email-address"
-          autoComplete="email"
-          autoFocus
-        />
+            <TouchableOpacity
+              style={[styles.linkBtn, (resendCooldown > 0 || saving) && styles.saveBtnDisabled]}
+              onPress={save}
+              disabled={resendCooldown > 0 || saving}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.linkBtnText, { color: colors.primary }]}>
+                {resendCooldown > 0
+                  ? `${t('settings.email_resend_in')} ${resendCooldown}s`
+                  : t('settings.email_resend_code')}
+              </Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            <Text style={styles.body}>
+              {currentEmail
+                ? t('settings.email_change_body')
+                : t('settings.email_set_body')}
+            </Text>
 
-        <TouchableOpacity
-          style={[styles.saveBtn, saving && styles.saveBtnDisabled]}
-          onPress={save}
-          disabled={saving}
-          activeOpacity={0.85}
-        >
-          {saving ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
-              <CheckCircle size={18} color="#fff" />
-              <Text style={styles.saveBtnText}>{t('settings.email_save')}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
+            <Text style={styles.label}>{t('settings.email_field_label')}</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="you@example.com"
+              placeholderTextColor={colors.textMuted}
+              value={draft}
+              onChangeText={setDraft}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              autoComplete="email"
+              autoFocus
+            />
+
+            <TouchableOpacity
+              style={[styles.saveBtn, saving && styles.saveBtnDisabled]}
+              onPress={save}
+              disabled={saving}
+              activeOpacity={0.85}
+            >
+              {saving ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+                  <CheckCircle size={18} color="#fff" />
+                  <Text style={styles.saveBtnText}>{t('settings.email_save')}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </>
+        )}
       </View>
     </Modal>
   );
@@ -149,10 +255,17 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
     padding: spacing.md, fontSize: font.md, color: colors.text,
     borderWidth: 1, borderColor: colors.border,
   },
+  codeInput: {
+    fontSize: 24, letterSpacing: 8, textAlign: 'center', fontVariant: ['tabular-nums'],
+  },
   saveBtn: {
     backgroundColor: colors.primary, borderRadius: radius.md,
     padding: spacing.md, alignItems: 'center', marginTop: spacing.md,
   },
   saveBtnDisabled: { opacity: 0.5 },
   saveBtnText: { fontSize: font.md, fontWeight: '700', color: '#fff' },
+  linkBtn: {
+    padding: spacing.sm, alignItems: 'center', marginTop: spacing.xs,
+  },
+  linkBtnText: { fontSize: font.sm, fontWeight: '600' },
 });

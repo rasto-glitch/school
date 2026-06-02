@@ -362,8 +362,15 @@
     "email_save": "Save",
     "email_save_failed_title": "Could not save",
     "email_save_failed_body": "Please try again in a moment.",
-    "email_pending_title": "Confirmation link sent",
-    "email_pending_body": "We sent a link to {{email}}. Click it to finish changing your email — the change isn't live until you confirm."
+    "email_verify_title": "Verify your new email",
+    "email_verify_body": "We sent a 6-digit code to {{email}}. Enter it below to finish changing your email. The code expires in 10 minutes.",
+    "email_verification_code": "Verification code",
+    "email_verify_action": "Verify",
+    "email_resend_code": "Resend code",
+    "email_resend_in": "Resend in",
+    "email_code_invalid_format": "Enter the 6-digit code.",
+    "email_code_verify_failed": "Could not verify code.",
+    "email_attempts_remaining": "attempts remaining"
   },
   "bug": {
     "title": "Report a bug",

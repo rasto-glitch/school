@@ -100,6 +100,10 @@ export const authApi = {
     fd.append('avatar', file);
     return api.patch('/auth/profile-picture', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
   },
+  updateMyEmail: (email: string) => api.patch('/auth/me/email', { email }),
+  verifyEmailCode: (code: string) => api.post('/auth/me/email/verify-code', { code }),
+  recoverAccount: (token: string, newPassword: string) =>
+    api.post('/auth/recover-account', { token, newPassword }),
 };
 
 // ---- ME (self-service employee records, Wave 2.5) ----
@@ -480,6 +484,8 @@ export const adminApi = {
   sendNotification: (data: object) => api.post('/admin/notifications', data),
   getUnreadNotificationCount: () => api.get('/admin/notifications/unread-count'),
   markAllNotificationsRead: () => api.patch('/admin/notifications/read-all'),
+  getInbox: (limit = 10) => api.get('/notifications', { params: { limit } }),
+  markNotificationRead: (id: string) => api.patch(`/notifications/${id}/read`),
   getAnnouncements: (cursor?: string | null) =>
     api.get<Paginated<Announcement>>('/admin/announcements', { params: cursor ? { cursor } : {} }),
   createAnnouncement: (data: FormData | object) =>

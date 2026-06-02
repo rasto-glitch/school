@@ -296,6 +296,7 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
     unreadCount, setUnreadCount,
     pendingAppointmentCount, setPendingAppointmentCount, incrementPendingAppointmentCount,
     teacherUnreadCount, setTeacherUnreadCount, incrementTeacherUnreadCount,
+    setAdminUnreadCount, incrementAdminUnreadCount,
     adminResetRequestCount, setAdminResetRequestCount, incrementAdminResetRequestCount,
     chatUnreadCount, setChatUnreadCount, incrementChatUnreadCount,
   } = useNotificationStore();
@@ -312,6 +313,7 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
     }
     if (user?.role === 'admin') {
       adminApi.getResetRequests().then(r => setAdminResetRequestCount(r.data?.length ?? 0)).catch(() => {});
+      adminApi.getUnreadNotificationCount().then(r => setAdminUnreadCount(r.data?.count ?? 0)).catch(() => {});
     }
     const chatRoles = ['parent', 'teacher', 'supervisor'];
     if (user?.role && chatRoles.includes(user.role)) {
@@ -349,6 +351,9 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
     const onNotification = () => {
       if (user.role === 'teacher' && window.location.pathname !== '/teacher/notifications') {
         incrementTeacherUnreadCount();
+      }
+      if (user.role === 'admin') {
+        incrementAdminUnreadCount();
       }
     };
 
@@ -389,7 +394,6 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
   }, [location.pathname]);
 
   const isRTL = ['ar', 'ku'].includes(i18n.language);
-  const showLangSwitcher = user?.role === 'parent' || user?.role === 'driver' || user?.role === 'accountant' || user?.role === 'admin' || user?.role === 'teacher' || user?.role === 'supervisor';
   // Premium-only features default to OFF when the key is missing — so a school
   // without a premium plan never sees the tab even if their features JSONB
   // pre-dates the feature flag being added.
@@ -606,31 +610,6 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
               <p className="text-xs text-gray-500 truncate">{user.username}</p>
             </div>
           </div>
-        )}
-        {showLangSwitcher && !collapsed && (
-          <div className="mb-2">
-            <select
-              value={i18n.language}
-              onChange={e => i18n.changeLanguage(e.target.value)}
-              className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 bg-gray-50 text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-400 cursor-pointer"
-            >
-              <option value="en">🌐 English</option>
-              <option value="ar">🌐 عربي</option>
-              <option value="ku">🌐 کوردی</option>
-            </select>
-          </div>
-        )}
-        {showLangSwitcher && collapsed && (
-          <select
-            value={i18n.language}
-            onChange={e => i18n.changeLanguage(e.target.value)}
-            className="w-full text-xs border border-gray-200 rounded-xl p-1 mb-2 bg-gray-50 text-gray-700 focus:outline-none cursor-pointer"
-            title="Language"
-          >
-            <option value="en">EN</option>
-            <option value="ar">ع</option>
-            <option value="ku">ک</option>
-          </select>
         )}
         <button
           onClick={logout}

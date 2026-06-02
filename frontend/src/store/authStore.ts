@@ -11,6 +11,7 @@ interface AuthState {
   setAuth: (token: string, refreshToken: string, user: AuthUser, school: School, rememberMe: boolean) => void;
   setTokens: (token: string, refreshToken: string) => void;
   setProfilePicture: (url: string) => void;
+  setEmail: (email: string | null) => void;
   logout: () => void;
   isAuthenticated: () => boolean;
 }
@@ -52,6 +53,7 @@ export const useAuthStore = create<AuthState>()(
       setAuth: (token, refreshToken, user, school, rememberMe) => set({ token, refreshToken, user, school, rememberMe }),
       setTokens: (token, refreshToken) => set({ token, refreshToken }),
       setProfilePicture: (url) => set(s => s.user ? { user: { ...s.user, profilePicture: url } } : {}),
+      setEmail: (email) => set(s => s.user ? { user: { ...s.user, email } } : {}),
       logout: () => {
         // Best-effort server-side revocation of the rotation family before
         // we drop local state. Plain fetch (not the api client) to avoid a

@@ -362,8 +362,15 @@
     "email_save": "حفظ",
     "email_save_failed_title": "تعذّر الحفظ",
     "email_save_failed_body": "يرجى المحاولة بعد قليل.",
-    "email_pending_title": "تم إرسال رابط التأكيد",
-    "email_pending_body": "أرسلنا رابطاً إلى {{email}}. اضغط الرابط لإكمال تغيير بريدك الإلكتروني — لن يتم التغيير قبل التأكيد."
+    "email_verify_title": "تحقّق من بريدك الجديد",
+    "email_verify_body": "أرسلنا رمزًا من 6 أرقام إلى {{email}}. أدخله أدناه لإكمال تغيير بريدك. ينتهي الرمز خلال 10 دقائق.",
+    "email_verification_code": "رمز التحقق",
+    "email_verify_action": "تحقّق",
+    "email_resend_code": "إعادة إرسال الرمز",
+    "email_resend_in": "إعادة الإرسال خلال",
+    "email_code_invalid_format": "أدخل الرمز المكوّن من 6 أرقام.",
+    "email_code_verify_failed": "تعذّر التحقق من الرمز.",
+    "email_attempts_remaining": "محاولات متبقية"
   },
   "bug": {
     "title": "الإبلاغ عن خلل",

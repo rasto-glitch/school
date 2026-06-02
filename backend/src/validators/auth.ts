@@ -41,6 +41,15 @@ export const resetWithTokenSchema = z.object({
 
 export const confirmEmailSchema = z.object({ token: opaqueToken });
 
+export const verifyEmailCodeSchema = z.object({
+  code: z.string().trim().regex(/^\d{6}$/, 'A 6-digit code is required.'),
+});
+
+export const recoverAccountSchema = z.object({
+  token: opaqueToken,
+  newPassword,
+});
+
 export const updateMyEmailSchema = z.object({ email });
 
 export const deviceTokenSchema = z.object({

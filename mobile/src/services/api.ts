@@ -129,7 +129,9 @@ export const authApi = {
     return multipartRequest<{ profilePicture: string }>('/auth/profile-picture', form, 'PATCH');
   },
   updateMyEmail: (email: string) =>
-    api.patch<{ email: string }>('/auth/me/email', { email }),
+    api.patch<{ email?: string; pending?: boolean; sentTo?: string }>('/auth/me/email', { email }),
+  verifyEmailCode: (code: string) =>
+    api.post<{ email: string }>('/auth/me/email/verify-code', { code }),
   getMe: () =>
     api.get<{ id: string; username: string; role: string; firstName: string; lastName: string; profilePicture: string | null; email: string | null }>('/auth/me'),
 };
