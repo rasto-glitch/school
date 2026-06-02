@@ -100,10 +100,26 @@ export const authApi = {
     fd.append('avatar', file);
     return api.patch('/auth/profile-picture', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
   },
-  updateMyEmail: (email: string) => api.patch('/auth/me/email', { email }),
+  updateMyEmail: (email: string, currentPassword: string) =>
+    api.patch('/auth/me/email', { email, currentPassword }),
   verifyEmailCode: (code: string) => api.post('/auth/me/email/verify-code', { code }),
   recoverAccount: (token: string, newPassword: string) =>
     api.post('/auth/recover-account', { token, newPassword }),
+  verifyMfaLogin: (mfaTicket: string, code: string) =>
+    api.post('/auth/login/verify-mfa', { mfaTicket, code }),
+};
+
+// ---- MFA (Phase 1: admin + accountant) ----
+export const mfaApi = {
+  status: () => api.get<{ eligible: boolean; enrolled: boolean; confirmed: boolean; recoveryCodesRemaining: number }>('/auth/mfa/status'),
+  setup: () => api.post<{ qrDataUrl: string; secret: string; otpauthUri: string; recoveryCodes: string[] }>('/auth/mfa/setup'),
+  confirm: (code: string) => api.post<{ ok: true }>('/auth/mfa/confirm', { code }),
+  disableSelf: (currentPassword: string, code: string) =>
+    api.post<{ ok: true }>('/auth/mfa/disable-self', { currentPassword, code }),
+  regenerateRecoveryCodes: (code: string) =>
+    api.post<{ recoveryCodes: string[] }>('/auth/mfa/recovery-codes', { code }),
+  adminDisable: (userId: string, reason: string) =>
+    api.post<{ ok: true }>(`/admin/users/${userId}/mfa-disable`, { reason }),
 };
 
 // ---- ME (self-service employee records, Wave 2.5) ----

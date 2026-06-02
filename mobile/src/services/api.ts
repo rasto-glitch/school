@@ -128,12 +128,28 @@ export const authApi = {
     form.append('avatar', { uri, name, type: mimeType } as any);
     return multipartRequest<{ profilePicture: string }>('/auth/profile-picture', form, 'PATCH');
   },
-  updateMyEmail: (email: string) =>
-    api.patch<{ email?: string; pending?: boolean; sentTo?: string }>('/auth/me/email', { email }),
+  updateMyEmail: (email: string, currentPassword: string) =>
+    api.patch<{ email?: string; pending?: boolean; sentTo?: string }>('/auth/me/email', { email, currentPassword }),
   verifyEmailCode: (code: string) =>
     api.post<{ email: string }>('/auth/me/email/verify-code', { code }),
+  verifyMfaLogin: (mfaTicket: string, code: string) =>
+    api.post<{ token: string; refreshToken: string; user: any; school: any }>('/auth/login/verify-mfa', { mfaTicket, code }),
   getMe: () =>
     api.get<{ id: string; username: string; role: string; firstName: string; lastName: string; profilePicture: string | null; email: string | null }>('/auth/me'),
+};
+
+// ---- MFA (Phase 1: admin + accountant) ----
+export const mfaApi = {
+  status: () =>
+    api.get<{ eligible: boolean; enrolled: boolean; confirmed: boolean; recoveryCodesRemaining: number }>('/auth/mfa/status'),
+  setup: () =>
+    api.post<{ qrDataUrl: string; secret: string; otpauthUri: string; recoveryCodes: string[] }>('/auth/mfa/setup'),
+  confirm: (code: string) =>
+    api.post<{ ok: true }>('/auth/mfa/confirm', { code }),
+  disableSelf: (currentPassword: string, code: string) =>
+    api.post<{ ok: true }>('/auth/mfa/disable-self', { currentPassword, code }),
+  regenerateRecoveryCodes: (code: string) =>
+    api.post<{ recoveryCodes: string[] }>('/auth/mfa/recovery-codes', { code }),
 };
 
 // ---- BUG REPORT ----

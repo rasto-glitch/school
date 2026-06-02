@@ -14,6 +14,8 @@ import { emitToAdmins, getIo, notify } from '../utils/notify';
 import { logger } from '../utils/logger';
 import { sendMail } from '../utils/mailer';
 import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from '../utils/passwordPolicy';
+import { logAudit } from '../utils/audit';
+import { isMfaActive, verifyMfaCodeForUser } from './mfa.controller';
 import type { AuthRequest } from '../middleware/auth';
 // Public landing host where /reset-password and /confirm-email live.
 // First value is treated as canonical; the rest are accepted at runtime
@@ -26,6 +28,11 @@ const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;          // 1 hour
 const EMAIL_CHANGE_TTL_MS = 10 * 60 * 1000;         // 10 minutes — 6-digit OTP
 const EMAIL_CHANGE_MAX_ATTEMPTS = 5;                // burn the token after this many wrong codes
 const ACCOUNT_RECOVERY_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7-day anchor window
+// MFA ticket — a short-lived signed JWT proving the user passed the
+// password step. The MFA-verify endpoint exchanges it (+ a TOTP / recovery
+// code) for real tokens. Kept short so a leaked ticket isn't a usable
+// half-credential for long.
+const MFA_TICKET_TTL = '5m';
 
 // Access token is deliberately short-lived: a leaked one dies fast. The
 // 7-day user-visible session is preserved by the rotating refresh token.
@@ -275,6 +282,22 @@ export async function login(req: Request, res: Response): Promise<void> {
   const signInIp = req.ip || null;
   const newSignIn = await isNewSignIn(user.id, signInUa, signInIp);
 
+  // MFA gate: if this user has TOTP enabled, password alone isn't
+  // enough. We mint a short-lived "ticket" that proves they passed the
+  // password step, and the verify-mfa endpoint exchanges it (+ a code)
+  // for real tokens. The ticket is a separate JWT type so it can't be
+  // mistaken for an access token.
+  const mfaActive = await isMfaActive(user.id);
+  if (mfaActive) {
+    const mfaTicket = jwt.sign(
+      { userId: user.id, schoolId: school.id, type: 'mfa_ticket' },
+      process.env.JWT_SECRET!,
+      { expiresIn: MFA_TICKET_TTL } as jwt.SignOptions,
+    );
+    res.json({ mfaRequired: true, mfaTicket });
+    return;
+  }
+
   const featuresVersion = school.features_version ?? 1;
   const { token, refreshToken } = await issueTokenPair(
     { id: user.id, role: user.role, username: user.username },
@@ -316,6 +339,117 @@ export async function login(req: Request, res: Response): Promise<void> {
       userId: user.id,
       email: user.email || null,
       firstName: user.first_name || '',
+      ua: signInUa,
+      ip: signInIp,
+    });
+  }
+}
+
+// Step 2 of MFA-required login: exchange a short-lived MFA ticket plus
+// either a 6-digit TOTP code or a recovery code for a real session.
+// Public — the ticket itself is the auth proving the user passed the
+// password step. Rate-limited at the route layer.
+export async function verifyMfaLogin(req: Request, res: Response): Promise<void> {
+  const { mfaTicket, code } = req.body as { mfaTicket?: string; code?: string };
+  if (!mfaTicket || typeof mfaTicket !== 'string') {
+    res.status(400).json({ error: 'mfaTicket is required' });
+    return;
+  }
+  if (!code || typeof code !== 'string' || !code.trim()) {
+    res.status(400).json({ error: 'code is required' });
+    return;
+  }
+  let payload: { userId: string; schoolId: string; type: string };
+  try {
+    payload = jwt.verify(mfaTicket, process.env.JWT_SECRET!, { algorithms: ['HS256'] }) as any;
+  } catch {
+    res.status(401).json({ error: 'Your verification session has expired. Please sign in again.' });
+    return;
+  }
+  if (payload.type !== 'mfa_ticket' || !payload.userId || !payload.schoolId) {
+    res.status(401).json({ error: 'Invalid verification session.' });
+    return;
+  }
+
+  // Re-validate the user — between the password step and this call,
+  // the account could have been deactivated.
+  const { data: user } = await supabase
+    .from('users')
+    .select('id, username, role, first_name, last_name, profile_picture, email, is_active')
+    .eq('id', payload.userId)
+    .single();
+  if (!user || !(user as { is_active: boolean }).is_active) {
+    res.status(401).json({ error: 'Account is not active.' });
+    return;
+  }
+  const { data: school } = await supabase
+    .from('schools')
+    .select('id, name, slug, logo_url, primary_color, secondary_color, features, features_version, timezone, is_active')
+    .eq('id', payload.schoolId)
+    .single();
+  if (!school || !(school as { is_active: boolean }).is_active) {
+    res.status(401).json({ error: 'School is not active.' });
+    return;
+  }
+
+  const result = await verifyMfaCodeForUser(payload.userId, code.trim());
+  if (result === 'no_mfa') {
+    // Ticket says MFA, DB says no. Edge case: someone admin-disabled
+    // MFA between login and this call. Tell the user to start over.
+    res.status(401).json({ error: 'Two-factor verification is no longer required. Please sign in again.' });
+    return;
+  }
+  if (result === 'wrong') {
+    res.status(401).json({ error: 'Wrong code.' });
+    return;
+  }
+
+  // Capture sign-in fingerprint BEFORE issuing the refresh row for this
+  // session (same idea as login()).
+  const signInUa = ((req.headers['user-agent'] as string) || '').slice(0, 300);
+  const signInIp = req.ip || null;
+  const newSignIn = await isNewSignIn(payload.userId, signInUa, signInIp);
+
+  const u = user as { id: string; username: string; role: string; first_name: string; last_name: string; profile_picture: string | null; email: string | null };
+  const s = school as { id: string; name: string; slug: string; logo_url: string | null; primary_color: string | null; secondary_color: string | null; features: Record<string, unknown> | null; features_version: number | null; timezone: string | null };
+  const featuresVersion = s.features_version ?? 1;
+  const { token, refreshToken } = await issueTokenPair(
+    { id: u.id, role: u.role, username: u.username },
+    s.id,
+    featuresVersion,
+    req,
+  );
+
+  res.json({
+    token,
+    refreshToken,
+    user: {
+      id: u.id,
+      username: u.username,
+      role: u.role,
+      firstName: u.first_name,
+      lastName: u.last_name,
+      profilePicture: u.profile_picture,
+      email: u.email || null,
+    },
+    school: {
+      id: s.id,
+      name: s.name,
+      slug: s.slug,
+      logoUrl: s.logo_url,
+      primaryColor: s.primary_color,
+      secondaryColor: s.secondary_color,
+      features: s.features ?? {},
+      timezone: s.timezone || 'Asia/Baghdad',
+    },
+  });
+
+  if (newSignIn) {
+    void notifyNewSignIn({
+      schoolId: s.id,
+      userId: u.id,
+      email: u.email || null,
+      firstName: u.first_name || '',
       ua: signInUa,
       ip: signInIp,
     });
@@ -478,7 +612,8 @@ export async function getMe(req: AuthRequest, res: Response): Promise<void> {
 // trade-off is accepted because admin-mediated reset still works.
 export async function updateMyEmail(req: AuthRequest, res: Response): Promise<void> {
   const userId = req.user?.userId;
-  const { email } = req.body as { email?: string };
+  const schoolId = req.user?.schoolId;
+  const { email, currentPassword } = req.body as { email?: string; currentPassword?: string };
 
   const cleaned = typeof email === 'string' ? email.trim().toLowerCase() : '';
   if (!cleaned) {
@@ -496,10 +631,52 @@ export async function updateMyEmail(req: AuthRequest, res: Response): Promise<vo
 
   const { data: userRow } = await supabase
     .from('users')
-    .select('email, first_name')
+    .select('email, first_name, password_hash, schools(name)')
     .eq('id', userId)
     .single();
   const currentEmail: string | null = (userRow as { email?: string | null })?.email || null;
+  const passwordHash = (userRow as { password_hash?: string } | null)?.password_hash || '';
+  const schoolName =
+    (userRow as { schools?: { name?: string } | null } | null)?.schools?.name || '';
+
+  // Re-auth before email change. Done BEFORE the email-already-in-use
+  // lookup so a session-only attacker can't enumerate which emails are
+  // registered at the school. The same generic error is returned on bad
+  // password whether the email exists or not.
+  if (!currentPassword || typeof currentPassword !== 'string' || !passwordHash) {
+    res.status(401).json({ error: 'Current password is required.' });
+    return;
+  }
+  const passwordOk = await bcrypt.compare(currentPassword, passwordHash);
+  if (!passwordOk) {
+    res.status(401).json({ error: 'Current password is incorrect.' });
+    return;
+  }
+
+  // Same-as-current short-circuit FIRST so the uniqueness check below
+  // doesn't false-positive on the user's own row.
+  if (currentEmail && cleaned === currentEmail.toLowerCase()) {
+    res.json({ email: currentEmail, pending: false });
+    return;
+  }
+
+  // Within-school uniqueness guard. Prevents two users at the same school
+  // from sharing an email — important so security alerts / recovery links
+  // can be unambiguously attributed to one account. Cross-school
+  // collisions are still allowed (separate tenants, separate inboxes).
+  // tenant-check-allow: scoped to the caller's school
+  const { data: clash } = await supabase
+    .from('users')
+    .select('id')
+    .eq('school_id', schoolId)
+    .ilike('email', cleaned)
+    .neq('id', userId)
+    .limit(1)
+    .maybeSingle();
+  if (clash) {
+    res.status(409).json({ error: 'Another account at your school already uses this email.' });
+    return;
+  }
 
   // No current email → first-time set, apply immediately.
   if (!currentEmail) {
@@ -512,11 +689,15 @@ export async function updateMyEmail(req: AuthRequest, res: Response): Promise<vo
       return;
     }
     res.json({ email: cleaned, pending: false });
-    return;
-  }
-
-  if (cleaned === currentEmail.toLowerCase()) {
-    res.json({ email: currentEmail, pending: false });
+    void logAudit({
+      req,
+      entityType: 'user_account',
+      entityId: userId!,
+      action: 'update',
+      before: { email: null },
+      after: { email: cleaned },
+      label: 'email_set_initial',
+    });
     return;
   }
 
@@ -546,13 +727,24 @@ export async function updateMyEmail(req: AuthRequest, res: Response): Promise<vo
   }
 
   const firstName = (userRow as { first_name?: string })?.first_name || '';
-  const subject = 'Your Scholify verification code';
+  // School name in the subject + chip line disambiguates which Scholify
+  // account this is for — users who hold accounts at multiple schools
+  // (e.g. a parent with kids in two) otherwise can't tell the codes apart.
+  const subject = schoolName
+    ? `Your Scholify verification code for ${schoolName}`
+    : 'Your Scholify verification code';
+  const chip = schoolName ? `Scholify · ${escapeHtml(schoolName)}` : 'Scholify';
+  const accountLine = schoolName
+    ? `Enter this code in Scholify to confirm this email address for your ${escapeHtml(schoolName)} account.`
+    : 'Enter this code in Scholify to confirm this email address for your account.';
   const text = [
     `Hi ${firstName || 'there'},`,
     '',
     `Your verification code is: ${code}`,
     '',
-    'Enter it in Scholify to finish confirming this email address.',
+    schoolName
+      ? `Enter it in Scholify to finish confirming this email address for your ${schoolName} account.`
+      : 'Enter it in Scholify to finish confirming this email address.',
     'This code expires in 10 minutes.',
     '',
     'If you did not request this change, you can ignore this email.',
@@ -561,12 +753,12 @@ export async function updateMyEmail(req: AuthRequest, res: Response): Promise<vo
     <div style="font-family:-apple-system,BlinkMacSystemFont,Inter,sans-serif;background:#f8fafc;padding:24px">
       <div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden">
         <div style="background:#6366F1;padding:20px 24px;color:#fff">
-          <div style="font-size:12px;opacity:.8;letter-spacing:.06em;text-transform:uppercase">Scholify</div>
+          <div style="font-size:12px;opacity:.8;letter-spacing:.06em;text-transform:uppercase">${chip}</div>
           <div style="font-size:20px;font-weight:800;margin-top:4px">Confirm your new email</div>
         </div>
         <div style="padding:24px;color:#0f172a">
           <p style="margin:0 0 12px;font-size:14px">Hi ${escapeHtml(firstName) || 'there'},</p>
-          <p style="margin:0 0 16px;font-size:14px;line-height:1.55">Enter this code in Scholify to confirm this email address for your account.</p>
+          <p style="margin:0 0 16px;font-size:14px;line-height:1.55">${accountLine}</p>
           <div style="margin:0 0 16px;padding:18px 24px;background:#f1f5f9;border-radius:12px;text-align:center">
             <div style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:32px;font-weight:700;letter-spacing:.18em;color:#0f172a">${code}</div>
           </div>
@@ -631,6 +823,10 @@ export async function confirmEmail(req: Request, res: Response): Promise<void> {
     .eq('id', r.id);
 
   res.json({ email: r.new_email });
+  // confirmEmail is public (token IS the auth), so we have no req.user
+  // context to feed logAudit with. The OTP path verifyEmailCode below
+  // does the audit write. If this legacy route ever sees real traffic,
+  // an inline insert similar to recoverAccount's would be needed here.
 }
 
 // OTP path: authenticated user submits the 6-digit code we sent to the
@@ -694,6 +890,16 @@ export async function verifyEmailCode(req: AuthRequest, res: Response): Promise<
     .eq('id', r.id);
 
   res.json({ email: r.new_email });
+  void logAudit({
+    req,
+    entityType: 'user_account',
+    entityId: r.user_id,
+    action: 'update',
+    before: { email: swap.previousEmail },
+    after: { email: r.new_email },
+    label: 'email_change',
+    reason: 'otp_verified',
+  });
 }
 
 // Applies the email swap on users + manages the 7-day recovery anchor and
@@ -705,15 +911,17 @@ export async function verifyEmailCode(req: AuthRequest, res: Response): Promise<
 async function applyEmailSwapAndAnchor(
   userId: string,
   newEmail: string,
-): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
-  // 1. Fetch the previous email + first name for the alert body
+): Promise<{ ok: true; previousEmail: string | null } | { ok: false; status: number; error: string }> {
+  // 1. Fetch the previous email + first name + school name for the alert body
   const { data: userRow } = await supabase
     .from('users')
-    .select('email, first_name')
+    .select('email, first_name, schools(name)')
     .eq('id', userId)
     .single();
   const previousEmail = (userRow as { email?: string | null })?.email || null;
   const firstName = (userRow as { first_name?: string })?.first_name || '';
+  const schoolName =
+    (userRow as { schools?: { name?: string } | null } | null)?.schools?.name || '';
 
   // 2. Apply the swap
   const { error: upErr } = await supabase
@@ -726,7 +934,7 @@ async function applyEmailSwapAndAnchor(
 
   // 3. If there's no previous email, there's no inbox to send the alert
   //    to. Skip the anchor (the user has no "true" address to revert to).
-  if (!previousEmail) return { ok: true };
+  if (!previousEmail) return { ok: true, previousEmail: null };
 
   // 4. Find an active anchor (unused, unexpired) for this user
   // tenant-check-allow: account_recovery_tokens is user-keyed (no school_id by design)
@@ -773,13 +981,19 @@ async function applyEmailSwapAndAnchor(
   //    admin reset), but we log it loudly so operators can investigate.
   try {
     const recoveryLink = `${PORTAL_URL}/recover-account?token=${raw}`;
-    const subject = existing ? 'Your Scholify email was changed again' : 'Your Scholify email was changed';
+    const schoolSuffix = schoolName ? ` (${schoolName})` : '';
+    const subject = existing
+      ? `Your Scholify email was changed again${schoolSuffix}`
+      : `Your Scholify email was changed${schoolSuffix}`;
+    const chip = schoolName
+      ? `Scholify · ${escapeHtml(schoolName)} · Security alert`
+      : 'Scholify · Security alert';
     const text = [
       `Hi ${firstName || 'there'},`,
       '',
       existing
-        ? `Your Scholify account email was changed again — the latest address on file is now ${newEmail}.`
-        : `Your Scholify account email was just changed to ${newEmail}.`,
+        ? `Your Scholify account email${schoolName ? ` at ${schoolName}` : ''} was changed again — the latest address on file is now ${newEmail}.`
+        : `Your Scholify account email${schoolName ? ` at ${schoolName}` : ''} was just changed to ${newEmail}.`,
       '',
       'If this was you, no action is needed.',
       '',
@@ -792,7 +1006,7 @@ async function applyEmailSwapAndAnchor(
       <div style="font-family:-apple-system,BlinkMacSystemFont,Inter,sans-serif;background:#f8fafc;padding:24px">
         <div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden">
           <div style="background:#b91c1c;padding:20px 24px;color:#fff">
-            <div style="font-size:12px;opacity:.8;letter-spacing:.06em;text-transform:uppercase">Scholify · Security alert</div>
+            <div style="font-size:12px;opacity:.8;letter-spacing:.06em;text-transform:uppercase">${chip}</div>
             <div style="font-size:20px;font-weight:800;margin-top:4px">${escapeHtml(subject)}</div>
           </div>
           <div style="padding:24px;color:#0f172a">
@@ -818,7 +1032,7 @@ async function applyEmailSwapAndAnchor(
   } catch (err) {
     logger.error('email-change recovery alert send failed', { err, userId, anchorEmail });
   }
-  return { ok: true };
+  return { ok: true, previousEmail };
 }
 
 // Public — the recovery link in the security alert email lands here.
@@ -859,13 +1073,18 @@ export async function recoverAccount(req: Request, res: Response): Promise<void>
   // their socket room. Revoking the refresh token alone only kicks them
   // out when their (up-to-15-min) access token expires — too slow for a
   // potentially compromised session. The socket signal makes it instant.
+  // username + role are pulled too so the audit log below can record
+  // who-was-recovered; previousEmail captures the attacker-set address
+  // we're about to overwrite.
   // tenant-check-allow: user_id sourced from token row above
   const { data: userRow } = await supabase
     .from('users')
-    .select('school_id')
+    .select('school_id, username, role, email')
     .eq('id', r.user_id)
     .single();
-  const schoolId = (userRow as { school_id?: string } | null)?.school_id;
+  const u = userRow as { school_id?: string; username?: string; role?: string; email?: string | null } | null;
+  const schoolId = u?.school_id;
+  const previousEmail = u?.email || null;
 
   const passwordHash = await bcrypt.hash(newPassword, 12);
   // tenant-check-allow: user_id sourced from token row above
@@ -901,6 +1120,38 @@ export async function recoverAccount(req: Request, res: Response): Promise<void>
   // honoring this event drops it.
   if (schoolId) {
     getIo()?.to(`school:${schoolId}:user:${r.user_id}`).emit('force_logout', { reason: 'account_recovered' });
+  }
+
+  // Audit log — this is one of the most security-sensitive operations in
+  // the system, so a tamper-evident trail of WHO recovered, WHEN, and
+  // WHAT changed must exist for any later dispute. Inlined (not via
+  // logAudit) because the route is unauthenticated; the token IS the
+  // auth and we synthesize the actor from the user row we just fetched.
+  // Best-effort — never let an audit-write failure roll back the
+  // recovery the user has already been told succeeded.
+  if (schoolId) {
+    try {
+      // tenant-check-allow: school_id sourced from the user row above
+      const { error: auditErr } = await supabase.from('audit_logs').insert({
+        school_id: schoolId,
+        entity_type: 'user_account',
+        entity_id: r.user_id,
+        action: 'update',
+        changes: {
+          email: { old: previousEmail, new: r.anchor_email },
+          password_reset: true,
+          sessions_revoked: true,
+        },
+        actor_id: r.user_id,
+        actor_username: u?.username ?? null,
+        actor_role: u?.role ?? null,
+        label: 'account_recovery',
+        reason: 'recovery_link_used',
+      });
+      if (auditErr) logger.error('audit insert for recoverAccount failed', { err: auditErr });
+    } catch (err) {
+      logger.error('audit insert for recoverAccount threw', { err });
+    }
   }
 
   res.json({ email: r.anchor_email });

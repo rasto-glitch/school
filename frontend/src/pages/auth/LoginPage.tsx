@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Eye, EyeOff, LogIn } from 'lucide-react';
+import { Eye, EyeOff, LogIn, ShieldCheck, ArrowLeft } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { authApi } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
@@ -35,6 +35,12 @@ export default function LoginPage() {
   const { setAuth, isAuthenticated, user } = useAuthStore();
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
+  // MFA step state. When the password step returns mfaRequired, we hold
+  // the rememberMe choice + ticket and switch the form into MFA-code mode.
+  const [mfaTicket, setMfaTicket] = useState<string | null>(null);
+  const [mfaCode, setMfaCode] = useState('');
+  const [mfaRemember, setMfaRemember] = useState(false);
+  const [mfaVerifying, setMfaVerifying] = useState(false);
 
   useEffect(() => {
     if (isAuthenticated() && user) {
@@ -51,6 +57,15 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const res = await authApi.login(data.username, data.password);
+      // MFA-required users: server returns a ticket instead of tokens.
+      // Switch into the code-entry step; rememberMe is held until the
+      // ticket is exchanged so the final setAuth uses the user's choice.
+      if (res.data?.mfaRequired && res.data?.mfaTicket) {
+        setMfaTicket(res.data.mfaTicket);
+        setMfaRemember(!!data.rememberMe);
+        setMfaCode('');
+        return;
+      }
       const { token, refreshToken, user, school } = res.data;
       setAuth(token, refreshToken, user, school, data.rememberMe);
       navigate(ROLE_DASHBOARDS[user.role] || '/');
@@ -59,6 +74,39 @@ export default function LoginPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const onMfaVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!mfaTicket) return;
+    const trimmed = mfaCode.trim();
+    if (!trimmed) {
+      toast.error(t('auth.mfa_code_required', 'Enter the 6-digit code from your authenticator app.'));
+      return;
+    }
+    setMfaVerifying(true);
+    try {
+      const res = await authApi.verifyMfaLogin(mfaTicket, trimmed);
+      const { token, refreshToken, user, school } = res.data;
+      setAuth(token, refreshToken, user, school, mfaRemember);
+      navigate(ROLE_DASHBOARDS[user.role] || '/');
+    } catch (err: any) {
+      // 401 on expired ticket means we drop back to step 1
+      const status = err.response?.status;
+      const msg = err.response?.data?.error;
+      toast.error(msg || t('auth.mfa_failed', 'Could not verify code.'));
+      if (status === 401 && msg && /sign in again/i.test(msg)) {
+        setMfaTicket(null);
+        setMfaCode('');
+      }
+    } finally {
+      setMfaVerifying(false);
+    }
+  };
+
+  const cancelMfa = () => {
+    setMfaTicket(null);
+    setMfaCode('');
   };
 
   return (
@@ -75,6 +123,44 @@ export default function LoginPage() {
 
         {/* Form card */}
         <div className="bg-white rounded-2xl shadow-2xl p-8">
+          {mfaTicket ? (
+            <form onSubmit={onMfaVerify} className="space-y-4">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-10 h-10 bg-primary-100 rounded-xl flex items-center justify-center">
+                  <ShieldCheck className="w-5 h-5 text-primary-700" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-gray-900">{t('auth.mfa_title', 'Two-factor verification')}</h2>
+                  <p className="text-xs text-gray-500">{t('auth.mfa_subtitle', 'Enter the 6-digit code from your authenticator app, or use a recovery code.')}</p>
+                </div>
+              </div>
+              <Input
+                label={t('auth.mfa_code_label', 'Authentication code')}
+                value={mfaCode}
+                onChange={(e) => setMfaCode(e.target.value)}
+                placeholder="123456"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                autoFocus
+                className="tracking-[0.3em] font-mono text-center text-lg"
+              />
+              <Button
+                type="submit"
+                fullWidth
+                loading={mfaVerifying}
+                icon={<LogIn className="w-4 h-4" />}
+              >
+                {t('auth.mfa_verify_action', 'Verify and sign in')}
+              </Button>
+              <button
+                type="button"
+                onClick={cancelMfa}
+                className="w-full inline-flex items-center justify-center gap-1.5 text-sm text-gray-600 hover:text-gray-800 mt-1"
+              >
+                <ArrowLeft className="w-4 h-4" /> {t('auth.mfa_back', 'Back to sign in')}
+              </button>
+            </form>
+          ) : (
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <Input
               label={t('auth.username')}
@@ -131,6 +217,7 @@ export default function LoginPage() {
               </button>
             </div>
           </form>
+          )}
 
           <p className="text-center text-xs text-gray-400 mt-6">
             {t('auth.contact_admin')}

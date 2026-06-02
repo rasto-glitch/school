@@ -10,6 +10,8 @@ import { authApi } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { colors, spacing, radius, font, shadow } from '../../theme';
 
+const MOBILE_ROLES = ['parent', 'teacher', 'driver', 'supervisor'];
+
 export default function LoginScreen() {
   const { setAuth } = useAuthStore();
   const { t } = useTranslation();
@@ -18,18 +20,34 @@ export default function LoginScreen() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  // MFA step (Phase 1: admin + accountant only; in practice unreachable
+  // on mobile because we role-block those after MFA verify, but we
+  // still display the prompt so MFA users see a sensible message
+  // instead of a misleading "role blocked" error from the password
+  // step.)
+  const [mfaTicket, setMfaTicket] = useState<string | null>(null);
+  const [mfaCode, setMfaCode] = useState('');
+  const [mfaVerifying, setMfaVerifying] = useState(false);
+
+  const finalizeLogin = (data: { token: string; refreshToken: string; user: any; school: any }) => {
+    if (!MOBILE_ROLES.includes(data.user?.role)) {
+      Alert.alert(t('auth.role_blocked_title'), t('auth.role_blocked_body'));
+      return;
+    }
+    setAuth(data.token, data.refreshToken, data.user, data.school);
+  };
 
   const handleLogin = async () => {
     if (!username || !password) { Alert.alert('', t('auth.enter_credentials')); return; }
     setLoading(true);
     try {
       const res = await authApi.login(username, password);
-      const MOBILE_ROLES = ['parent', 'teacher', 'driver', 'supervisor'];
-      if (!MOBILE_ROLES.includes(res.data.user?.role)) {
-        Alert.alert(t('auth.role_blocked_title'), t('auth.role_blocked_body'));
+      if (res.data?.mfaRequired && res.data?.mfaTicket) {
+        setMfaTicket(res.data.mfaTicket);
+        setMfaCode('');
         return;
       }
-      setAuth(res.data.token, res.data.refreshToken, res.data.user, res.data.school);
+      finalizeLogin(res.data);
     } catch (err: any) {
       const serverMsg = err.response?.data?.error;
       const msg = serverMsg
@@ -41,6 +59,35 @@ export default function LoginScreen() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleMfaVerify = async () => {
+    if (!mfaTicket) return;
+    const trimmed = mfaCode.trim();
+    if (!trimmed) {
+      Alert.alert('', t('auth.mfa_code_required'));
+      return;
+    }
+    setMfaVerifying(true);
+    try {
+      const res = await authApi.verifyMfaLogin(mfaTicket, trimmed);
+      finalizeLogin(res.data);
+    } catch (err: any) {
+      const status = err.response?.status;
+      const msg = err.response?.data?.error || t('auth.mfa_failed');
+      Alert.alert(t('auth.sign_in_failed'), msg);
+      if (status === 401 && msg && /sign in again/i.test(msg)) {
+        setMfaTicket(null);
+        setMfaCode('');
+      }
+    } finally {
+      setMfaVerifying(false);
+    }
+  };
+
+  const cancelMfa = () => {
+    setMfaTicket(null);
+    setMfaCode('');
   };
 
   return (
@@ -56,42 +103,81 @@ export default function LoginScreen() {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.label}>{t('auth.username')}</Text>
-          <TextInput
-            style={styles.input}
-            value={username}
-            onChangeText={setUsername}
-            autoCapitalize="none"
-            autoCorrect={false}
-            placeholder={t('auth.username_ph')}
-            placeholderTextColor={colors.textMuted}
-            returnKeyType="next"
-          />
+          {mfaTicket ? (
+            <>
+              <Text style={styles.mfaTitle}>{t('auth.mfa_title')}</Text>
+              <Text style={styles.mfaSub}>{t('auth.mfa_subtitle')}</Text>
 
-          <Text style={styles.label}>{t('auth.password')}</Text>
-          <TextInput
-            style={styles.input}
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            placeholder={t('auth.password_ph')}
-            placeholderTextColor={colors.textMuted}
-            returnKeyType="done"
-            onSubmitEditing={handleLogin}
-          />
+              <Text style={styles.label}>{t('auth.mfa_code_label')}</Text>
+              <TextInput
+                style={[styles.input, styles.mfaCodeInput]}
+                value={mfaCode}
+                onChangeText={v => setMfaCode(v.replace(/\D/g, '').slice(0, 6))}
+                keyboardType="number-pad"
+                placeholder="123456"
+                placeholderTextColor={colors.textMuted}
+                maxLength={6}
+                autoFocus
+                textContentType="oneTimeCode"
+                autoComplete="one-time-code"
+                returnKeyType="done"
+                onSubmitEditing={handleMfaVerify}
+              />
 
-          <TouchableOpacity style={[styles.btn, loading && { opacity: 0.7 }]} onPress={handleLogin} disabled={loading}>
-            {loading ? <ActivityIndicator color={colors.textInverse} /> : <Text style={styles.btnText}>{t('auth.sign_in')}</Text>}
-          </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.btn, (mfaVerifying || mfaCode.length !== 6) && { opacity: 0.6 }]}
+                onPress={handleMfaVerify}
+                disabled={mfaVerifying || mfaCode.length !== 6}
+              >
+                {mfaVerifying
+                  ? <ActivityIndicator color={colors.textInverse} />
+                  : <Text style={styles.btnText}>{t('auth.mfa_verify_action')}</Text>}
+              </TouchableOpacity>
 
-          <TouchableOpacity
-            onPress={() => navigation.navigate('ForgotPassword', { prefillUsername: username })}
-            style={styles.forgotWrap}
-          >
-            <Text style={styles.forgotLink}>{t('auth.forgot_password')}</Text>
-          </TouchableOpacity>
+              <TouchableOpacity onPress={cancelMfa} style={styles.forgotWrap}>
+                <Text style={styles.forgotLink}>{t('auth.mfa_back')}</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <Text style={styles.label}>{t('auth.username')}</Text>
+              <TextInput
+                style={styles.input}
+                value={username}
+                onChangeText={setUsername}
+                autoCapitalize="none"
+                autoCorrect={false}
+                placeholder={t('auth.username_ph')}
+                placeholderTextColor={colors.textMuted}
+                returnKeyType="next"
+              />
 
-          <Text style={styles.hint}>{t('auth.contact_admin')}</Text>
+              <Text style={styles.label}>{t('auth.password')}</Text>
+              <TextInput
+                style={styles.input}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                placeholder={t('auth.password_ph')}
+                placeholderTextColor={colors.textMuted}
+                returnKeyType="done"
+                onSubmitEditing={handleLogin}
+              />
+
+              <TouchableOpacity style={[styles.btn, loading && { opacity: 0.7 }]} onPress={handleLogin} disabled={loading}>
+                {loading ? <ActivityIndicator color={colors.textInverse} /> : <Text style={styles.btnText}>{t('auth.sign_in')}</Text>}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => navigation.navigate('ForgotPassword', { prefillUsername: username })}
+                style={styles.forgotWrap}
+              >
+                <Text style={styles.forgotLink}>{t('auth.forgot_password')}</Text>
+              </TouchableOpacity>
+
+              <Text style={styles.hint}>{t('auth.contact_admin')}</Text>
+            </>
+          )}
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -113,4 +199,7 @@ const styles = StyleSheet.create({
   forgotWrap: { alignItems: 'center', marginTop: spacing.md },
   forgotLink: { fontSize: font.sm, fontWeight: '600', color: '#2563EB' },
   hint: { fontSize: font.xs, color: colors.textMuted, textAlign: 'center', marginTop: spacing.md },
+  mfaTitle: { fontSize: font.xl, fontWeight: '800', color: colors.text, marginBottom: 4 },
+  mfaSub: { fontSize: font.sm, color: colors.textSecondary, marginBottom: spacing.md, lineHeight: 20 },
+  mfaCodeInput: { textAlign: 'center', letterSpacing: 8, fontSize: 24, fontVariant: ['tabular-nums'] },
 });

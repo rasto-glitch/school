@@ -3,8 +3,8 @@ import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation, Trans } from 'react-i18next';
 import { toast } from 'react-toastify';
-import { UserPlus, Search, Trash2, KeyRound, Clock, CheckCircle2, X, Pencil, Shield, ExternalLink, Printer } from 'lucide-react';
-import { adminApi } from '../../services/api';
+import { UserPlus, Search, Trash2, KeyRound, Clock, CheckCircle2, X, Pencil, Shield, ShieldOff, ExternalLink, Printer } from 'lucide-react';
+import { adminApi, mfaApi } from '../../services/api';
 import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from '../../utils/passwordPolicy';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
@@ -48,6 +48,30 @@ export default function AccountsPage() {
   const [resetModalUser, setResetModalUser] = useState<any | null>(null);
   const [newPassword, setNewPassword] = useState('');
   const [resetting, setResetting] = useState(false);
+
+  // Admin emergency MFA disable. Reason is required + audited server-side.
+  const [mfaDisableUser, setMfaDisableUser] = useState<any | null>(null);
+  const [mfaDisableReason, setMfaDisableReason] = useState('');
+  const [mfaDisabling, setMfaDisabling] = useState(false);
+
+  const onConfirmMfaDisable = async () => {
+    if (!mfaDisableUser) return;
+    if (mfaDisableReason.trim().length < 4) {
+      toast.error(t('admin.accounts.mfa_reason_required', 'A short reason is required.'));
+      return;
+    }
+    setMfaDisabling(true);
+    try {
+      await mfaApi.adminDisable(mfaDisableUser.id, mfaDisableReason.trim());
+      toast.success(t('admin.accounts.mfa_disable_success', 'Two-factor disabled for {{name}}.', { name: mfaDisableUser.fullName || mfaDisableUser.firstName || mfaDisableUser.username }));
+      setMfaDisableUser(null);
+      setMfaDisableReason('');
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || t('admin.accounts.mfa_disable_failed', 'Could not disable two-factor.'));
+    } finally {
+      setMfaDisabling(false);
+    }
+  };
 
   // Reset requests
   const [resetRequests, setResetRequests] = useState<any[]>([]);
@@ -452,6 +476,15 @@ export default function AccountsPage() {
                     >
                       <KeyRound className="w-4 h-4" />
                     </button>
+                    {(acc.role === 'admin' || acc.role === 'accountant') && (
+                      <button
+                        onClick={() => { setMfaDisableUser(acc); setMfaDisableReason(''); }}
+                        className="text-gray-400 hover:text-red-600 transition-colors p-1.5 rounded-lg hover:bg-red-50"
+                        title={t('admin.accounts.mfa_disable_title', 'Disable two-factor (emergency)')}
+                      >
+                        <ShieldOff className="w-4 h-4" />
+                      </button>
+                    )}
                     {isParent && parent && (
                       <button
                         onClick={() => navigate(`/admin/parents/${parent.id}`)}
@@ -516,6 +549,50 @@ export default function AccountsPage() {
               </Button>
               <Button fullWidth loading={resetting} onClick={onResetPassword} icon={<CheckCircle2 className="w-4 h-4" />}>
                 {t('admin.accounts.set_password')}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* MFA Disable Modal — admin emergency disable for a user who's
+          locked out (lost phone + lost recovery codes). Audited. */}
+      {mfaDisableUser && (
+        <Modal
+          isOpen={true}
+          onClose={() => { setMfaDisableUser(null); setMfaDisableReason(''); }}
+          title={t('admin.accounts.mfa_disable_modal_title', { name: mfaDisableUser.fullName || mfaDisableUser.firstName || mfaDisableUser.username })}
+        >
+          <div className="space-y-4">
+            <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3">
+              <p className="text-sm text-red-900">
+                {t('admin.accounts.mfa_disable_warning', "This turns off two-factor authentication for this user. They will be able to sign in with just their password. Use this only when the user has lost both their authenticator and their recovery codes. The action is logged with your name and reason.")}
+              </p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin.accounts.mfa_disable_reason_label', 'Reason')}</label>
+              <input
+                type="text"
+                value={mfaDisableReason}
+                onChange={e => setMfaDisableReason(e.target.value)}
+                placeholder={t('admin.accounts.mfa_disable_reason_ph', 'e.g. lost phone, in person verified')}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                autoFocus
+                maxLength={500}
+              />
+            </div>
+            <div className="flex gap-3 pt-1">
+              <Button variant="outline" fullWidth onClick={() => { setMfaDisableUser(null); setMfaDisableReason(''); }} icon={<X className="w-4 h-4" />}>
+                {t('common.cancel')}
+              </Button>
+              <Button
+                fullWidth
+                loading={mfaDisabling}
+                onClick={onConfirmMfaDisable}
+                icon={<ShieldOff className="w-4 h-4" />}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                {t('admin.accounts.mfa_disable_action', 'Disable two-factor')}
               </Button>
             </div>
           </div>

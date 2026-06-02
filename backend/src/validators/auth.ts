@@ -50,7 +50,15 @@ export const recoverAccountSchema = z.object({
   newPassword,
 });
 
-export const updateMyEmailSchema = z.object({ email });
+export const updateMyEmailSchema = z.object({
+  email,
+  // Re-prompt for the current password before issuing a verification code
+  // (or, on first-time set, before saving). Catches the unlocked-laptop /
+  // hijacked-session attacker who has a live JWT but doesn't know the
+  // password. Legacy callers without this field will fail open at the
+  // controller layer with a 401, which the new UIs handle.
+  currentPassword: password,
+});
 
 export const deviceTokenSchema = z.object({
   token: opaqueToken,
@@ -61,4 +69,24 @@ export const removeDeviceTokenSchema = z.object({ token: opaqueToken });
 
 export const deviceLanguageSchema = z.object({
   language: z.string().trim().min(1).max(16),
+});
+
+// MFA — TOTP code is always six digits. Recovery codes are
+// XXXX-XXXX-XXXX (alphanumeric, optionally without dashes / mixed case).
+// We accept anything that could plausibly be either form; the controller
+// normalizes + verifies.
+const totpOrRecovery = z.string().trim().min(6).max(32);
+
+export const mfaConfirmSchema = z.object({ code: z.string().trim().regex(/^\d{6}$/, 'A 6-digit code is required.') });
+export const mfaCodeSchema = z.object({ code: totpOrRecovery });
+export const mfaDisableSelfSchema = z.object({
+  currentPassword: password,
+  code: z.string().trim().regex(/^\d{6}$/, 'A 6-digit code is required.'),
+});
+export const mfaVerifyLoginSchema = z.object({
+  mfaTicket: opaqueToken,
+  code: totpOrRecovery,
+});
+export const mfaAdminDisableSchema = z.object({
+  reason: z.string().trim().min(4).max(500),
 });

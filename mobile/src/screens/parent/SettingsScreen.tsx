@@ -122,6 +122,31 @@ export default function SettingsScreen() {
     ]);
   };
 
+  // Revokes every refresh-token family for this user — including the
+  // current session — so anyone signed in elsewhere is kicked the next
+  // time their access token rotates. The local logout() also tears down
+  // this device immediately so the user isn't left staring at a UI whose
+  // refresh has already been killed server-side. Fire-and-forget on the
+  // network call: even if it fails, the user expressed intent to sign
+  // out and we honor the local part regardless.
+  const handleSignOutAll = () => {
+    Alert.alert(
+      t('settings.sign_out_all_title'),
+      t('settings.sign_out_all_confirm'),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('settings.sign_out_all_label'),
+          style: 'destructive',
+          onPress: async () => {
+            try { await authApi.logoutAll(); } catch { /* honor intent locally */ }
+            logout();
+          },
+        },
+      ],
+    );
+  };
+
   const handleChangePassword = async () => {
     if (newPassword !== confirmPassword) {
       Alert.alert('', t('settings.passwords_no_match'));
@@ -297,6 +322,16 @@ export default function SettingsScreen() {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.rowLabel}>{t('settings.reset_password')}</Text>
+          </View>
+          <ChevronRight size={18} color={colors.textMuted} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.row} onPress={handleSignOutAll}>
+          <View style={[styles.iconBox, { backgroundColor: '#FEF2F2' }]}>
+            <LogOut size={18} color="#DC2626" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.rowLabel}>{t('settings.sign_out_all_label')}</Text>
+            <Text style={styles.rowSub}>{t('settings.sign_out_all_sub')}</Text>
           </View>
           <ChevronRight size={18} color={colors.textMuted} />
         </TouchableOpacity>

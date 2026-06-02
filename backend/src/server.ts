@@ -9,6 +9,7 @@ import jwt from 'jsonwebtoken';
 import { createRouter } from './routes/index';
 import { setIo } from './utils/notify';
 import { startBackupVerifySchedule } from './utils/backupVerify';
+import { startTokenGcSchedule } from './utils/tokenGc';
 import { logger } from './utils/logger';
 import { reportError } from './utils/alerting';
 import { supabase } from './config/supabase';
@@ -123,6 +124,7 @@ const tokenRedeemLimiter = rateLimit({
 });
 app.use('/api/auth/reset-with-token', tokenRedeemLimiter);
 app.use('/api/auth/confirm-email', tokenRedeemLimiter);
+app.use('/api/auth/recover-account', tokenRedeemLimiter);
 
 // Refresh-token rotation. A legit client refreshes ~once per access-token
 // lifetime (~15 min); 120 / 15 min / IP is generous for NAT'd schools yet
@@ -260,6 +262,7 @@ httpServer.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV}`);
   startBackupVerifySchedule();
+  startTokenGcSchedule();
 });
 
 export { io };

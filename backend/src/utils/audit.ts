@@ -42,7 +42,11 @@ export type AuditEntityType =
   // Cross-school student transfer (migration 032, phase A)
   | 'student_transfer'
   // Supervisor overrides on locked-day attendance (Phase A daily lock)
-  | 'attendance';
+  | 'attendance'
+  // Self-service auth — email change + account recovery (migration 037)
+  | 'user_account'
+  // MFA enrollment / confirm / disable / regen (migration 038)
+  | 'user_mfa';
 
 interface LogParams {
   req: AuthRequest;

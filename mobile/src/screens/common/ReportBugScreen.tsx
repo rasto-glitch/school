@@ -36,6 +36,7 @@ export default function ReportBugScreen() {
 
   const [emailModalOpen, setEmailModalOpen] = useState(false);
   const [emailDraft, setEmailDraft] = useState('');
+  const [emailPassword, setEmailPassword] = useState('');
   const [savingEmail, setSavingEmail] = useState(false);
 
   const styles = makeStyles(colors);
@@ -115,10 +116,15 @@ export default function ReportBugScreen() {
       Alert.alert(t('bug.email_invalid'));
       return;
     }
+    if (!emailPassword) {
+      Alert.alert(t('bug.email_password_required'));
+      return;
+    }
     setSavingEmail(true);
     try {
-      await authApi.updateMyEmail(clean);
+      await authApi.updateMyEmail(clean, emailPassword);
       setEmailModalOpen(false);
+      setEmailPassword('');
       // Auto-retry once now that they have an email. The retry flag stops a
       // loop if the server still rejects (modal won't reopen).
       setTimeout(() => submit(true), 50);
@@ -233,10 +239,21 @@ export default function ReportBugScreen() {
             autoComplete="email"
           />
 
+          <Text style={styles.fieldLabel}>{t('bug.email_password_label')}</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="••••••••"
+            placeholderTextColor={colors.textMuted}
+            value={emailPassword}
+            onChangeText={setEmailPassword}
+            secureTextEntry
+            autoComplete="current-password"
+          />
+
           <TouchableOpacity
-            style={[styles.submitBtn, savingEmail && styles.submitBtnDisabled]}
+            style={[styles.submitBtn, (savingEmail || !emailPassword) && styles.submitBtnDisabled]}
             onPress={saveEmail}
-            disabled={savingEmail}
+            disabled={savingEmail || !emailPassword}
             activeOpacity={0.85}
           >
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>

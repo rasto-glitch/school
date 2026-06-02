@@ -31,6 +31,9 @@ export default function EmailEditModal({ visible, onClose, currentEmail }: Props
   const setEmail = useAuthStore(s => s.setEmail);
 
   const [draft, setDraft] = useState(currentEmail || '');
+  // Held across resends so the user doesn't re-type to refresh the code.
+  // Wiped on success and on modal close.
+  const [password, setPassword] = useState('');
   const [saving, setSaving] = useState(false);
   const [pendingEmail, setPendingEmail] = useState<string | null>(null);
   const [code, setCode] = useState('');
@@ -41,6 +44,7 @@ export default function EmailEditModal({ visible, onClose, currentEmail }: Props
   useEffect(() => {
     if (visible) {
       setDraft(currentEmail || '');
+      setPassword('');
       setPendingEmail(null);
       setCode('');
       setResendCooldown(0);
@@ -66,9 +70,13 @@ export default function EmailEditModal({ visible, onClose, currentEmail }: Props
       onClose();
       return;
     }
+    if (!password) {
+      Alert.alert(t('settings.email_password_required'));
+      return;
+    }
     setSaving(true);
     try {
-      const r = await authApi.updateMyEmail(clean);
+      const r = await authApi.updateMyEmail(clean, password);
       const { pending, email: applied } = r.data || {};
       if (pending) {
         // Change confirmation — switch to code-input state
@@ -78,6 +86,7 @@ export default function EmailEditModal({ visible, onClose, currentEmail }: Props
       } else {
         // First-time set — backend applied immediately
         setEmail(applied || clean);
+        setPassword('');
         onClose();
       }
     } catch (e: any) {
@@ -99,6 +108,7 @@ export default function EmailEditModal({ visible, onClose, currentEmail }: Props
     try {
       const r = await authApi.verifyEmailCode(code);
       setEmail(r.data?.email || pendingEmail || '');
+      setPassword('');
       onClose();
     } catch (e: any) {
       const data = e?.response?.data;
@@ -120,6 +130,7 @@ export default function EmailEditModal({ visible, onClose, currentEmail }: Props
   const cancelPending = () => {
     setPendingEmail(null);
     setCode('');
+    setPassword('');
   };
 
   return (
@@ -218,10 +229,21 @@ export default function EmailEditModal({ visible, onClose, currentEmail }: Props
               autoFocus
             />
 
+            <Text style={styles.label}>{t('settings.email_confirm_password_label')}</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="••••••••"
+              placeholderTextColor={colors.textMuted}
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              autoComplete="current-password"
+            />
+
             <TouchableOpacity
-              style={[styles.saveBtn, saving && styles.saveBtnDisabled]}
+              style={[styles.saveBtn, (saving || !password) && styles.saveBtnDisabled]}
               onPress={save}
-              disabled={saving}
+              disabled={saving || !password}
               activeOpacity={0.85}
             >
               {saving ? (

@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import multer from 'multer';
-import { login, changePassword, getSchools, forgotPassword, registerDeviceToken, removeDeviceToken, updateDeviceLanguage, uploadProfilePicture, updateMyEmail, verifyEmailCode, getMe, forgotPasswordEmail, resetWithToken, confirmEmail, recoverAccount, refreshToken, logout, logoutAll } from '../controllers/auth.controller';
+import rateLimit from 'express-rate-limit';
+import { login, changePassword, getSchools, forgotPassword, registerDeviceToken, removeDeviceToken, updateDeviceLanguage, uploadProfilePicture, updateMyEmail, verifyEmailCode, getMe, forgotPasswordEmail, resetWithToken, confirmEmail, recoverAccount, refreshToken, logout, logoutAll, verifyMfaLogin } from '../controllers/auth.controller';
+import { getMfaStatus, setupMfa, confirmMfa, disableMfaSelf, regenerateRecoveryCodes, adminDisableMfa } from '../controllers/mfa.controller';
 import { submitBugReport } from '../controllers/bugReport.controller';
 import * as admin from '../controllers/admin.controller';
 import * as archivedProfile from '../controllers/archivedEmployeeProfile.controller';
@@ -44,6 +46,61 @@ import { Server as SocketServer } from 'socket.io';
 // Multer — memory storage so files never touch the filesystem
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
+// Per-user rate limiters for the self-service email-change flow. Defined
+// here rather than via app.use() in server.ts because /auth/me/email and
+// /auth/me/email/verify-code share a path prefix — an app-level limiter
+// on the parent path would burn the same bucket on both. Keyed on
+// req.user.userId (set by authenticate, which runs first) so abuse is
+// capped per account, not per IP — a whole school behind one NAT
+// shouldn't share a quota.
+const userKey = (req: Request): string =>
+  (req as AuthRequest).user?.userId || req.ip || 'anon';
+
+// Sending real emails — tight budget. 10 / 15 min / user.
+const emailChangeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: userKey,
+  message: { error: 'Too many email change requests. Please try again later.' },
+});
+
+// Verifying the 6-digit code. The per-token attempt cap (5) is the inner
+// guard; this is the outer ceiling that stops an attacker from minting
+// fresh tokens to refill attempts indefinitely. 30 / 15 min / user.
+const verifyEmailCodeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: userKey,
+  message: { error: 'Too many verification attempts. Please try again later.' },
+});
+
+// MFA TOTP / recovery code attempts on the login path. Per-IP rather
+// than per-user because the ticket is short-lived and the user identity
+// only becomes visible inside the controller. 10 / 15 min / IP — even a
+// shared NAT only logs in a few times per window.
+const mfaVerifyLoginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many verification attempts. Please sign in again.' },
+});
+
+// MFA enrollment-side actions (setup, confirm, disable-self, regen).
+// Per-user; modest limit because these are interactive UI flows.
+const mfaSelfLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: userKey,
+  message: { error: 'Too many requests. Please try again later.' },
+});
+
 export function createRouter(io: SocketServer) {
   const router = Router();
 
@@ -71,12 +128,21 @@ export function createRouter(io: SocketServer) {
   router.post('/auth/logout-all', authenticate, (req, res) => logoutAll(req as AuthRequest, res));
   router.post('/auth/change-password', authenticate, validate({ body: v.changePasswordSchema }), (req, res) => changePassword(req as AuthRequest, res));
   router.get('/auth/me', authenticate, (req, res) => getMe(req as AuthRequest, res));
-  router.patch('/auth/me/email', authenticate, validate({ body: v.updateMyEmailSchema }), (req, res) => updateMyEmail(req as AuthRequest, res));
-  router.post('/auth/me/email/verify-code', authenticate, validate({ body: v.verifyEmailCodeSchema }), (req, res) => verifyEmailCode(req as AuthRequest, res));
+  router.patch('/auth/me/email', authenticate, emailChangeLimiter, validate({ body: v.updateMyEmailSchema }), (req, res) => updateMyEmail(req as AuthRequest, res));
+  router.post('/auth/me/email/verify-code', authenticate, verifyEmailCodeLimiter, validate({ body: v.verifyEmailCodeSchema }), (req, res) => verifyEmailCode(req as AuthRequest, res));
   router.post('/auth/confirm-email', validate({ body: v.confirmEmailSchema }), (req, res) => confirmEmail(req, res));
   router.post('/auth/recover-account', validate({ body: v.recoverAccountSchema }), (req, res) => recoverAccount(req, res));
   router.post('/auth/forgot-password-email', validate({ body: v.forgotPasswordSchema }), (req, res) => forgotPasswordEmail(req, res));
   router.post('/auth/reset-with-token', validate({ body: v.resetWithTokenSchema }), (req, res) => resetWithToken(req, res));
+
+  // ---- MFA (Phase 1: admin + accountant) ----
+  router.post('/auth/login/verify-mfa', mfaVerifyLoginLimiter, validate({ body: v.mfaVerifyLoginSchema }), (req, res) => verifyMfaLogin(req, res));
+  router.get('/auth/mfa/status', authenticate, (req, res) => getMfaStatus(req as AuthRequest, res));
+  router.post('/auth/mfa/setup', authenticate, mfaSelfLimiter, (req, res) => setupMfa(req as AuthRequest, res));
+  router.post('/auth/mfa/confirm', authenticate, mfaSelfLimiter, validate({ body: v.mfaConfirmSchema }), (req, res) => confirmMfa(req as AuthRequest, res));
+  router.post('/auth/mfa/disable-self', authenticate, mfaSelfLimiter, validate({ body: v.mfaDisableSelfSchema }), (req, res) => disableMfaSelf(req as AuthRequest, res));
+  router.post('/auth/mfa/recovery-codes', authenticate, mfaSelfLimiter, validate({ body: v.mfaConfirmSchema }), (req, res) => regenerateRecoveryCodes(req as AuthRequest, res));
+  router.post('/admin/users/:userId/mfa-disable', authenticate, authorize('admin'), validate({ params: vu.userIdParam, body: v.mfaAdminDisableSchema }), (req, res) => adminDisableMfa(req as AuthRequest, res));
 
   // Bug report — mobile app posts here. Multer accepts one screenshot or
   // short video up to 25 MB. Body field `description` is required.
