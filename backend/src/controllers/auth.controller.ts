@@ -10,7 +10,7 @@ import crypto from 'crypto';
 import { adminDb as supabase } from '../utils/db';
 import { safeExt } from '../utils/upload';
 import { toCC } from '../utils/transform';
-import { emitToAdmins, notify } from '../utils/notify';
+import { emitToAdmins, getIo, notify } from '../utils/notify';
 import { logger } from '../utils/logger';
 import { sendMail } from '../utils/mailer';
 import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from '../utils/passwordPolicy';
@@ -855,6 +855,18 @@ export async function recoverAccount(req: Request, res: Response): Promise<void>
     return;
   }
 
+  // We need the user's school_id to push a real-time force-logout to
+  // their socket room. Revoking the refresh token alone only kicks them
+  // out when their (up-to-15-min) access token expires — too slow for a
+  // potentially compromised session. The socket signal makes it instant.
+  // tenant-check-allow: user_id sourced from token row above
+  const { data: userRow } = await supabase
+    .from('users')
+    .select('school_id')
+    .eq('id', r.user_id)
+    .single();
+  const schoolId = (userRow as { school_id?: string } | null)?.school_id;
+
   const passwordHash = await bcrypt.hash(newPassword, 12);
   // tenant-check-allow: user_id sourced from token row above
   const { error: upErr } = await supabase
@@ -881,6 +893,15 @@ export async function recoverAccount(req: Request, res: Response): Promise<void>
     .update({ used_at: new Date().toISOString() })
     .eq('user_id', r.user_id)
     .is('used_at', null);
+
+  // Real-time kick: any connected client (web or mobile) listening on this
+  // user's room clears its local auth state immediately. Sockets joined
+  // their room at handshake using the auth token; even though that token
+  // is still cryptographically valid for up to 15 minutes, the client
+  // honoring this event drops it.
+  if (schoolId) {
+    getIo()?.to(`school:${schoolId}:user:${r.user_id}`).emit('force_logout', { reason: 'account_recovered' });
+  }
 
   res.json({ email: r.anchor_email });
 }

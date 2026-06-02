@@ -25,6 +25,12 @@ export const useSocketStore = create<SocketState>((set, get) => ({
     const socket = io(SOCKET_URL, {
       auth: (cb) => cb({ token: useAuthStore.getState().token || token }),
     });
+    // Server-initiated forced logout (e.g. recovery flow). Kicks this
+    // session out instantly instead of waiting for the ~15-min access
+    // token TTL to lapse + a failed refresh.
+    socket.on('force_logout', () => {
+      useAuthStore.getState().logout();
+    });
     set({ socket });
   },
   disconnect: () => {

@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form';
 import { toast } from 'react-toastify';
 import { ShieldAlert, ArrowLeft } from 'lucide-react';
 import { authApi } from '../../services/api';
+import { useAuthStore } from '../../store/authStore';
 import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from '../../utils/passwordPolicy';
 import Input from '../../components/common/Input';
 import Button from '../../components/common/Button';
@@ -36,6 +37,11 @@ export default function RecoverAccountPage() {
     setSubmitting(true);
     try {
       await authApi.recoverAccount(token, data.newPassword);
+      // Clear any local auth left over in this browser BEFORE showing the
+      // done state. Otherwise "Go to login" would land the user on /login,
+      // which auto-redirects authenticated users straight into the
+      // dashboard — defeating the whole point of forcing a re-login.
+      useAuthStore.getState().logout();
       setDone(true);
     } catch (err: any) {
       toast.error(err.response?.data?.error || t('recover.failed', 'Could not recover your account. The link may be expired or already used.'));

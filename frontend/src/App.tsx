@@ -109,8 +109,8 @@ import ParentAttendanceHistoryPage from './pages/parent/ParentAttendanceHistoryP
 import AttendancePage from './pages/teacher/AttendancePage';
 
 function SocketProvider({ children }: { children: React.ReactNode }) {
-  const { token, isAuthenticated } = useAuthStore();
-  const { connect, disconnect } = useSocketStore();
+  const { token, isAuthenticated, logout } = useAuthStore();
+  const { connect, disconnect, socket } = useSocketStore();
 
   useEffect(() => {
     if (isAuthenticated() && token) {
@@ -120,6 +120,17 @@ function SocketProvider({ children }: { children: React.ReactNode }) {
     }
     return () => { disconnect(); };
   }, [token]);
+
+  // Server-initiated forced logout. Backend emits this when the account
+  // is recovered (or any other "kick everyone out now" event). We honor
+  // it by clearing local auth — the protected route guards then bounce
+  // the user back to /login.
+  useEffect(() => {
+    if (!socket) return;
+    const onForceLogout = () => { logout(); };
+    socket.on('force_logout', onForceLogout);
+    return () => { socket.off('force_logout', onForceLogout); };
+  }, [socket]);
 
   return <>{children}</>;
 }
