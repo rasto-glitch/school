@@ -7,13 +7,12 @@ import { useSocketStore } from '../../store/socketStore';
 import { parentApi, adminApi, teacherApi, chatApi, receptionApi } from '../../services/api';
 import {
   Home, BookOpen, ClipboardList, Megaphone, BarChart2,
-  MapPin, Bell, User, Users, GraduationCap, Bus,
+  MapPin, Bell, Users, GraduationCap, Bus,
   Calendar, Settings, UserCog, LogOut, ChevronLeft, ChevronRight, ChevronDown,
   FileText, Star, Clock, X, ClipboardCheck, MessageSquare, Archive,
   CreditCard, Wallet, History, Receipt, BookOpenCheck,
   AlertCircle, FileBarChart, BarChart3, CalendarClock, ArrowLeftRight, Scale,
-  ShieldCheck, UserPlus,
-  // Send,                            // re-add when transfers UI is restored — see FEATURE.md
+  ShieldCheck, UserPlus, Send,
 } from 'lucide-react';
 import type { Dispatch, SetStateAction } from 'react';
 import type { Role } from '../../types';
@@ -104,9 +103,8 @@ const adminNav: AdminNavNode[] = [
   },
   { kind: 'leaf', path: '/admin/accounts', icon: UserCog, labelKey: 'nav.accounts', labelFallback: 'Accounts' },
   { kind: 'leaf', path: '/admin/audit-log', icon: History, labelKey: 'nav.audit_log', labelFallback: 'Audit Log' },
-  { kind: 'leaf', path: '/admin/notifications', icon: Bell, labelKey: 'nav.notifications', labelFallback: 'Notifications' },
-  { kind: 'leaf', path: '/admin/settings', icon: Settings, labelKey: 'nav.settings', labelFallback: 'Settings' },
-  { kind: 'leaf', path: '/admin/profile', icon: User, labelKey: 'nav.profile', labelFallback: 'Profile' },
+  { kind: 'leaf', path: '/admin/notifications', icon: Send, labelKey: 'nav.send_notifications', labelFallback: 'Send Notifications' },
+  { kind: 'leaf', path: '/admin/settings', icon: Settings, labelKey: 'nav.school_settings', labelFallback: 'School Settings' },
 ];
 
 function filterAdminTree(node: AdminNavNode, isEnabled: (f?: string) => boolean): AdminNavNode | null {
@@ -231,7 +229,6 @@ const navItems: Partial<Record<Role, NavItem[]>> = {
     { to: '/parent/schedule', icon: Clock, label: 'Schedule' },
     { to: '/chat', icon: MessageSquare, label: 'Chat' },
     { to: '/parent/notifications', icon: Bell, label: 'Notifications' },
-    { to: '/parent/profile', icon: User, label: 'Profile' },
   ],
   teacher: [
     { to: '/teacher/dashboard', icon: Home, label: 'Dashboard' },
@@ -245,14 +242,12 @@ const navItems: Partial<Record<Role, NavItem[]>> = {
     { to: '/teacher/schedule', icon: Calendar, label: 'Schedule' },
     { to: '/chat', icon: MessageSquare, label: 'Chat', feature: 'chat' },
     { to: '/teacher/notifications', icon: Bell, label: 'Notifications' },
-    { to: '/teacher/profile', icon: User, label: 'Profile' },
   ],
   // Admin nav is the nested `adminNav` tree above. Transfers UI is shelved (see FEATURE.md).
   reception: [
     { to: '/reception/dashboard', icon: Home, label: 'Dashboard' },
     { to: '/reception/appointments', icon: Calendar, label: 'Appointments', feature: 'appointments' },
     { to: '/accounting', icon: CreditCard, label: 'Tuition', feature: 'tuition_fees', end: true },
-    { to: '/reception/profile', icon: User, label: 'Profile' },
   ],
   accountant: [
     { to: '/accounting/dashboard', icon: Home, label: 'Dashboard', feature: 'tuition_fees' },
@@ -268,13 +263,11 @@ const navItems: Partial<Record<Role, NavItem[]>> = {
     { to: '/accounting/periods', icon: CalendarClock, label: 'Periods', feature: 'tuition_fees' },
     { to: '/accounting/payment-accounts', icon: Wallet, label: 'Payment accts', feature: 'tuition_fees' },
     { to: '/accounting/fx-rates', icon: ArrowLeftRight, label: 'FX rates', feature: 'tuition_fees' },
-    { to: '/accounting/profile', icon: User, label: 'Profile' },
   ],
   driver: [
     { to: '/driver/dashboard', icon: Home, label: 'Dashboard' },
     { to: '/driver/drive', icon: MapPin, label: 'Start Drive' },
     { to: '/driver/students', icon: Users, label: 'Students' },
-    { to: '/driver/profile', icon: User, label: 'Profile' },
   ],
   supervisor: [
     { to: '/supervisor/dashboard', icon: Home, label: 'Dashboard' },
@@ -286,7 +279,6 @@ const navItems: Partial<Record<Role, NavItem[]>> = {
     { to: '/supervisor/student-reports', icon: FileText, label: 'Student Reports', feature: 'reports' },
     { to: '/chat', icon: MessageSquare, label: 'Chat', feature: 'chat' },
     { to: '/supervisor/notifications', icon: Bell, label: 'Notifications' },
-    { to: '/supervisor/profile', icon: User, label: 'Profile' },
   ],
 };
 
@@ -432,6 +424,9 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
       const active = isLeafActive(node, location.pathname, adminSearchParams, samePath);
       const showResetBadge = node.path === '/admin/accounts' && adminResetRequestCount > 0;
       const label = t(node.labelKey, node.labelFallback);
+      const activeBar = isRTL
+        ? 'before:content-[""] before:absolute before:top-1/2 before:-translate-y-1/2 before:-right-2 before:w-[3px] before:h-[18px] before:bg-primary-600 before:rounded-l-[3px]'
+        : 'before:content-[""] before:absolute before:top-1/2 before:-translate-y-1/2 before:-left-2 before:w-[3px] before:h-[18px] before:bg-primary-600 before:rounded-r-[3px]';
       return (
         <NavLink
           key={`leaf:${href}`}
@@ -442,20 +437,20 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
             if (showResetBadge) setAdminResetRequestCount(0);
           }}
           className={`
-            flex items-center gap-3 px-3 py-2 mx-2 rounded-xl transition-colors duration-150 ${indentClass}
-            ${active ? 'bg-primary-50 text-primary-700 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}
+            relative flex items-center gap-2.5 px-2.5 py-[7px] mx-2 rounded-lg transition-colors duration-150 ${indentClass}
+            ${active ? `bg-primary-50 text-primary-700 font-semibold ${activeBar}` : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}
           `}
           title={collapsed ? label : undefined}
         >
           <div className="relative flex-shrink-0">
-            <Icon className="w-5 h-5" />
+            <Icon className="w-[18px] h-[18px]" />
             {showResetBadge && collapsed && (
               <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full" />
             )}
           </div>
-          {!collapsed && <span className="text-sm flex-1 truncate">{label}</span>}
+          {!collapsed && <span className="text-[13.5px] flex-1 truncate">{label}</span>}
           {!collapsed && showResetBadge && (
-            <span className="bg-red-500 text-white text-xs font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+            <span className="bg-red-500 text-white text-[10.5px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
               {adminResetRequestCount > 99 ? '99+' : adminResetRequestCount}
             </span>
           )}
@@ -475,16 +470,16 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
             to={leafHref(first)}
             onClick={() => setMobileOpen(false)}
             className={`
-              flex items-center gap-3 px-3 py-2 mx-2 rounded-xl transition-colors duration-150 ${indentClass}
+              flex items-center gap-2.5 px-2.5 py-[7px] mx-2 rounded-lg transition-colors duration-150 ${indentClass}
               ${expanded ? 'text-gray-900 font-semibold' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}
             `}
             title={collapsed ? label : undefined}
           >
-            <GroupIcon className="w-5 h-5 flex-shrink-0" />
-            {!collapsed && <span className="text-sm flex-1 truncate">{label}</span>}
+            <GroupIcon className="w-[18px] h-[18px] flex-shrink-0" />
+            {!collapsed && <span className="text-[13.5px] flex-1 truncate">{label}</span>}
             {!collapsed && (
               <ChevronDown
-                className={`w-4 h-4 transition-transform ${expanded ? 'rotate-0' : chevronCollapsedRotate}`}
+                className={`w-[15px] h-[15px] text-gray-400 transition-transform ${expanded ? 'rotate-0' : chevronCollapsedRotate}`}
               />
             )}
           </Link>

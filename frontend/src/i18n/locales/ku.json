@@ -60,6 +60,8 @@
     "drivers": "شوفێرەکان",
     "accounts": "هەژمارەکان",
     "settings": "ڕێکخستنەکان",
+    "school_settings": "ڕێکخستنەکانی قوتابخانە",
+    "send_notifications": "ناردنی ئاگادارکراوەکان",
     "hr": "سەرچاوەی مرۆیی",
     "employees_add": "زیادکردنی کارمەندی نوێ",
     "employees_active": "کارمەندانی چالاک",
@@ -76,6 +78,7 @@
     "search": "گەڕان",
     "save": "پاشکەوتکردن",
     "cancel": "هەڵوەشاندنەوە",
+    "close": "داخستن",
     "confirm": "بەردەوامبوون",
     "back": "گەڕانەوە",
     "loading": "چاوەڕوان بە...",
@@ -350,6 +353,26 @@
     "all_caught_up": "هەمووی خوێندراوەتەوە!",
     "mark_all_read": "هەمووی وەک خوێندراوە نیشان بکە",
     "none": "هیچ ئاگادارکردنەوەیەک نییە"
+  },
+  "top_bar": {
+    "notifications_title": "ئاگادارکردنەوەکان",
+    "no_notifications": "هیچ ئاگادارکردنەوەیەک نییە",
+    "all_caught_up": "هەمووی خوێندراوەتەوە.",
+    "view_all": "بینینی هەموو ئاگادارکردنەوەکان",
+    "notif_appointments_one": "یەک داواکاری وادە",
+    "notif_appointments_other": "{{count}} داواکاری وادە",
+    "notif_reset_requests_one": "یەک داواکاری گۆڕینی وشەی نهێنی",
+    "notif_reset_requests_other": "{{count}} داواکاری گۆڕینی وشەی نهێنی",
+    "notif_unread_one": "یەک ئاگادارکردنەوەی نوێ",
+    "notif_unread_other": "{{count}} ئاگادارکردنەوەی نوێ"
+  },
+  "account_settings": {
+    "title": "ڕێکخستنەکانی هەژمار",
+    "language_section": "زمان و ناوچە",
+    "display_language": "زمانی پیشاندان",
+    "email_section": "ئیمەیڵی هەژمار",
+    "email_label": "ئیمەیڵ",
+    "email_readonly_hint": "پەیوەندی بە بەڕێوبەری قوتابخانە بکە بۆ گۆڕینی ئیمەیڵی هەژمارت."
   },
   "profile": {
     "title": "پرۆفایل",

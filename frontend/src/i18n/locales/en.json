@@ -60,6 +60,8 @@
     "drivers": "Drivers",
     "accounts": "Accounts",
     "settings": "Settings",
+    "school_settings": "School Settings",
+    "send_notifications": "Send Notifications",
     "hr": "HR",
     "employees_add": "Add New Employee",
     "employees_active": "Active Employees",
@@ -76,6 +78,7 @@
     "search": "Search",
     "save": "Save",
     "cancel": "Cancel",
+    "close": "Close",
     "confirm": "Continue",
     "back": "Back",
     "loading": "Loading...",
@@ -350,6 +353,26 @@
     "all_caught_up": "All caught up!",
     "mark_all_read": "Mark all read",
     "none": "No notifications"
+  },
+  "top_bar": {
+    "notifications_title": "Notifications",
+    "no_notifications": "No notifications",
+    "all_caught_up": "You're all caught up.",
+    "view_all": "View all notifications",
+    "notif_appointments_one": "{{count}} appointment request",
+    "notif_appointments_other": "{{count}} appointment requests",
+    "notif_reset_requests_one": "{{count}} password reset request",
+    "notif_reset_requests_other": "{{count}} password reset requests",
+    "notif_unread_one": "{{count}} new notification",
+    "notif_unread_other": "{{count}} new notifications"
+  },
+  "account_settings": {
+    "title": "Account Settings",
+    "language_section": "Language & region",
+    "display_language": "Display language",
+    "email_section": "Account email",
+    "email_label": "Email",
+    "email_readonly_hint": "Contact your school admin to change your account email."
   },
   "profile": {
     "title": "Profile",

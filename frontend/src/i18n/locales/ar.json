@@ -60,6 +60,8 @@
     "drivers": "السائقون",
     "accounts": "الحسابات",
     "settings": "الإعدادات",
+    "school_settings": "إعدادات المدرسة",
+    "send_notifications": "إرسال الإشعارات",
     "hr": "الموارد البشرية",
     "employees_add": "إضافة موظف جديد",
     "employees_active": "الموظفون النشطون",
@@ -76,6 +78,7 @@
     "search": "بحث",
     "save": "حفظ",
     "cancel": "إلغاء",
+    "close": "إغلاق",
     "confirm": "متابعة",
     "back": "رجوع",
     "loading": "جارٍ التحميل...",
@@ -350,6 +353,26 @@
     "all_caught_up": "لا جديد!",
     "mark_all_read": "تحديد الكل كمقروء",
     "none": "لا توجد إشعارات"
+  },
+  "top_bar": {
+    "notifications_title": "الإشعارات",
+    "no_notifications": "لا توجد إشعارات",
+    "all_caught_up": "كل شيء على ما يرام.",
+    "view_all": "عرض كل الإشعارات",
+    "notif_appointments_one": "طلب موعد واحد",
+    "notif_appointments_other": "{{count}} طلبات مواعيد",
+    "notif_reset_requests_one": "طلب إعادة تعيين كلمة مرور",
+    "notif_reset_requests_other": "{{count}} طلبات إعادة تعيين كلمة مرور",
+    "notif_unread_one": "إشعار جديد واحد",
+    "notif_unread_other": "{{count}} إشعارات جديدة"
+  },
+  "account_settings": {
+    "title": "إعدادات الحساب",
+    "language_section": "اللغة والمنطقة",
+    "display_language": "لغة العرض",
+    "email_section": "البريد الإلكتروني للحساب",
+    "email_label": "البريد الإلكتروني",
+    "email_readonly_hint": "تواصل مع مسؤول المدرسة لتغيير البريد الإلكتروني لحسابك."
   },
   "profile": {
     "title": "الملف الشخصي",
