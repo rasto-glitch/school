@@ -4,7 +4,7 @@ import { adminDb as supabase } from '../utils/db';
 import { logAudit } from '../utils/audit';
 import { logger } from '../utils/logger';
 import {
-  generateTotpSecret, buildOtpauthUri, buildQrDataUrl, verifyTotp,
+  generateTotpSecret, buildOtpauthUri, buildQrDataUrl, verifyTotp, verifyTotpDetailed,
   encryptSecret, decryptSecret, generateRecoveryCodes,
 } from '../utils/mfa';
 import type { AuthRequest } from '../middleware/auth';
@@ -180,8 +180,23 @@ export async function confirmMfa(req: AuthRequest, res: Response): Promise<void>
     return;
   }
 
-  if (!verifyTotp(code, secret)) {
-    res.status(400).json({ error: 'Wrong code. Make sure your authenticator clock is correct and try again.' });
+  const verifyResult = verifyTotpDetailed(code, secret);
+  if (!verifyResult.valid) {
+    // Diagnostic logging: delta tells us "near miss" (wrong window =
+    // probably clock skew) vs. "no match at any window" (probably wrong
+    // secret — stale QR or wrong entry in authenticator app). We log the
+    // SHA-256 of the secret instead of the secret itself so a leaked log
+    // can't reveal it.
+    const secretFingerprint = require('crypto').createHash('sha256').update(secret).digest('hex').slice(0, 12);
+    logger.info('MFA confirm verify failed', {
+      userId,
+      epoch: Math.floor(Date.now() / 1000),
+      delta: verifyResult.delta,
+      reason: verifyResult.reason,
+      codeLen: code.length,
+      secretFp: secretFingerprint,
+    });
+    res.status(400).json({ error: 'Wrong code. Make sure you scanned the most recent QR and that your phone clock is set correctly.' });
     return;
   }
 

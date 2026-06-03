@@ -54,9 +54,11 @@ export function decryptSecret(blob: Buffer): string {
 
 // otplib v13 defaults: 30s step, 6-digit code, SHA-1. Industry standard,
 // matches Google Authenticator / Authy / 1Password out of the box.
-// epochTolerance=30 (seconds) accepts ±1 step around now, covering minor
-// clock skew without weakening security materially.
-const TOTP_TOLERANCE_SECONDS = 30;
+// epochTolerance is in seconds. 60s = ±2 steps around now, which covers
+// typical phone/server clock drift without meaningfully expanding the
+// brute-force surface (still 1 in ~5,000,000 per attempt with a per-token
+// attempt cap of 5).
+const TOTP_TOLERANCE_SECONDS = 60;
 
 export function generateTotpSecret(): string {
   return generateSecret({ length: 20 });
@@ -81,6 +83,18 @@ export function verifyTotp(code: string, secret: string): boolean {
     const result = verifySync({ secret, token: code, epochTolerance: TOTP_TOLERANCE_SECONDS });
     return !!result?.valid;
   } catch { return false; }
+}
+
+// Same as verifyTotp but returns the raw result so callers can log
+// diagnostic info (delta, epoch) on near-misses.
+export function verifyTotpDetailed(code: string, secret: string): { valid: boolean; delta?: number; epoch?: number; reason?: string } {
+  if (!/^\d{6}$/.test(code)) return { valid: false, reason: 'not_six_digits' };
+  try {
+    const result = verifySync({ secret, token: code, epochTolerance: TOTP_TOLERANCE_SECONDS });
+    return result as { valid: boolean; delta?: number; epoch?: number };
+  } catch (err) {
+    return { valid: false, reason: 'threw:' + (err as Error).message };
+  }
 }
 
 // Recovery codes — 10 single-use codes formatted XXXX-XXXX-XXXX for
