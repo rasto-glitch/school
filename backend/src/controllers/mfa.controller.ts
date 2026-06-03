@@ -108,7 +108,7 @@ export async function setupMfa(req: AuthRequest, res: Response): Promise<void> {
     .from('user_mfa')
     .upsert({
       user_id: userId,
-      secret_encrypted: encrypted,
+      secret_encrypted: bytea(encrypted),
       recovery_codes_hash: codes.hashes,
       enrolled_at: new Date().toISOString(),
       confirmed_at: null,
@@ -264,7 +264,7 @@ export async function disableMfaSelf(req: AuthRequest, res: Response): Promise<v
     .update({
       disabled_at: now,
       disabled_by: userId,
-      secret_encrypted: Buffer.from([]),
+      secret_encrypted: bytea(Buffer.from([])),
       recovery_codes_hash: [],
       updated_at: now,
     })
@@ -384,7 +384,7 @@ export async function adminDisableMfa(req: AuthRequest, res: Response): Promise<
     .update({
       disabled_at: now,
       disabled_by: adminId,
-      secret_encrypted: Buffer.from([]),
+      secret_encrypted: bytea(Buffer.from([])),
       recovery_codes_hash: [],
       updated_at: now,
     })
@@ -411,6 +411,14 @@ function toBuffer(b: string | Buffer): Buffer {
     return Buffer.from(b, 'base64');
   }
   return Buffer.from([]);
+}
+
+// PostgREST won't accept a Node Buffer as a BYTEA value — `JSON.stringify`
+// turns it into `{"type":"Buffer","data":[...]}`, which Postgres rejects.
+// Send the standard `\x<hex>` BYTEA literal instead; that round-trips
+// cleanly through the JS-string boundary on both write and read.
+function bytea(buf: Buffer): string {
+  return '\\x' + buf.toString('hex');
 }
 
 // Exported for use by the login flow when verifying a TOTP code after
