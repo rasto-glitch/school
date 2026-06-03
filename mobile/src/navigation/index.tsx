@@ -35,6 +35,7 @@ import TuitionScreen from '../screens/parent/TuitionScreen';
 import ParentArchiveScreen from '../screens/parent/ParentArchiveScreen';
 import ChatScreen from '../screens/chat/ChatScreen';
 import ReportBugScreen from '../screens/common/ReportBugScreen';
+import MfaSettingsScreen from '../screens/common/MfaSettingsScreen';
 import type { Homework, Announcement, Conversation, Ebook, Report } from '../types';
 
 export type RootStackParamList = {
@@ -57,6 +58,7 @@ export type RootStackParamList = {
   SetPickupLocation: undefined;
   Settings: undefined;
   ReportBug: undefined;
+  MfaSettings: undefined;
   Reports: undefined;
   Notifications: undefined;
   ReportDetail: { report: Report };
@@ -143,6 +145,7 @@ export default function Navigation() {
               component={SupervisorSalaryScreen}
               options={{ headerShown: true, headerTitle: 'My Salary', headerBackTitle: 'Back' }}
             />
+            <Stack.Screen name="MfaSettings" component={MfaSettingsScreen} options={{ headerShown: false }} />
             <Stack.Screen
               name="AnnouncementDetail"
               component={AnnouncementDetailScreen}
@@ -187,6 +190,7 @@ export default function Navigation() {
               component={TeacherSalaryScreen}
               options={{ headerShown: true, headerTitle: 'My Salary', headerBackTitle: 'Back' }}
             />
+            <Stack.Screen name="MfaSettings" component={MfaSettingsScreen} options={{ headerShown: false }} />
             <Stack.Screen
               name="PostDetail"
               component={PostDetailScreen}

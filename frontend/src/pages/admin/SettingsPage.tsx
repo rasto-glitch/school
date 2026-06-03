@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'react-toastify';
-import { CalendarDays, Settings, Tag, Trash2, Plus, Layers, Image as ImageIcon, GraduationCap } from 'lucide-react';
+import { CalendarDays, Settings, Tag, Trash2, Plus, Layers, Image as ImageIcon, GraduationCap, ShieldCheck } from 'lucide-react';
 import { adminApi } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import PageLayout from '../../components/layout/PageLayout';
@@ -39,6 +39,10 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showWizard, setShowWizard] = useState(false);
+
+  // MFA enforcement (Phase 2). Toggle persists via updateSettings.
+  const [mfaRequired, setMfaRequired] = useState(false);
+  const [savingMfa, setSavingMfa] = useState(false);
 
   const logoInputRef = useRef<HTMLInputElement>(null);
   const [logoUploading, setLogoUploading] = useState(false);
@@ -91,9 +95,29 @@ export default function SettingsPage() {
         const y = r.data?.currentAcademicYear || '';
         setAcademicYear(y);
         setEditYear(y);
+        setMfaRequired(!!r.data?.mfaRequired);
       })
       .finally(() => setLoading(false));
   }, []);
+
+  const onToggleMfaRequired = async (next: boolean) => {
+    setSavingMfa(true);
+    // Optimistic — flip immediately so the switch feels snappy; revert
+    // on failure with a toast.
+    const prev = mfaRequired;
+    setMfaRequired(next);
+    try {
+      await adminApi.updateSettings({ mfaRequired: next });
+      toast.success(next
+        ? t('admin.settings.mfa_required_on_toast', 'Two-factor is now required for eligible staff.')
+        : t('admin.settings.mfa_required_off_toast', 'Two-factor is no longer required.'));
+    } catch (err: any) {
+      setMfaRequired(prev);
+      toast.error(err.response?.data?.error || t('admin.settings.failed_save', 'Could not save changes.'));
+    } finally {
+      setSavingMfa(false);
+    }
+  };
 
   useEffect(() => {
     if (!feat('grades') && !feat('reports')) return;
@@ -305,6 +329,36 @@ export default function SettingsPage() {
           >
             {t('admin.settings.begin_transition')}
           </Button>
+        </Card>
+
+        {/* Security — MFA enforcement */}
+        <Card>
+          <div className="flex items-center gap-2 mb-1">
+            <ShieldCheck className="w-5 h-5 text-primary-600" />
+            <h2 className="font-semibold text-gray-900">{t('admin.settings.security', 'Security')}</h2>
+          </div>
+          <p className="text-sm text-gray-500 mb-4">
+            {t('admin.settings.mfa_required_hint', 'When on, admins, accountants, teachers, supervisors, and receptionists must enroll in two-factor authentication on their next sign-in.')}
+          </p>
+          <label className="flex items-start gap-3 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={mfaRequired}
+              onChange={(e) => onToggleMfaRequired(e.target.checked)}
+              disabled={savingMfa || loading}
+              className="mt-1 w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            />
+            <div className="flex-1">
+              <div className="text-sm font-medium text-gray-900">
+                {t('admin.settings.mfa_required_label', 'Require two-factor authentication')}
+              </div>
+              <div className="text-xs text-gray-500 mt-0.5">
+                {mfaRequired
+                  ? t('admin.settings.mfa_required_state_on', 'On — eligible staff are required to enroll.')
+                  : t('admin.settings.mfa_required_state_off', 'Off — eligible staff may opt in from their account settings.')}
+              </div>
+            </div>
+          </label>
         </Card>
 
         {/* Chat schedule */}

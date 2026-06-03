@@ -1,5 +1,6 @@
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 import { adminDb as supabase } from '../utils/db';
 import { logAudit } from '../utils/audit';
 import { logger } from '../utils/logger';
@@ -7,12 +8,14 @@ import {
   generateTotpSecret, buildOtpauthUri, buildQrDataUrl, verifyTotp, verifyTotpDetailed,
   encryptSecret, decryptSecret, generateRecoveryCodes,
 } from '../utils/mfa';
+import { revokeAllTrustedDevicesForUser, issueTrustedDevice } from '../utils/trustedDevice';
 import type { AuthRequest } from '../middleware/auth';
 
-// Phase 1: TOTP is opt-in for admin + accountant only. The role gate is
-// enforced server-side so a tampered client can't bypass it; the UI
-// hides the section for other roles to match.
-const MFA_ROLES = new Set(['admin', 'accountant']);
+// Phase 2 scope: every role that touches student records or financial
+// data is eligible. The role gate is enforced server-side so a tampered
+// client can't bypass it; the UI hides the section for other roles
+// (parent, driver) to match.
+const MFA_ROLES = new Set(['admin', 'accountant', 'teacher', 'supervisor', 'reception']);
 
 function isEligibleRole(role: string | undefined): boolean {
   return !!role && MFA_ROLES.has(role);
@@ -36,6 +39,113 @@ export async function getMfaStatus(req: AuthRequest, res: Response): Promise<voi
   const confirmed = !!r && r.confirmed_at !== null && r.disabled_at === null;
   const recoveryCodesRemaining = r?.recovery_codes_hash?.length ?? 0;
   res.json({ eligible, enrolled, confirmed, recoveryCodesRemaining });
+}
+
+// Inner helper: generate a fresh secret + recovery codes, encrypt, upsert
+// the row, build the QR + URI. Used by both the authenticated setup
+// endpoint and the ticket-based forced-enrollment endpoint. Doesn't
+// know about the request/response — caller decides how to surface the
+// result and whether to audit.
+async function generateAndStoreMfaSetup(opts: { userId: string; username: string; schoolName: string }):
+  Promise<{ qrDataUrl: string; secret: string; otpauthUri: string; recoveryCodes: string[] } | { error: string; status: number }> {
+  // Block setup if the user already has CONFIRMED + active MFA.
+  // tenant-check-allow: user_mfa is user-keyed
+  const { data: existing } = await supabase
+    .from('user_mfa')
+    .select('confirmed_at, disabled_at')
+    .eq('user_id', opts.userId)
+    .maybeSingle();
+  const ex = existing as { confirmed_at: string | null; disabled_at: string | null } | null;
+  if (ex && ex.confirmed_at && !ex.disabled_at) {
+    return { error: 'Two-factor is already enabled. Disable it first or regenerate recovery codes from settings.', status: 409 };
+  }
+
+  let secret: string;
+  let encrypted: Buffer;
+  let codes: ReturnType<typeof generateRecoveryCodes>;
+  try {
+    secret = generateTotpSecret();
+    encrypted = encryptSecret(secret);
+    codes = generateRecoveryCodes();
+  } catch (err) {
+    logger.error('MFA secret gen / encrypt failed', { err });
+    return { error: 'Could not initialize two-factor setup. Please try again later.', status: 500 };
+  }
+
+  const uri = buildOtpauthUri({ username: opts.username, secret, schoolName: opts.schoolName });
+  let qrDataUrl: string;
+  try {
+    qrDataUrl = await buildQrDataUrl(uri);
+  } catch (err) {
+    logger.error('MFA QR generation failed', { err });
+    return { error: 'Could not generate setup QR. Please try again later.', status: 500 };
+  }
+
+  // tenant-check-allow: user_mfa is user-keyed (PK on user_id)
+  const { error: upErr } = await supabase
+    .from('user_mfa')
+    .upsert({
+      user_id: opts.userId,
+      secret_encrypted: bytea(encrypted),
+      recovery_codes_hash: codes.hashes,
+      enrolled_at: new Date().toISOString(),
+      confirmed_at: null,
+      disabled_at: null,
+      disabled_by: null,
+      failed_attempts: 0,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'user_id' });
+  if (upErr) {
+    logger.error('MFA upsert failed', { err: upErr.message });
+    return { error: 'Could not save two-factor setup. Please try again later.', status: 500 };
+  }
+
+  return { qrDataUrl, secret, otpauthUri: uri, recoveryCodes: codes.display };
+}
+
+// Inner helper: verify a TOTP code against a user's pending enrollment,
+// activate on match. Same pattern as generateAndStoreMfaSetup.
+async function verifyAndActivateMfa(userId: string, code: string):
+  Promise<{ ok: true } | { error: string; status: number }> {
+  // tenant-check-allow: user_mfa is user-keyed
+  const { data: row } = await supabase
+    .from('user_mfa')
+    .select('secret_encrypted, confirmed_at, disabled_at')
+    .eq('user_id', userId)
+    .maybeSingle();
+  const r = row as { secret_encrypted: string | Buffer; confirmed_at: string | null; disabled_at: string | null } | null;
+  if (!r || r.disabled_at) {
+    return { error: 'No pending enrollment. Start setup again.', status: 400 };
+  }
+  if (r.confirmed_at) {
+    return { error: 'Two-factor is already enabled.', status: 400 };
+  }
+  let secret: string;
+  try { secret = decryptSecret(toBuffer(r.secret_encrypted)); }
+  catch (err) {
+    logger.error('MFA secret decrypt failed at confirm', { err });
+    return { error: 'Could not verify code. Please try setup again.', status: 500 };
+  }
+  const result = verifyTotpDetailed(code, secret);
+  if (!result.valid) {
+    const secretFingerprint = require('crypto').createHash('sha256').update(secret).digest('hex').slice(0, 12);
+    logger.info('MFA confirm verify failed', {
+      userId,
+      epoch: Math.floor(Date.now() / 1000),
+      delta: result.delta,
+      reason: result.reason,
+      codeLen: code.length,
+      secretFp: secretFingerprint,
+    });
+    return { error: 'Wrong code. Make sure you scanned the most recent QR and that your phone clock is set correctly.', status: 400 };
+  }
+  const now = new Date().toISOString();
+  // tenant-check-allow: user_mfa is user-keyed
+  await supabase
+    .from('user_mfa')
+    .update({ confirmed_at: now, last_used_at: now, failed_attempts: 0, updated_at: now })
+    .eq('user_id', userId);
+  return { ok: true };
 }
 
 // POST /auth/mfa/setup — start enrollment. Generates a fresh secret +
@@ -64,71 +174,12 @@ export async function setupMfa(req: AuthRequest, res: Response): Promise<void> {
   const username = u?.username || 'user';
   const schoolName = u?.schools?.name || '';
 
-  // Block setup if the user already has CONFIRMED + active MFA — they
-  // should disable first or regenerate via the dedicated endpoint.
-  // tenant-check-allow: user_mfa is user-keyed
-  const { data: existing } = await supabase
-    .from('user_mfa')
-    .select('confirmed_at, disabled_at')
-    .eq('user_id', userId)
-    .maybeSingle();
-  const ex = existing as { confirmed_at: string | null; disabled_at: string | null } | null;
-  if (ex && ex.confirmed_at && !ex.disabled_at) {
-    res.status(409).json({ error: 'Two-factor is already enabled. Disable it first or regenerate recovery codes from settings.' });
+  const result = await generateAndStoreMfaSetup({ userId: userId!, username, schoolName });
+  if ('error' in result) {
+    res.status(result.status).json({ error: result.error });
     return;
   }
-
-  let secret: string;
-  let encrypted: Buffer;
-  let codes: ReturnType<typeof generateRecoveryCodes>;
-  try {
-    secret = generateTotpSecret();
-    encrypted = encryptSecret(secret);
-    codes = generateRecoveryCodes();
-  } catch (err) {
-    logger.error('MFA secret gen / encrypt failed', { err });
-    res.status(500).json({ error: 'Could not initialize two-factor setup. Please try again later.' });
-    return;
-  }
-
-  const uri = buildOtpauthUri({ username, secret, schoolName });
-  let qrDataUrl: string;
-  try {
-    qrDataUrl = await buildQrDataUrl(uri);
-  } catch (err) {
-    logger.error('MFA QR generation failed', { err });
-    res.status(500).json({ error: 'Could not generate setup QR. Please try again later.' });
-    return;
-  }
-
-  // Upsert by user_id (PK). Reset confirmed_at + disabled_at + counter
-  // so a previously-disabled row becomes a fresh enrollment.
-  // tenant-check-allow: user_mfa is user-keyed (PK on user_id)
-  const { error: upErr } = await supabase
-    .from('user_mfa')
-    .upsert({
-      user_id: userId,
-      secret_encrypted: bytea(encrypted),
-      recovery_codes_hash: codes.hashes,
-      enrolled_at: new Date().toISOString(),
-      confirmed_at: null,
-      disabled_at: null,
-      disabled_by: null,
-      failed_attempts: 0,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'user_id' });
-  if (upErr) {
-    logger.error('MFA upsert failed', { err: upErr.message });
-    res.status(500).json({ error: 'Could not save two-factor setup. Please try again later.' });
-    return;
-  }
-
-  res.json({
-    qrDataUrl,
-    secret,
-    otpauthUri: uri,
-    recoveryCodes: codes.display,
-  });
+  res.json(result);
   void logAudit({
     req,
     entityType: 'user_mfa',
@@ -154,59 +205,11 @@ export async function confirmMfa(req: AuthRequest, res: Response): Promise<void>
     res.status(400).json({ error: 'A 6-digit code is required.' });
     return;
   }
-
-  // tenant-check-allow: user_mfa is user-keyed
-  const { data: row } = await supabase
-    .from('user_mfa')
-    .select('secret_encrypted, confirmed_at, disabled_at')
-    .eq('user_id', userId)
-    .maybeSingle();
-  const r = row as { secret_encrypted: string | Buffer; confirmed_at: string | null; disabled_at: string | null } | null;
-  if (!r || r.disabled_at) {
-    res.status(400).json({ error: 'No pending enrollment. Start setup again.' });
+  const result = await verifyAndActivateMfa(userId!, code);
+  if ('error' in result) {
+    res.status(result.status).json({ error: result.error });
     return;
   }
-  if (r.confirmed_at) {
-    res.status(400).json({ error: 'Two-factor is already enabled.' });
-    return;
-  }
-
-  let secret: string;
-  try {
-    secret = decryptSecret(toBuffer(r.secret_encrypted));
-  } catch (err) {
-    logger.error('MFA secret decrypt failed at confirm', { err });
-    res.status(500).json({ error: 'Could not verify code. Please try setup again.' });
-    return;
-  }
-
-  const verifyResult = verifyTotpDetailed(code, secret);
-  if (!verifyResult.valid) {
-    // Diagnostic logging: delta tells us "near miss" (wrong window =
-    // probably clock skew) vs. "no match at any window" (probably wrong
-    // secret — stale QR or wrong entry in authenticator app). We log the
-    // SHA-256 of the secret instead of the secret itself so a leaked log
-    // can't reveal it.
-    const secretFingerprint = require('crypto').createHash('sha256').update(secret).digest('hex').slice(0, 12);
-    logger.info('MFA confirm verify failed', {
-      userId,
-      epoch: Math.floor(Date.now() / 1000),
-      delta: verifyResult.delta,
-      reason: verifyResult.reason,
-      codeLen: code.length,
-      secretFp: secretFingerprint,
-    });
-    res.status(400).json({ error: 'Wrong code. Make sure you scanned the most recent QR and that your phone clock is set correctly.' });
-    return;
-  }
-
-  const now = new Date().toISOString();
-  // tenant-check-allow: user_mfa is user-keyed
-  await supabase
-    .from('user_mfa')
-    .update({ confirmed_at: now, last_used_at: now, failed_attempts: 0, updated_at: now })
-    .eq('user_id', userId);
-
   res.json({ ok: true });
   void logAudit({
     req,
@@ -284,6 +287,11 @@ export async function disableMfaSelf(req: AuthRequest, res: Response): Promise<v
       updated_at: now,
     })
     .eq('user_id', userId);
+
+  // Trusted devices represent "I previously cleared MFA from here"; with
+  // MFA off, that promise is meaningless. Revoke them all so the next
+  // login is a clean slate.
+  await revokeAllTrustedDevicesForUser(userId!);
 
   res.json({ ok: true });
   void logAudit({
@@ -405,6 +413,9 @@ export async function adminDisableMfa(req: AuthRequest, res: Response): Promise<
     })
     .eq('user_id', targetUserId);
 
+  // Same reasoning as self-disable: trust dies when MFA dies.
+  await revokeAllTrustedDevicesForUser(targetUserId);
+
   res.json({ ok: true });
   void logAudit({
     req,
@@ -500,6 +511,192 @@ export async function verifyMfaCodeForUser(
     failed_attempts: 0,
   }).eq('user_id', userId);
   return 'ok';
+}
+
+// Forced-enrollment endpoints (Phase 2). The user passed the password
+// step but didn't have MFA on, and the school requires it for their
+// role. Login issued an `enrollmentTicket` instead of tokens; these
+// endpoints accept that ticket as proof of password-success and walk
+// the user through setup + confirm. The successful confirm here ALSO
+// issues real tokens, so the user lands logged-in.
+
+interface EnrollmentTicketPayload {
+  userId: string;
+  schoolId: string;
+  role: string;
+  type: string;
+}
+
+function verifyEnrollmentTicket(ticket: string): EnrollmentTicketPayload | null {
+  try {
+    const payload = jwt.verify(ticket, process.env.JWT_SECRET!, { algorithms: ['HS256'] }) as EnrollmentTicketPayload;
+    if (payload.type !== 'mfa_enrollment_ticket') return null;
+    if (!payload.userId || !payload.schoolId || !payload.role) return null;
+    return payload;
+  } catch { return null; }
+}
+
+// POST /auth/login/mfa-enroll-setup — ticket-authenticated mirror of
+// /auth/mfa/setup. Public route (the ticket is the auth).
+export async function enrollSetupViaTicket(req: Request, res: Response): Promise<void> {
+  const { enrollmentTicket } = req.body as { enrollmentTicket?: string };
+  if (!enrollmentTicket) {
+    res.status(400).json({ error: 'enrollmentTicket is required' });
+    return;
+  }
+  const payload = verifyEnrollmentTicket(enrollmentTicket);
+  if (!payload) {
+    res.status(401).json({ error: 'Your enrollment session has expired. Please sign in again.' });
+    return;
+  }
+  if (!isEligibleRole(payload.role)) {
+    res.status(403).json({ error: 'Two-factor authentication is not available for this account type.' });
+    return;
+  }
+
+  // Fetch username + school name for the otpauth label, and re-validate
+  // the user is still active.
+  const { data: userRow } = await supabase
+    .from('users')
+    .select('username, is_active, schools(name)')
+    .eq('id', payload.userId)
+    .single();
+  const u = userRow as { username?: string; is_active?: boolean; schools?: { name?: string } | null } | null;
+  if (!u || !u.is_active) {
+    res.status(401).json({ error: 'Account is not active.' });
+    return;
+  }
+  const username = u.username || 'user';
+  const schoolName = u.schools?.name || '';
+
+  const result = await generateAndStoreMfaSetup({ userId: payload.userId, username, schoolName });
+  if ('error' in result) {
+    res.status(result.status).json({ error: result.error });
+    return;
+  }
+  res.json(result);
+
+  // Audit — inline (no req.user) using payload as actor.
+  try {
+    await supabase.from('audit_logs').insert({
+      school_id: payload.schoolId,
+      entity_type: 'user_mfa',
+      entity_id: payload.userId,
+      action: 'create',
+      changes: { state: 'enrolled_pending_confirm' },
+      actor_id: payload.userId,
+      actor_username: username,
+      actor_role: payload.role,
+      label: 'mfa_setup',
+      reason: 'forced_enrollment',
+    });
+  } catch (err) { logger.error('audit insert for enroll-setup failed', { err }); }
+}
+
+// POST /auth/login/mfa-enroll-confirm — ticket-authenticated confirm.
+// On success: activates MFA AND issues the real token pair (the user is
+// now logged in). Also optionally issues a trusted device token if the
+// client asked to remember the browser.
+export async function enrollConfirmViaTicket(req: Request, res: Response): Promise<void> {
+  const { enrollmentTicket, code, rememberDevice } = req.body as { enrollmentTicket?: string; code?: string; rememberDevice?: boolean };
+  if (!enrollmentTicket) {
+    res.status(400).json({ error: 'enrollmentTicket is required' });
+    return;
+  }
+  if (!code || !/^\d{6}$/.test(code)) {
+    res.status(400).json({ error: 'A 6-digit code is required.' });
+    return;
+  }
+  const payload = verifyEnrollmentTicket(enrollmentTicket);
+  if (!payload) {
+    res.status(401).json({ error: 'Your enrollment session has expired. Please sign in again.' });
+    return;
+  }
+
+  const result = await verifyAndActivateMfa(payload.userId, code);
+  if ('error' in result) {
+    res.status(result.status).json({ error: result.error });
+    return;
+  }
+
+  // Pull full user + school for token issue + response (mirrors
+  // verifyMfaLogin's shape). Tokens are issued via a dynamic import to
+  // keep this controller free of cross-controller circular dependencies.
+  const { data: user } = await supabase
+    .from('users')
+    .select('id, username, role, first_name, last_name, profile_picture, email, is_active')
+    .eq('id', payload.userId)
+    .single();
+  if (!user || !(user as { is_active: boolean }).is_active) {
+    res.status(401).json({ error: 'Account is not active.' });
+    return;
+  }
+  const { data: school } = await supabase
+    .from('schools')
+    .select('id, name, slug, logo_url, primary_color, secondary_color, features, features_version, timezone, is_active')
+    .eq('id', payload.schoolId)
+    .single();
+  if (!school || !(school as { is_active: boolean }).is_active) {
+    res.status(401).json({ error: 'School is not active.' });
+    return;
+  }
+
+  const auth = await import('./auth.controller');
+  const u = user as { id: string; username: string; role: string; first_name: string; last_name: string; profile_picture: string | null; email: string | null };
+  const s = school as { id: string; name: string; slug: string; logo_url: string | null; primary_color: string | null; secondary_color: string | null; features: Record<string, unknown> | null; features_version: number | null; timezone: string | null };
+  const featuresVersion = s.features_version ?? 1;
+  const { token, refreshToken } = await auth.issueTokenPair(
+    { id: u.id, role: u.role, username: u.username },
+    s.id,
+    featuresVersion,
+    req,
+  );
+
+  let trustedDeviceToken: string | undefined;
+  if (rememberDevice) {
+    const issued = await issueTrustedDevice({ userId: u.id, schoolId: s.id, req });
+    if (issued) trustedDeviceToken = issued.rawToken;
+  }
+
+  res.json({
+    token,
+    refreshToken,
+    user: {
+      id: u.id,
+      username: u.username,
+      role: u.role,
+      firstName: u.first_name,
+      lastName: u.last_name,
+      profilePicture: u.profile_picture,
+      email: u.email || null,
+    },
+    school: {
+      id: s.id,
+      name: s.name,
+      slug: s.slug,
+      logoUrl: s.logo_url,
+      primaryColor: s.primary_color,
+      secondaryColor: s.secondary_color,
+      features: s.features ?? {},
+      timezone: s.timezone || 'Asia/Baghdad',
+    },
+    ...(trustedDeviceToken ? { trustedDeviceToken } : {}),
+  });
+
+  try {
+    await supabase.from('audit_logs').insert({
+      school_id: s.id,
+      entity_type: 'user_mfa',
+      entity_id: u.id,
+      action: 'update',
+      changes: { state: 'active' },
+      actor_id: u.id,
+      actor_username: u.username,
+      actor_role: u.role,
+      label: 'mfa_confirmed',
+      reason: 'forced_enrollment',
+    });
+  } catch (err) { logger.error('audit insert for enroll-confirm failed', { err }); }
 }
 
 // Helper for the login flow: is MFA active for this user?

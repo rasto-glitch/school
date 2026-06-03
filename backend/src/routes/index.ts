@@ -2,7 +2,8 @@ import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import rateLimit from 'express-rate-limit';
 import { login, changePassword, getSchools, forgotPassword, registerDeviceToken, removeDeviceToken, updateDeviceLanguage, uploadProfilePicture, updateMyEmail, verifyEmailCode, getMe, forgotPasswordEmail, resetWithToken, confirmEmail, recoverAccount, refreshToken, logout, logoutAll, verifyMfaLogin } from '../controllers/auth.controller';
-import { getMfaStatus, setupMfa, confirmMfa, disableMfaSelf, regenerateRecoveryCodes, adminDisableMfa } from '../controllers/mfa.controller';
+import { getMfaStatus, setupMfa, confirmMfa, disableMfaSelf, regenerateRecoveryCodes, adminDisableMfa, enrollSetupViaTicket, enrollConfirmViaTicket } from '../controllers/mfa.controller';
+import { listTrustedDevices, revokeTrustedDevice, revokeAllTrustedDevicesEndpoint } from '../controllers/trustedDevice.controller';
 import { submitBugReport } from '../controllers/bugReport.controller';
 import * as admin from '../controllers/admin.controller';
 import * as archivedProfile from '../controllers/archivedEmployeeProfile.controller';
@@ -135,14 +136,23 @@ export function createRouter(io: SocketServer) {
   router.post('/auth/forgot-password-email', validate({ body: v.forgotPasswordSchema }), (req, res) => forgotPasswordEmail(req, res));
   router.post('/auth/reset-with-token', validate({ body: v.resetWithTokenSchema }), (req, res) => resetWithToken(req, res));
 
-  // ---- MFA (Phase 1: admin + accountant) ----
+  // ---- MFA (Phase 1 + 2: admin + accountant + teacher + supervisor + reception) ----
   router.post('/auth/login/verify-mfa', mfaVerifyLoginLimiter, validate({ body: v.mfaVerifyLoginSchema }), (req, res) => verifyMfaLogin(req, res));
+  // Phase 2 forced enrollment — ticket-authenticated, mirrors the
+  // authenticated setup/confirm flow for users the school is forcing in.
+  router.post('/auth/login/mfa-enroll-setup', mfaVerifyLoginLimiter, validate({ body: v.mfaEnrollSetupSchema }), (req, res) => enrollSetupViaTicket(req, res));
+  router.post('/auth/login/mfa-enroll-confirm', mfaVerifyLoginLimiter, validate({ body: v.mfaEnrollConfirmSchema }), (req, res) => enrollConfirmViaTicket(req, res));
   router.get('/auth/mfa/status', authenticate, (req, res) => getMfaStatus(req as AuthRequest, res));
   router.post('/auth/mfa/setup', authenticate, mfaSelfLimiter, (req, res) => setupMfa(req as AuthRequest, res));
   router.post('/auth/mfa/confirm', authenticate, mfaSelfLimiter, validate({ body: v.mfaConfirmSchema }), (req, res) => confirmMfa(req as AuthRequest, res));
   router.post('/auth/mfa/disable-self', authenticate, mfaSelfLimiter, validate({ body: v.mfaDisableSelfSchema }), (req, res) => disableMfaSelf(req as AuthRequest, res));
   router.post('/auth/mfa/recovery-codes', authenticate, mfaSelfLimiter, validate({ body: v.mfaConfirmSchema }), (req, res) => regenerateRecoveryCodes(req as AuthRequest, res));
   router.post('/admin/users/:userId/mfa-disable', authenticate, authorize('admin'), validate({ params: vu.userIdParam, body: v.mfaAdminDisableSchema }), (req, res) => adminDisableMfa(req as AuthRequest, res));
+
+  // ---- Trusted devices (Phase 3) ----
+  router.get('/auth/trusted-devices', authenticate, (req, res) => listTrustedDevices(req as AuthRequest, res));
+  router.post('/auth/trusted-devices/revoke-all', authenticate, (req, res) => revokeAllTrustedDevicesEndpoint(req as AuthRequest, res));
+  router.post('/auth/trusted-devices/:id/revoke', authenticate, validate({ params: vp.idParam }), (req, res) => revokeTrustedDevice(req as AuthRequest, res));
 
   // Bug report — mobile app posts here. Multer accepts one screenshot or
   // short video up to 25 MB. Body field `description` is required.

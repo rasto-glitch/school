@@ -8,6 +8,8 @@ import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { authApi } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
+import { getTrustedDeviceToken, setTrustedDeviceToken, clearTrustedDeviceToken } from '../../utils/trustedDevice';
+import MfaEnrollPanel, { type MfaEnrollSuccessForced } from '../../components/MfaEnrollPanel';
 import { colors, spacing, radius, font, shadow } from '../../theme';
 
 const MOBILE_ROLES = ['parent', 'teacher', 'driver', 'supervisor'];
@@ -20,19 +22,25 @@ export default function LoginScreen() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  // MFA step (Phase 1: admin + accountant only; in practice unreachable
-  // on mobile because we role-block those after MFA verify, but we
-  // still display the prompt so MFA users see a sensible message
-  // instead of a misleading "role blocked" error from the password
-  // step.)
+  // MFA step. Phase 2 makes teacher + supervisor eligible too, so this
+  // path can land for real mobile users now (admin + accountant are
+  // still web-only; the finalizeLogin role check filters them out).
   const [mfaTicket, setMfaTicket] = useState<string | null>(null);
   const [mfaCode, setMfaCode] = useState('');
   const [mfaVerifying, setMfaVerifying] = useState(false);
+  const [rememberDevice, setRememberDevice] = useState(false);
+  const [mfaUsername, setMfaUsername] = useState<string | null>(null);
+  // Phase 2 forced enrollment
+  const [enrollTicket, setEnrollTicket] = useState<string | null>(null);
+  const [enrollUsername, setEnrollUsername] = useState<string | null>(null);
 
-  const finalizeLogin = (data: { token: string; refreshToken: string; user: any; school: any }) => {
+  const finalizeLogin = async (data: { token: string; refreshToken: string; user: any; school: any; trustedDeviceToken?: string }, usernameForToken?: string) => {
     if (!MOBILE_ROLES.includes(data.user?.role)) {
       Alert.alert(t('auth.role_blocked_title'), t('auth.role_blocked_body'));
       return;
+    }
+    if (data.trustedDeviceToken && usernameForToken) {
+      await setTrustedDeviceToken(usernameForToken, data.trustedDeviceToken);
     }
     setAuth(data.token, data.refreshToken, data.user, data.school);
   };
@@ -41,13 +49,22 @@ export default function LoginScreen() {
     if (!username || !password) { Alert.alert('', t('auth.enter_credentials')); return; }
     setLoading(true);
     try {
-      const res = await authApi.login(username, password);
+      const trustedToken = await getTrustedDeviceToken(username);
+      const res = await authApi.login(username, password, trustedToken);
       if (res.data?.mfaRequired && res.data?.mfaTicket) {
         setMfaTicket(res.data.mfaTicket);
+        setMfaUsername(username);
+        setRememberDevice(false);
         setMfaCode('');
         return;
       }
-      finalizeLogin(res.data);
+      if (res.data?.mfaEnrollmentRequired && res.data?.enrollmentTicket) {
+        setEnrollTicket(res.data.enrollmentTicket);
+        setEnrollUsername(username);
+        setRememberDevice(false);
+        return;
+      }
+      await finalizeLogin(res.data, username);
     } catch (err: any) {
       const serverMsg = err.response?.data?.error;
       const msg = serverMsg
@@ -70,8 +87,8 @@ export default function LoginScreen() {
     }
     setMfaVerifying(true);
     try {
-      const res = await authApi.verifyMfaLogin(mfaTicket, trimmed);
-      finalizeLogin(res.data);
+      const res = await authApi.verifyMfaLogin(mfaTicket, trimmed, rememberDevice);
+      await finalizeLogin(res.data, mfaUsername || username);
     } catch (err: any) {
       const status = err.response?.status;
       const msg = err.response?.data?.error || t('auth.mfa_failed');
@@ -79,6 +96,7 @@ export default function LoginScreen() {
       if (status === 401 && msg && /sign in again/i.test(msg)) {
         setMfaTicket(null);
         setMfaCode('');
+        if (mfaUsername) await clearTrustedDeviceToken(mfaUsername);
       }
     } finally {
       setMfaVerifying(false);
@@ -88,6 +106,20 @@ export default function LoginScreen() {
   const cancelMfa = () => {
     setMfaTicket(null);
     setMfaCode('');
+    setMfaUsername(null);
+    setRememberDevice(false);
+  };
+
+  const onEnrollSuccess = async (payload: MfaEnrollSuccessForced) => {
+    await finalizeLogin(payload, enrollUsername || username);
+    setEnrollTicket(null);
+    setEnrollUsername(null);
+  };
+
+  const onEnrollCancel = () => {
+    setEnrollTicket(null);
+    setEnrollUsername(null);
+    setRememberDevice(false);
   };
 
   return (
@@ -103,7 +135,16 @@ export default function LoginScreen() {
         </View>
 
         <View style={styles.card}>
-          {mfaTicket ? (
+          {enrollTicket ? (
+            <MfaEnrollPanel
+              mode="forced"
+              enrollmentTicket={enrollTicket}
+              rememberDevice={rememberDevice}
+              onRememberDeviceChange={setRememberDevice}
+              onSuccess={onEnrollSuccess}
+              onCancel={onEnrollCancel}
+            />
+          ) : mfaTicket ? (
             <>
               <Text style={styles.mfaTitle}>{t('auth.mfa_title')}</Text>
               <Text style={styles.mfaSub}>{t('auth.mfa_subtitle')}</Text>
@@ -123,6 +164,15 @@ export default function LoginScreen() {
                 returnKeyType="done"
                 onSubmitEditing={handleMfaVerify}
               />
+
+              <TouchableOpacity
+                onPress={() => setRememberDevice(!rememberDevice)}
+                style={styles.checkboxRow}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.checkbox, rememberDevice && { backgroundColor: colors.primary, borderColor: colors.primary }]} />
+                <Text style={styles.checkboxLabel}>{t('auth.remember_device_30d')}</Text>
+              </TouchableOpacity>
 
               <TouchableOpacity
                 style={[styles.btn, (mfaVerifying || mfaCode.length !== 6) && { opacity: 0.6 }]}
@@ -202,4 +252,7 @@ const styles = StyleSheet.create({
   mfaTitle: { fontSize: font.xl, fontWeight: '800', color: colors.text, marginBottom: 4 },
   mfaSub: { fontSize: font.sm, color: colors.textSecondary, marginBottom: spacing.md, lineHeight: 20 },
   mfaCodeInput: { textAlign: 'center', letterSpacing: 8, fontSize: 24, fontVariant: ['tabular-nums'] },
+  checkboxRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm, marginBottom: spacing.xs },
+  checkbox: { width: 18, height: 18, borderRadius: 4, borderWidth: 1.5, borderColor: colors.border },
+  checkboxLabel: { fontSize: font.sm, color: colors.text },
 });

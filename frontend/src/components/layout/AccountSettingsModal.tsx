@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useForm } from 'react-hook-form';
 import { toast } from 'react-toastify';
-import { Globe, Mail, Lock, Loader2, LogOut, ShieldCheck, Copy, CheckCircle2 } from 'lucide-react';
-import { authApi, mfaApi } from '../../services/api';
+import { Globe, Mail, Lock, Loader2, LogOut, ShieldCheck, Copy, CheckCircle2, Monitor, Trash2 } from 'lucide-react';
+import { authApi, mfaApi, trustedDeviceApi } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from '../../utils/passwordPolicy';
 import Modal from '../common/Modal';
@@ -43,6 +43,13 @@ export default function AccountSettingsModal({ isOpen, onClose }: AccountSetting
   const [mfaNewCodes, setMfaNewCodes] = useState<string[] | null>(null);
   const [mfaCopied, setMfaCopied] = useState(false);
 
+  // Trusted devices (Phase 3). Listed only when MFA is active, since
+  // without MFA the concept of "trusted device" has no meaning.
+  type TrustedDevice = { id: string; device_label: string | null; user_agent: string | null; ip: string | null; created_at: string; last_seen_at: string; expires_at: string };
+  const [trustedDevices, setTrustedDevices] = useState<TrustedDevice[] | null>(null);
+  const [trustedLoading, setTrustedLoading] = useState(false);
+  const [revokingId, setRevokingId] = useState<string | null>(null);
+
   // Email change state machine
   const [emailDraft, setEmailDraft] = useState(user?.email || '');
   // Held across resends so the user doesn't have to re-type to refresh
@@ -79,9 +86,22 @@ export default function AccountSettingsModal({ isOpen, onClose }: AccountSetting
       setMfaLoading(false);
     }
   };
+  const refreshTrustedDevices = async () => {
+    setTrustedLoading(true);
+    try {
+      const r = await trustedDeviceApi.list();
+      setTrustedDevices(r.data.devices || []);
+    } catch {
+      setTrustedDevices([]);
+    } finally {
+      setTrustedLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (isOpen) {
       void refreshMfaStatus();
+      void refreshTrustedDevices();
       setMfaShowDisable(false);
       setMfaShowRegen(false);
       setMfaDisablePassword('');
@@ -90,6 +110,31 @@ export default function AccountSettingsModal({ isOpen, onClose }: AccountSetting
       setMfaNewCodes(null);
     }
   }, [isOpen]);
+
+  const onRevokeTrustedDevice = async (id: string) => {
+    setRevokingId(id);
+    try {
+      await trustedDeviceApi.revoke(id);
+      setTrustedDevices((prev) => (prev || []).filter((d) => d.id !== id));
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || t('mfa.trust_revoke_failed', 'Could not revoke device.'));
+    } finally {
+      setRevokingId(null);
+    }
+  };
+
+  const onRevokeAllTrusted = async () => {
+    if (!window.confirm(t('mfa.trust_revoke_all_confirm', 'Forget every trusted browser for this account?'))) return;
+    setRevokingId('all');
+    try {
+      await trustedDeviceApi.revokeAll();
+      setTrustedDevices([]);
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || t('mfa.trust_revoke_failed', 'Could not revoke devices.'));
+    } finally {
+      setRevokingId(null);
+    }
+  };
 
   // Cooldown tick
   useEffect(() => {
@@ -497,18 +542,77 @@ export default function AccountSettingsModal({ isOpen, onClose }: AccountSetting
                   </div>
                 </div>
               ) : (
-                <div className="flex gap-2 flex-wrap">
-                  <Button variant="outline" onClick={() => setMfaShowRegen(true)}>
-                    {t('mfa.regen_open', 'Regenerate recovery codes')}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => setMfaShowDisable(true)}
-                    className="border-red-300 text-red-700 hover:bg-red-50"
-                  >
-                    {t('mfa.disable_open', 'Disable two-factor')}
-                  </Button>
-                </div>
+                <>
+                  <div className="flex gap-2 flex-wrap">
+                    <Button variant="outline" onClick={() => setMfaShowRegen(true)}>
+                      {t('mfa.regen_open', 'Regenerate recovery codes')}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => setMfaShowDisable(true)}
+                      className="border-red-300 text-red-700 hover:bg-red-50"
+                    >
+                      {t('mfa.disable_open', 'Disable two-factor')}
+                    </Button>
+                  </div>
+
+                  {/* Trusted devices subsection */}
+                  <div className="mt-4 pt-4 border-t border-gray-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <Monitor className="w-4 h-4 text-gray-500" />
+                        <h4 className="text-sm font-semibold text-gray-900">
+                          {t('mfa.trust_section_title', 'Trusted devices')}
+                        </h4>
+                      </div>
+                      {trustedDevices && trustedDevices.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={onRevokeAllTrusted}
+                          disabled={revokingId === 'all'}
+                          className="text-xs font-semibold text-red-600 hover:text-red-700 disabled:opacity-50"
+                        >
+                          {t('mfa.trust_revoke_all', 'Revoke all')}
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500 mb-3">
+                      {t('mfa.trust_section_body', "Browsers where you ticked 'Remember this browser' won't prompt for a code for 30 days. Revoke any you no longer recognize.")}
+                    </p>
+                    {trustedLoading ? (
+                      <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+                    ) : !trustedDevices || trustedDevices.length === 0 ? (
+                      <p className="text-xs text-gray-500 italic">
+                        {t('mfa.trust_none', 'No trusted devices.')}
+                      </p>
+                    ) : (
+                      <ul className="space-y-2">
+                        {trustedDevices.map((d) => (
+                          <li key={d.id} className="flex items-center justify-between gap-3 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg">
+                            <div className="min-w-0 flex-1">
+                              <div className="text-sm font-medium text-gray-900 truncate">
+                                {d.device_label || t('mfa.trust_unknown_device', 'Unknown device')}
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                {t('mfa.trust_last_seen', 'Last seen')}: {new Date(d.last_seen_at).toLocaleString()}
+                                {d.ip ? ` · ${d.ip}` : ''}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => onRevokeTrustedDevice(d.id)}
+                              disabled={revokingId === d.id}
+                              className="flex-shrink-0 inline-flex items-center gap-1 text-xs font-semibold text-red-600 hover:text-red-700 disabled:opacity-50"
+                            >
+                              {revokingId === d.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                              {t('mfa.trust_revoke', 'Revoke')}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </>
               )}
             </div>
           )}

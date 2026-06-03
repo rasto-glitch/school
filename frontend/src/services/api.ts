@@ -85,8 +85,8 @@ export async function drainPages<T>(
 // ---- AUTH ----
 export const authApi = {
   getSchools: () => api.get('/schools'),
-  login: (username: string, password: string) =>
-    api.post('/auth/login', { username, password }),
+  login: (username: string, password: string, trustedDeviceToken?: string) =>
+    api.post('/auth/login', { username, password, ...(trustedDeviceToken ? { trustedDeviceToken } : {}) }),
   logout: (refreshToken: string) => api.post('/auth/logout', { refreshToken }),
   logoutAll: () => api.post('/auth/logout-all'),
   changePassword: (currentPassword: string, newPassword: string) =>
@@ -105,8 +105,12 @@ export const authApi = {
   verifyEmailCode: (code: string) => api.post('/auth/me/email/verify-code', { code }),
   recoverAccount: (token: string, newPassword: string) =>
     api.post('/auth/recover-account', { token, newPassword }),
-  verifyMfaLogin: (mfaTicket: string, code: string) =>
-    api.post('/auth/login/verify-mfa', { mfaTicket, code }),
+  verifyMfaLogin: (mfaTicket: string, code: string, rememberDevice?: boolean) =>
+    api.post('/auth/login/verify-mfa', { mfaTicket, code, rememberDevice }),
+  enrollMfaSetup: (enrollmentTicket: string) =>
+    api.post<{ qrDataUrl: string; secret: string; otpauthUri: string; recoveryCodes: string[] }>('/auth/login/mfa-enroll-setup', { enrollmentTicket }),
+  enrollMfaConfirm: (enrollmentTicket: string, code: string, rememberDevice?: boolean) =>
+    api.post('/auth/login/mfa-enroll-confirm', { enrollmentTicket, code, rememberDevice }),
 };
 
 // ---- MFA (Phase 1: admin + accountant) ----
@@ -120,6 +124,14 @@ export const mfaApi = {
     api.post<{ recoveryCodes: string[] }>('/auth/mfa/recovery-codes', { code }),
   adminDisable: (userId: string, reason: string) =>
     api.post<{ ok: true }>(`/admin/users/${userId}/mfa-disable`, { reason }),
+};
+
+// ---- Trusted devices (Phase 3) ----
+export const trustedDeviceApi = {
+  list: () =>
+    api.get<{ devices: { id: string; device_label: string | null; user_agent: string | null; ip: string | null; created_at: string; last_seen_at: string; expires_at: string }[] }>('/auth/trusted-devices'),
+  revoke: (id: string) => api.post<{ ok: true }>(`/auth/trusted-devices/${id}/revoke`),
+  revokeAll: () => api.post<{ ok: true }>('/auth/trusted-devices/revoke-all'),
 };
 
 // ---- ME (self-service employee records, Wave 2.5) ----

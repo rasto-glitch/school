@@ -3576,7 +3576,7 @@ export async function reactivateUser(req: AuthRequest, res: Response): Promise<v
 export async function getSettings(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
   const { data, error } = await supabase.from('schools')
-    .select('current_academic_year, timezone, chat_restrictions')
+    .select('current_academic_year, timezone, chat_restrictions, mfa_required')
     .eq('id', schoolId).single();
   if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data));
@@ -3613,7 +3613,7 @@ function sanitizeChatRestrictions(raw: any): { enabled: boolean; days?: Record<s
 
 export async function updateSettings(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
-  const { currentAcademicYear, timezone, chatRestrictions } = req.body;
+  const { currentAcademicYear, timezone, chatRestrictions, mfaRequired } = req.body;
 
   const patch: Record<string, unknown> = {};
 
@@ -3635,6 +3635,10 @@ export async function updateSettings(req: AuthRequest, res: Response): Promise<v
     patch.chat_restrictions = clean;
   }
 
+  if (mfaRequired !== undefined) {
+    patch.mfa_required = !!mfaRequired;
+  }
+
   if (Object.keys(patch).length === 0) {
     res.status(400).json({ error: 'Nothing to update' }); return;
   }
@@ -3642,7 +3646,7 @@ export async function updateSettings(req: AuthRequest, res: Response): Promise<v
   const { data, error } = await supabase.from('schools')
     .update(patch)
     .eq('id', schoolId)
-    .select('current_academic_year, timezone, chat_restrictions').single();
+    .select('current_academic_year, timezone, chat_restrictions, mfa_required').single();
   if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data));
 }

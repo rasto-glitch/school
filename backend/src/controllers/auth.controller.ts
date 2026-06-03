@@ -16,6 +16,7 @@ import { sendMail } from '../utils/mailer';
 import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from '../utils/passwordPolicy';
 import { logAudit } from '../utils/audit';
 import { isMfaActive, verifyMfaCodeForUser } from './mfa.controller';
+import { checkTrustedDevice, issueTrustedDevice } from '../utils/trustedDevice';
 import type { AuthRequest } from '../middleware/auth';
 // Public landing host where /reset-password and /confirm-email live.
 // First value is treated as canonical; the rest are accepted at runtime
@@ -33,6 +34,15 @@ const ACCOUNT_RECOVERY_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7-day anchor window
 // code) for real tokens. Kept short so a leaked ticket isn't a usable
 // half-credential for long.
 const MFA_TICKET_TTL = '5m';
+// Enrollment ticket — same shape as MFA ticket but for the forced-
+// enrollment flow (Phase 2). Slightly longer because users scanning a
+// QR with a fresh authenticator app may take a few minutes.
+const MFA_ENROLLMENT_TICKET_TTL = '15m';
+
+// Phase 2 enforcement scope — must match MFA_ROLES in mfa.controller.
+// Duplicated here as a local constant to avoid a cross-controller import
+// cycle (mfa.controller already imports from auth.controller).
+const MFA_ELIGIBLE_ROLES = new Set(['admin', 'accountant', 'teacher', 'supervisor', 'reception']);
 
 // Access token is deliberately short-lived: a leaked one dies fast. The
 // 7-day user-visible session is preserved by the rotating refresh token.
@@ -52,7 +62,9 @@ function signAccessToken(user: TokenUser, schoolId: string, featuresVersion: num
 
 // Issues a fresh access token + a new refresh token row. Pass `familyId`
 // to keep a rotation chain together; omit it to start a new session.
-async function issueTokenPair(
+// Exported so the MFA-enrollment-via-ticket flow (in mfa.controller) can
+// also mint sessions without duplicating the rotating-refresh plumbing.
+export async function issueTokenPair(
   user: TokenUser,
   schoolId: string,
   featuresVersion: number,
@@ -218,7 +230,7 @@ export async function getSchools(_req: Request, res: Response): Promise<void> {
 }
 
 export async function login(req: Request, res: Response): Promise<void> {
-  const { username, password, portal } = req.body;
+  const { username, password, portal, trustedDeviceToken } = req.body;
 
   if (!username || !password) {
     res.status(400).json({ error: 'username and password are required' });
@@ -239,7 +251,7 @@ export async function login(req: Request, res: Response): Promise<void> {
   const safeAbbrev = abbreviation.replace(/[\\%_]/g, '\\$&');
   const { data: school, error: schoolErr } = await supabase
     .from('schools')
-    .select('id, name, slug, logo_url, primary_color, secondary_color, features, features_version, timezone')
+    .select('id, name, slug, logo_url, primary_color, secondary_color, features, features_version, timezone, mfa_required')
     .ilike('abbreviation', safeAbbrev)
     .eq('is_active', true)
     .single();
@@ -282,19 +294,45 @@ export async function login(req: Request, res: Response): Promise<void> {
   const signInIp = req.ip || null;
   const newSignIn = await isNewSignIn(user.id, signInUa, signInIp);
 
-  // MFA gate: if this user has TOTP enabled, password alone isn't
-  // enough. We mint a short-lived "ticket" that proves they passed the
-  // password step, and the verify-mfa endpoint exchanges it (+ a code)
-  // for real tokens. The ticket is a separate JWT type so it can't be
-  // mistaken for an access token.
+  // MFA gate: combines two Phase-2 paths and one Phase-3 shortcut.
+  //   1. School requires MFA for this role and user hasn't enrolled
+  //      → enrollment ticket (forced setup at next login).
+  //   2. User has active MFA. Trusted-device check happens BEFORE
+  //      issuing the MFA ticket, so a remembered browser skips the
+  //      second factor entirely.
+  //   3. Otherwise — no MFA needed — proceed with normal token issue.
+  const eligibleForMfa = MFA_ELIGIBLE_ROLES.has(user.role);
+  const schoolMfaRequired = !!(school as { mfa_required?: boolean }).mfa_required && eligibleForMfa;
   const mfaActive = await isMfaActive(user.id);
+
   if (mfaActive) {
-    const mfaTicket = jwt.sign(
-      { userId: user.id, schoolId: school.id, type: 'mfa_ticket' },
+    // Phase 3 trusted-device skip. Only valid if MFA is actually active
+    // for the user — a stale trust from a previously-enrolled-then-
+    // disabled state should NOT bypass enrollment enforcement.
+    let trusted = false;
+    if (typeof trustedDeviceToken === 'string' && trustedDeviceToken.length >= 32) {
+      trusted = await checkTrustedDevice(trustedDeviceToken, user.id);
+    }
+    if (!trusted) {
+      const mfaTicket = jwt.sign(
+        { userId: user.id, schoolId: school.id, type: 'mfa_ticket' },
+        process.env.JWT_SECRET!,
+        { expiresIn: MFA_TICKET_TTL } as jwt.SignOptions,
+      );
+      res.json({ mfaRequired: true, mfaTicket });
+      return;
+    }
+    // trusted=true falls through to normal token issue below
+  } else if (schoolMfaRequired) {
+    // Phase 2 enforcement: school requires MFA for this role, user
+    // isn't enrolled. Issue a short-lived enrollment ticket the client
+    // exchanges via /auth/login/mfa-enroll-setup + /auth/login/mfa-enroll-confirm.
+    const enrollmentTicket = jwt.sign(
+      { userId: user.id, schoolId: school.id, role: user.role, type: 'mfa_enrollment_ticket' },
       process.env.JWT_SECRET!,
-      { expiresIn: MFA_TICKET_TTL } as jwt.SignOptions,
+      { expiresIn: MFA_ENROLLMENT_TICKET_TTL } as jwt.SignOptions,
     );
-    res.json({ mfaRequired: true, mfaTicket });
+    res.json({ mfaEnrollmentRequired: true, enrollmentTicket });
     return;
   }
 
@@ -350,7 +388,7 @@ export async function login(req: Request, res: Response): Promise<void> {
 // Public — the ticket itself is the auth proving the user passed the
 // password step. Rate-limited at the route layer.
 export async function verifyMfaLogin(req: Request, res: Response): Promise<void> {
-  const { mfaTicket, code } = req.body as { mfaTicket?: string; code?: string };
+  const { mfaTicket, code, rememberDevice } = req.body as { mfaTicket?: string; code?: string; rememberDevice?: boolean };
   if (!mfaTicket || typeof mfaTicket !== 'string') {
     res.status(400).json({ error: 'mfaTicket is required' });
     return;
@@ -420,6 +458,15 @@ export async function verifyMfaLogin(req: Request, res: Response): Promise<void>
     req,
   );
 
+  // Phase 3: if the user ticked "remember this browser", mint a trusted
+  // device token. The raw token is returned to the client to persist
+  // (localStorage / AsyncStorage); only its hash lives in the DB.
+  let trustedDeviceToken: string | undefined;
+  if (rememberDevice) {
+    const issued = await issueTrustedDevice({ userId: u.id, schoolId: s.id, req });
+    if (issued) trustedDeviceToken = issued.rawToken;
+  }
+
   res.json({
     token,
     refreshToken,
@@ -442,6 +489,7 @@ export async function verifyMfaLogin(req: Request, res: Response): Promise<void>
       features: s.features ?? {},
       timezone: s.timezone || 'Asia/Baghdad',
     },
+    ...(trustedDeviceToken ? { trustedDeviceToken } : {}),
   });
 
   if (newSignIn) {

@@ -107,8 +107,8 @@ async function multipartRequest<T>(
 // ---- AUTH ----
 export const authApi = {
   getSchools: () => api.get('/schools'),
-  login: (username: string, password: string) =>
-    api.post('/auth/login', { username, password }),
+  login: (username: string, password: string, trustedDeviceToken?: string) =>
+    api.post('/auth/login', { username, password, ...(trustedDeviceToken ? { trustedDeviceToken } : {}) }),
   logout: (refreshToken: string) => api.post('/auth/logout', { refreshToken }),
   logoutAll: () => api.post('/auth/logout-all'),
   registerDeviceToken: (token: string, language: string) =>
@@ -132,8 +132,12 @@ export const authApi = {
     api.patch<{ email?: string; pending?: boolean; sentTo?: string }>('/auth/me/email', { email, currentPassword }),
   verifyEmailCode: (code: string) =>
     api.post<{ email: string }>('/auth/me/email/verify-code', { code }),
-  verifyMfaLogin: (mfaTicket: string, code: string) =>
-    api.post<{ token: string; refreshToken: string; user: any; school: any }>('/auth/login/verify-mfa', { mfaTicket, code }),
+  verifyMfaLogin: (mfaTicket: string, code: string, rememberDevice?: boolean) =>
+    api.post<{ token: string; refreshToken: string; user: any; school: any; trustedDeviceToken?: string }>('/auth/login/verify-mfa', { mfaTicket, code, rememberDevice }),
+  enrollMfaSetup: (enrollmentTicket: string) =>
+    api.post<{ qrDataUrl: string; secret: string; otpauthUri: string; recoveryCodes: string[] }>('/auth/login/mfa-enroll-setup', { enrollmentTicket }),
+  enrollMfaConfirm: (enrollmentTicket: string, code: string, rememberDevice?: boolean) =>
+    api.post<{ token: string; refreshToken: string; user: any; school: any; trustedDeviceToken?: string }>('/auth/login/mfa-enroll-confirm', { enrollmentTicket, code, rememberDevice }),
   getMe: () =>
     api.get<{ id: string; username: string; role: string; firstName: string; lastName: string; profilePicture: string | null; email: string | null }>('/auth/me'),
 };
@@ -150,6 +154,14 @@ export const mfaApi = {
     api.post<{ ok: true }>('/auth/mfa/disable-self', { currentPassword, code }),
   regenerateRecoveryCodes: (code: string) =>
     api.post<{ recoveryCodes: string[] }>('/auth/mfa/recovery-codes', { code }),
+};
+
+// ---- Trusted devices (Phase 3) ----
+export const trustedDeviceApi = {
+  list: () =>
+    api.get<{ devices: { id: string; device_label: string | null; user_agent: string | null; ip: string | null; created_at: string; last_seen_at: string; expires_at: string }[] }>('/auth/trusted-devices'),
+  revoke: (id: string) => api.post<{ ok: true }>(`/auth/trusted-devices/${id}/revoke`),
+  revokeAll: () => api.post<{ ok: true }>('/auth/trusted-devices/revoke-all'),
 };
 
 // ---- BUG REPORT ----

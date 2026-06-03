@@ -46,7 +46,9 @@ export type AuditEntityType =
   // Self-service auth — email change + account recovery (migration 037)
   | 'user_account'
   // MFA enrollment / confirm / disable / regen (migration 038)
-  | 'user_mfa';
+  | 'user_mfa'
+  // Trusted devices — Phase 3 (migration 039)
+  | 'trusted_device';
 
 interface LogParams {
   req: AuthRequest;

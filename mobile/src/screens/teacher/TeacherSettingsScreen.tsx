@@ -257,6 +257,16 @@ export default function TeacherSettingsScreen() {
           </View>
           <ChevronRight size={18} color={colors.textMuted} />
         </TouchableOpacity>
+        <TouchableOpacity style={styles.row} onPress={() => navigation.navigate('MfaSettings')}>
+          <View style={[styles.iconBox, { backgroundColor: '#EEF2FF' }]}>
+            <ShieldCheck size={18} color="#6366F1" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.rowLabel}>{t('mfa.section_title')}</Text>
+            <Text style={styles.rowSub}>{t('mfa.row_sub')}</Text>
+          </View>
+          <ChevronRight size={18} color={colors.textMuted} />
+        </TouchableOpacity>
         <TouchableOpacity style={styles.row} onPress={() => openLegalPage('privacy')}>
           <View style={[styles.iconBox, { backgroundColor: '#F3F4F6' }]}>
             <ShieldCheck size={18} color={colors.textMuted} />

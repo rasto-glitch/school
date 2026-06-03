@@ -21,6 +21,9 @@ export const loginSchema = z.object({
   username,
   password,
   portal: z.string().trim().max(32).optional(),
+  // Phase 3 — present when the client has previously been granted a
+  // "remember this browser" token. Tolerated, not required.
+  trustedDeviceToken: z.string().trim().min(32).max(128).optional(),
 });
 
 export const forgotPasswordSchema = z.object({ username });
@@ -86,7 +89,19 @@ export const mfaDisableSelfSchema = z.object({
 export const mfaVerifyLoginSchema = z.object({
   mfaTicket: opaqueToken,
   code: totpOrRecovery,
+  rememberDevice: z.boolean().optional(),
 });
 export const mfaAdminDisableSchema = z.object({
   reason: z.string().trim().min(4).max(500),
+});
+
+// Forced enrollment (Phase 2). The ticket is the auth — the body
+// otherwise mirrors the authenticated endpoints.
+export const mfaEnrollSetupSchema = z.object({
+  enrollmentTicket: opaqueToken,
+});
+export const mfaEnrollConfirmSchema = z.object({
+  enrollmentTicket: opaqueToken,
+  code: z.string().trim().regex(/^\d{6}$/, 'A 6-digit code is required.'),
+  rememberDevice: z.boolean().optional(),
 });

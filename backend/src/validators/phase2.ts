@@ -198,6 +198,9 @@ export const updateSettingsSchema = z.object({
   currentAcademicYear: z.string().max(20).optional(),
   timezone: z.string().max(64).optional(),
   chatRestrictions: z.any().optional(),
+  // Phase 2 enforcement toggle. When true, eligible roles must enroll
+  // in MFA at next login. The setter has to be an admin (route layer).
+  mfaRequired: z.boolean().optional(),
 }).passthrough();
 export const yearTransitionSchema = z.object({
   newAcademicYear: nonEmptyStr(20),
