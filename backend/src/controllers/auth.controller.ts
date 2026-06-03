@@ -411,6 +411,7 @@ export async function verifyMfaLogin(req: Request, res: Response): Promise<void>
 
   // Re-validate the user — between the password step and this call,
   // the account could have been deactivated.
+  // tenant-check-allow: payload.userId comes from the just-verified MFA ticket, minted in login() only after a school-scoped password match
   const { data: user } = await supabase
     .from('users')
     .select('id, username, role, first_name, last_name, profile_picture, email, is_active')

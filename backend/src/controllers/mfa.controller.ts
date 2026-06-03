@@ -556,6 +556,7 @@ export async function enrollSetupViaTicket(req: Request, res: Response): Promise
 
   // Fetch username + school name for the otpauth label, and re-validate
   // the user is still active.
+  // tenant-check-allow: payload.userId comes from the just-verified enrollment ticket, minted in login() only after a school-scoped password match
   const { data: userRow } = await supabase
     .from('users')
     .select('username, is_active, schools(name)')
@@ -622,6 +623,7 @@ export async function enrollConfirmViaTicket(req: Request, res: Response): Promi
   // Pull full user + school for token issue + response (mirrors
   // verifyMfaLogin's shape). Tokens are issued via a dynamic import to
   // keep this controller free of cross-controller circular dependencies.
+  // tenant-check-allow: payload.userId comes from the just-verified enrollment ticket, minted in login() only after a school-scoped password match
   const { data: user } = await supabase
     .from('users')
     .select('id, username, role, first_name, last_name, profile_picture, email, is_active')
