@@ -23,6 +23,8 @@ export interface Report {
   examMarks?: number;
   reportDate?: string;
   createdAt: string;
+  // migration 041
+  academicYear?: string;
   students?: { fullName: string };
   teachers?: { fullName: string };
 }
@@ -36,6 +38,13 @@ export default function ReportsScreen() {
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  // PR 2 — year filter chip row.
+  const [yearFilter, setYearFilter] = useState('');
+  const allYears = useMemo(
+    () => Array.from(new Set(reports.map(r => r.academicYear).filter((y): y is string => !!y))).sort((a, b) => b.localeCompare(a)),
+    [reports],
+  );
+  const visibleReports = yearFilter ? reports.filter(r => r.academicYear === yearFilter) : reports;
 
   const clearReport = useBadgeStore(s => s.clearReport);
   const setUnreadCount = useBadgeStore(s => s.setUnreadCount);
@@ -65,15 +74,27 @@ export default function ReportsScreen() {
       contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.md, paddingBottom: 40 }]}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
     >
+      {allYears.length > 1 && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing.md }}>
+          <TouchableOpacity style={[styles.yearChip, !yearFilter && styles.yearChipActive]} onPress={() => setYearFilter('')}>
+            <Text style={[styles.yearChipText, !yearFilter && styles.yearChipTextActive]}>{t('reports.year_filter_all')}</Text>
+          </TouchableOpacity>
+          {allYears.map(yr => (
+            <TouchableOpacity key={yr} style={[styles.yearChip, yearFilter === yr && styles.yearChipActive]} onPress={() => setYearFilter(yr)}>
+              <Text style={[styles.yearChipText, yearFilter === yr && styles.yearChipTextActive]}>{yr}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
       {loading ? (
         <CardListSkeleton count={4} />
-      ) : reports.length === 0 ? (
+      ) : visibleReports.length === 0 ? (
         <View style={styles.empty}>
           <FileText size={40} color={colors.textMuted} />
           <Text style={styles.emptyText}>{t('reports.no_reports')}</Text>
         </View>
       ) : (
-        reports.map(r => {
+        visibleReports.map(r => {
           const preview = r.teacherNotes || r.behaviorNotes || r.attendanceNotes;
           const dateStr = r.reportDate
             ? new Date(r.reportDate).toLocaleDateString()
@@ -127,4 +148,8 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   date: { fontSize: font.xs, color: colors.textMuted },
   preview: { fontSize: font.sm, color: colors.textSecondary, lineHeight: 20, marginBottom: spacing.xs },
   teacher: { fontSize: font.xs, color: colors.textMuted },
+  yearChip: { borderWidth: 1.5, borderColor: colors.border, borderRadius: radius.full, paddingHorizontal: 14, paddingVertical: 6, marginRight: spacing.sm, backgroundColor: colors.card },
+  yearChipActive: { borderColor: colors.primary, backgroundColor: colors.primaryLight },
+  yearChipText: { fontSize: font.sm, color: colors.textSecondary, fontWeight: '500' },
+  yearChipTextActive: { color: colors.primary, fontWeight: '700' },
 });

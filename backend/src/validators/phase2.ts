@@ -39,6 +39,15 @@ export const createReportSchema = z.object({
   behaviorNotes: optText(),
   teacherNotes: optText(),
   marks: marksArr.optional(),
+  // Migration 041 + PR 2 — per-report opt-in for cross-subject handoff
+  // visibility. Default false. School-level gate is checked at read time
+  // (schools.features.teacher_report_handoff).
+  sharedWithOtherTeachers: z.boolean().optional(),
+});
+// PR 2 — share toggle on an existing report. Only the report's author can
+// flip it (enforced in the controller).
+export const setReportShareSchema = z.object({
+  shared: z.boolean(),
 });
 export const upsertGradeSchema = z.object({
   studentId: uuid,

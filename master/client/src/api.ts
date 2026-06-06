@@ -33,6 +33,12 @@ export interface SchoolFeatures {
   chat: boolean;
   archive: boolean;
   tuition_fees: boolean;
+  // Migration 041 — when on, a teacher viewing one of their students sees
+  // (a) Tier A: prior-year reports written for that student in the same
+  // subjects the teacher teaches, and (b) any report another teacher
+  // explicitly toggled "share with other teachers" on. When off, teachers
+  // see only their own past reports for that student.
+  teacher_report_handoff: boolean;
 }
 
 // Premium-only feature keys. Excluded from non-premium plan defaults
@@ -53,6 +59,7 @@ export const DEFAULT_FEATURES: SchoolFeatures = {
   chat: true,
   archive: true,
   tuition_fees: false,
+  teacher_report_handoff: true,
 };
 
 export interface School {

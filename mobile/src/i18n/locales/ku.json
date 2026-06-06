@@ -243,7 +243,8 @@
     "subject": "بابەت",
     "school_note": "تێبینی لە قوتابخانە",
     "cumulative_gpa": "ناوەندی گشتی (GPA)",
-    "year_gpa": "GPA ی ساڵ"
+    "year_gpa": "GPA ی ساڵ",
+    "year_filter_all": "هەموو ساڵەکان"
   },
   "reports": {
     "title": "ڕاپۆرتەکان",
@@ -255,7 +256,29 @@
     "quiz_marks": "نمرەی تاقیکردنەوەی کورت",
     "exam_marks": "نمرەی تاقیکردنەوە",
     "report_date": "بەرواری ڕاپۆرت",
-    "by_teacher": "لەلایەن {{name}}"
+    "by_teacher": "لەلایەن {{name}}",
+    "year_filter_all": "هەموو ساڵەکان"
+  },
+  "attendance_history": {
+    "parent_title": "مێژووی ئامادەبوون",
+    "parent_subtitle": "کۆی ساڵانە لە سەردەمی تۆمارکردنی منداڵەکەتدا.",
+    "choose_child_prompt": "منداڵێک هەڵبژێرە بۆ بینینی مێژووی ئامادەبوونی.",
+    "archive_required_title": "بەردەست نییە",
+    "archive_required": "قوتابخانەکەت تایبەتمەندی ئەرشیفی ئامادەبوونی چالاک نەکردووە. داوا لە ئەدمین بکە چالاکی بکات.",
+    "none": "هێشتا مێژووی ئامادەبوون بۆ ئەم منداڵە نییە.",
+    "live_count": "ساڵی ئێستا — کۆکان بە تۆمارکردنی ئامادەبوون نوێ دەبنەوە",
+    "present": "ئامادە",
+    "absent": "نائامادە",
+    "late": "دوادکەوتن",
+    "excused": "بە بیانوو",
+    "total_days": "{{count}} ڕۆژ تۆمارکراو",
+    "status_enrolled": "تۆمارکراو",
+    "status_promoted": "بەرزکراوەتەوە",
+    "status_retained": "گەڕێنراوەتەوە",
+    "status_on_leave": "لە چوونی نییە",
+    "status_withdrew": "کشایەوە",
+    "status_transferred": "گواستراوەتەوە",
+    "status_graduated": "دەرچوو"
   },
   "schoolpicker": {
     "title": "Scholify",
@@ -510,6 +533,8 @@
     "period_short": "و{{n}}"
   },
   "teacher": {
+    "share_report_label": "بەشداری کردن لەم ڕاپۆرتە لەگەڵ مامۆستاکانی ئەم قوتابییە",
+    "share_report_help": "ئەو مامۆستایانەی ئێستا یان پێشتر ئەم قوتابییەیان وانە دەڵێتەوە دەتوانن ئەم ڕاپۆرتە ببینن.",
     "welcome": "بەخێربێیت، {{name}}",
     "summary_period_open": "ماوەی پوختە کراوەیە · {{start}} – {{end}}",
     "quick_actions": "کردارە خێراکان",

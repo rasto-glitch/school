@@ -243,7 +243,8 @@
     "subject": "المادة",
     "school_note": "ملاحظة من المدرسة",
     "cumulative_gpa": "المعدل التراكمي",
-    "year_gpa": "معدل السنة"
+    "year_gpa": "معدل السنة",
+    "year_filter_all": "كل السنوات"
   },
   "reports": {
     "title": "التقارير",
@@ -255,7 +256,29 @@
     "quiz_marks": "درجات الاختبار القصير",
     "exam_marks": "درجات الامتحان",
     "report_date": "تاريخ التقرير",
-    "by_teacher": "بقلم {{name}}"
+    "by_teacher": "بقلم {{name}}",
+    "year_filter_all": "كل السنوات"
+  },
+  "attendance_history": {
+    "parent_title": "سجل الحضور",
+    "parent_subtitle": "إجماليات سنوية عبر سنوات تسجيل طفلك.",
+    "choose_child_prompt": "اختر طفلًا لرؤية سجل حضوره.",
+    "archive_required_title": "غير متاح",
+    "archive_required": "لم تُفعّل مدرستك ميزة السجلات التاريخية للحضور. اطلب من الإدارة تفعيل ميزة الأرشيف.",
+    "none": "لا يوجد سجل حضور لهذا الطفل بعد.",
+    "live_count": "السنة الحالية — الإجماليات تتحدّث مع تسجيل الحضور",
+    "present": "حاضر",
+    "absent": "غائب",
+    "late": "متأخر",
+    "excused": "بعذر",
+    "total_days": "{{count}} يوم مسجّل",
+    "status_enrolled": "مسجَّل",
+    "status_promoted": "مُرفَّع",
+    "status_retained": "أُعيد",
+    "status_on_leave": "في إجازة",
+    "status_withdrew": "انسحب",
+    "status_transferred": "منقول",
+    "status_graduated": "متخرج"
   },
   "schoolpicker": {
     "title": "Scholify",
@@ -510,6 +533,8 @@
     "period_short": "ح{{n}}"
   },
   "teacher": {
+    "share_report_label": "مشاركة هذا التقرير مع باقي معلمي هذا الطالب",
+    "share_report_help": "سيتمكن المعلمون الذين يدرّسون أو درّسوا هذا الطالب من رؤية هذا التقرير.",
     "welcome": "مرحباً، {{name}}",
     "summary_period_open": "فترة الملخص مفتوحة · {{start}} – {{end}}",
     "quick_actions": "إجراءات سريعة",

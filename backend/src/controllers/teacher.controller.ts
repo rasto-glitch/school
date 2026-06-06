@@ -11,6 +11,8 @@ import {
   buildAttendanceNotificationCopy,
   type AttendanceWriteStatus,
 } from '../utils/attendance';
+import { academicYearOf, loadEnrollmentHistory, rowsToSnapshot } from '../utils/studentEnrollments';
+import { logAudit } from '../utils/audit';
 // Elevated client for STORAGE-only operations — see chat.controller.ts
 // for the rationale.
 import { adminDb } from '../utils/db';
@@ -232,19 +234,33 @@ export async function deleteAssignment(req: AuthRequest, res: Response): Promise
 }
 
 // ---- REPORTS ----
+// Reports are the year-by-year academic narrative of each student
+// (migration 041). Every write stamps:
+//   * academic_year — derived from the calendar via academicYearOf() (Sep
+//     boundary). NOT from schools.current_academic_year, which is purely
+//     informational and can lag the real boundary — see audit finding HD-4.
+//   * class_id + class_name_snapshot — captured from the student's current
+//     class. The snapshot column survives a class rename or delete.
+//   * teacher_name_snapshot — captured from the teacher's profile. Survives
+//     the teacher leaving / being archived.
+//   * shared_with_other_teachers — the per-report opt-in toggle for
+//     cross-subject visibility on the teacher handoff view. Defaults
+//     false; the UI to flip it ships in PR 2.
 export async function createReport(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId, userId } = req.user!;
-  const { studentId, subject, attendanceNotes, behaviorNotes, marks, teacherNotes } = req.body;
+  const { studentId, subject, attendanceNotes, behaviorNotes, marks, teacherNotes, sharedWithOtherTeachers } = req.body;
 
-  const [{ data: teacher }, { data: school }, { data: studentRow }] = await Promise.all([
-    req.db!.from('teachers').select('id').eq('user_id', userId).eq('school_id', schoolId).single(),
-    req.db!.from('schools').select('current_academic_year').eq('id', schoolId).single(),
-    req.db!.from('students').select('class_id').eq('id', studentId).eq('school_id', schoolId).maybeSingle(),
+  const [{ data: teacher }, { data: studentRow }] = await Promise.all([
+    req.db!.from('teachers').select('id, full_name').eq('user_id', userId).eq('school_id', schoolId).single(),
+    req.db!.from('students').select('class_id, classes(name)').eq('id', studentId).eq('school_id', schoolId).maybeSingle(),
   ]);
   if (!teacher) { res.status(404).json({ error: 'Teacher not found' }); return; }
   if (!(await subjectAllowedForClass(schoolId, teacher.id, (studentRow as any)?.class_id, subject))) {
     res.status(403).json({ error: `You aren't assigned to teach ${subject} for this student's class.` }); return;
   }
+
+  const classId = (studentRow as any)?.class_id ?? null;
+  const className = (studentRow as any)?.classes?.name ?? null;
 
   const { data, error } = await req.db!.from('reports').insert({
     school_id: schoolId,
@@ -255,7 +271,11 @@ export async function createReport(req: AuthRequest, res: Response): Promise<voi
     behavior_notes: behaviorNotes,
     marks: marks || [],
     teacher_notes: teacherNotes,
-    academic_year: school?.current_academic_year || null,
+    academic_year: academicYearOf(),
+    class_id: classId,
+    class_name_snapshot: className,
+    teacher_name_snapshot: (teacher as { full_name?: string }).full_name ?? null,
+    shared_with_other_teachers: Boolean(sharedWithOtherTeachers),
   }).select().single();
 
   if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
@@ -616,4 +636,187 @@ export async function getStudentBrief(req: AuthRequest, res: Response): Promise<
     reports: toCC(reportsRes.data || []),
     grades: toCC(gradesRes.data || []),
   });
+}
+
+// ── PR 2 — TEACHER HANDOFF (migration 041) ──────────────────────────────
+//
+// "Prior progress" view: a teacher viewing one of their current students
+// can see the student's prior years of academic history — enrollment
+// rows, released grades, and reports. Reports follow the locked
+// visibility rule:
+//
+//   * teacher's OWN reports                                 — always
+//   * same-subject reports written by other teachers, when
+//     the class is one of the teacher's current classes      — Tier A default
+//   * any report another teacher toggled `shared_with_other_
+//     teachers = true` on                                    — opt-in broadcast
+//
+// All three above are gated on schools.features.teacher_report_handoff.
+// When the flag is OFF, only the teacher's own reports surface (so the
+// page still works as a "see my own history" view).
+//
+// Grades follow the released-only rule (parents-visible gate); they're
+// not opt-in and so the same school flag doesn't apply to them.
+// Supervisors are unaffected by this endpoint — they already have their
+// own broader access through admin-style routes.
+
+export async function getStudentHistory(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId, userId } = req.user!;
+  const { id: studentId } = req.params;
+
+  // Resolve the calling teacher, their classes, and the curriculum rows
+  // that pin down which (class, subject) pairs they're allowed to read
+  // cross-teacher for Tier A.
+  const { data: teacher } = await req.db!
+    .from('teachers')
+    .select('id, teacher_classes(class_id), class_subject_teachers(class_id, subject_id, subjects(name))')
+    .eq('user_id', userId).eq('school_id', schoolId).single();
+  if (!teacher) { res.status(404).json({ error: 'Teacher not found' }); return; }
+
+  const teacherId: string = (teacher as any).id;
+  const teacherClassIds: string[] = ((teacher as any).teacher_classes ?? []).map((tc: any) => tc.class_id);
+
+  const { data: student, error: stuErr } = await req.db!
+    .from('students')
+    .select('id, full_name, profile_picture, class_id, classes(name)')
+    .eq('id', studentId).eq('school_id', schoolId).single();
+  if (stuErr || !student) { res.status(404).json({ error: 'Student not found' }); return; }
+
+  // Ownership: teacher can only view the history of a student in one of
+  // their current classes. Mirrors getStudentBrief.
+  if (teacherClassIds.length > 0 && (student as any).class_id && !teacherClassIds.includes((student as any).class_id)) {
+    res.status(403).json({ error: 'Forbidden' }); return;
+  }
+
+  const { data: school } = await req.db!
+    .from('schools').select('features').eq('id', schoolId).single();
+  const handoffOn = (school?.features as Record<string, boolean> | null)?.teacher_report_handoff !== false;
+
+  // Subject keys the teacher teaches to the student's current class (Tier A).
+  // We match by subject NAME because that's what reports.subject stores.
+  const currentClassId = (student as any).class_id ?? null;
+  const tierASubjects: string[] = currentClassId
+    ? Array.from(new Set(
+        ((teacher as any).class_subject_teachers ?? [])
+          .filter((r: any) => r.class_id === currentClassId)
+          .map((r: any) => r.subjects?.name)
+          .filter((s: unknown): s is string => typeof s === 'string' && s.length > 0)
+      ))
+    : [];
+
+  // Fetch reports in three buckets and merge. We deliberately UNION on the
+  // application side rather than try to OR all three into a single supabase
+  // query — the resulting query plan stays simple and the result-set is
+  // bounded by one student.
+  const baseSelect = 'id, school_id, student_id, teacher_id, subject, class_id, class_name_snapshot, teacher_name_snapshot, attendance_notes, behavior_notes, marks, teacher_notes, quiz_marks, exam_marks, report_date, academic_year, shared_with_other_teachers, created_at';
+
+  // (a) own
+  const ownPromise = req.db!
+    .from('reports').select(baseSelect)
+    .eq('school_id', schoolId).eq('student_id', studentId).eq('teacher_id', teacherId);
+
+  // (b) Tier A: same-subject reports for the student's current class,
+  //     written by other teachers, only when handoff is on.
+  const tierAPromise = (handoffOn && currentClassId && tierASubjects.length > 0)
+    ? req.db!.from('reports').select(baseSelect)
+        .eq('school_id', schoolId).eq('student_id', studentId)
+        .eq('class_id', currentClassId)
+        .in('subject', tierASubjects)
+        .neq('teacher_id', teacherId)
+    : Promise.resolve({ data: [] as unknown[], error: null });
+
+  // (c) shared broadcast: any report another teacher opted in to share.
+  const sharedPromise = handoffOn
+    ? req.db!.from('reports').select(baseSelect)
+        .eq('school_id', schoolId).eq('student_id', studentId)
+        .eq('shared_with_other_teachers', true)
+        .neq('teacher_id', teacherId)
+    : Promise.resolve({ data: [] as unknown[], error: null });
+
+  const [ownRes, tierARes, sharedRes] = await Promise.all([ownPromise, tierAPromise, sharedPromise]);
+  if (ownRes.error) { res.status(500).json({ error: ownRes.error.message }); return; }
+
+  const dedupById = new Map<string, any>();
+  for (const r of (ownRes.data as any[] | null) ?? []) dedupById.set(r.id, { ...r, _origin: 'own' });
+  for (const r of (tierARes.data as any[] | null) ?? []) if (!dedupById.has(r.id)) dedupById.set(r.id, { ...r, _origin: 'tier_a' });
+  for (const r of (sharedRes.data as any[] | null) ?? []) if (!dedupById.has(r.id)) dedupById.set(r.id, { ...r, _origin: 'shared' });
+
+  const reports = Array.from(dedupById.values()).sort((a, b) => {
+    // year desc, then created_at desc
+    const ay = String(a.academic_year ?? '');
+    const by = String(b.academic_year ?? '');
+    if (ay !== by) return by.localeCompare(ay);
+    return String(b.created_at ?? '').localeCompare(String(a.created_at ?? ''));
+  });
+
+  // Released grades for the student — admin gate already applied. Not
+  // gated on the handoff flag (grades are released-to-parent, so they're
+  // already broadly visible).
+  const { data: grades, error: gradesErr } = await req.db!
+    .from('grades')
+    .select('id, subject, marks, grading_period, academic_year, is_released, released_at, class_id, teacher_id, daily_grade, quiz_grade, monthly_exam_grade, term_exam_grade, created_at')
+    .eq('school_id', schoolId).eq('student_id', studentId).eq('is_released', true)
+    .order('academic_year', { ascending: false })
+    .order('grading_period');
+  if (gradesErr) { res.status(500).json({ error: gradesErr.message }); return; }
+
+  // Per-year enrollment timeline (already school-scoped by the helper).
+  const enrollmentRows = await loadEnrollmentHistory(schoolId, String(studentId));
+  const enrollmentHistory = rowsToSnapshot(enrollmentRows);
+
+  res.json({
+    student: toCC(student),
+    handoffEnabled: handoffOn,
+    reports: toCC(reports),
+    grades: toCC(grades || []),
+    enrollmentHistory,
+  });
+}
+
+// PATCH /teacher/reports/:id/share — flip the per-report opt-in toggle
+// on a report I authored. Only the writing teacher can change it; admins
+// have separate paths (and aren't expected to touch this in normal flow).
+// Audited; the next reader sees the new state immediately.
+export async function setReportShare(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId, userId } = req.user!;
+  const { id } = req.params;
+  const { shared } = req.body as { shared: boolean };
+
+  const { data: teacher } = await req.db!
+    .from('teachers').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
+  if (!teacher) { res.status(404).json({ error: 'Teacher not found' }); return; }
+
+  // Verify the report exists, belongs to this school, and was authored by
+  // this teacher. School-scoped + author-scoped — the UPDATE below
+  // wouldn't match someone else's report, but the explicit check gives a
+  // clean 403 instead of a silent no-op.
+  const { data: existing } = await req.db!
+    .from('reports').select('id, teacher_id, student_id, shared_with_other_teachers')
+    .eq('id', id).eq('school_id', schoolId).maybeSingle();
+  if (!existing) { res.status(404).json({ error: 'Report not found' }); return; }
+  if ((existing as any).teacher_id !== (teacher as any).id) {
+    res.status(403).json({ error: 'You can only change the sharing on reports you authored.' }); return;
+  }
+
+  const newVal = Boolean(shared);
+  if (Boolean((existing as any).shared_with_other_teachers) === newVal) {
+    res.json({ id, sharedWithOtherTeachers: newVal });
+    return;
+  }
+
+  const { data, error } = await req.db!
+    .from('reports')
+    .update({ shared_with_other_teachers: newVal })
+    .eq('id', id).eq('school_id', schoolId).eq('teacher_id', (teacher as any).id)
+    .select('id, shared_with_other_teachers').single();
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+
+  await logAudit({
+    req, entityType: 'report', entityId: String(id), action: 'update',
+    before: { shared_with_other_teachers: Boolean((existing as any).shared_with_other_teachers) },
+    after: { shared_with_other_teachers: newVal },
+    label: 'report_share_toggled',
+  });
+
+  res.json({ id: (data as any).id, sharedWithOtherTeachers: Boolean((data as any).shared_with_other_teachers) });
 }

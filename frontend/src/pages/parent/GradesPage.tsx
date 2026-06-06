@@ -21,6 +21,10 @@ export default function GradesPage() {
   const [error, setError] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
   const [cfg, setCfg] = useState<GradingConfig>({ mode: 'scale', bands: [], markMaxes: {} });
+  // PR 2 — let the parent narrow the view to one academic year. Default
+  // (empty string) shows every year on file. Cumulative GPA still spans
+  // the full history regardless of the filter.
+  const [yearFilter, setYearFilter] = useState('');
 
   useEffect(() => {
     parentApi.getChildren().then(r => {
@@ -58,24 +62,41 @@ export default function GradesPage() {
     return acc;
   }, {} as Record<string, Record<string, Record<string, Grade>>>);
 
-  const years = Object.keys(byYear).sort((a, b) => b.localeCompare(a));
+  const allYears = Object.keys(byYear).sort((a, b) => b.localeCompare(a));
+  const years = yearFilter ? allYears.filter(y => y === yearFilter) : allYears;
 
-  // Cumulative GPA across everything on file (equal-weight).
+  // Cumulative GPA across everything on file (equal-weight) — deliberately
+  // NOT filtered by the year picker; the cumulative is the lifetime number.
   const cgpa = averageGpa(grades.map(g => points(g)).filter((p): p is number => p != null));
 
   return (
     <PageLayout title={t('grades.title')} subtitle={t('grades.subtitle')}>
       <div className="space-y-6">
-        {children.length > 1 && (
-          <div className="w-full sm:w-56">
-            <Select
-              label={t('common.child')}
-              options={children.map(c => ({ value: c.id, label: c.fullName }))}
-              value={selectedChild}
-              onChange={e => setSelectedChild(e.target.value)}
-            />
-          </div>
-        )}
+        <div className="flex flex-wrap gap-3 items-end">
+          {children.length > 1 && (
+            <div className="w-full sm:w-56">
+              <Select
+                label={t('common.child')}
+                options={children.map(c => ({ value: c.id, label: c.fullName }))}
+                value={selectedChild}
+                onChange={e => setSelectedChild(e.target.value)}
+              />
+            </div>
+          )}
+          {allYears.length > 1 && (
+            <div className="w-full sm:w-44">
+              <Select
+                label={t('grades.academic_year_label')}
+                options={[
+                  { value: '', label: t('grades.year_filter_all') },
+                  ...allYears.map(y => ({ value: y, label: y })),
+                ]}
+                value={yearFilter}
+                onChange={e => setYearFilter(e.target.value)}
+              />
+            </div>
+          )}
+        </div>
 
         {loading ? <GradesTableSkeleton /> : error ? (
           <ErrorMessage onRetry={() => setRetryKey(k => k + 1)} />

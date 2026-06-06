@@ -424,12 +424,14 @@ export function createRouter(io: SocketServer) {
   router.post('/teacher/assignments', authenticate, authorize('teacher'), upload.single('attachment'), validate({ body: vupl.createAssignmentSchema }), (req, res) => teacher.createAssignment(req as AuthRequest, res));
   router.delete('/teacher/assignments/:id', authenticate, authorize('teacher'), validate({ params: vp.idParam }), (req, res) => teacher.deleteAssignment(req as AuthRequest, res));
   router.post('/teacher/reports', authenticate, authorize('teacher'), validate({ body: vp.createReportSchema }), (req, res) => teacher.createReport(req as AuthRequest, res));
+  router.patch('/teacher/reports/:id/share', authenticate, authorize('teacher'), validate({ params: vp.idParam, body: vp.setReportShareSchema }), (req, res) => teacher.setReportShare(req as AuthRequest, res));
   router.get('/teacher/grades', authenticate, authorize('teacher'), validate({ query: vq.listQuery }), (req, res) => teacher.getGrades(req as AuthRequest, res));
   router.post('/teacher/grades', authenticate, authorize('teacher'), validate({ body: vp.upsertGradeSchema }), (req, res) => teacher.upsertGrade(req as AuthRequest, res));
   router.get('/teacher/weekly-summary', authenticate, authorize('teacher'), (req, res) => teacher.getWeeklySummary(req as AuthRequest, res));
   router.post('/teacher/weekly-summary', authenticate, authorize('teacher'), validate({ body: vp.upsertWeeklySummarySchema }), (req, res) => teacher.upsertWeeklySummary(req as AuthRequest, res));
   router.get('/teacher/students', authenticate, authorize('teacher'), (req, res) => teacher.getMyStudents(req as AuthRequest, res));
   router.get('/teacher/students/:id/brief', authenticate, authorize('teacher'), (req, res) => teacher.getStudentBrief(req as AuthRequest, res));
+  router.get('/teacher/students/:id/history', authenticate, authorize('teacher'), validate({ params: vp.idParam }), (req, res) => teacher.getStudentHistory(req as AuthRequest, res));
   router.get('/teacher/classes', authenticate, authorize('teacher'), (req, res) => teacher.getMyClasses(req as AuthRequest, res));
   router.get('/teacher/notifications', authenticate, authorize('teacher'), validate({ query: vq.listQuery }), (req, res) => parent.getNotifications(req as AuthRequest, res));
   router.get('/teacher/notifications/unread-count', authenticate, authorize('teacher'), (req, res) => parent.getUnreadCount(req as AuthRequest, res));

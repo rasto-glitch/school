@@ -232,6 +232,8 @@ export const teacherApi = {
       data instanceof FormData ? { headers: { 'Content-Type': 'multipart/form-data' } } : {}),
   deleteAssignment: (id: string) => api.delete(`/teacher/assignments/${id}`),
   createReport: (data: object) => api.post('/teacher/reports', data),
+  setReportShare: (id: string, shared: boolean) => api.patch(`/teacher/reports/${id}/share`, { shared }),
+  getStudentHistory: (id: string) => api.get(`/teacher/students/${id}/history`),
   getGrades: (studentId: string) => api.get('/teacher/grades', { params: { studentId } }),
   upsertGrade: (data: object) => api.post('/teacher/grades', data),
   getMarkTypes: (appliesTo?: 'report' | 'grade') => api.get('/teacher/mark-types', { params: appliesTo ? { for: appliesTo } : {} }),

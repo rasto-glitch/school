@@ -1,9 +1,10 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'react-toastify';
-import { FileText, Plus, Trash2 } from 'lucide-react';
+import { FileText, Plus, Trash2, Share2, Lock } from 'lucide-react';
 import { teacherApi } from '../../services/api';
 import { useTeacherProfile } from '../../hooks/useTeacherProfile';
+import { useAuthStore } from '../../store/authStore';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
 import Select from '../../components/common/Select';
@@ -24,6 +25,12 @@ export default function WriteReportPage() {
   const [marks, setMarks] = useState<Mark[]>([]);
   const [markTypes, setMarkTypes] = useState<MarkType[]>([]);
   const [loading, setLoading] = useState(false);
+  // PR 2 — per-report share toggle. Defaults off (private to same-subject
+  // colleagues + admin only). Visible only when the school enables the
+  // teacher_report_handoff feature; when the feature is off the report
+  // stays in the "my work" lane regardless and the toggle is hidden.
+  const [shared, setShared] = useState(false);
+  const handoffEnabled = useAuthStore(s => s.school?.features?.teacher_report_handoff !== false);
 
   useEffect(() => {
     teacherApi.getClasses().then(r => setClasses(r.data || []));
@@ -81,6 +88,7 @@ export default function WriteReportPage() {
         behaviorNotes,
         teacherNotes,
         marks: marks.map(m => ({ name: m.name, value: parseFloat(String(m.value)) || 0 })),
+        sharedWithOtherTeachers: shared,
       });
       toast.success(t('teacher.report_submitted'));
       setSelectedStudent('');
@@ -88,6 +96,7 @@ export default function WriteReportPage() {
       setBehaviorNotes('');
       setTeacherNotes('');
       setMarks([]);
+      setShared(false);
     } catch (err: any) {
       toast.error(err.response?.data?.error || t('teacher.submit_report_failed'));
     } finally {
@@ -234,6 +243,25 @@ export default function WriteReportPage() {
                 placeholder={t('teacher.additional_notes_ph')}
               />
             </div>
+
+            {handoffEnabled && (
+              <label className="flex items-start gap-3 p-3 rounded-xl border border-gray-200 hover:border-gray-300 cursor-pointer transition-colors">
+                <input
+                  type="checkbox"
+                  checked={shared}
+                  onChange={e => setShared(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 text-sm font-medium text-gray-800">
+                    {shared ? <Share2 className="w-3.5 h-3.5 text-emerald-600" /> : <Lock className="w-3.5 h-3.5 text-gray-400" />}
+                    <span>{t('teacher.share_report_label')}</span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-0.5">{t('teacher.share_report_help')}</p>
+                </div>
+              </label>
+            )}
+
             <Button type="submit" loading={loading} fullWidth icon={<FileText className="w-4 h-4" />}>
               {t('teacher.submit_report')}
             </Button>

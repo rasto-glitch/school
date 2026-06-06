@@ -50,7 +50,9 @@ export type AuditEntityType =
   // Trusted devices — Phase 3 (migration 039)
   | 'trusted_device'
   // Login + session lifecycle events (migration 040)
-  | 'user_session';
+  | 'user_session'
+  // Reports — handoff share-toggle audit (migration 041 + PR 2)
+  | 'report';
 
 interface LogParams {
   req: AuthRequest;

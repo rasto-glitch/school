@@ -21,11 +21,15 @@ export default function ReportsPage() {
   const [children, setChildren] = useState<Student[]>([]);
   const [selectedChild, setSelectedChild] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
+  // PR 2 — academic-year filter (reports now carry academicYear).
+  const [selectedYear, setSelectedYear] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
 
   const subjects = [...new Set(reports.map(r => r.subject).filter(Boolean))];
+  const years = [...new Set(reports.map(r => r.academicYear).filter((y): y is string => !!y))].sort((a, b) => b.localeCompare(a));
+  const visibleReports = selectedYear ? reports.filter(r => r.academicYear === selectedYear) : reports;
 
   useEffect(() => { parentApi.getChildren().then(r => setChildren(r.data || [])); }, []);
 
@@ -54,15 +58,25 @@ export default function ReportsPage() {
           <div className="flex-1 min-w-36">
             <Select options={subjects.map(s => ({ value: s, label: s }))} placeholder={t('common.all_subjects')} value={selectedSubject} onChange={e => setSelectedSubject(e.target.value)} />
           </div>
+          {years.length > 1 && (
+            <div className="flex-1 min-w-36">
+              <Select
+                options={years.map(y => ({ value: y, label: y }))}
+                placeholder={t('reports.year_filter_all')}
+                value={selectedYear}
+                onChange={e => setSelectedYear(e.target.value)}
+              />
+            </div>
+          )}
         </div>
 
         {loading ? <CardListSkeleton count={3} /> : error ? (
           <ErrorMessage onRetry={() => setRetryKey(k => k + 1)} />
-        ) : reports.length === 0 ? (
+        ) : visibleReports.length === 0 ? (
           <EmptyState title={t('reports.no_reports')} icon={<BarChart2 className="w-8 h-8 text-gray-400" />} />
         ) : (
           <div className="grid gap-4">
-            {reports.map((r) => {
+            {visibleReports.map((r) => {
               const marks = r.marks && r.marks.length > 0
                 ? r.marks
                 : legacyMarks(r);

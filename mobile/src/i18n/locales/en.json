@@ -243,7 +243,8 @@
     "subject": "Subject",
     "school_note": "Note from school",
     "cumulative_gpa": "Cumulative GPA",
-    "year_gpa": "Year GPA"
+    "year_gpa": "Year GPA",
+    "year_filter_all": "All years"
   },
   "reports": {
     "title": "Reports",
@@ -255,7 +256,29 @@
     "quiz_marks": "Quiz Marks",
     "exam_marks": "Exam Marks",
     "report_date": "Report Date",
-    "by_teacher": "By {{name}}"
+    "by_teacher": "By {{name}}",
+    "year_filter_all": "All years"
+  },
+  "attendance_history": {
+    "parent_title": "Attendance history",
+    "parent_subtitle": "Per-year totals across your child's enrollment.",
+    "choose_child_prompt": "Pick a child to see their attendance history.",
+    "archive_required_title": "Not available",
+    "archive_required": "Your school has not enabled historical records for attendance. Ask the admin to turn on the archive feature.",
+    "none": "No attendance history yet for this child.",
+    "live_count": "current year — totals update as marks come in",
+    "present": "Present",
+    "absent": "Absent",
+    "late": "Late",
+    "excused": "Excused",
+    "total_days": "{{count}} day(s) on record",
+    "status_enrolled": "Enrolled",
+    "status_promoted": "Promoted",
+    "status_retained": "Retained",
+    "status_on_leave": "On leave",
+    "status_withdrew": "Withdrew",
+    "status_transferred": "Transferred",
+    "status_graduated": "Graduated"
   },
   "schoolpicker": {
     "title": "Scholify",
@@ -510,6 +533,8 @@
     "period_short": "P{{n}}"
   },
   "teacher": {
+    "share_report_label": "Share with other teachers of this student",
+    "share_report_help": "Other teachers who currently or previously teach this student will be able to see this report.",
     "welcome": "Welcome, {{name}}",
     "summary_period_open": "Summary period open · {{start}} – {{end}}",
     "quick_actions": "Quick Actions",

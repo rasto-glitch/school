@@ -197,6 +197,10 @@ export const parentApi = {
   getChildren: () => api.get('/parent/children'),
   getArchivedChildren: () => api.get('/parent/archived-children'),
   getArchivedChild: (id: string) => api.get(`/parent/archived-children/${id}`),
+  getChildAttendanceHistory: (id: string) =>
+    api.get(`/parent/children/${id}/attendance-history`),
+  getChildAttendanceDays: (id: string, year: string) =>
+    api.get(`/parent/children/${id}/attendance-history/days`, { params: { year } }),
   getHomework: (params?: Record<string, string>) => api.get('/parent/homework', { params }),
   getAssignments: (params?: Record<string, string>) => api.get('/parent/assignments', { params }),
   getGrades: (studentId?: string) => api.get('/parent/grades', { params: studentId ? { studentId } : {} }),
@@ -313,6 +317,8 @@ export const teacherApi = {
   },
   deleteAssignment: (id: string) => api.delete(`/teacher/assignments/${id}`),
   createReport: (data: object) => api.post('/teacher/reports', data),
+  setReportShare: (id: string, shared: boolean) => api.patch(`/teacher/reports/${id}/share`, { shared }),
+  getStudentHistory: (id: string) => api.get(`/teacher/students/${id}/history`),
   getGrades: (studentId: string) => api.get('/teacher/grades', { params: { studentId } }),
   getGradeConfig: () => api.get('/grade-config'),
   upsertGrade: (data: object) => api.post('/teacher/grades', data),

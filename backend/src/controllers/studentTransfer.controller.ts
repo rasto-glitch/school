@@ -387,6 +387,33 @@ export async function completeTransfer(req: AuthRequest, res: Response): Promise
     termExamGrade: g.term_exam_grade,
   }));
 
+  // Migration 041 — reports become part of the archive snapshot. Same shape
+  // as admin.controller#buildStudentArchiveSnapshot for consistency on read.
+  const { data: reports } = await supabase
+    .from('reports')
+    .select('academic_year, subject, class_id, class_name_snapshot, teacher_id, teacher_name_snapshot, attendance_notes, behavior_notes, marks, teacher_notes, quiz_marks, exam_marks, report_date, shared_with_other_teachers, created_at')
+    .eq('student_id', t.student_id).eq('school_id', schoolId)
+    .order('academic_year', { ascending: true })
+    .order('created_at', { ascending: true });
+
+  const reportsSnapshot = (reports || []).map((r: any) => ({
+    academicYear: r.academic_year,
+    subject: r.subject,
+    classId: r.class_id ?? null,
+    className: r.class_name_snapshot ?? null,
+    teacherId: r.teacher_id ?? null,
+    teacherName: r.teacher_name_snapshot ?? null,
+    attendanceNotes: r.attendance_notes ?? null,
+    behaviorNotes: r.behavior_notes ?? null,
+    marks: Array.isArray(r.marks) ? r.marks : [],
+    teacherNotes: r.teacher_notes ?? null,
+    quizMarks: r.quiz_marks,
+    examMarks: r.exam_marks,
+    reportDate: r.report_date,
+    sharedWithOtherTeachers: Boolean(r.shared_with_other_teachers),
+    createdAt: r.created_at,
+  }));
+
   // Archive atomically (insert + delete student). Pass transfer_id at
   // INSERT (migration 033) so the link is set before the append-only
   // trigger applies — UPDATEing it post-insert would be blocked.
@@ -410,6 +437,7 @@ export async function completeTransfer(req: AuthRequest, res: Response): Promise
     p_archived_by_role: role,
     p_original_parent_id: (student as any).parent_id ?? null,
     p_transfer_id: id,
+    p_reports: reportsSnapshot,
   });
   if (rpcErr) { res.status(safeDbErrorStatus(rpcErr)).json({ error: safeDbErrorMessage(rpcErr) }); return; }
   const archiveUuid = (archiveId as unknown as string) || null;

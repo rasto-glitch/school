@@ -3,9 +3,10 @@ import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
   TextInput, ActivityIndicator, Alert, Modal, KeyboardAvoidingView, Platform,
 } from 'react-native';
-import { Plus, Trash2, Send, ChevronDown, Check } from 'lucide-react-native';
+import { Plus, Trash2, Send, ChevronDown, Check, Share2, Lock } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { teacherApi } from '../../services/api';
+import { useAuthStore } from '../../store/authStore';
 import { useColors } from '../../store/themeStore';
 import { spacing, radius, font } from '../../theme';
 import { subjectsForClass, type SubjectOpt, type TeachingEntry } from '../../utils/subjects';
@@ -32,6 +33,9 @@ export default function TeacherReportScreen({ subject, classes, subjects, teachi
   const [behaviorNotes, setBehaviorNotes] = useState('');
   const [teacherNotes, setTeacherNotes] = useState('');
   const [saving, setSaving] = useState(false);
+  // PR 2 — per-report opt-in share. Default off.
+  const [shared, setShared] = useState(false);
+  const handoffEnabled = useAuthStore(s => s.school?.features?.teacher_report_handoff !== false);
 
   // Mark type picker state
   const [pickerIndex, setPickerIndex] = useState<number | null>(null);
@@ -84,11 +88,13 @@ export default function TeacherReportScreen({ subject, classes, subjects, teachi
         attendanceNotes: attendanceNotes.trim() || undefined,
         behaviorNotes: behaviorNotes.trim() || undefined,
         teacherNotes: teacherNotes.trim() || undefined,
+        sharedWithOtherTeachers: shared,
       });
       Alert.alert(t('teacher.saved'), t('teacher.report_saved'));
       setMarks([{ name: '', value: '' }]);
       setAttendanceNotes(''); setBehaviorNotes(''); setTeacherNotes('');
       setSelectedStudent('');
+      setShared(false);
     } catch {
       Alert.alert(t('common.error'), t('teacher.submit_report_failed'));
     } finally {
@@ -191,6 +197,27 @@ export default function TeacherReportScreen({ subject, classes, subjects, teachi
       <Text style={styles.label}>{t('reports.teacher_notes')}</Text>
       <TextInput style={[styles.input, styles.textarea]} placeholder={t('teacher.additional_notes_ph')} placeholderTextColor={colors.textMuted} value={teacherNotes} onChangeText={setTeacherNotes} multiline numberOfLines={4} />
 
+      {handoffEnabled && (
+        <TouchableOpacity
+          style={[styles.shareToggle, shared && styles.shareToggleActive]}
+          onPress={() => setShared(v => !v)}
+          activeOpacity={0.75}
+        >
+          <View style={styles.shareToggleIcon}>
+            {shared
+              ? <Share2 size={16} color={colors.success} />
+              : <Lock size={16} color={colors.textMuted} />}
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.shareToggleTitle}>{t('teacher.share_report_label')}</Text>
+            <Text style={styles.shareToggleHelp}>{t('teacher.share_report_help')}</Text>
+          </View>
+          <View style={[styles.shareCheckbox, shared && styles.shareCheckboxOn]}>
+            {shared && <Check size={12} color="#fff" />}
+          </View>
+        </TouchableOpacity>
+      )}
+
       <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={saving || !selectedStudent}>
         {saving ? <ActivityIndicator color="#fff" size="small" /> : <><Send size={16} color="#fff" /><Text style={styles.saveBtnText}>{t('teacher.submit_report')}</Text></>}
       </TouchableOpacity>
@@ -243,6 +270,13 @@ const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').u
   totalText: { fontSize: font.md, fontWeight: '800', color: colors.text },
   saveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, backgroundColor: colors.primary, borderRadius: radius.md, padding: spacing.md, marginTop: spacing.sm },
   saveBtnText: { fontSize: font.md, fontWeight: '700', color: '#fff' },
+  shareToggle: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm },
+  shareToggleActive: { borderColor: colors.success, backgroundColor: colors.card },
+  shareToggleIcon: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
+  shareToggleTitle: { fontSize: font.sm, fontWeight: '700', color: colors.text },
+  shareToggleHelp: { fontSize: font.xs, color: colors.textMuted, marginTop: 2 },
+  shareCheckbox: { width: 18, height: 18, borderRadius: 4, borderWidth: 1.5, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  shareCheckboxOn: { backgroundColor: colors.success, borderColor: colors.success },
   pickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   pickerBox: { borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, padding: spacing.lg, paddingBottom: 32 },
   pickerTitle: { fontSize: font.lg, fontWeight: '800', color: colors.text, marginBottom: spacing.md },

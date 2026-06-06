@@ -95,6 +95,8 @@ export default function GradesScreen() {
   const [cfg, setCfg] = useState<GradingConfig>(EMPTY_GRADING_CONFIG);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  // PR 2 — academic-year filter chip row. '' means "all years".
+  const [yearFilter, setYearFilter] = useState('');
   const clearGrade = useBadgeStore(s => s.clearGrade);
   const setUnreadCount = useBadgeStore(s => s.setUnreadCount);
 
@@ -144,7 +146,8 @@ export default function GradesScreen() {
     return acc;
   }, {} as Record<string, Record<string, Record<string, Grade>>>), [grades]);
 
-  const years = Object.keys(byYear).sort((a, b) => b.localeCompare(a));
+  const allYears = Object.keys(byYear).sort((a, b) => b.localeCompare(a));
+  const years = yearFilter ? allYears.filter(y => y === yearFilter) : allYears;
   const cgpa = averageGpa(grades.map(g => gradePoints(g)).filter((p): p is number => p != null));
 
   return (
@@ -163,6 +166,19 @@ export default function GradesScreen() {
           {children.map(c => (
             <TouchableOpacity key={c.id} style={[styles.chip, selectedChild === c.id && styles.chipActive]} onPress={() => setSelectedChild(c.id)}>
               <Text style={[styles.chipText, selectedChild === c.id && styles.chipTextActive]}>{c.fullName}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
+
+      {allYears.length > 1 && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing.md }}>
+          <TouchableOpacity style={[styles.chip, !yearFilter && styles.chipActive]} onPress={() => setYearFilter('')}>
+            <Text style={[styles.chipText, !yearFilter && styles.chipTextActive]}>{t('grades.year_filter_all')}</Text>
+          </TouchableOpacity>
+          {allYears.map(yr => (
+            <TouchableOpacity key={yr} style={[styles.chip, yearFilter === yr && styles.chipActive]} onPress={() => setYearFilter(yr)}>
+              <Text style={[styles.chipText, yearFilter === yr && styles.chipTextActive]}>{yr}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>

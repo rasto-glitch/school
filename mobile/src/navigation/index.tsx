@@ -33,6 +33,7 @@ import EbookReaderScreen from '../screens/parent/EbookReaderScreen';
 import ParentScheduleScreen from '../screens/parent/ParentScheduleScreen';
 import TuitionScreen from '../screens/parent/TuitionScreen';
 import ParentArchiveScreen from '../screens/parent/ParentArchiveScreen';
+import ParentAttendanceHistoryScreen from '../screens/parent/ParentAttendanceHistoryScreen';
 import ChatScreen from '../screens/chat/ChatScreen';
 import ReportBugScreen from '../screens/common/ReportBugScreen';
 import MfaSettingsScreen from '../screens/common/MfaSettingsScreen';
@@ -67,6 +68,7 @@ export type RootStackParamList = {
   Appointments: undefined;
   Grades: undefined;
   PastRecords: undefined;
+  ParentAttendanceHistory: undefined;
   Homework: undefined;
   HomeworkDetail: { homework: Homework };
   Assignments: undefined;
@@ -255,6 +257,11 @@ export default function Navigation() {
               name="PastRecords"
               component={ParentArchiveScreen}
               options={{ headerShown: true, headerTitle: 'Past Records', headerBackTitle: 'Back' }}
+            />
+            <Stack.Screen
+              name="ParentAttendanceHistory"
+              component={ParentAttendanceHistoryScreen}
+              options={{ headerShown: true, headerTitle: 'Attendance', headerBackTitle: 'Back' }}
             />
             <Stack.Screen
               name="Homework"

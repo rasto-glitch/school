@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS schools (
   is_active BOOLEAN DEFAULT TRUE,
   periods_per_day INT NOT NULL DEFAULT 6,
   schedule_days TEXT[] NOT NULL DEFAULT ARRAY['sunday','monday','tuesday','wednesday','thursday'],
-  features JSONB DEFAULT '{"homework":true,"assignments":true,"announcements":true,"grades":true,"reports":true,"bus_tracking":true,"appointments":true,"attendance":true,"weekly_summary":true,"chat":true}',
+  features JSONB DEFAULT '{"homework":true,"assignments":true,"announcements":true,"grades":true,"reports":true,"bus_tracking":true,"appointments":true,"attendance":true,"weekly_summary":true,"chat":true,"teacher_report_handoff":true}',
   features_version INTEGER NOT NULL DEFAULT 1,
   tuition_config JSONB DEFAULT '{"currency":"USD","siblingDiscount":{"enabled":false,"type":"percent","tiers":[]}}'::jsonb,
   timezone TEXT NOT NULL DEFAULT 'Asia/Baghdad',
@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS schools (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 -- Run this if the table already exists:
--- ALTER TABLE schools ADD COLUMN IF NOT EXISTS features JSONB DEFAULT '{"homework":true,"assignments":true,"announcements":true,"grades":true,"reports":true,"bus_tracking":true,"appointments":true,"attendance":true,"weekly_summary":true,"chat":true}';
+-- ALTER TABLE schools ADD COLUMN IF NOT EXISTS features JSONB DEFAULT '{"homework":true,"assignments":true,"announcements":true,"grades":true,"reports":true,"bus_tracking":true,"appointments":true,"attendance":true,"weekly_summary":true,"chat":true,"teacher_report_handoff":true}';
 -- ALTER TABLE schools ADD COLUMN IF NOT EXISTS features_version INTEGER NOT NULL DEFAULT 1;
 -- ALTER TABLE schools ADD COLUMN IF NOT EXISTS timezone TEXT NOT NULL DEFAULT 'Asia/Baghdad';
 -- ALTER TABLE schools ADD COLUMN IF NOT EXISTS chat_restrictions JSONB NOT NULL DEFAULT '{"enabled":false}'::jsonb;
@@ -482,8 +482,23 @@ CREATE TABLE IF NOT EXISTS reports (
   marks JSONB DEFAULT '[]',
   teacher_notes TEXT,
   report_date DATE DEFAULT CURRENT_DATE,
+  -- Migration 041 — reports become durable year-organized history.
+  -- academic_year is stamped from academicYearOf() (Sep boundary), NOT
+  -- from schools.current_academic_year (which is purely informational).
+  -- class_name_snapshot survives class rename/delete.
+  -- teacher_name_snapshot survives teacher delete/archive.
+  -- shared_with_other_teachers powers the PR 2 cross-subject handoff toggle.
+  academic_year TEXT NOT NULL,
+  class_id UUID REFERENCES classes(id) ON DELETE SET NULL,
+  class_name_snapshot TEXT,
+  teacher_name_snapshot TEXT,
+  shared_with_other_teachers BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+CREATE INDEX IF NOT EXISTS idx_reports_student_year
+  ON reports(student_id, academic_year DESC, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_reports_school_year
+  ON reports(school_id, academic_year);
 -- Run if table already exists:
 -- ALTER TABLE reports ADD COLUMN IF NOT EXISTS marks JSONB DEFAULT '[]';
 
@@ -802,6 +817,7 @@ CREATE TABLE IF NOT EXISTS archived_students (
   transfer_id UUID,                              -- migration 032: links back to student_transfers row when reason='transferred' was driven by the transfer wizard. NOT in _canon_archived_student.
   grades JSONB DEFAULT '[]',
   payment_history JSONB DEFAULT '[]',
+  reports JSONB NOT NULL DEFAULT '[]',  -- migration 041: per-year teacher reports snapshot; included in _canon_archived_student (as.v2)
   archived_by UUID,  -- FK-less actor ref (append-only/hashed row): keeps its value when the user is deleted; text copies below stay readable
   archived_by_name TEXT,
   archived_by_role TEXT,
@@ -813,7 +829,7 @@ CREATE TABLE IF NOT EXISTS archived_students (
 CREATE INDEX IF NOT EXISTS idx_archived_students_school ON archived_students(school_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_archived_students_parent ON archived_students(school_id, original_parent_id) WHERE original_parent_id IS NOT NULL;
 
--- Atomic snapshot-insert + students-row delete (see migration 010 / 015).
+-- Atomic snapshot-insert + students-row delete (see migration 010 / 015 / 041).
 -- The controller builds the JSONB; this function just commits the pair.
 CREATE OR REPLACE FUNCTION archive_student_atomic(
   p_school_id UUID,
@@ -833,7 +849,8 @@ CREATE OR REPLACE FUNCTION archive_student_atomic(
   p_archived_by_role TEXT,
   p_original_parent_id UUID,
   p_enrollment_history JSONB DEFAULT '[]'::jsonb,  -- migration 031
-  p_transfer_id UUID DEFAULT NULL                  -- migration 033
+  p_transfer_id UUID DEFAULT NULL,                 -- migration 033
+  p_reports JSONB DEFAULT '[]'::jsonb              -- migration 041
 ) RETURNS UUID
 LANGUAGE plpgsql
 AS $$
@@ -843,7 +860,7 @@ BEGIN
   INSERT INTO archived_students (
     school_id, original_student_id, full_name, date_of_birth, enrollment_date,
     departure_date, reason, parent_full_name, parent_phone,
-    classes_attended, enrollment_history, grades, payment_history,
+    classes_attended, enrollment_history, grades, payment_history, reports,
     archived_by, archived_by_name, archived_by_role, original_parent_id,
     transfer_id
   ) VALUES (
@@ -853,6 +870,7 @@ BEGIN
     COALESCE(p_enrollment_history, '[]'::jsonb),
     COALESCE(p_grades, '[]'::jsonb),
     COALESCE(p_payment_history, '[]'::jsonb),
+    COALESCE(p_reports, '[]'::jsonb),
     p_archived_by, p_archived_by_name, p_archived_by_role, p_original_parent_id,
     p_transfer_id
   )
@@ -1228,15 +1246,17 @@ CREATE OR REPLACE FUNCTION _sha(t text) RETURNS text
 LANGUAGE sql IMMUTABLE SET search_path = public, extensions
 AS $$ SELECT encode(digest(coalesce(t,''), 'sha256'), 'hex') $$;
 
+-- Canonical form bumped to as.v2 in migration 041 to include `reports`.
 CREATE OR REPLACE FUNCTION _canon_archived_student(r archived_students) RETURNS text
 LANGUAGE sql IMMUTABLE AS $$
-  SELECT concat_ws('|', 'as.v1',
+  SELECT concat_ws('|', 'as.v2',
     r.school_id::text, coalesce(r.original_student_id::text,''),
     coalesce(r.full_name,''), coalesce(r.date_of_birth::text,''),
     coalesce(r.enrollment_date::text,''), coalesce(r.departure_date::text,''),
     coalesce(r.reason,''), coalesce(r.parent_full_name,''), coalesce(r.parent_phone,''),
     coalesce(r.classes_attended::text,'[]'), coalesce(r.grades::text,'[]'),
-    coalesce(r.payment_history::text,'[]'), coalesce(r.archived_by::text,''),
+    coalesce(r.payment_history::text,'[]'), coalesce(r.reports::text,'[]'),
+    coalesce(r.archived_by::text,''),
     coalesce(r.archived_by_name,''), coalesce(r.archived_by_role,''),
     coalesce(r.original_parent_id::text,''), coalesce(r.snapshot_version::text,'1'),
     coalesce(r.created_at::text,''))

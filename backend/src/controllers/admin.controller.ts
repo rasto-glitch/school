@@ -884,6 +884,7 @@ async function buildStudentArchiveSnapshot(schoolId: string, studentId: string):
   classesAttended: { year: string; classId: string; className: string }[];
   enrollmentHistory: EnrollmentSnapshotEntry[];
   gradesSnapshot: any[];
+  reportsSnapshot: any[];
   paymentHistory: any[];
 } | null> {
   const { data: student, error: studentErr } = await supabase
@@ -922,6 +923,37 @@ async function buildStudentArchiveSnapshot(schoolId: string, studentId: string):
     quizGrade: g.quiz_grade,
     monthlyExamGrade: g.monthly_exam_grade,
     termExamGrade: g.term_exam_grade,
+  }));
+
+  // Reports snapshot — migration 041 makes reports durable year-organized
+  // history. At archive time we freeze the full set onto archived_students.
+  // class_name_snapshot / teacher_name_snapshot are read from the report
+  // itself (stamped at write time) so the snapshot survives a class or
+  // teacher delete after the report was written.
+  const { data: reports } = await supabase
+    .from('reports')
+    .select('academic_year, subject, class_id, class_name_snapshot, teacher_id, teacher_name_snapshot, attendance_notes, behavior_notes, marks, teacher_notes, quiz_marks, exam_marks, report_date, shared_with_other_teachers, created_at')
+    .eq('student_id', studentId)
+    .eq('school_id', schoolId)
+    .order('academic_year', { ascending: true })
+    .order('created_at', { ascending: true });
+
+  const reportsSnapshot = (reports || []).map((r: any) => ({
+    academicYear: r.academic_year,
+    subject: r.subject,
+    classId: r.class_id ?? null,
+    className: r.class_name_snapshot ?? null,
+    teacherId: r.teacher_id ?? null,
+    teacherName: r.teacher_name_snapshot ?? null,
+    attendanceNotes: r.attendance_notes ?? null,
+    behaviorNotes: r.behavior_notes ?? null,
+    marks: r.marks ?? [],
+    teacherNotes: r.teacher_notes ?? null,
+    quizMarks: r.quiz_marks,
+    examMarks: r.exam_marks,
+    reportDate: r.report_date,
+    sharedWithOtherTeachers: Boolean(r.shared_with_other_teachers),
+    createdAt: r.created_at,
   }));
 
   const { data: studentFeeRows } = await supabase
@@ -988,7 +1020,7 @@ async function buildStudentArchiveSnapshot(schoolId: string, studentId: string):
   const enrollmentRows = await loadEnrollmentHistory(schoolId, studentId);
   const enrollmentHistory = rowsToSnapshot(enrollmentRows);
 
-  return { student, classesAttended, enrollmentHistory, gradesSnapshot, paymentHistory };
+  return { student, classesAttended, enrollmentHistory, gradesSnapshot, reportsSnapshot, paymentHistory };
 }
 
 // Freeze a graduated student into archived_students (reason='graduated')
@@ -1029,6 +1061,7 @@ async function snapshotGraduatedStudent(
       enrollment_history: snap.enrollmentHistory,
       grades: snap.gradesSnapshot,
       payment_history: snap.paymentHistory,
+      reports: snap.reportsSnapshot,
       archived_by: actor.id,
       archived_by_name: actor.name,
       archived_by_role: actor.role,
@@ -1071,7 +1104,7 @@ export async function archiveStudent(req: AuthRequest, res: Response): Promise<v
   const { student } = snap;
 
   // Atomic archive: insert into archived_students + delete from students
-  // in one transaction (PL/pgSQL function from migration 010 / 031).
+  // in one transaction (PL/pgSQL function from migration 010 / 031 / 041).
   const { error: rpcErr } = await supabase.rpc('archive_student_atomic', {
     p_school_id: schoolId,
     p_student_id: id,
@@ -1086,6 +1119,7 @@ export async function archiveStudent(req: AuthRequest, res: Response): Promise<v
     p_enrollment_history: snap.enrollmentHistory,
     p_grades: snap.gradesSnapshot,
     p_payment_history: snap.paymentHistory,
+    p_reports: snap.reportsSnapshot,
     p_archived_by: req.user!.userId,
     p_archived_by_name: req.user!.username,
     p_archived_by_role: req.user!.role,
@@ -3405,6 +3439,14 @@ export async function exportFullArchiveBackup(req: AuthRequest, res: Response): 
 }
 
 // ---- YEAR TRANSITION ----
+// Migration 041 reframed reports as durable year-organized history. The
+// wizard no longer wipes them; reports now carry their own `academic_year`
+// column and the parent / teacher views group by year.
+//
+// Graduating path also calls closeCurrentEnrollment(status='graduated')
+// BEFORE flipping is_graduated, so the snapshot's enrollment_history
+// records the final year cleanly (audit finding HD-3). Matches the per-
+// class promote wizard's pattern.
 export async function yearTransition(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
   const {
@@ -3418,24 +3460,19 @@ export async function yearTransition(req: AuthRequest, res: Response): Promise<v
     return;
   }
 
-  // 1. Collect all currently active student IDs
-  const { data: activeStudents, error: activeErr } = await supabase
-    .from('students').select('id').eq('school_id', schoolId).eq('is_graduated', false);
-  if (activeErr) { res.status(safeDbErrorStatus(activeErr)).json({ error: safeDbErrorMessage(activeErr) }); return; }
-  const activeIds = (activeStudents || []).map((s: any) => s.id);
-
-  // 2. Clear reports for all active students — clean slate for new year
-  if (activeIds.length > 0) {
-    const { error: repErr } = await supabase.from('reports')
-      .delete().in('student_id', activeIds).eq('school_id', schoolId);
-    if (repErr) { res.status(safeDbErrorStatus(repErr)).json({ error: safeDbErrorMessage(repErr) }); return; }
-  }
-
-  // 3. Graduate selected students. Schools without the archive feature can't
+  // 1. Graduate selected students. Schools without the archive feature can't
   //    retain past students — delete them instead of marking graduated.
   if (studentIdsToGraduate.length > 0) {
     const archiveOn = await hasArchiveFeature(schoolId);
     if (archiveOn) {
+      // Close each student's current enrollment row with status='graduated'
+      // first, so the archive snapshot below reads the finalised row. This
+      // mirrors commitPromoteClass and archiveStudent; without it the row
+      // stays open as 'enrolled' and the snapshot's enrollment_history
+      // mislabels the last year (audit finding HD-3).
+      for (const sid of studentIdsToGraduate) {
+        await closeCurrentEnrollment({ schoolId, studentId: String(sid), status: 'graduated' });
+      }
       const { error: gradErr } = await supabase.from('students')
         .update({ is_graduated: true })
         .in('id', studentIdsToGraduate).eq('school_id', schoolId);
@@ -3452,7 +3489,7 @@ export async function yearTransition(req: AuthRequest, res: Response): Promise<v
     }
   }
 
-  // 4. Apply class assignments — grouped by target class for efficient bulk updates
+  // 2. Apply class assignments — grouped by target class for efficient bulk updates
   if (classAssignments.length > 0) {
     const byClass: Record<string, string[]> = {};
     for (const { studentId, classId } of classAssignments) {
@@ -3466,7 +3503,10 @@ export async function yearTransition(req: AuthRequest, res: Response): Promise<v
     }
   }
 
-  // 5. Advance the school's academic year
+  // 3. Advance the school's current_academic_year column. Note: readers
+  //    derive the authoritative year from the calendar via academicYearOf()
+  //    (Sep boundary), so this field is informational — useful for "what
+  //    year is the school in" UI but never gates a read path.
   const { error: yearErr } = await supabase.from('schools')
     .update({ current_academic_year: newAcademicYear }).eq('id', schoolId);
   if (yearErr) { res.status(safeDbErrorStatus(yearErr)).json({ error: safeDbErrorMessage(yearErr) }); return; }

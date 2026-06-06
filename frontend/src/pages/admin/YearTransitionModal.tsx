@@ -200,7 +200,6 @@ export default function YearTransitionModal({ currentYear, onClose, onDone }: Pr
                   {[
                     t('admin.year_transition.will_graduate'),
                     t('admin.year_transition.will_promote'),
-                    t('admin.year_transition.will_clear'),
                     t('admin.year_transition.will_advance'),
                   ].map((item, i) => (
                     <li key={i} className="flex items-start gap-2">
@@ -215,15 +214,9 @@ export default function YearTransitionModal({ currentYear, onClose, onDone }: Pr
                   <Loader2 className="w-4 h-4 animate-spin" /> {t('admin.year_transition.loading')}
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-gray-50 rounded-xl p-3 text-center">
-                    <p className="text-2xl font-bold text-gray-800">{students.length}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">{t('admin.year_transition.active_students')}</p>
-                  </div>
-                  <div className="bg-orange-50 rounded-xl p-3 text-center">
-                    <p className="text-2xl font-bold text-orange-500">{students.length}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">{t('admin.year_transition.reports_cleared')}</p>
-                  </div>
+                <div className="bg-gray-50 rounded-xl p-3 text-center">
+                  <p className="text-2xl font-bold text-gray-800">{students.length}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">{t('admin.year_transition.active_students')}</p>
                 </div>
               )}
             </div>
@@ -413,9 +406,6 @@ export default function YearTransitionModal({ currentYear, onClose, onDone }: Pr
                     <Trans i18nKey="admin.year_transition.sum_promoted" values={{ count: promoSelected.size }} components={{ b: <span className="font-semibold text-green-600" /> }} />
                   </li>
                   <li>
-                    <Trans i18nKey="admin.year_transition.sum_cleared" values={{ count: continuingStudents.length }} components={{ b: <span className="font-semibold text-orange-500" /> }} />
-                  </li>
-                  <li>
                     <Trans i18nKey="admin.year_transition.sum_advance" values={{ year: newYear.trim() || '—' }} components={{ b: <span className="font-semibold text-gray-900" /> }} />
                   </li>
                 </ul>
@@ -426,9 +416,6 @@ export default function YearTransitionModal({ currentYear, onClose, onDone }: Pr
                 <div className="text-sm text-red-700 space-y-1.5">
                   <p><span className="font-semibold">{t('admin.year_transition.cannot_undo')}</span></p>
                   <ul className="list-disc pl-5 space-y-1">
-                    <li>
-                      <Trans i18nKey="admin.year_transition.warn_reports" values={{ count: continuingStudents.length }} components={{ b: <span className="font-semibold" /> }} />
-                    </li>
                     <li>
                       {t('admin.year_transition.warn_graduating', { count: gradSelected.size })}
                     </li>

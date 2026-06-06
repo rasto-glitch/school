@@ -179,6 +179,13 @@ export interface Report {
   createdAt: string;
   students?: { fullName: string };
   teachers?: { fullName: string };
+  // migration 041
+  academicYear?: string;
+  classId?: string | null;
+  classNameSnapshot?: string | null;
+  teacherId?: string | null;
+  teacherNameSnapshot?: string | null;
+  sharedWithOtherTeachers?: boolean;
   // legacy fields — present on old records
   quizMarks?: number;
   examMarks?: number;
