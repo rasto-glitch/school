@@ -156,6 +156,13 @@ export const mfaApi = {
     api.post<{ recoveryCodes: string[] }>('/auth/mfa/recovery-codes', { code }),
 };
 
+// ---- Active sessions (refresh-token families) ----
+export const sessionsApi = {
+  list: () =>
+    api.get<{ sessions: { familyId: string; deviceLabel: string; userAgent: string | null; ip: string | null; createdAt: string; lastActivityAt: string; expiresAt: string }[] }>('/auth/sessions'),
+  revoke: (familyId: string) => api.post<{ ok: true }>(`/auth/sessions/${familyId}/revoke`),
+};
+
 // ---- Trusted devices (Phase 3) ----
 export const trustedDeviceApi = {
   list: () =>

@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import {
   Bell, Globe, Lock, LogOut, FileText, ShieldCheck,
-  Moon, ChevronRight, CheckCircle, XCircle, AlertCircle, X,
+  Moon, ChevronRight, CheckCircle, XCircle, AlertCircle, X, Activity,
 } from 'lucide-react-native';
 import { openLegalPage } from '../../utils/legal';
 import i18n, { changeLanguageAndApply } from '../../i18n';
@@ -219,6 +219,16 @@ export default function SupervisorSettingsScreen() {
           <View style={{ flex: 1 }}>
             <Text style={styles.rowLabel}>{t('mfa.section_title')}</Text>
             <Text style={styles.rowSub}>{t('mfa.row_sub')}</Text>
+          </View>
+          <ChevronRight size={18} color={colors.textMuted} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.row} onPress={() => navigation.navigate('Sessions')}>
+          <View style={[styles.iconBox, { backgroundColor: '#ECFDF5' }]}>
+            <Activity size={18} color="#10B981" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.rowLabel}>{t('sessions.section_title')}</Text>
+            <Text style={styles.rowSub}>{t('sessions.row_sub')}</Text>
           </View>
           <ChevronRight size={18} color={colors.textMuted} />
         </TouchableOpacity>

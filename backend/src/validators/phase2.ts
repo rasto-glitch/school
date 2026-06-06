@@ -27,6 +27,7 @@ const marksArr = z.array(z.object({
 // ── shared param schemas ────────────────────────────────────────────────
 export const idParam = z.object({ id: uuid });
 export const commentIdParam = z.object({ commentId: uuid });
+export const familyIdParam = z.object({ familyId: uuid });
 export const msgIdParam = z.object({ msgId: uuid });
 export const typeParam = z.object({ type: z.string().min(1).max(60) });
 

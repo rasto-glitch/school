@@ -12,6 +12,7 @@ import { logger } from './logger';
 //   - email_change_tokens      (10-min OTPs)
 //   - account_recovery_tokens  (7-day anchor recovery links)
 //   - password_reset_tokens    (1-hour reset links)
+//   - trusted_devices          (30-day MFA bypass tokens — Phase 3)
 //
 // All best-effort: errors are logged but never thrown to the scheduler
 // (a failed sweep should never crash the process).
@@ -43,6 +44,7 @@ async function sweepAll(): Promise<void> {
   await sweepTable('email_change_tokens');
   await sweepTable('account_recovery_tokens');
   await sweepTable('password_reset_tokens');
+  await sweepTable('trusted_devices');
 }
 
 // Same pattern as startBackupVerifySchedule: a short delay before the

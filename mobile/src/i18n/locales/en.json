@@ -118,7 +118,20 @@
     "trust_revoke": "Revoke",
     "trust_revoke_title": "Revoke trusted device",
     "trust_revoke_confirm": "Stop trusting this device? You'll have to enter a code next time you sign in from it.",
-    "trust_revoke_failed": "Could not revoke trusted device."
+    "trust_revoke_failed": "Could not revoke trusted device.",
+    "share_codes": "Share / Save codes"
+  },
+  "sessions": {
+    "section_title": "Active sessions",
+    "section_body": "Each row is a device you're currently signed in on. Sign out any you don't recognize.",
+    "row_sub": "Manage signed-in devices",
+    "none": "No active sessions.",
+    "started": "Started",
+    "last_active": "last active",
+    "revoke": "Sign out",
+    "revoke_title": "Sign out session",
+    "revoke_confirm": "Sign this session out? The device will need to log in again.",
+    "revoke_failed": "Could not sign out session."
   },
   "common": {
     "day": "Day",

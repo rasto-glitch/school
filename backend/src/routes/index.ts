@@ -4,6 +4,7 @@ import rateLimit from 'express-rate-limit';
 import { login, changePassword, getSchools, forgotPassword, registerDeviceToken, removeDeviceToken, updateDeviceLanguage, uploadProfilePicture, updateMyEmail, verifyEmailCode, getMe, forgotPasswordEmail, resetWithToken, confirmEmail, recoverAccount, refreshToken, logout, logoutAll, verifyMfaLogin } from '../controllers/auth.controller';
 import { getMfaStatus, setupMfa, confirmMfa, disableMfaSelf, regenerateRecoveryCodes, adminDisableMfa, enrollSetupViaTicket, enrollConfirmViaTicket } from '../controllers/mfa.controller';
 import { listTrustedDevices, revokeTrustedDevice, revokeAllTrustedDevicesEndpoint } from '../controllers/trustedDevice.controller';
+import { listSessions, revokeSession } from '../controllers/sessions.controller';
 import { submitBugReport } from '../controllers/bugReport.controller';
 import * as admin from '../controllers/admin.controller';
 import * as archivedProfile from '../controllers/archivedEmployeeProfile.controller';
@@ -153,6 +154,10 @@ export function createRouter(io: SocketServer) {
   router.get('/auth/trusted-devices', authenticate, (req, res) => listTrustedDevices(req as AuthRequest, res));
   router.post('/auth/trusted-devices/revoke-all', authenticate, (req, res) => revokeAllTrustedDevicesEndpoint(req as AuthRequest, res));
   router.post('/auth/trusted-devices/:id/revoke', authenticate, validate({ params: vp.idParam }), (req, res) => revokeTrustedDevice(req as AuthRequest, res));
+
+  // ---- Active sessions (refresh-token families) ----
+  router.get('/auth/sessions', authenticate, (req, res) => listSessions(req as AuthRequest, res));
+  router.post('/auth/sessions/:familyId/revoke', authenticate, validate({ params: vp.familyIdParam }), (req, res) => revokeSession(req as AuthRequest, res));
 
   // Bug report — mobile app posts here. Multer accepts one screenshot or
   // short video up to 25 MB. Body field `description` is required.

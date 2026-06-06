@@ -36,6 +36,7 @@ import ParentArchiveScreen from '../screens/parent/ParentArchiveScreen';
 import ChatScreen from '../screens/chat/ChatScreen';
 import ReportBugScreen from '../screens/common/ReportBugScreen';
 import MfaSettingsScreen from '../screens/common/MfaSettingsScreen';
+import SessionsScreen from '../screens/common/SessionsScreen';
 import type { Homework, Announcement, Conversation, Ebook, Report } from '../types';
 
 export type RootStackParamList = {
@@ -59,6 +60,7 @@ export type RootStackParamList = {
   Settings: undefined;
   ReportBug: undefined;
   MfaSettings: undefined;
+  Sessions: undefined;
   Reports: undefined;
   Notifications: undefined;
   ReportDetail: { report: Report };
@@ -126,6 +128,7 @@ export default function Navigation() {
               component={DriverSettingsScreen}
               options={{ headerShown: true, headerTitle: 'Settings', headerBackTitle: 'Back', presentation: 'card' }}
             />
+            <Stack.Screen name="Sessions" component={SessionsScreen} options={{ headerShown: false }} />
           </>
         ) : user?.role === 'supervisor' ? (
           <>
@@ -146,6 +149,7 @@ export default function Navigation() {
               options={{ headerShown: true, headerTitle: 'My Salary', headerBackTitle: 'Back' }}
             />
             <Stack.Screen name="MfaSettings" component={MfaSettingsScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="Sessions" component={SessionsScreen} options={{ headerShown: false }} />
             <Stack.Screen
               name="AnnouncementDetail"
               component={AnnouncementDetailScreen}
@@ -191,6 +195,7 @@ export default function Navigation() {
               options={{ headerShown: true, headerTitle: 'My Salary', headerBackTitle: 'Back' }}
             />
             <Stack.Screen name="MfaSettings" component={MfaSettingsScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="Sessions" component={SessionsScreen} options={{ headerShown: false }} />
             <Stack.Screen
               name="PostDetail"
               component={PostDetailScreen}
@@ -306,6 +311,7 @@ export default function Navigation() {
               component={ReportBugScreen}
               options={{ headerShown: true, headerTitle: 'Report a bug', headerBackTitle: 'Back' }}
             />
+            <Stack.Screen name="Sessions" component={SessionsScreen} options={{ headerShown: false }} />
           </>
         )}
       </Stack.Navigator>

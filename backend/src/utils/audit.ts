@@ -48,7 +48,9 @@ export type AuditEntityType =
   // MFA enrollment / confirm / disable / regen (migration 038)
   | 'user_mfa'
   // Trusted devices — Phase 3 (migration 039)
-  | 'trusted_device';
+  | 'trusted_device'
+  // Login + session lifecycle events (migration 040)
+  | 'user_session';
 
 interface LogParams {
   req: AuthRequest;

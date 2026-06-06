@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'react-toastify';
-import { Copy, CheckCircle2, Loader2, ShieldCheck } from 'lucide-react';
+import { Copy, CheckCircle2, Loader2, ShieldCheck, Download } from 'lucide-react';
 import { mfaApi } from '../../services/api';
+import { useAuthStore } from '../../store/authStore';
+import { downloadRecoveryCodes } from '../../utils/downloadCodes';
 import Modal from '../common/Modal';
 import Input from '../common/Input';
 import Button from '../common/Button';
@@ -23,6 +25,7 @@ interface SetupData {
 
 export default function MfaSetupModal({ isOpen, onClose, onCompleted }: Props) {
   const { t } = useTranslation();
+  const { user, school } = useAuthStore() as any;
   const [loading, setLoading] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [data, setData] = useState<SetupData | null>(null);
@@ -180,7 +183,7 @@ export default function MfaSetupModal({ isOpen, onClose, onCompleted }: Props) {
             ))}
           </div>
 
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
             <button
               type="button"
               onClick={() => copyToClipboard(data.recoveryCodes.join('\n'), 'codes')}
@@ -188,6 +191,13 @@ export default function MfaSetupModal({ isOpen, onClose, onCompleted }: Props) {
             >
               {copiedCodes ? <CheckCircle2 className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
               {copiedCodes ? t('mfa.copied', 'Copied') : t('mfa.copy_all_codes', 'Copy all codes')}
+            </button>
+            <button
+              type="button"
+              onClick={() => downloadRecoveryCodes(data.recoveryCodes, { schoolName: school?.name, username: user?.username })}
+              className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary-700 hover:text-primary-800"
+            >
+              <Download className="w-4 h-4" /> {t('mfa.download_codes', 'Download as file')}
             </button>
           </div>
 

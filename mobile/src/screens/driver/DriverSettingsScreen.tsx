@@ -5,9 +5,10 @@ import {
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import {
   Bell, MapPin, Globe, Lock, LogOut, FileText, ShieldCheck,
-  Moon, ChevronRight, CheckCircle, XCircle, AlertCircle, X,
+  Moon, ChevronRight, CheckCircle, XCircle, AlertCircle, X, Activity,
 } from 'lucide-react-native';
 import { openLegalPage } from '../../utils/legal';
 import i18n, { changeLanguageAndApply } from '../../i18n';
@@ -30,6 +31,7 @@ export default function DriverSettingsScreen() {
   const { isDark, toggleTheme } = useThemeStore();
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<any>();
   const [lang, setLang] = useState(i18n.language || 'en');
   const [pushStatus, setPushStatus] = useState<PushStatus>(getPushStatus());
   const [retrying, setRetrying] = useState(false);
@@ -220,6 +222,16 @@ export default function DriverSettingsScreen() {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.rowLabel}>{t('settings.reset_password')}</Text>
+          </View>
+          <ChevronRight size={18} color={colors.textMuted} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.row} onPress={() => navigation.navigate('Sessions')}>
+          <View style={[styles.iconBox, { backgroundColor: '#ECFDF5' }]}>
+            <Activity size={18} color="#10B981" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.rowLabel}>{t('sessions.section_title')}</Text>
+            <Text style={styles.rowSub}>{t('sessions.row_sub')}</Text>
           </View>
           <ChevronRight size={18} color={colors.textMuted} />
         </TouchableOpacity>

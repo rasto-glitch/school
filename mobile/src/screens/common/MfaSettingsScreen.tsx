@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet,
-  Alert, ActivityIndicator, Modal,
+  Alert, ActivityIndicator, Modal, Share,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import {
-  ShieldCheck, ChevronLeft, CheckCircle, AlertTriangle, KeyRound, Trash2, X,
+  ShieldCheck, ChevronLeft, CheckCircle, AlertTriangle, KeyRound, Trash2, X, Share2,
 } from 'lucide-react-native';
 import { useColors } from '../../store/themeStore';
 import { mfaApi, trustedDeviceApi } from '../../services/api';
@@ -206,6 +206,20 @@ export default function MfaSettingsScreen() {
                       <Text key={i} selectable style={styles.codeItem}>{c}</Text>
                     ))}
                   </View>
+                  <TouchableOpacity
+                    onPress={async () => {
+                      try {
+                        await Share.share({
+                          message: 'Scholify two-factor recovery codes\n\nEach code works ONCE.\n\n' + newCodes.join('\n'),
+                          title: t('mfa.recovery_save_title'),
+                        });
+                      } catch { /* user dismissed */ }
+                    }}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs, alignSelf: 'flex-start', marginTop: spacing.sm }}
+                  >
+                    <Share2 size={14} color={colors.primary} />
+                    <Text style={{ color: colors.primary, fontWeight: '600', fontSize: font.sm }}>{t('mfa.share_codes')}</Text>
+                  </TouchableOpacity>
                   <TouchableOpacity onPress={() => setNewCodes(null)} style={{ alignSelf: 'flex-end', marginTop: spacing.sm }}>
                     <Text style={{ color: colors.primary, fontWeight: '600' }}>{t('common.close')}</Text>
                   </TouchableOpacity>

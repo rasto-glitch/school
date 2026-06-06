@@ -471,7 +471,21 @@
     "ineligible_body": "التحقق بخطوتين غير متاح لهذا النوع من الحسابات.",
     "open_in_authenticator": "فتح في تطبيق المصادقة",
     "no_authenticator_title": "لا يوجد تطبيق مصادقة",
-    "no_authenticator_body": "لم نجد تطبيق مصادقة على هذا الجهاز. ثبّت تطبيقًا (Google Authenticator أو Authy أو 1Password ...) وحاول مجددًا، أو امسح رمز QR بجهاز آخر."
+    "no_authenticator_body": "لم نجد تطبيق مصادقة على هذا الجهاز. ثبّت تطبيقًا (Google Authenticator أو Authy أو 1Password ...) وحاول مجددًا، أو امسح رمز QR بجهاز آخر.",
+    "download_codes": "تنزيل كملف"
+  },
+  "sessions": {
+    "section_title": "الجلسات النشطة",
+    "section_body": "كل صف هو جهاز تسجّل دخوله حاليًا. سجّل خروج الأجهزة التي لا تعرفها.",
+    "row_sub": "إدارة الأجهزة المسجّلة",
+    "none": "لا توجد جلسات نشطة.",
+    "started": "بدأت",
+    "last_active": "آخر نشاط",
+    "revoke": "تسجيل الخروج",
+    "revoke_title": "تسجيل خروج الجلسة",
+    "revoke_confirm": "تسجيل خروج هذه الجلسة؟ سيحتاج الجهاز إلى تسجيل دخول جديد.",
+    "revoke_success": "تم تسجيل خروج الجلسة.",
+    "revoke_failed": "تعذّر تسجيل خروج الجلسة."
   },
   "profile": {
     "title": "الملف الشخصي",

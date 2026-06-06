@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useForm } from 'react-hook-form';
 import { toast } from 'react-toastify';
-import { Globe, Mail, Lock, Loader2, LogOut, ShieldCheck, Copy, CheckCircle2, Monitor, Trash2, Download, Activity } from 'lucide-react';
+import { Globe, Mail, Lock, Loader2, LogOut, ShieldCheck, Copy, CheckCircle2, Monitor, Trash2, Download } from 'lucide-react';
 import { authApi, mfaApi, trustedDeviceApi, sessionsApi } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from '../../utils/passwordPolicy';
@@ -50,13 +50,6 @@ export default function AccountSettingsModal({ isOpen, onClose }: AccountSetting
   const [trustedDevices, setTrustedDevices] = useState<TrustedDevice[] | null>(null);
   const [trustedLoading, setTrustedLoading] = useState(false);
   const [revokingId, setRevokingId] = useState<string | null>(null);
-
-  // Active sessions (refresh-token families). Independent of MFA — every
-  // logged-in user has at least one session.
-  type Session = { familyId: string; deviceLabel: string; userAgent: string | null; ip: string | null; createdAt: string; lastActivityAt: string; expiresAt: string };
-  const [sessions, setSessions] = useState<Session[] | null>(null);
-  const [sessionsLoading, setSessionsLoading] = useState(false);
-  const [revokingSessionId, setRevokingSessionId] = useState<string | null>(null);
 
   // Email change state machine
   const [emailDraft, setEmailDraft] = useState(user?.email || '');
@@ -106,36 +99,10 @@ export default function AccountSettingsModal({ isOpen, onClose }: AccountSetting
     }
   };
 
-  const refreshSessions = async () => {
-    setSessionsLoading(true);
-    try {
-      const r = await sessionsApi.list();
-      setSessions(r.data.sessions || []);
-    } catch {
-      setSessions([]);
-    } finally {
-      setSessionsLoading(false);
-    }
-  };
-
-  const onRevokeSession = async (familyId: string) => {
-    setRevokingSessionId(familyId);
-    try {
-      await sessionsApi.revoke(familyId);
-      setSessions((prev) => (prev || []).filter((s) => s.familyId !== familyId));
-      toast.success(t('sessions.revoke_success', 'Session signed out.'));
-    } catch (err: any) {
-      toast.error(err.response?.data?.error || t('sessions.revoke_failed', 'Could not sign out session.'));
-    } finally {
-      setRevokingSessionId(null);
-    }
-  };
-
   useEffect(() => {
     if (isOpen) {
       void refreshMfaStatus();
       void refreshTrustedDevices();
-      void refreshSessions();
       setMfaShowDisable(false);
       setMfaShowRegen(false);
       setMfaDisablePassword('');
@@ -684,51 +651,6 @@ export default function AccountSettingsModal({ isOpen, onClose }: AccountSetting
           >
             {t('account_settings.sign_out_all_action', 'Sign out everywhere')}
           </Button>
-
-          {/* Active sessions subsection — one row per device family. */}
-          <div className="mt-4 pt-4 border-t border-gray-200">
-            <div className="flex items-center gap-2 mb-2">
-              <Activity className="w-4 h-4 text-gray-500" />
-              <h4 className="text-sm font-semibold text-gray-900">
-                {t('sessions.section_title', 'Active sessions')}
-              </h4>
-            </div>
-            <p className="text-xs text-gray-500 mb-3">
-              {t('sessions.section_body', "Each row is a device you're currently signed in on. Sign out individual devices if you don't recognize one.")}
-            </p>
-            {sessionsLoading ? (
-              <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
-            ) : !sessions || sessions.length === 0 ? (
-              <p className="text-xs text-gray-500 italic">
-                {t('sessions.none', 'No active sessions.')}
-              </p>
-            ) : (
-              <ul className="space-y-2">
-                {sessions.map((s) => (
-                  <li key={s.familyId} className="flex items-center justify-between gap-3 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg">
-                    <div className="min-w-0 flex-1">
-                      <div className="text-sm font-medium text-gray-900 truncate">{s.deviceLabel}</div>
-                      <div className="text-xs text-gray-500">
-                        {t('sessions.started', 'Started')}: {new Date(s.createdAt).toLocaleString()}
-                        {' · '}
-                        {t('sessions.last_active', 'last active')} {new Date(s.lastActivityAt).toLocaleString()}
-                        {s.ip ? ` · ${s.ip}` : ''}
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => onRevokeSession(s.familyId)}
-                      disabled={revokingSessionId === s.familyId}
-                      className="flex-shrink-0 inline-flex items-center gap-1 text-xs font-semibold text-red-600 hover:text-red-700 disabled:opacity-50"
-                    >
-                      {revokingSessionId === s.familyId ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <LogOut className="w-3.5 h-3.5" />}
-                      {t('sessions.revoke', 'Sign out')}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
         </section>
 
         {/* Password */}

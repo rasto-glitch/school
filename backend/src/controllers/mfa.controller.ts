@@ -4,12 +4,91 @@ import jwt from 'jsonwebtoken';
 import { adminDb as supabase } from '../utils/db';
 import { logAudit } from '../utils/audit';
 import { logger } from '../utils/logger';
+import { sendMail } from '../utils/mailer';
 import {
   generateTotpSecret, buildOtpauthUri, buildQrDataUrl, verifyTotp, verifyTotpDetailed,
   encryptSecret, decryptSecret, generateRecoveryCodes,
 } from '../utils/mfa';
 import { revokeAllTrustedDevicesForUser, issueTrustedDevice } from '../utils/trustedDevice';
 import type { AuthRequest } from '../middleware/auth';
+
+// Best-effort security-alert emails for MFA state changes. Same threat
+// model as the email-change alert: an attacker on a hijacked session
+// could enroll their own TOTP secret or disable MFA, and the legit user
+// would have no signal until they were already locked out. The alert
+// goes to the email on file; we never block the underlying request on a
+// mail-provider hiccup.
+const escapeHtmlMfa = (s: string): string =>
+  s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] || c));
+
+async function sendMfaStateChangeAlert(opts: {
+  userId: string;
+  event: 'enrolled' | 'disabled_self' | 'disabled_by_admin';
+  reason?: string | null;
+}): Promise<void> {
+  try {
+    // tenant-check-allow: opts.userId is sourced by all callers from req.user (authenticated MFA endpoints) or a verified user row that was already school-scoped
+    const { data: u } = await supabase
+      .from('users')
+      .select('email, first_name, schools(name)')
+      .eq('id', opts.userId)
+      .single();
+    const row = u as { email?: string | null; first_name?: string; schools?: { name?: string } | null } | null;
+    const email = row?.email;
+    if (!email) return; // no inbox to alert; not a failure
+    const firstName = row?.first_name || '';
+    const schoolName = row?.schools?.name || '';
+    const schoolSuffix = schoolName ? ` (${schoolName})` : '';
+
+    const titleMap = {
+      enrolled: `Two-factor authentication was enabled on your Scholify account${schoolSuffix}`,
+      disabled_self: `Two-factor authentication was disabled on your Scholify account${schoolSuffix}`,
+      disabled_by_admin: `Two-factor authentication was disabled by an administrator${schoolSuffix}`,
+    } as const;
+    const subject = titleMap[opts.event];
+
+    const bodyLines: string[] = [`Hi ${firstName || 'there'},`, ''];
+    if (opts.event === 'enrolled') {
+      bodyLines.push(
+        'Two-factor authentication was just enabled on your Scholify account. From now on, signing in will ask for a 6-digit code from your authenticator app.',
+        '',
+        "If this was you, no action is needed. If this wasn't you, change your password immediately — that signs out every device.",
+      );
+    } else if (opts.event === 'disabled_self') {
+      bodyLines.push(
+        'Two-factor authentication was just disabled on your Scholify account.',
+        '',
+        "If this was you, no action is needed. If this wasn't you, change your password immediately — someone may have access to your session.",
+      );
+    } else {
+      bodyLines.push(
+        'A school administrator just disabled two-factor authentication on your account.',
+        '',
+        'This is normal if you asked them to help you recover access (lost phone, lost recovery codes).',
+      );
+      if (opts.reason) bodyLines.push('', `Reason given: ${opts.reason}`);
+      bodyLines.push('', 'If you did not ask for this, contact your school administrator immediately.');
+    }
+    const text = bodyLines.join('\n');
+
+    const chipColor = opts.event === 'enrolled' ? '#16A34A' : '#B91C1C';
+    const html = `
+      <div style="font-family:-apple-system,BlinkMacSystemFont,Inter,sans-serif;background:#f8fafc;padding:24px">
+        <div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden">
+          <div style="background:${chipColor};padding:20px 24px;color:#fff">
+            <div style="font-size:12px;opacity:.85;letter-spacing:.06em;text-transform:uppercase">Scholify${schoolName ? ` · ${escapeHtmlMfa(schoolName)}` : ''} · Security alert</div>
+            <div style="font-size:20px;font-weight:800;margin-top:4px">${escapeHtmlMfa(subject)}</div>
+          </div>
+          <div style="padding:24px;color:#0f172a">
+            ${bodyLines.map(l => l ? `<p style="margin:0 0 12px;font-size:14px;line-height:1.55">${escapeHtmlMfa(l)}</p>` : '').join('')}
+          </div>
+        </div>
+      </div>`;
+    await sendMail(email, subject, html, text);
+  } catch (err) {
+    logger.error('MFA state-change alert send failed', { err, event: opts.event, userId: opts.userId });
+  }
+}
 
 // Phase 2 scope: every role that touches student records or financial
 // data is eligible. The role gate is enforced server-side so a tampered
@@ -219,6 +298,7 @@ export async function confirmMfa(req: AuthRequest, res: Response): Promise<void>
     after: { state: 'active' },
     label: 'mfa_confirmed',
   });
+  void sendMfaStateChangeAlert({ userId: userId!, event: 'enrolled' });
 }
 
 // POST /auth/mfa/disable-self — user turns off their own MFA. Requires
@@ -302,6 +382,7 @@ export async function disableMfaSelf(req: AuthRequest, res: Response): Promise<v
     before: { state: 'active' },
     label: 'mfa_disabled_self',
   });
+  void sendMfaStateChangeAlert({ userId: userId!, event: 'disabled_self' });
 }
 
 // POST /auth/mfa/recovery-codes — regenerate. Requires a valid current
@@ -426,6 +507,7 @@ export async function adminDisableMfa(req: AuthRequest, res: Response): Promise<
     label: 'mfa_disabled_by_admin',
     reason: reason.trim(),
   });
+  void sendMfaStateChangeAlert({ userId: targetUserId, event: 'disabled_by_admin', reason: reason.trim() });
 }
 
 // Supabase returns BYTEA as either a Buffer (raw) or a hex string
@@ -698,7 +780,22 @@ export async function enrollConfirmViaTicket(req: Request, res: Response): Promi
       label: 'mfa_confirmed',
       reason: 'forced_enrollment',
     });
+    // Also log the session creation — forced enrollment is a login event.
+    const ua = ((req.headers['user-agent'] as string) || '').slice(0, 300);
+    await supabase.from('audit_logs').insert({
+      school_id: s.id,
+      entity_type: 'user_session',
+      entity_id: u.id,
+      action: 'create',
+      changes: { factor: 'forced_enrollment', ip: req.ip || null, user_agent: ua || null },
+      actor_id: u.id,
+      actor_username: u.username,
+      actor_role: u.role,
+      label: 'login_success',
+      reason: 'forced_enrollment',
+    });
   } catch (err) { logger.error('audit insert for enroll-confirm failed', { err }); }
+  void sendMfaStateChangeAlert({ userId: u.id, event: 'enrolled' });
 }
 
 // Helper for the login flow: is MFA active for this user?

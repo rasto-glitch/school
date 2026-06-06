@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, Image, StyleSheet,
-  ActivityIndicator, Alert, Linking, ScrollView,
+  ActivityIndicator, Alert, Linking, ScrollView, Share,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { CheckCircle, ShieldCheck, ExternalLink, X } from 'lucide-react-native';
+import { CheckCircle, ShieldCheck, ExternalLink, X, Share2 } from 'lucide-react-native';
 import { useColors } from '../store/themeStore';
 import { authApi, mfaApi } from '../services/api';
 import { spacing, radius, font } from '../theme';
@@ -217,6 +217,15 @@ export default function MfaEnrollPanel(props: Props) {
               <Text key={i} selectable style={styles.codeItem}>{c}</Text>
             ))}
           </View>
+          <TouchableOpacity
+            onPress={() => shareRecoveryCodes(data.recoveryCodes, t)}
+            style={styles.shareBtn}
+          >
+            <Share2 size={16} color={colors.primary} />
+            <Text style={[styles.shareBtnText, { color: colors.primary }]}>
+              {t('mfa.share_codes')}
+            </Text>
+          </TouchableOpacity>
           <TouchableOpacity onPress={() => setAck(!ack)} style={styles.ackRow}>
             <View style={[styles.checkbox, ack && { backgroundColor: colors.primary, borderColor: colors.primary }]}>
               {ack && <CheckCircle size={14} color="#fff" />}
@@ -250,6 +259,24 @@ export default function MfaEnrollPanel(props: Props) {
 // simpler than ref-typing for a one-shot success payload. Safe because
 // MfaEnrollPanel is mounted at most once per flow.
 const pendingSuccessRef: { current?: MfaEnrollSuccessForced } = {};
+
+// Built-in Share API — no extra dep. Opens the system share sheet so
+// the user can pick Mail, Messages, Notes, Files (iOS), Drive, etc.
+async function shareRecoveryCodes(codes: string[], t: (k: string) => string): Promise<void> {
+  const header = [
+    'Scholify two-factor recovery codes',
+    `Saved: ${new Date().toISOString()}`,
+    '',
+    'Each code works ONCE. Use one in place of the 6-digit code at sign-in if you lose your authenticator.',
+    '',
+  ].join('\n');
+  try {
+    await Share.share({
+      message: header + codes.join('\n'),
+      title: t('mfa.recovery_save_title'),
+    });
+  } catch { /* user dismissed */ }
+}
 
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   root: { padding: spacing.lg, gap: spacing.md },
@@ -295,6 +322,13 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
     borderWidth: 1, borderColor: colors.border,
   },
   codeItem: { fontFamily: 'monospace', fontSize: font.sm, color: colors.text, width: '47%' },
+  shareBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs,
+    paddingVertical: spacing.sm, paddingHorizontal: spacing.md,
+    borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.primary,
+    marginTop: spacing.sm,
+  },
+  shareBtnText: { fontSize: font.sm, fontWeight: '600' },
   ackRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, paddingVertical: spacing.xs },
   checkbox: {
     width: 18, height: 18, borderRadius: 4, borderWidth: 1.5, borderColor: colors.border,

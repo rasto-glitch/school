@@ -94,6 +94,40 @@ export async function issueTokenPair(
   return { token, refreshToken: raw };
 }
 
+// Best-effort audit row for a successful login. Inlined (no logAudit
+// helper) because /auth/login and the verify endpoints are public — we
+// have no `req.user` to attribute, but we have a verified user from
+// our own credential check, so we synthesize the actor inline. Records
+// which factor combination got the user in so the audit feed can answer
+// "did this session start with MFA or just password?".
+async function logLoginAudit(opts: {
+  req: Request;
+  userId: string;
+  username: string;
+  role: string;
+  schoolId: string;
+  factor: 'password' | 'password_trusted_device' | 'password_mfa' | 'forced_enrollment';
+}): Promise<void> {
+  try {
+    const ua = ((opts.req.headers['user-agent'] as string) || '').slice(0, 300);
+    // tenant-check-allow: schoolId comes from the school row we just looked up by abbreviation and matched the user against
+    await supabase.from('audit_logs').insert({
+      school_id: opts.schoolId,
+      entity_type: 'user_session',
+      entity_id: opts.userId,
+      action: 'create',
+      changes: { factor: opts.factor, ip: opts.req.ip || null, user_agent: ua || null },
+      actor_id: opts.userId,
+      actor_username: opts.username,
+      actor_role: opts.role,
+      label: 'login_success',
+      reason: opts.factor,
+    });
+  } catch (err) {
+    logger.error('login audit insert failed', { err });
+  }
+}
+
 // Coarse, dependency-free device label from a User-Agent. Intentionally
 // not granular (no version numbers) so it stays stable across browser /
 // app updates — enough for a user to judge "that wasn't me".
@@ -305,6 +339,9 @@ export async function login(req: Request, res: Response): Promise<void> {
   const schoolMfaRequired = !!(school as { mfa_required?: boolean }).mfa_required && eligibleForMfa;
   const mfaActive = await isMfaActive(user.id);
 
+  // Track which factor path got the user in for the post-response audit row.
+  let factor: 'password' | 'password_trusted_device' | 'password_mfa' | 'forced_enrollment' = 'password';
+
   if (mfaActive) {
     // Phase 3 trusted-device skip. Only valid if MFA is actually active
     // for the user — a stale trust from a previously-enrolled-then-
@@ -322,6 +359,7 @@ export async function login(req: Request, res: Response): Promise<void> {
       res.json({ mfaRequired: true, mfaTicket });
       return;
     }
+    factor = 'password_trusted_device';
     // trusted=true falls through to normal token issue below
   } else if (schoolMfaRequired) {
     // Phase 2 enforcement: school requires MFA for this role, user
@@ -366,6 +404,15 @@ export async function login(req: Request, res: Response): Promise<void> {
       features: school.features ?? {},
       timezone: school.timezone || 'Asia/Baghdad',
     },
+  });
+
+  void logLoginAudit({
+    req,
+    userId: user.id,
+    username: user.username,
+    role: user.role,
+    schoolId: school.id,
+    factor,
   });
 
   // Fire-and-forget: alert the user when the sign-in is from a device or
@@ -491,6 +538,15 @@ export async function verifyMfaLogin(req: Request, res: Response): Promise<void>
       timezone: s.timezone || 'Asia/Baghdad',
     },
     ...(trustedDeviceToken ? { trustedDeviceToken } : {}),
+  });
+
+  void logLoginAudit({
+    req,
+    userId: u.id,
+    username: u.username,
+    role: u.role,
+    schoolId: s.id,
+    factor: 'password_mfa',
   });
 
   if (newSignIn) {

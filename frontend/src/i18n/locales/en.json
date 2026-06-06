@@ -471,7 +471,21 @@
     "ineligible_body": "Two-factor authentication is not available for this account type.",
     "open_in_authenticator": "Open in authenticator app",
     "no_authenticator_title": "No authenticator app",
-    "no_authenticator_body": "We couldn't find an authenticator app on this device. Install one (Google Authenticator, Authy, 1Password, etc.) and try again, or scan the QR with another device."
+    "no_authenticator_body": "We couldn't find an authenticator app on this device. Install one (Google Authenticator, Authy, 1Password, etc.) and try again, or scan the QR with another device.",
+    "download_codes": "Download as file"
+  },
+  "sessions": {
+    "section_title": "Active sessions",
+    "section_body": "Each row is a device you're currently signed in on. Sign out individual devices if you don't recognize one.",
+    "row_sub": "Manage signed-in devices",
+    "none": "No active sessions.",
+    "started": "Started",
+    "last_active": "last active",
+    "revoke": "Sign out",
+    "revoke_title": "Sign out session",
+    "revoke_confirm": "Sign this session out? The device will need to log in again.",
+    "revoke_success": "Session signed out.",
+    "revoke_failed": "Could not sign out session."
   },
   "profile": {
     "title": "Profile",

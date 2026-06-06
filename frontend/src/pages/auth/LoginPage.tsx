@@ -4,11 +4,12 @@ import { useTranslation } from 'react-i18next';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Eye, EyeOff, LogIn, ShieldCheck, ArrowLeft, Copy, CheckCircle2, Loader2 } from 'lucide-react';
+import { Eye, EyeOff, LogIn, ShieldCheck, ArrowLeft, Copy, CheckCircle2, Loader2, Download } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { authApi } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { getTrustedDeviceToken, setTrustedDeviceToken, clearTrustedDeviceToken } from '../../utils/trustedDevice';
+import { downloadRecoveryCodes } from '../../utils/downloadCodes';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
 
@@ -288,7 +289,7 @@ export default function LoginPage() {
                       <div key={i} className="font-mono text-sm text-gray-900 tracking-wider">{c}</div>
                     ))}
                   </div>
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
                     <button
                       type="button"
                       onClick={() => copyText(enrollData.recoveryCodes.join('\n'), 'codes')}
@@ -296,6 +297,13 @@ export default function LoginPage() {
                     >
                       {copiedCodes ? <CheckCircle2 className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                       {copiedCodes ? t('mfa.copied', 'Copied') : t('mfa.copy_all_codes', 'Copy all codes')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => downloadRecoveryCodes(enrollData.recoveryCodes, { username: enrollUsername ?? undefined })}
+                      className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary-700 hover:text-primary-800"
+                    >
+                      <Download className="w-4 h-4" /> {t('mfa.download_codes', 'Download as file')}
                     </button>
                   </div>
                   <label className="flex items-start gap-2 cursor-pointer">
