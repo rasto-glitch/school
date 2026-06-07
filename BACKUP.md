@@ -408,56 +408,76 @@ key:
 ### Restoring a Supabase Storage bucket
 
 Storage backups live under `storage/<bucket>/...` and are tarballs
-encrypted with the same age key. To restore one:
+encrypted with the same age key. Use [`scripts/restore-storage.ps1`](scripts/restore-storage.ps1)
+— companion to `restore.ps1`. It bundles download + decrypt + list +
+extract + (optional) re-upload into one command. Same secrets as the
+upload workflow, just set them in your local shell.
+
+Set the env vars once per session (same secrets that GitHub Actions uses):
 
 ```powershell
-# 1. Download the encrypted tarball from B2.
-aws --endpoint-url $env:B2_ENDPOINT s3 cp `
-  "s3://$env:B2_BUCKET/storage/homework-attachments/latest.tar.age" `
-  homework-attachments.tar.age
+# Backblaze (download)
+$env:B2_APPLICATION_KEY_ID = '<keyID from BACKUP.md step 3>'
+$env:B2_APPLICATION_KEY    = '<applicationKey>'
+$env:B2_BUCKET             = '<your bucket>'
+$env:B2_ENDPOINT           = 'https://s3.us-west-002.backblazeb2.com'
 
-# 2. Decrypt with your age private key.
-age --decrypt `
-  --identity "$env:USERPROFILE\.config\school-backups\key.txt" `
-  --output homework-attachments.tar `
-  homework-attachments.tar.age
-
-# 3. List what's inside to confirm.
-tar -tf homework-attachments.tar | head -20
-
-# 4. Extract into a working directory.
-mkdir restored-buckets
-tar -xf homework-attachments.tar -C restored-buckets
-
-# 5. Re-upload to Supabase Storage. Use the same Supabase S3 credentials
-#    as the backup workflow uses (NOT the postgres URL).
-$env:AWS_ACCESS_KEY_ID = '<SUPABASE_S3_ACCESS_KEY_ID>'
-$env:AWS_SECRET_ACCESS_KEY = '<SUPABASE_S3_SECRET_ACCESS_KEY>'
-$env:AWS_DEFAULT_REGION = '<SUPABASE_S3_REGION>'
-aws --endpoint-url '<SUPABASE_S3_ENDPOINT>' s3 sync `
-  restored-buckets/homework-attachments/ `
-  s3://homework-attachments/
+# Supabase Storage S3 (re-upload — only needed when NOT using -DryRun)
+$env:SUPABASE_S3_ACCESS_KEY_ID     = '<from BACKUP.md step 4>'
+$env:SUPABASE_S3_SECRET_ACCESS_KEY = '<from BACKUP.md step 4>'
+$env:SUPABASE_S3_ENDPOINT          = 'https://<projref>.supabase.co/storage/v1/s3'
+$env:SUPABASE_S3_REGION            = '<your project region>'
 ```
 
-For a real recovery (not a drill), restore into a brand-new bucket
-first, inspect it, then swap the buckets. **Never overwrite the live
-bucket** with a restored copy until you've verified the contents — a
-restore that's missing files is silently worse than the bucket you
-have today.
-
-For older snapshots, pass a dated path instead of `latest.tar.age`:
+#### Drill — verify the latest backup is decryptable + lists the right files
 
 ```powershell
-aws --endpoint-url $env:B2_ENDPOINT s3 cp `
-  "s3://$env:B2_BUCKET/storage/homework-attachments/2026/05/14/homework-attachments-20260514T013000Z.tar.age" `
-  homework-attachments.tar.age
+.\scripts\restore-storage.ps1 -Bucket homework-attachments -DryRun
+```
+
+Prints the first 30 tarball entries + the total count. No upload, no
+extraction unless you also pass `-Keep`. Repeat for each bucket
+quarterly.
+
+#### Drill — same, but extract the files locally so you can open them
+
+```powershell
+.\scripts\restore-storage.ps1 -Bucket employee-documents -DryRun -Keep
+```
+
+The script prints the extraction path. Open a few PDFs to confirm they
+render. Delete the working directory afterwards — it contains
+plaintext school data.
+
+#### Real recovery — into a NEW bucket, leaving the live one intact
+
+```powershell
+.\scripts\restore-storage.ps1 -Bucket homework-attachments `
+  -TargetBucket homework-attachments-restored
+```
+
+Inspect the new bucket via the Supabase Storage UI, confirm files are
+present and openable, then swap the buckets (rename in Supabase or
+update the application config). **Never overwrite the live bucket**
+with a restored copy until you've verified the contents — a restore
+that's missing files is silently worse than the bucket you have today.
+
+#### Real recovery — from an older snapshot
+
+```powershell
+.\scripts\restore-storage.ps1 -Bucket chat-files `
+  -Source "storage/chat-files/2026/05/14/chat-files-20260514T013000Z.tar.age" `
+  -TargetBucket chat-files-restored
 ```
 
 ---
 
 ## Restore drill — do this every quarter
 
-Schedule a recurring calendar event. The drill:
+Schedule a recurring calendar event. The drill has two halves now —
+postgres dump and the storage buckets — but both are one-liners.
+
+### Half 1: Postgres dump
 
 1. Run `.\scripts\restore.ps1 -Source latest -DryRun`.
 2. Inspect the listed contents with `pg_restore --list`.
@@ -473,9 +493,28 @@ Schedule a recurring calendar event. The drill:
    Compare against the production counts. They should match.
 6. Pick a random student. Walk through their related rows (parent,
    class, grades, attendance, fee_payments). Verify relations resolve.
-7. **Time the whole thing.** That's your real RTO.
-8. Delete the practice Supabase project.
-9. Write down anything that surprised you in this file.
+7. Delete the practice Supabase project.
+
+### Half 2: Storage buckets
+
+For each of the four buckets, run a `-DryRun` first to confirm the
+tarball is decryptable and the entry count matches what you expect:
+
+```powershell
+.\scripts\restore-storage.ps1 -Bucket homework-attachments -DryRun
+.\scripts\restore-storage.ps1 -Bucket employee-documents -DryRun
+.\scripts\restore-storage.ps1 -Bucket operator-mail -DryRun
+.\scripts\restore-storage.ps1 -Bucket chat-files -DryRun
+```
+
+Pick one bucket and re-run with `-Keep` so the files extract locally.
+Open a handful of them to confirm content (e.g. open a homework PDF,
+view an employee photo). Delete the working directory afterwards.
+
+### After both halves
+
+1. **Time the whole thing.** That's your real RTO.
+2. Write down anything that surprised you in this file.
 
 A backup you've never restored is theatre. The drill is what makes the
 "yes, we have backups" answer a real one.

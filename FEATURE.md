@@ -245,3 +245,107 @@ this for a deliberate UX pass keeps the defensive PRs (PR A + PR B) tight.
 - Authoritative current academic year lives on `schools.current_academic_year` since migration 042. Read it via `resolveCurrentAcademicYear`.
 - The accountant could legitimately run the wizard MID-year as a "close FY 2025 retroactively" action — don't gate strictly on a date window. Gate on "any open prior-year period exists" or similar state-based check.
 
+---
+
+## Browser-side backup restore in the master portal
+
+**Status:** Not built yet — planned. The CLI script
+[`scripts/restore-storage.ps1`](scripts/restore-storage.ps1) covers the
+restore-drill UX today; this is the friendlier follow-up for actual
+recoveries.
+
+### What the feature does
+
+The operator opens the master portal, navigates to a "Restore from
+backup" page, picks a `.tar.age` (storage bucket) or `.pg.age`
+(postgres dump) file from disk, picks their `key.txt` private key from
+disk, and the browser:
+
+1. Decrypts the file entirely in-tab using a WASM `age` implementation.
+   The private key never travels over the network. Master portal sees
+   nothing.
+2. For storage tarballs: parses `tar` in JS, displays the entry list,
+   lets the operator confirm.
+3. For drill mode: stops here. No upload, no destructive action. Just
+   "decryption succeeded, here are the contents."
+4. For real restore: POSTs the decrypted bytes to a master-portal
+   endpoint that writes them to Supabase Storage (or a target bucket
+   the operator picks). The decrypted data only crosses the wire over
+   TLS, and only when the operator clicks "Restore."
+
+### Why "browser-side" is non-negotiable
+
+The whole reason the current backup setup is "bullet proof" is that the
+age private key never touches any server — it lives only on the
+operator's laptop, plus an offline backup. Backblaze can't read your
+backups. Supabase can't read your backups. GitHub Actions can't read
+your backups. Only the laptop with the key can.
+
+If the master portal could decrypt server-side, the private key would
+have to live on the master server. A master-portal compromise would
+then expose every backup ever. The cross-provider isolation that makes
+the promise "we cannot leak your data even if our cloud provider is
+breached" disappears.
+
+Browser-side decryption preserves the model: the key file is selected
+via a file input, lives in the browser tab's memory for the duration
+of the decrypt, and is discarded when the tab closes. Nothing ever
+sends it.
+
+### What it needs
+
+**Master portal (web client) — new restore page:**
+- `apps/master-web/src/pages/restore/RestoreBackupPage.tsx` — drag-drop
+  for the `.tar.age` / `.pg.age` file, file input for `key.txt`. Two
+  modes: drill (decrypt + list) and restore (decrypt + upload).
+- WASM age library: `age-encryption.js` from FiloSottile (the official
+  port) or `@vlcn.io/age`. Single dependency, ~200KB.
+- `tar` parsing in JS: `js-untar` or `tar-stream` (works in browser
+  with a polyfill). Or a minimal hand-rolled USTAR parser if those
+  pull in too much.
+- For real restore: POST the decrypted blob to a new endpoint on
+  `apps/api`, which streams it into Supabase Storage. Uploads chunked
+  by entry rather than as one giant blob.
+
+**Master portal (api) — new endpoints:**
+- `POST /api/restore/storage/:bucket` — accepts a multipart upload of
+  files extracted client-side. Writes each into the target Supabase
+  Storage bucket via the existing `scholifyDb` client. Audited.
+- `POST /api/restore/postgres` — out of scope for v1. Postgres
+  restores still go through the CLI, since they involve `pg_restore`
+  against a target connection string. Browser can't execute that.
+
+**Auth gate:**
+- Operator-scoped, MFA required at the start of the session.
+- Audit every restore action to `operator_audit_log` with the source
+  B2 key (when the operator pastes one in) and the destination bucket.
+
+### Open questions to settle before building
+
+- **Large files.** Browser memory holds the decrypted blob during
+  parsing. Storage tarballs in the typical small-school range (50MB–
+  500MB) are fine. Worth measuring against a real production tarball
+  before committing to one giant blob vs streamed parse.
+- **`tar` parsing for empty entries.** `aws s3 sync` puts trailing
+  slash markers on empty directories on some configs. The parser
+  should skip them, not treat them as files to restore.
+- **What gets surfaced for drill vs restore?** Suggestion: drill
+  always shows entry count + tree preview + a "looks right?" prompt.
+  Restore requires typing the bucket name (matching the
+  existing-account-deletion confirmation pattern) before the upload
+  fires.
+
+### Notes for whoever picks this up
+
+- This is the "make the bullet-proof promise easier to keep" feature.
+  Without it, drills are doable but tedious; operators skip them and
+  the backup quietly rots.
+- The CLI script [`scripts/restore-storage.ps1`](scripts/restore-storage.ps1)
+  already does everything the API endpoint will do, in PowerShell.
+  The browser implementation is essentially a port of that script's
+  flow with the decryption shifted from `age` CLI to `age-encryption.js`
+  and the `aws s3 sync` replaced by per-file PUTs.
+- Do not add a "remember my private key" toggle. The point of the
+  feature is that the key is short-lived in browser memory; persisting
+  it would re-introduce the problem we're avoiding.
+
