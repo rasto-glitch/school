@@ -1,0 +1,156 @@
+name: Daily storage backup
+
+# Nightly mirror of Supabase Storage buckets → age encryption → Backblaze B2.
+# Complements backup-daily.yml (which captures the Postgres rows) by capturing
+# the files those rows reference: homework attachments, profile pictures,
+# employee documents, archive backup JSONs, chat attachments. Without this,
+# the dump alone cannot reproduce student work, signed contracts, or any
+# binary upload. See BACKUP.md for the one-time setup walkthrough.
+#
+# Same encryption pattern as the postgres workflow — the same offline `age`
+# private key recovers both. Same B2 bucket; different prefix (storage/...).
+
+on:
+  schedule:
+    # 01:30 UTC = 04:30 Iraq — 30 min after the postgres dump so the two
+    # backups don't compete for the runner's outbound bandwidth.
+    - cron: '30 1 * * *'
+  workflow_dispatch: {}
+
+# Independent of the postgres backup so a long storage run can't stall
+# the database snapshot.
+concurrency:
+  group: backup-storage
+  cancel-in-progress: false
+
+jobs:
+  storage:
+    name: Supabase Storage → B2
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      # Edit this list when a new bucket is added to the application.
+      # Order doesn't matter — each bucket is backed up independently.
+      BUCKETS: 'homework-attachments employee-documents operator-mail chat-files'
+    steps:
+      - name: Install age
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y age
+          age --version
+          # AWS CLI v2 is pre-installed on ubuntu-latest runners.
+          aws --version
+
+      - name: Prepare timestamp + workspace
+        run: |
+          set -euo pipefail
+          STAMP=$(date -u +%Y%m%dT%H%M%SZ)
+          echo "STAMP=$STAMP" >> "$GITHUB_ENV"
+          echo "DAY_PREFIX=${STAMP:0:4}/${STAMP:4:2}/${STAMP:6:2}" >> "$GITHUB_ENV"
+          mkdir -p /tmp/storage-buckets /tmp/encrypted
+
+      - name: Sync each Supabase Storage bucket
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.SUPABASE_S3_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.SUPABASE_S3_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ secrets.SUPABASE_S3_REGION }}
+          SUPABASE_S3_ENDPOINT: ${{ secrets.SUPABASE_S3_ENDPOINT }}
+        run: |
+          set -euo pipefail
+          # `aws s3 sync` mirrors the full bucket every run. We don't need
+          # incremental tracking — the daily tarball is a complete snapshot
+          # and the storage cost is set by Object Lock retention, not by
+          # how often we re-fetch.
+          for BUCKET in $BUCKETS; do
+            echo "==> Syncing $BUCKET"
+            mkdir -p "/tmp/storage-buckets/$BUCKET"
+            # `|| true` so a single empty/missing bucket doesn't fail the
+            # entire run — operator-mail might not exist on a fresh project
+            # until the first archive backup writes to it.
+            aws --endpoint-url "$SUPABASE_S3_ENDPOINT" s3 sync \
+              "s3://$BUCKET/" "/tmp/storage-buckets/$BUCKET/" \
+              --no-progress || echo "  (sync returned non-zero; bucket may be empty or missing)"
+            BYTES=$(du -sb "/tmp/storage-buckets/$BUCKET" | cut -f1)
+            echo "  $BUCKET: $BYTES bytes"
+          done
+
+      - name: Tarball + encrypt each bucket
+        env:
+          BACKUP_AGE_PUBLIC_KEY: ${{ secrets.BACKUP_AGE_PUBLIC_KEY }}
+        run: |
+          set -euo pipefail
+          # The public key is fine to expose; the matching private key
+          # never leaves your offline storage. If both are compromised
+          # together, your tarballs are readable — same risk model as
+          # the postgres workflow.
+          echo "$BACKUP_AGE_PUBLIC_KEY" > /tmp/recipient.txt
+          for BUCKET in $BUCKETS; do
+            SRC="/tmp/storage-buckets/$BUCKET"
+            # Skip empty buckets to avoid shipping a tarball that decodes
+            # to nothing. The summary step lists what was skipped so we
+            # don't lose visibility.
+            if [ -z "$(ls -A "$SRC" 2>/dev/null)" ]; then
+              echo "==> $BUCKET: empty, skipping"
+              continue
+            fi
+            OUT="/tmp/encrypted/${BUCKET}-${STAMP}.tar.age"
+            echo "==> Encrypting $BUCKET"
+            # tar streams the bucket directory through age in one pipe
+            # — keeps the unencrypted tarball off disk so a runner failure
+            # mid-encryption never leaves cleartext behind.
+            tar -cf - -C /tmp/storage-buckets "$BUCKET" \
+              | age --encrypt --recipients-file /tmp/recipient.txt \
+                    --output "$OUT"
+            ls -lh "$OUT"
+          done
+          # Wipe the cleartext mirror now that the encrypted tarballs exist.
+          rm -rf /tmp/storage-buckets
+
+      - name: Upload encrypted tarballs to Backblaze B2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.B2_APPLICATION_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.B2_APPLICATION_KEY }}
+          B2_BUCKET: ${{ secrets.B2_BUCKET }}
+          B2_ENDPOINT: ${{ secrets.B2_ENDPOINT }}
+        run: |
+          set -euo pipefail
+          # Per-bucket prefix lets you retrieve just one bucket without
+          # downloading everything. STAMP is YYYYMMDDTHHMMSSZ — slice
+          # directly rather than re-parsing with `date -d`, which doesn't
+          # accept the compact form on GNU date.
+          for BUCKET in $BUCKETS; do
+            FILE="/tmp/encrypted/${BUCKET}-${STAMP}.tar.age"
+            if [ ! -f "$FILE" ]; then
+              echo "==> $BUCKET: no encrypted file (was empty), nothing to upload"
+              continue
+            fi
+            DEST="s3://${B2_BUCKET}/storage/${BUCKET}/${DAY_PREFIX}/${BUCKET}-${STAMP}.tar.age"
+            LATEST="s3://${B2_BUCKET}/storage/${BUCKET}/latest.tar.age"
+            echo "==> Uploading $BUCKET"
+            aws --endpoint-url "$B2_ENDPOINT" s3 cp "$FILE" "$DEST"
+            # `latest` pointer for the restore script. With Object Lock +
+            # versioning, each PUT here creates a new version; old versions
+            # stay locked until their retention expires. Reads always
+            # return the newest.
+            aws --endpoint-url "$B2_ENDPOINT" s3 cp "$FILE" "$LATEST"
+          done
+
+      - name: Summary
+        run: |
+          set -euo pipefail
+          echo "## Storage backup complete" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Timestamp: \`$STAMP\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- B2 prefix: \`storage/<bucket>/${DAY_PREFIX}/\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Per-bucket sizes" >> "$GITHUB_STEP_SUMMARY"
+          for BUCKET in $BUCKETS; do
+            FILE="/tmp/encrypted/${BUCKET}-${STAMP}.tar.age"
+            if [ -f "$FILE" ]; then
+              ENC=$(stat -c '%s' "$FILE")
+              echo "- \`$BUCKET\`: encrypted $ENC bytes" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "- \`$BUCKET\`: empty (skipped)" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done

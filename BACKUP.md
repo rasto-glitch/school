@@ -5,15 +5,17 @@ Runs nightly via GitHub Actions. Total cost: typically under $2/month
 for a small school's data volume.
 
 **What this covers:**
-- Daily encrypted snapshots of the Supabase Postgres database.
+- Daily encrypted snapshots of the Supabase Postgres database
+  (`backup-daily.yml`).
+- Daily encrypted snapshots of Supabase Storage buckets — homework
+  attachments, profile pictures, employee documents, archive backup
+  JSONs, chat attachments (`backup-storage-daily.yml`).
 - 24-hour RPO (worst case data loss: one day).
 - Cross-vendor isolation: your data lives in Supabase, your backups live
   in Backblaze, the encryption key lives on your laptop. No single
   provider failure (or account suspension) takes both out.
 
 **What this does NOT cover (yet):**
-- Supabase Storage objects (homework attachments, profile pictures).
-  Add a second workflow when you can.
 - Sub-day recovery granularity. Bump the cron to every 6 hours if you
   want 6-hour RPO at 4× the storage cost (still pennies).
 - Point-in-time recovery to the second. That needs Supabase PITR.
@@ -47,12 +49,19 @@ for a small school's data volume.
 ```
 
 **Secrets that make this work:**
-- `BACKUP_AGE_PUBLIC_KEY` (GitHub Secret) — the recipient the workflow
-  encrypts to. Safe to share.
+- `BACKUP_AGE_PUBLIC_KEY` (GitHub Secret) — the recipient both workflows
+  encrypt to. Safe to share.
 - Private half of the age keypair (your laptop, plus offline backup) —
   the only thing that can decrypt anything. Lose it, all backups
   are unreadable noise.
-- `SUPABASE_DB_URL` (GitHub Secret) — Session pooler URL, NOT Direct.
+- `SUPABASE_DB_URL` (GitHub Secret) — Session pooler URL for `pg_dump`,
+  NOT Direct.
+- `SUPABASE_S3_ACCESS_KEY_ID` + `SUPABASE_S3_SECRET_ACCESS_KEY` (GitHub
+  Secrets) — separate credentials for the Storage S3 endpoint, generated
+  in Supabase Dashboard → Storage → S3 Connection. NOT the project API
+  keys.
+- `SUPABASE_S3_ENDPOINT` + `SUPABASE_S3_REGION` (GitHub Secrets) — the
+  S3-compatible URL Supabase gives you and the region of your project.
 - `B2_APPLICATION_KEY_ID` + `B2_APPLICATION_KEY` (GitHub Secrets) —
   scoped to one bucket; rotate via Backblaze dashboard if leaked.
 
@@ -160,19 +169,41 @@ file is corrupted and decryption will fail.
 **Save the keyID and applicationKey immediately** — Backblaze only shows
 the applicationKey once. If you lose it you'll need to regenerate.
 
-### 4. Add the secrets to GitHub
+### 4. Generate Supabase Storage S3 credentials
+
+The storage backup workflow uses Supabase's S3-compatible Storage endpoint
+to mirror buckets. **This is different from the project API keys.**
+
+1. In the Supabase Dashboard, go to **Storage → S3 Connection** (sidebar
+   under Configuration). On older dashboards it's at **Settings → Storage**.
+2. Click **New access key** (or **Generate**).
+3. Save the **Access key ID** and **Secret access key** immediately —
+   Supabase only shows the secret once.
+4. Note the **Endpoint URL** (looks like
+   `https://<project-ref>.supabase.co/storage/v1/s3`) and the project
+   region (e.g. `us-east-1`, `eu-central-1` — shown on the same page).
+
+These credentials are scoped to your Storage buckets only; they can't
+read or write database rows. Treat them like the postgres URL — anyone
+with them can read every file in every bucket.
+
+### 5. Add the secrets to GitHub
 
 Go to your repo → **Settings → Secrets and variables → Actions → New
-repository secret**. Add five secrets:
+repository secret**. Add nine secrets:
 
-| Secret name              | Value                                                |
-|--------------------------|------------------------------------------------------|
-| `SUPABASE_DB_URL`        | Full Postgres connection string for your project. See note below. |
-| `BACKUP_AGE_PUBLIC_KEY`  | The `age1...` public key from step 1.                |
-| `B2_APPLICATION_KEY_ID`  | The keyID from step 3.                               |
-| `B2_APPLICATION_KEY`     | The applicationKey from step 3.                      |
-| `B2_BUCKET`              | Your bucket name (e.g. `school-system-backups-...`). |
-| `B2_ENDPOINT`            | `https://s3.us-west-002.backblazeb2.com` (replace region as appropriate; include the `https://`). |
+| Secret name                       | Value                                                |
+|-----------------------------------|------------------------------------------------------|
+| `SUPABASE_DB_URL`                 | Full Postgres connection string for your project. See note below. |
+| `SUPABASE_S3_ACCESS_KEY_ID`       | Access key ID from step 4.                          |
+| `SUPABASE_S3_SECRET_ACCESS_KEY`   | Secret access key from step 4.                      |
+| `SUPABASE_S3_ENDPOINT`            | The full S3 URL from step 4 (include `https://`).   |
+| `SUPABASE_S3_REGION`              | Your project region (e.g. `us-east-1`).             |
+| `BACKUP_AGE_PUBLIC_KEY`           | The `age1...` public key from step 1.               |
+| `B2_APPLICATION_KEY_ID`           | The keyID from step 3.                              |
+| `B2_APPLICATION_KEY`              | The applicationKey from step 3.                     |
+| `B2_BUCKET`                       | Your bucket name (e.g. `school-system-backups-...`).|
+| `B2_ENDPOINT`                     | `https://s3.us-west-002.backblazeb2.com` (replace region as appropriate; include the `https://`). |
 
 **Where to find `SUPABASE_DB_URL`:** click the green **Connect** button in
 the Supabase dashboard. The panel has tabs for different connection types
@@ -206,19 +237,25 @@ psql "<paste full URL here>" -c "SELECT 1"
 If you get back `1`, the URL is good. If it errors, fix the URL first
 (usually a forgotten password replacement or wrong region).
 
-### 5. Test it
+### 6. Test it
 
-In the GitHub repo → **Actions** tab → **Daily backup** → **Run workflow**.
-It should complete in 1–3 minutes. Then go check Backblaze: a new file
-should appear at `postgres/<year>/<month>/<day>/dump-<timestamp>.pg.age`
-and at `postgres/latest.pg.age`.
+In the GitHub repo → **Actions** tab, run each workflow once by hand:
 
-If anything fails, the workflow logs will show what's wrong — usually a
+1. **Daily backup → Run workflow.** Should complete in 1–3 minutes.
+   Check Backblaze: a new file appears at
+   `postgres/<year>/<month>/<day>/dump-<timestamp>.pg.age` and at
+   `postgres/latest.pg.age`.
+2. **Daily storage backup → Run workflow.** Takes longer (1–10 min
+   depending on how much is in your buckets). Check Backblaze:
+   `storage/<bucket>/<year>/<month>/<day>/<bucket>-<timestamp>.tar.age`
+   for each non-empty bucket, plus a `latest.tar.age` per bucket.
+
+If anything fails, the workflow logs show what's wrong — usually a
 missing or misspelled secret.
 
 After the first successful run, GitHub Actions will start sending you an
-email if the workflow ever fails on its next nightly run. That's your
-backup health monitor for free.
+email if either workflow ever fails on its next nightly run. That's
+your backup health monitor for free.
 
 ---
 
@@ -368,6 +405,54 @@ key:
   -Source "postgres/2026/05/14/dump-20260514T010000Z.pg.age"
 ```
 
+### Restoring a Supabase Storage bucket
+
+Storage backups live under `storage/<bucket>/...` and are tarballs
+encrypted with the same age key. To restore one:
+
+```powershell
+# 1. Download the encrypted tarball from B2.
+aws --endpoint-url $env:B2_ENDPOINT s3 cp `
+  "s3://$env:B2_BUCKET/storage/homework-attachments/latest.tar.age" `
+  homework-attachments.tar.age
+
+# 2. Decrypt with your age private key.
+age --decrypt `
+  --identity "$env:USERPROFILE\.config\school-backups\key.txt" `
+  --output homework-attachments.tar `
+  homework-attachments.tar.age
+
+# 3. List what's inside to confirm.
+tar -tf homework-attachments.tar | head -20
+
+# 4. Extract into a working directory.
+mkdir restored-buckets
+tar -xf homework-attachments.tar -C restored-buckets
+
+# 5. Re-upload to Supabase Storage. Use the same Supabase S3 credentials
+#    as the backup workflow uses (NOT the postgres URL).
+$env:AWS_ACCESS_KEY_ID = '<SUPABASE_S3_ACCESS_KEY_ID>'
+$env:AWS_SECRET_ACCESS_KEY = '<SUPABASE_S3_SECRET_ACCESS_KEY>'
+$env:AWS_DEFAULT_REGION = '<SUPABASE_S3_REGION>'
+aws --endpoint-url '<SUPABASE_S3_ENDPOINT>' s3 sync `
+  restored-buckets/homework-attachments/ `
+  s3://homework-attachments/
+```
+
+For a real recovery (not a drill), restore into a brand-new bucket
+first, inspect it, then swap the buckets. **Never overwrite the live
+bucket** with a restored copy until you've verified the contents — a
+restore that's missing files is silently worse than the bucket you
+have today.
+
+For older snapshots, pass a dated path instead of `latest.tar.age`:
+
+```powershell
+aws --endpoint-url $env:B2_ENDPOINT s3 cp `
+  "s3://$env:B2_BUCKET/storage/homework-attachments/2026/05/14/homework-attachments-20260514T013000Z.tar.age" `
+  homework-attachments.tar.age
+```
+
 ---
 
 ## Restore drill — do this every quarter
@@ -502,8 +587,6 @@ run from current main, which is safer.
 
 ## Future enhancements (when funding shows up)
 
-- **Add Supabase Storage to the backup.** Second workflow that mirrors
-  the `homework-attachments` bucket to B2. Same encryption pattern.
 - **Sub-day RPO.** Change the cron from `'0 1 * * *'` (daily) to
   `'0 */6 * * *'` (every 6 hours). Storage cost 4×, still trivial.
 - **Supabase PITR.** Solves the sub-second-recovery case. ~$100/mo
