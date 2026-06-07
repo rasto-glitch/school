@@ -1498,6 +1498,225 @@ export async function removeLock(req: AuthRequest, res: Response): Promise<void>
 
 // ── Receipts ────────────────────────────────────────────────────────────
 
+// AC-2 — find a payment inside the frozen archived_students.payment_history
+// snapshot when the live fee_payments row is gone (student was archived).
+// Searches by payment id; on miss, by (receiptYear, receiptNumber). The
+// archived snapshot includes every receipt field we need (per migration 041 +
+// the staff parity work in PR B) so the receipt regenerates without touching
+// the deleted live tables.
+interface ArchivedReceiptHit {
+  archive: {
+    id: string;
+    schoolId: string;
+    studentName: string;
+    parentName: string | null;
+    originalParentId: string | null;
+  };
+  studentFee: {
+    studentFeeId: string;
+    planName: string;
+    academicYear: string | null;
+    currency: string;
+    totalAmount: number;
+    adjustment: number;
+    siblingDiscount: number;
+  };
+  payment: {
+    id: string;
+    amount: number;
+    paidOn: string;
+    method: string | null;
+    reference: string | null;
+    notes: string | null;
+    receiptYear: number | null;
+    receiptNumber: number | null;
+    taxAmount: number | null;
+    taxLabel: string | null;
+    paymentAccountId: string | null;
+    isRefund: boolean;
+  };
+}
+
+function projectArchive(row: any): ArchivedReceiptHit['archive'] {
+  return {
+    id: row.id,
+    schoolId: row.school_id,
+    studentName: row.full_name ?? '—',
+    parentName: row.parent_full_name ?? null,
+    originalParentId: row.original_parent_id ?? null,
+  };
+}
+
+function projectStudentFee(sf: any): ArchivedReceiptHit['studentFee'] {
+  return {
+    studentFeeId: String(sf.studentFeeId ?? ''),
+    planName: sf.planName ?? '—',
+    academicYear: sf.academicYear ?? null,
+    currency: sf.currency ?? 'USD',
+    totalAmount: Number(sf.totalAmount ?? 0),
+    adjustment: Number(sf.adjustment ?? 0),
+    siblingDiscount: Number(sf.siblingDiscount ?? 0),
+  };
+}
+
+function projectPayment(p: any): ArchivedReceiptHit['payment'] {
+  return {
+    id: String(p.id ?? ''),
+    amount: Number(p.amount ?? 0),
+    paidOn: String(p.paidOn ?? ''),
+    method: p.method ?? null,
+    reference: p.reference ?? null,
+    notes: p.notes ?? null,
+    receiptYear: p.receiptYear != null ? Number(p.receiptYear) : null,
+    receiptNumber: p.receiptNumber != null ? Number(p.receiptNumber) : null,
+    taxAmount: p.taxAmount != null ? Number(p.taxAmount) : null,
+    taxLabel: p.taxLabel ?? null,
+    paymentAccountId: p.paymentAccountId ?? null,
+    isRefund: Boolean(p.isRefund),
+  };
+}
+
+async function findArchivedPaymentById(
+  schoolId: string, paymentId: string,
+): Promise<ArchivedReceiptHit | null> {
+  const { data } = await supabase
+    .from('archived_students')
+    .select('id, school_id, full_name, parent_full_name, original_parent_id, payment_history')
+    .eq('school_id', schoolId);
+  for (const row of (data ?? []) as any[]) {
+    const history = Array.isArray(row.payment_history) ? row.payment_history : [];
+    for (const sf of history) {
+      const payments = Array.isArray(sf.payments) ? sf.payments : [];
+      const hit = payments.find((p: any) => String(p.id) === paymentId);
+      if (hit) {
+        return {
+          archive: projectArchive(row),
+          studentFee: projectStudentFee(sf),
+          payment: projectPayment(hit),
+        };
+      }
+    }
+  }
+  return null;
+}
+
+async function findArchivedStudentFeeById(
+  schoolId: string, studentFeeId: string,
+): Promise<{ archive: ArchivedReceiptHit['archive']; studentFee: ArchivedReceiptHit['studentFee']; payments: ArchivedReceiptHit['payment'][] } | null> {
+  const { data } = await supabase
+    .from('archived_students')
+    .select('id, school_id, full_name, parent_full_name, original_parent_id, payment_history')
+    .eq('school_id', schoolId);
+  for (const row of (data ?? []) as any[]) {
+    const history = Array.isArray(row.payment_history) ? row.payment_history : [];
+    const sf = history.find((s: any) => String(s.studentFeeId) === studentFeeId);
+    if (sf) {
+      const payments = (Array.isArray(sf.payments) ? sf.payments : []).map(projectPayment);
+      return {
+        archive: projectArchive(row),
+        studentFee: projectStudentFee(sf),
+        payments,
+      };
+    }
+  }
+  return null;
+}
+
+// Render a single archived payment as a receipt PDF. Allocation breakdown
+// is omitted — the snapshot doesn't capture per-installment allocations
+// (they cascaded with the live fee_payment_allocations rows). The total
+// goes into the "unallocated" line, which is honest about the gap.
+async function streamArchivedPaymentReceipt(
+  res: Response, schoolId: string, hit: ArchivedReceiptHit,
+): Promise<void> {
+  const { data: school } = await supabase.from('schools').select('name, logo_url').eq('id', schoolId).single();
+  if (!school) { res.status(404).json({ error: 'School not found' }); return; }
+  const receiptNumber = hit.payment.receiptYear != null && hit.payment.receiptNumber != null
+    ? `RCP-${hit.payment.receiptYear}-${String(hit.payment.receiptNumber).padStart(5, '0')}`
+    : `FEE-${hit.payment.id.slice(0, 8).toUpperCase()}`;
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="receipt-${receiptNumber}.pdf"`);
+  await streamPaymentReceipt(res, {
+    school: { name: (school as any).name, logoUrl: (school as any).logo_url ?? null },
+    parentName: hit.archive.parentName ?? '—',
+    studentName: hit.archive.studentName,
+    planName: hit.studentFee.planName,
+    academicYear: hit.studentFee.academicYear,
+    currency: hit.studentFee.currency,
+    receiptNumber,
+    paidOn: hit.payment.paidOn,
+    amount: hit.payment.amount,
+    method: hit.payment.method,
+    reference: hit.payment.reference,
+    notes: hit.payment.notes,
+    taxAmount: hit.payment.taxAmount ?? 0,
+    taxLabel: hit.payment.taxLabel,
+    totalAmount: hit.studentFee.totalAmount,
+    adjustment: hit.studentFee.adjustment,
+    siblingDiscount: hit.studentFee.siblingDiscount,
+    paidBefore: 0,
+    recorderName: null,
+    allocations: [],
+    unallocatedAmount: hit.payment.amount,
+    unallocatedNote: null,
+  });
+}
+
+// Render an archived student_fee's full payment history as the year-summary
+// PDF. Same allocation caveat as the single-receipt variant.
+async function streamArchivedYearSummary(
+  res: Response, schoolId: string,
+  hit: { archive: ArchivedReceiptHit['archive']; studentFee: ArchivedReceiptHit['studentFee']; payments: ArchivedReceiptHit['payment'][] },
+): Promise<void> {
+  const { data: school } = await supabase.from('schools').select('name, logo_url').eq('id', schoolId).single();
+  if (!school) { res.status(404).json({ error: 'School not found' }); return; }
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="tuition-statement-${hit.studentFee.studentFeeId.slice(0, 8)}.pdf"`);
+  await streamYearSummary(res, {
+    school: { name: (school as any).name, logoUrl: (school as any).logo_url ?? null },
+    parentName: hit.archive.parentName ?? '—',
+    studentName: hit.archive.studentName,
+    planName: hit.studentFee.planName,
+    academicYear: hit.studentFee.academicYear,
+    currency: hit.studentFee.currency,
+    totalAmount: hit.studentFee.totalAmount,
+    adjustment: hit.studentFee.adjustment,
+    siblingDiscount: hit.studentFee.siblingDiscount,
+    payments: hit.payments
+      .filter(p => !p.isRefund)
+      .sort((a, b) => a.paidOn.localeCompare(b.paidOn))
+      .map(p => ({
+        id: p.id,
+        paidOn: p.paidOn,
+        amount: p.amount,
+        method: p.method,
+        reference: p.reference,
+        recorderName: null,
+        allocations: [],
+        unallocatedAmount: p.amount,
+        unallocatedNote: null,
+      })),
+  });
+}
+
+// Parent visibility on an archived snapshot — the live student_fees row is
+// gone, so we authorize via the snapshot's original_parent_id pointer.
+// Admin/accountant/reception always allowed (school-scoped).
+async function authorizeArchivedReceipt(
+  req: AuthRequest, archive: ArchivedReceiptHit['archive'],
+): Promise<{ ok: boolean }> {
+  const { schoolId, userId, role } = req.user!;
+  if (archive.schoolId !== schoolId) return { ok: false };
+  if (role === 'admin' || role === 'accountant' || role === 'reception') return { ok: true };
+  if (role === 'parent') {
+    if (!archive.originalParentId) return { ok: false };
+    const { data } = await supabase
+      .from('parents').select('user_id').eq('id', archive.originalParentId).eq('school_id', schoolId).maybeSingle();
+    if ((data as { user_id?: string } | null)?.user_id === userId) return { ok: true };
+  }
+  return { ok: false };
+}
+
 async function loadReceiptContext(schoolId: string, studentFeeId: string) {
   const cfg = await getTuitionConfig(schoolId);
   const { data: sf } = await supabase
@@ -1568,12 +1787,24 @@ export async function paymentReceiptPdf(req: AuthRequest, res: Response): Promis
   const guard = await ensurePremium(schoolId);
   if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
 
-  const { id } = req.params; // payment id
+  const id = String(req.params.id); // payment id
 
   const { data: payment } = await supabase
     .from('fee_payments').select('id, student_fee_id, amount, paid_on, method, reference, notes, unallocated_note, recorded_by, created_at, receipt_year, receipt_number, tax_amount, tax_label')
-    .eq('id', id).eq('school_id', schoolId).is('voided_at', null).single();
-  if (!payment) { res.status(404).json({ error: 'Payment not found' }); return; }
+    .eq('id', id).eq('school_id', schoolId).is('voided_at', null).maybeSingle();
+
+  // AC-2 — Live payment is gone (student archived). Fall back to the frozen
+  // snapshot on archived_students.payment_history so receipts can still be
+  // reissued. Authorization here keys on the archive's original_parent_id
+  // (the live student_fees row no longer exists for the parent check).
+  if (!payment) {
+    const hit = await findArchivedPaymentById(schoolId, id);
+    if (!hit) { res.status(404).json({ error: 'Payment not found' }); return; }
+    const auth = await authorizeArchivedReceipt(req, hit.archive);
+    if (!auth.ok) { res.status(403).json({ error: 'Forbidden' }); return; }
+    await streamArchivedPaymentReceipt(res, schoolId, hit);
+    return;
+  }
 
   // Canonical receipt number is RCP-YYYY-NNNNN (sequential per school, per
   // calendar year — see CLAUDE.md). Fall back to a UUID-derived ID only for
@@ -1657,11 +1888,23 @@ export async function studentFeeSummaryPdf(req: AuthRequest, res: Response): Pro
   if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
 
   const id = req.params.id as string; // student_fee id
+
+  // AC-2 — when the live student_fees row is gone (student archived), serve
+  // the year summary from the frozen archived_students.payment_history
+  // snapshot. The live auth check joins through student_fees, so we have to
+  // re-authorize in the archived path.
+  const ctx = await loadReceiptContext(schoolId, id);
+  if (!ctx) {
+    const hit = await findArchivedStudentFeeById(schoolId, id);
+    if (!hit) { res.status(404).json({ error: 'Not found' }); return; }
+    const archAuth = await authorizeArchivedReceipt(req, hit.archive);
+    if (!archAuth.ok) { res.status(403).json({ error: 'Forbidden' }); return; }
+    await streamArchivedYearSummary(res, schoolId, hit);
+    return;
+  }
+
   const auth = await authorizeReceipt(req, id);
   if (!auth.ok) { res.status(403).json({ error: 'Forbidden' }); return; }
-
-  const ctx = await loadReceiptContext(schoolId, id);
-  if (!ctx) { res.status(404).json({ error: 'Not found' }); return; }
 
   const { data: payments } = await supabase
     .from('fee_payments')

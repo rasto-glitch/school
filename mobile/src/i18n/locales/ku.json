@@ -380,7 +380,8 @@
     "insurance_pct": "{{pct}}% لە هەر پارەدانێک دەکرێت",
     "insurance_held": "هەڵگیراو: {{amount}}",
     "insurance_paid_out": "دراوەتەوە: {{amount}} لە {{date}}",
-    "insurance_withheld": "بیمە: {{ins}} · ڕوون: {{net}}"
+    "insurance_withheld": "بیمە: {{ins}} · ڕوون: {{net}}",
+    "voided_on": "هەڵوەشێنرایەوە لە {{date}}"
   },
   "settings": {
     "unknown_error": "هەڵەی نەزانراو",

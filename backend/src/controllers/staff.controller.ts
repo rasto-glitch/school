@@ -27,9 +27,15 @@ async function snapshotStaffArchive(
   departureDate: string,
   actor: { id: string; name: string; role: string },
 ): Promise<{ ok: true; archiveId: string } | { ok: false; error: string }> {
+  // AC-6/8 — match the student-fee snapshot field set so a tax-authority
+  // audit after archive still has tax_amount + tax_label, plus the
+  // payment_account_id / recorded_by attribution the original receipt
+  // carried. The id is included so receipt regen (AC-2) can key on it.
   const { data: payments } = await supabase
     .from('staff_salary_payments')
-    .select('amount, currency, paid_on, period_label, notes, insurance_amount, insurance_percentage')
+    .select(`id, amount, currency, paid_on, period_label, notes,
+             insurance_amount, insurance_percentage,
+             tax_amount, tax_label, payment_account_id, recorded_by`)
     .eq('staff_id', staff.id).eq('school_id', schoolId).is('voided_at', null)
     .order('paid_on', { ascending: true });
 
@@ -44,9 +50,14 @@ async function snapshotStaffArchive(
 
   const insuranceHeld = await sumInsuranceHeld(staff.id, staff.currency);
   const paymentHistory = (payments ?? []).map((p: any) => ({
+    id: p.id,
     amount: p.amount, currency: p.currency, paidOn: p.paid_on,
     periodLabel: p.period_label ?? null, notes: p.notes ?? null,
     insuranceAmount: p.insurance_amount ?? 0, insurancePercentage: p.insurance_percentage ?? null,
+    taxAmount: p.tax_amount != null ? Number(p.tax_amount) : null,
+    taxLabel: p.tax_label ?? null,
+    paymentAccountId: p.payment_account_id ?? null,
+    recordedBy: p.recorded_by ?? null,
   }));
 
   const { data, error } = await supabase
@@ -1058,6 +1069,71 @@ export async function notifyAllStaffDue(req: AuthRequest, res: Response): Promis
 
 // ── Per-staff salary export (PDF / XLSX) ───────────────────────────────
 
+// AC-2 — when the live staff_members row is gone (staff archived /
+// cleanup_voided_records ran 30 days after void), build the export from
+// the frozen archived_employees snapshot. Match on original_employee_id,
+// then on archived_employees.id as a second pass so the same accountant URL
+// works whether they navigate from the live staff list or the archive list.
+async function buildExportDataFromArchive(
+  schoolId: string, staffOrArchiveId: string,
+): Promise<StaffSalaryExportData | null> {
+  let { data: row } = await supabase
+    .from('archived_employees')
+    .select('full_name, position, employment, payment_history, departure_date, reason')
+    .eq('school_id', schoolId).eq('role', 'staff')
+    .eq('original_employee_id', staffOrArchiveId)
+    .order('created_at', { ascending: false })
+    .limit(1).maybeSingle();
+  if (!row) {
+    const fallback = await supabase
+      .from('archived_employees')
+      .select('full_name, position, employment, payment_history, departure_date, reason')
+      .eq('school_id', schoolId).eq('role', 'staff').eq('id', staffOrArchiveId).maybeSingle();
+    row = fallback.data ?? null;
+  }
+  if (!row) return null;
+
+  const { data: school } = await supabase
+    .from('schools').select('name, logo_url').eq('id', schoolId).single();
+  const employment = ((row as any).employment ?? {}) as Record<string, any>;
+  const baseCurrency = String(employment.currency ?? 'USD');
+  const payments = Array.isArray((row as any).payment_history) ? (row as any).payment_history : [];
+
+  let insuranceHeld = 0;
+  for (const p of payments as any[]) {
+    if (String(p.currency) === baseCurrency) insuranceHeld += Number(p.insuranceAmount ?? 0);
+  }
+  insuranceHeld = Math.round(insuranceHeld * 100) / 100;
+
+  return {
+    schoolName: (school as { name: string } | null)?.name ?? 'School',
+    schoolLogoUrl: (school as { logo_url: string | null } | null)?.logo_url ?? null,
+    fullName: (row as any).full_name,
+    position: (row as any).position ?? employment.position ?? null,
+    salaryAmount: Number(employment.salaryAmount ?? 0),
+    currency: baseCurrency,
+    nextPaymentDate: employment.nextPaymentDate ?? null,
+    status: 'archived',
+    archiveReason: (row as any).reason ?? null,
+    insurancePercentage: employment.insurancePercentage ?? null,
+    insuranceHeld,
+    insurancePaidOut: !!employment.insurancePaidOut,
+    insurancePaidOutAt: employment.insurancePaidOutAt ?? null,
+    insurancePaidOutAmount: employment.insurancePaidOutAmount ?? null,
+    insurancePaidOutCurrency: employment.insurancePaidOutCurrency ?? null,
+    insurancePaidOutNotes: employment.insurancePaidOutNotes ?? null,
+    payments: (payments as any[]).map(p => ({
+      amount: Number(p.amount ?? 0),
+      currency: String(p.currency ?? baseCurrency),
+      paidOn: String(p.paidOn ?? ''),
+      periodLabel: p.periodLabel ?? null,
+      notes: p.notes ?? null,
+      insuranceAmount: Number(p.insuranceAmount ?? 0),
+      insurancePercentage: p.insurancePercentage ?? null,
+    })),
+  };
+}
+
 async function buildExportData(schoolId: string, staffId: string): Promise<StaffSalaryExportData | null> {
   const { data: staff } = await supabase
     .from('staff_members')
@@ -1125,7 +1201,9 @@ export async function exportStaffSalaryPdf(req: AuthRequest, res: Response): Pro
   const guard = await ensurePremium(schoolId);
   if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
 
-  const data = await buildExportData(schoolId, String(req.params.id));
+  const id = String(req.params.id);
+  const data = await buildExportData(schoolId, id)
+    ?? await buildExportDataFromArchive(schoolId, id);
   if (!data) { res.status(404).json({ error: 'Staff member not found' }); return; }
 
   const safeName = data.fullName.replace(/[^a-zA-Z0-9._-]+/g, '_');
@@ -1139,7 +1217,9 @@ export async function exportStaffSalaryXlsx(req: AuthRequest, res: Response): Pr
   const guard = await ensurePremium(schoolId);
   if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
 
-  const data = await buildExportData(schoolId, String(req.params.id));
+  const id = String(req.params.id);
+  const data = await buildExportData(schoolId, id)
+    ?? await buildExportDataFromArchive(schoolId, id);
   if (!data) { res.status(404).json({ error: 'Staff member not found' }); return; }
 
   const buf = buildStaffSalaryXlsx(data);
@@ -1167,15 +1247,19 @@ export async function getMyStaffInfo(req: AuthRequest, res: Response): Promise<v
   if (!staff) { res.json({ staff: null, payments: [] }); return; }
 
   const staffRow = staff as { id: string; currency: string };
+  // AC-7 — include voided rows too, marked with voided_at, so the staff
+  // member has a complete audit trail of "money was recorded and reversed."
+  // Insurance-held total stays unchanged (only counts non-voided rows toward
+  // the live liability balance).
   const { data: payments } = await supabase
     .from('staff_salary_payments')
-    .select('id, amount, currency, paid_on, period_label, notes, insurance_amount, insurance_percentage, created_at')
+    .select('id, amount, currency, paid_on, period_label, notes, insurance_amount, insurance_percentage, created_at, voided_at, void_reason')
     .eq('staff_id', staffRow.id)
-    .is('voided_at', null)
     .order('paid_on', { ascending: false });
 
   let insuranceHeld = 0;
-  for (const p of (payments ?? []) as { currency: string; insurance_amount: number }[]) {
+  for (const p of (payments ?? []) as { currency: string; insurance_amount: number; voided_at: string | null }[]) {
+    if (p.voided_at) continue;
     if (p.currency === staffRow.currency) insuranceHeld += Number(p.insurance_amount) || 0;
   }
   insuranceHeld = Math.round(insuranceHeld * 100) / 100;

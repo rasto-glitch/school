@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, RefreshControl } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { Wallet, CalendarClock, History, Shield, ShieldCheck } from 'lucide-react-native';
+import { Wallet, CalendarClock, History, Shield, ShieldCheck, Ban } from 'lucide-react-native';
 import { CardListSkeleton } from '../../components/Skeleton';
 import { useColors } from '../../store/themeStore';
 import { spacing, radius, font, shadow } from '../../theme';
@@ -36,6 +36,8 @@ interface SalaryPayment {
   notes: string | null;
   insuranceAmount: number;
   insurancePercentage: number | null;
+  voidedAt: string | null;
+  voidReason: string | null;
 }
 
 export interface SalaryScreenProps {
@@ -167,17 +169,28 @@ export default function SalaryScreen({ fetchSalary }: SalaryScreenProps) {
             payments.map(p => {
               const ins = p.insuranceAmount || 0;
               const net = Math.round((p.amount - ins) * 100) / 100;
+              const voided = !!p.voidedAt;
               return (
-                <View key={p.id} style={styles.paymentCard}>
+                <View key={p.id} style={[styles.paymentCard, voided && styles.paymentCardVoided]}>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.paymentAmount}>{fmtMoney(p.amount, p.currency)}</Text>
+                    <Text style={[styles.paymentAmount, voided && styles.paymentAmountVoided]}>{fmtMoney(p.amount, p.currency)}</Text>
                     <Text style={styles.paymentMeta}>
                       {p.paidOn}{p.periodLabel ? ` · ${p.periodLabel}` : ''}
                     </Text>
-                    {ins > 0 && (
-                      <Text style={[styles.paymentMeta, { color: '#4F46E5', marginTop: 2 }]}>
-                        {t('salary.insurance_withheld', { defaultValue: 'Insurance: {{ins}} · Net: {{net}}', ins: fmtMoney(ins, p.currency), net: fmtMoney(net, p.currency) })}
-                      </Text>
+                    {voided ? (
+                      <View style={styles.voidedRow}>
+                        <Ban size={12} color="#B91C1C" />
+                        <Text style={styles.voidedText}>
+                          {t('salary.voided_on', { defaultValue: 'Voided on {{date}}', date: (p.voidedAt as string).slice(0, 10) })}
+                          {p.voidReason ? ` · ${p.voidReason}` : ''}
+                        </Text>
+                      </View>
+                    ) : (
+                      ins > 0 && (
+                        <Text style={[styles.paymentMeta, { color: '#4F46E5', marginTop: 2 }]}>
+                          {t('salary.insurance_withheld', { defaultValue: 'Insurance: {{ins}} · Net: {{net}}', ins: fmtMoney(ins, p.currency), net: fmtMoney(net, p.currency) })}
+                        </Text>
+                      )
                     )}
                     {p.notes && <Text style={styles.paymentNotes}>{p.notes}</Text>}
                   </View>
@@ -212,7 +225,11 @@ const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').u
   historyTitle: { fontSize: font.xs, fontWeight: '700', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
   noPayments: { textAlign: 'center', color: colors.textMuted, marginTop: 20, fontSize: font.sm },
   paymentCard: { flexDirection: 'row', backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.xs, ...shadow.sm },
+  paymentCardVoided: { opacity: 0.7, borderWidth: 1, borderColor: '#FEE2E2' },
   paymentAmount: { fontSize: font.md, fontWeight: '700', color: colors.text },
+  paymentAmountVoided: { textDecorationLine: 'line-through', color: colors.textMuted },
   paymentMeta: { fontSize: font.xs, color: colors.textMuted, marginTop: 2 },
   paymentNotes: { fontSize: font.xs, color: colors.textSecondary, marginTop: 4 },
+  voidedRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
+  voidedText: { fontSize: font.xs, color: '#B91C1C', fontWeight: '600' },
 });

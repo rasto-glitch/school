@@ -380,7 +380,8 @@
     "insurance_pct": "يتم اقتطاع {{pct}}% من كل دفعة",
     "insurance_held": "المحتجز: {{amount}}",
     "insurance_paid_out": "تم الصرف: {{amount}} في {{date}}",
-    "insurance_withheld": "التأمين: {{ins}} · الصافي: {{net}}"
+    "insurance_withheld": "التأمين: {{ins}} · الصافي: {{net}}",
+    "voided_on": "ألغيت في {{date}}"
   },
   "settings": {
     "unknown_error": "خطأ غير معروف",

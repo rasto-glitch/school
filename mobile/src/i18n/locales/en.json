@@ -380,7 +380,8 @@
     "insurance_pct": "{{pct}}% withheld per payment",
     "insurance_held": "Held: {{amount}}",
     "insurance_paid_out": "Paid out: {{amount}} on {{date}}",
-    "insurance_withheld": "Insurance: {{ins}} · Net: {{net}}"
+    "insurance_withheld": "Insurance: {{ins}} · Net: {{net}}",
+    "voided_on": "Voided on {{date}}"
   },
   "settings": {
     "unknown_error": "Unknown error",
