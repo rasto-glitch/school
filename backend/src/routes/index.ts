@@ -619,6 +619,7 @@ export function createRouter(io: SocketServer) {
   router.get('/accounting/reports/profit-loss', authenticate, authorize(...accountingRW), validate({ query: vq.listQuery }), (req, res) => reports.getProfitLoss(req as AuthRequest, res));
   router.get('/accounting/reports/cash-flow', authenticate, authorize(...accountingRW), validate({ query: vq.listQuery }), (req, res) => reports.getCashFlowForecast(req as AuthRequest, res));
   router.get('/accounting/reports/tax', authenticate, authorize(...accountingRW), validate({ query: vq.listQuery }), (req, res) => reports.getTaxReport(req as AuthRequest, res));
+  router.get('/accounting/reports/unposted-source-rows', authenticate, authorize(...accountingRW), (req, res) => reports.getUnpostedSourceRows(req as AuthRequest, res));
   router.post('/accounting/reports/rollup', authenticate, authorize(...accountingRW), validate({ body: va.rollupCurrenciesSchema }), (req, res) => reports.rollupCurrencies(req as AuthRequest, res));
 
   // Teacher / supervisor self-service: read-only "my salary".

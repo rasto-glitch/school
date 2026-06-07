@@ -205,6 +205,50 @@ export async function postRefund(o: {
   });
 }
 
+// AR writeoff at archive time: Dr Bad Debt Expense / Cr Accounts Receivable.
+//
+// When a student is archived (transferred / withdrew), the live students row
+// is deleted, which CASCADEs student_fees + fee_payments. The original
+// tuition_billing entry in the GL is FK-less by design and survives — leaving
+// an open receivable that the AR-aging report can no longer see (the live
+// fees rows it joins through are gone). That breaks the trial-balance
+// invariant "GL AR = sum of AR-aging".
+//
+// This writeoff clears the open balance from AR with a matching expense, so
+// the books reconcile after archive. It's the GL equivalent of "we are not
+// expecting to collect this anymore."
+//
+// One entry per archived snapshot, keyed on the archived_students row id
+// (sourceId). Skipped silently if no outstanding balance or no chart.
+export async function postArWriteoff(o: {
+  schoolId: string;
+  archivedStudentId: string;
+  studentName?: string | null;
+  amount: number;
+  currency: string;
+  entryDate: string;
+  postedBy?: string | null;
+}): Promise<void> {
+  if (!(o.amount > 0)) return;
+  const acc = await loadAccounts(o.schoolId);
+  const ar = acc.byCode('1100');
+  // 5060 Bad Debt; fall back to 5090 Other Expense if the chart predates
+  // migration 043 and the seed hasn't run yet (defensive — ensureChartSeeded
+  // is called in loadAccounts, so 5060 is almost always present).
+  const badDebt = acc.byCode('5060') ?? acc.byCode('5090');
+  if (!ar || !badDebt) { console.error('[gl] writeoff skipped: AR/bad-debt account missing'); return; }
+  await postEntry({
+    schoolId: o.schoolId, entryDate: o.entryDate, currency: o.currency,
+    source: 'ar_writeoff', sourceId: o.archivedStudentId,
+    memo: o.studentName ? `Writeoff — ${o.studentName}` : 'AR writeoff (archive)',
+    postedBy: o.postedBy ?? null,
+    lines: [
+      { accountId: badDebt, debit: o.amount, description: 'Bad debt — archive writeoff' },
+      { accountId: ar, credit: o.amount, description: 'Clear receivable on archive' },
+    ],
+  });
+}
+
 // ── Expenses (cash basis) ────────────────────────────────────────────────
 
 // Expense paid: Dr Expense(category) / Cr Cash. Tax (if any) is folded into the

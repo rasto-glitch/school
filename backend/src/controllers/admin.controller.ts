@@ -43,6 +43,7 @@ import {
   type EnrollmentSnapshotEntry,
 } from '../utils/studentEnrollments';
 import { backfillSchoolEnrollments } from '../utils/studentEnrollmentsBackfill';
+import { postArWriteoff } from '../utils/glPosting';
 
 // ---- EMPLOYEE ARCHIVE (teacher / driver / supervisor; staff in staff.controller) ----
 // Mirrors the student archive: the controller assembles the role-specific
@@ -973,6 +974,26 @@ async function buildStudentArchiveSnapshot(schoolId: string, studentId: string):
         .order('paid_on', { ascending: true })
     : { data: [] as any[] };
 
+  // Live late-fee totals (non-voided). student_fees has no late_fees
+  // column — the value lives in the separate student_fee_late_fees table,
+  // which cascade-deletes with the student. So we sum it now and freeze
+  // the per-fee total into the snapshot for receipt regen / writeoff math.
+  const { data: lateFeeRows } = sfIds.length
+    ? await supabase
+        .from('student_fee_late_fees')
+        .select('student_fee_id, amount')
+        .eq('school_id', schoolId)
+        .in('student_fee_id', sfIds)
+        .is('voided_at', null)
+    : { data: [] as any[] };
+  const lateFeesBySf = new Map<string, number>();
+  for (const lf of (lateFeeRows || []) as any[]) {
+    lateFeesBySf.set(
+      lf.student_fee_id,
+      (lateFeesBySf.get(lf.student_fee_id) ?? 0) + Number(lf.amount),
+    );
+  }
+
   const paymentsBySf = new Map<string, any[]>();
   for (const p of paymentRows || []) {
     const arr = paymentsBySf.get((p as any).student_fee_id) ?? [];
@@ -1006,7 +1027,7 @@ async function buildStudentArchiveSnapshot(schoolId: string, studentId: string):
       totalAmount: Number(sf.total_amount),
       adjustment: Number(sf.adjustment),
       siblingDiscount: sf.sibling_discount != null ? Number(sf.sibling_discount) : 0,
-      lateFees: sf.late_fees != null ? Number(sf.late_fees) : 0,
+      lateFees: lateFeesBySf.get(sf.id) ?? 0,
       notes: sf.notes ?? null,
       createdAt: sf.created_at,
       payments,
@@ -1105,7 +1126,9 @@ export async function archiveStudent(req: AuthRequest, res: Response): Promise<v
 
   // Atomic archive: insert into archived_students + delete from students
   // in one transaction (PL/pgSQL function from migration 010 / 031 / 041).
-  const { error: rpcErr } = await supabase.rpc('archive_student_atomic', {
+  // Returns the new archived_students.id — captured so the AC-3 AR writeoff
+  // posting below can key its GL entry on it.
+  const { data: archivedId, error: rpcErr } = await supabase.rpc('archive_student_atomic', {
     p_school_id: schoolId,
     p_student_id: id,
     p_full_name: student.full_name,
@@ -1132,6 +1155,39 @@ export async function archiveStudent(req: AuthRequest, res: Response): Promise<v
   }
 
   await logAudit({ req, entityType: 'student', entityId: String(id), action: 'delete', before: student as Record<string, unknown>, label: student.full_name, reason: `Archived (${reason})` });
+
+  // AC-3 — write off any outstanding AR balance to Bad Debt so the GL's
+  // Accounts Receivable stays in sync with the (now empty for this student)
+  // AR aging report. One entry per currency in the snapshot. Gated on the
+  // premium accounting feature: if it's off (now or never on), we don't
+  // touch the GL — postArWriteoff would otherwise seed a chart for a school
+  // that isn't using accounting. The originating tuition_billing entry is
+  // FK-less and survives either way, so the chain remains intact.
+  const { data: featureRow } = await supabase
+    .from('schools').select('features').eq('id', schoolId).single();
+  const tuitionFeesOn = (featureRow?.features as Record<string, boolean> | null)?.tuition_fees === true;
+  const writeoffDate = (departureDate || new Date().toISOString().split('T')[0]) as string;
+  const archivedIdStr = typeof archivedId === 'string' ? archivedId : null;
+  if (tuitionFeesOn && archivedIdStr) {
+    const byCurrency = new Map<string, number>();
+    for (const sf of snap.paymentHistory as any[]) {
+      const cur = String(sf.currency ?? 'USD');
+      const due = Number(sf.totalAmount ?? 0) + Number(sf.adjustment ?? 0) + Number(sf.lateFees ?? 0);
+      const paid = (sf.payments as any[] ?? []).reduce(
+        (s, p) => s + Number(p.amount ?? 0) * (p.isRefund ? -1 : 1), 0);
+      const bal = Math.max(0, due - paid);
+      if (bal < 0.01) continue;
+      byCurrency.set(cur, Math.round(((byCurrency.get(cur) ?? 0) + bal) * 100) / 100);
+    }
+    for (const [currency, amount] of byCurrency) {
+      await postArWriteoff({
+        schoolId, archivedStudentId: archivedIdStr,
+        studentName: student.full_name, amount, currency,
+        entryDate: writeoffDate, postedBy: req.user!.userId,
+      });
+    }
+  }
+
   res.json({ message: 'Student archived successfully' });
 }
 
@@ -3420,20 +3476,46 @@ export async function exportFullArchiveBackup(req: AuthRequest, res: Response): 
     return;
   }
 
-  const [{ data: school }, { data: students }, { data: employees }] = await Promise.all([
+  // AC-10 — v2 payload includes the General Ledger (the only first-class
+  // book of record per ACCOUNTANT_AUDIT.md). The chart of accounts +
+  // payment accounts ship alongside so account_id references in the
+  // lines remain interpretable after a re-import. Historical fee_plans
+  // (including voided) preserve the source-document context the GL's
+  // FK-less source_id rows point at. Schools without the tuition_fees
+  // module still get all keys — as empty arrays — so v2 readers don't
+  // need to special-case shape.
+  const [
+    { data: school }, { data: students }, { data: employees },
+    { data: jEntries }, { data: jLines }, { data: coa }, { data: payAccts }, { data: feePlans },
+  ] = await Promise.all([
     supabase.from('schools').select('name').eq('id', schoolId).single(),
     supabase.from('archived_students').select('*').eq('school_id', schoolId).order('created_at', { ascending: false }),
     supabase.from('archived_employees').select('*').eq('school_id', schoolId).order('created_at', { ascending: false }),
+    supabase.from('journal_entries').select('*').eq('school_id', schoolId).order('entry_no', { ascending: true }),
+    supabase.from('journal_lines').select('*').eq('school_id', schoolId).order('created_at', { ascending: true }),
+    supabase.from('chart_of_accounts').select('*').eq('school_id', schoolId),
+    supabase.from('payment_accounts').select('*').eq('school_id', schoolId),
+    supabase.from('fee_plans').select('*').eq('school_id', schoolId),
   ]);
 
   const backup = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     kind: 'full_archive_backup',
     schoolName: (school as { name?: string } | null)?.name ?? 'School',
     generatedAt: new Date().toISOString(),
-    counts: { students: (students ?? []).length, employees: (employees ?? []).length },
+    counts: {
+      students: (students ?? []).length,
+      employees: (employees ?? []).length,
+      journalEntries: (jEntries ?? []).length,
+      journalLines: (jLines ?? []).length,
+    },
     archivedStudents: toCC(students ?? []),
     archivedEmployees: toCC(employees ?? []),
+    journalEntries: toCC(jEntries ?? []),
+    journalLines: toCC(jLines ?? []),
+    chartOfAccounts: toCC(coa ?? []),
+    paymentAccounts: toCC(payAccts ?? []),
+    feePlansHistorical: toCC(feePlans ?? []),
   };
 
   const safe = ((school as { name?: string } | null)?.name ?? 'school').replace(/[^a-z0-9-_]+/gi, '_');

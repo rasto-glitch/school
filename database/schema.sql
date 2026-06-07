@@ -950,6 +950,11 @@ CREATE TABLE IF NOT EXISTS archive_backups (
   byte_size INTEGER,
   student_count INTEGER,
   employee_count INTEGER,
+  -- v2 (AC-10) backups include the General Ledger. Nullable so v1 rows
+  -- created before migration 044 still pass verification; the verifier
+  -- skips the GL count check when these are NULL.
+  journal_entry_count INTEGER,
+  journal_line_count INTEGER,
   reason TEXT,
   created_by_name TEXT,
   sha256 TEXT,                                       -- E-b: checksum of the stored file
@@ -959,6 +964,8 @@ CREATE TABLE IF NOT EXISTS archive_backups (
   verify_detail TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+ALTER TABLE archive_backups ADD COLUMN IF NOT EXISTS journal_entry_count INTEGER;
+ALTER TABLE archive_backups ADD COLUMN IF NOT EXISTS journal_line_count INTEGER;
 CREATE INDEX IF NOT EXISTS idx_archive_backups_school ON archive_backups(school_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_archive_backups_verify ON archive_backups(verify_status, verified_at);
 
@@ -1758,13 +1765,42 @@ CREATE INDEX IF NOT EXISTS idx_expenses_voided ON expenses(school_id, voided_at)
 -- ============================================================
 CREATE EXTENSION IF NOT EXISTS pg_cron;
 
+-- Mirror of migration 043 — voided parents (fee_plans, staff_members) are
+-- only hard-deleted when none of their dependents are still alive. The
+-- earlier version cascaded through fee_plans → student_fees → fee_payments
+-- and silently wiped receipts for everyone on a voided plan.
 CREATE OR REPLACE FUNCTION cleanup_voided_records() RETURNS void AS $$
 BEGIN
-  DELETE FROM fee_payments         WHERE voided_at IS NOT NULL AND voided_at < NOW() - INTERVAL '30 days';
-  DELETE FROM fee_plans            WHERE voided_at IS NOT NULL AND voided_at < NOW() - INTERVAL '30 days';
-  DELETE FROM staff_salary_payments WHERE voided_at IS NOT NULL AND voided_at < NOW() - INTERVAL '30 days';
-  DELETE FROM staff_members        WHERE voided_at IS NOT NULL AND voided_at < NOW() - INTERVAL '30 days';
-  DELETE FROM expenses             WHERE voided_at IS NOT NULL AND voided_at < NOW() - INTERVAL '30 days';
+  DELETE FROM fee_payments
+   WHERE voided_at IS NOT NULL AND voided_at < NOW() - INTERVAL '30 days';
+
+  DELETE FROM staff_salary_payments
+   WHERE voided_at IS NOT NULL AND voided_at < NOW() - INTERVAL '30 days';
+
+  DELETE FROM expenses
+   WHERE voided_at IS NOT NULL AND voided_at < NOW() - INTERVAL '30 days';
+
+  DELETE FROM fee_plans fp
+   WHERE fp.voided_at IS NOT NULL
+     AND fp.voided_at < NOW() - INTERVAL '30 days'
+     AND NOT EXISTS (
+       SELECT 1 FROM student_fees sf WHERE sf.fee_plan_id = fp.id
+     )
+     AND NOT EXISTS (
+       SELECT 1 FROM fee_payments fpay
+         JOIN student_fees sf2 ON sf2.id = fpay.student_fee_id
+        WHERE sf2.fee_plan_id = fp.id
+          AND fpay.voided_at IS NULL
+     );
+
+  DELETE FROM staff_members sm
+   WHERE sm.voided_at IS NOT NULL
+     AND sm.voided_at < NOW() - INTERVAL '30 days'
+     AND NOT EXISTS (
+       SELECT 1 FROM staff_salary_payments ssp
+        WHERE ssp.staff_id = sm.id
+          AND ssp.voided_at IS NULL
+     );
 END;
 $$ LANGUAGE plpgsql;
 

@@ -14,6 +14,8 @@ interface BackupRow {
   sha256: string | null;
   student_count: number | null;
   employee_count: number | null;
+  journal_entry_count: number | null;
+  journal_line_count: number | null;
 }
 
 async function verifyOne(b: BackupRow): Promise<void> {
@@ -34,12 +36,26 @@ async function verifyOne(b: BackupRow): Promise<void> {
         const parsed = JSON.parse(buf.toString('utf8'));
         const sN = Array.isArray(parsed.archivedStudents) ? parsed.archivedStudents.length : -1;
         const eN = Array.isArray(parsed.archivedEmployees) ? parsed.archivedEmployees.length : -1;
+        // v2 backups include the General Ledger (AC-10). Old v1 rows have
+        // NULL GL counts — skip those checks for them. New v2 rows always
+        // record both counts at insert time.
+        const isV2 = parsed.schemaVersion === 2;
+        const jeN = isV2 && Array.isArray(parsed.journalEntries) ? parsed.journalEntries.length : null;
+        const jlN = isV2 && Array.isArray(parsed.journalLines) ? parsed.journalLines.length : null;
         if ((b.student_count ?? sN) !== sN || (b.employee_count ?? eN) !== eN) {
           status = 'failed';
           detail = `count mismatch (students ${sN}/${b.student_count}, employees ${eN}/${b.employee_count})`;
+        } else if (b.journal_entry_count !== null && jeN !== null && b.journal_entry_count !== jeN) {
+          status = 'failed';
+          detail = `GL entry count mismatch (${jeN}/${b.journal_entry_count})`;
+        } else if (b.journal_line_count !== null && jlN !== null && b.journal_line_count !== jlN) {
+          status = 'failed';
+          detail = `GL line count mismatch (${jlN}/${b.journal_line_count})`;
         } else {
           status = 'verified';
-          detail = `sha256 ok, parsed, ${sN} students + ${eN} employees`;
+          detail = isV2
+            ? `sha256 ok, parsed, ${sN} students + ${eN} employees + ${jeN} GL entries / ${jlN} lines`
+            : `sha256 ok, parsed, ${sN} students + ${eN} employees`;
         }
       }
     }
@@ -62,7 +78,7 @@ export async function verifyPendingArchiveBackups(): Promise<void> {
     const cutoff = new Date(Date.now() - 7 * 86400_000).toISOString();
     const { data, error } = await supabase
       .from('archive_backups')
-      .select('id, storage_bucket, storage_path, sha256, student_count, employee_count, verify_status, verified_at')
+      .select('id, storage_bucket, storage_path, sha256, student_count, employee_count, journal_entry_count, journal_line_count, verify_status, verified_at')
       .or(`verify_status.neq.verified,verified_at.lt.${cutoff}`)
       .order('created_at', { ascending: true })
       .limit(50);

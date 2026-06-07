@@ -441,6 +441,111 @@ export async function getTaxReport(req: AuthRequest, res: Response): Promise<voi
   });
 }
 
+// ── UNPOSTED SOURCE ROWS REPORT (AC-4) ──────────────────────────────────
+// Reconciliation between operational source rows and the General Ledger.
+// Late fees, expenses (incl. recurring), and fee payments are supposed to
+// post a journal entry at the time they're created. The pg_cron jobs skip
+// the GL post when the chart of accounts isn't seeded; the TS posters log
+// & swallow on missing accounts. Both paths leave the source row alive
+// without a matching GL entry — a silent desync that this report surfaces.
+//
+// A row is "unposted" if it's non-voided AND there is no non-reversal
+// journal_entries row keyed on its (source, source_id). Refund payments
+// match against source='refund'; regular payments against 'fee_payment'.
+//
+// Response includes counts + per-currency totals so the accountant can see
+// the magnitude before deciding to back-post (PR B feature) or seed the
+// chart and rely on the next cron run.
+export async function getUnpostedSourceRows(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const guard = await ensurePremium(schoolId);
+  if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
+
+  const defaultCurrency = await getDefaultCurrency(schoolId);
+
+  // Source rows + the GL entries that could be matched against them.
+  const [{ data: lateFees }, { data: expenses }, { data: payments }, { data: chart }, { data: entries }] = await Promise.all([
+    supabase.from('student_fee_late_fees')
+      .select('id, amount, applied_on, student_fee_id, student_fees(fee_plans(currency), students(full_name))')
+      .eq('school_id', schoolId).is('voided_at', null),
+    supabase.from('expenses')
+      .select('id, name, amount, currency, expense_date, template_id, expense_categories(name)')
+      .eq('school_id', schoolId).is('voided_at', null),
+    supabase.from('fee_payments')
+      .select('id, amount, currency, paid_on, is_refund, student_fees(students(full_name), fee_plans(currency))')
+      .eq('school_id', schoolId).is('voided_at', null),
+    supabase.from('chart_of_accounts')
+      .select('id').eq('school_id', schoolId).limit(1),
+    supabase.from('journal_entries')
+      .select('source, source_id')
+      .eq('school_id', schoolId).eq('is_reversal', false)
+      .in('source', ['late_fee', 'expense', 'fee_payment', 'refund']),
+  ]);
+
+  const chartSeeded = !!((chart as unknown[] | null)?.length);
+  const postedBySource = new Map<string, Set<string>>();
+  for (const e of (entries ?? []) as { source: string; source_id: string }[]) {
+    const set = postedBySource.get(e.source) ?? new Set<string>();
+    set.add(e.source_id);
+    postedBySource.set(e.source, set);
+  }
+  const isPosted = (source: string, id: string): boolean => postedBySource.get(source)?.has(id) === true;
+
+  type UnpostedRow = { id: string; amount: number; currency: string; date: string; label: string };
+  const unpostedLateFees: UnpostedRow[] = [];
+  const unpostedExpenses: (UnpostedRow & { recurring: boolean })[] = [];
+  const unpostedPayments: (UnpostedRow & { kind: 'payment' | 'refund' })[] = [];
+
+  for (const lf of (lateFees ?? []) as any[]) {
+    if (isPosted('late_fee', lf.id)) continue;
+    unpostedLateFees.push({
+      id: lf.id, amount: Number(lf.amount),
+      currency: lf.student_fees?.fee_plans?.currency ?? defaultCurrency,
+      date: lf.applied_on,
+      label: lf.student_fees?.students?.full_name ?? '—',
+    });
+  }
+  for (const ex of (expenses ?? []) as any[]) {
+    if (isPosted('expense', ex.id)) continue;
+    unpostedExpenses.push({
+      id: ex.id, amount: Number(ex.amount),
+      currency: ex.currency ?? defaultCurrency,
+      date: ex.expense_date,
+      label: ex.name ?? ex.expense_categories?.name ?? 'Expense',
+      recurring: !!ex.template_id,
+    });
+  }
+  for (const p of (payments ?? []) as any[]) {
+    const source = p.is_refund ? 'refund' : 'fee_payment';
+    if (isPosted(source, p.id)) continue;
+    unpostedPayments.push({
+      id: p.id, amount: Number(p.amount),
+      currency: p.currency ?? p.student_fees?.fee_plans?.currency ?? defaultCurrency,
+      date: p.paid_on,
+      label: p.student_fees?.students?.full_name ?? '—',
+      kind: p.is_refund ? 'refund' : 'payment',
+    });
+  }
+
+  const sumByCurrency = (rows: UnpostedRow[]) => {
+    const m = new Map<string, number>();
+    for (const r of rows) m.set(r.currency, (m.get(r.currency) ?? 0) + r.amount);
+    return Array.from(m.entries()).map(([currency, amount]) => ({ currency, amount: Math.round(amount * 100) / 100 }));
+  };
+
+  res.json({
+    chartSeeded,
+    summary: {
+      lateFees: { count: unpostedLateFees.length, totals: sumByCurrency(unpostedLateFees) },
+      expenses: { count: unpostedExpenses.length, totals: sumByCurrency(unpostedExpenses) },
+      payments: { count: unpostedPayments.length, totals: sumByCurrency(unpostedPayments) },
+    },
+    lateFees: unpostedLateFees.sort((a, b) => b.date.localeCompare(a.date)),
+    expenses: unpostedExpenses.sort((a, b) => b.date.localeCompare(a.date)),
+    payments: unpostedPayments.sort((a, b) => b.date.localeCompare(a.date)),
+  });
+}
+
 // ── MULTI-CURRENCY ROLLUP ───────────────────────────────────────────────
 // Take an array of {amount, currency} entries and return per-currency totals
 // + an optional consolidated total in `toCurrency` using fx_rates. Exposed
