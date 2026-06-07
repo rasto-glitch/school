@@ -179,3 +179,69 @@ Sized at ~2 days of focused work.
 - Reports in the snapshot already carry `teacher_name_snapshot` + `class_name_snapshot` (PR 1) so the transcript renders correct names even if the writing teacher has been archived since.
 - A graduated student has `is_graduated=true` + an `archived_students` row (`reason='graduated'`) referenced via `original_student_id`. The transcript should pull that snapshot too, not just rely on the live row.
 - Archive-gated like the rest of the historical-data surfaces. Schools without the archive feature get a transcript spanning only their currently-enrolled year and any current `student_enrollments` rows.
+
+---
+
+## Year-end accounting close wizard (AC-9 from the 2026-06 accountant-portal audit)
+
+**Status:** Not built yet — planned. No code exists. Recorded here so the
+shape carries over between the accountant audit and the follow-up PR.
+
+### What the feature does
+
+A wizard for the accountant that runs at fiscal year-end, parallel to
+[YearTransitionModal.tsx](frontend/src/pages/admin/YearTransitionModal.tsx)
+(the student-side wizard the admin already has). It bundles the
+operational steps a school has to perform at the boundary and offers
+sensible defaults instead of leaving them as silent manual chores.
+
+| Step | What the wizard does |
+|---|---|
+| Close prior year | Recommend closing the last open `accounting_periods` row whose `period_end` is in the prior fiscal year. Uses `assertPeriodOpen` for safety. |
+| Deactivate old plans | List `fee_plans` with `academic_year` matching the prior year, propose flipping `is_active=false`. Voiding is NOT the right answer here — voiding deletes data; deactivation just hides plans from new student enrolments. |
+| Clone plans into new year | For each tuition-kind plan, mint a copy with the new `academic_year`, same currency / total / fee_kind / late-fee config; shift each `fee_installments.due_date` forward by 12 months (or by months matching the new year boundary). New plans default `is_active=true`. |
+| Carry FX rates | Optional — duplicate the most recent `fx_rates` entries with `effective_from` set to the first day of the new fiscal year so cross-currency math doesn't go dark. |
+| Recurring expenses | Surface every `expense_recurring_templates.next_due_date` that's still pointing into the prior year. The cron will keep firing on the old schedule — this is informational so the accountant decides whether to bump them forward. |
+
+### Why now
+
+Right now there's zero coordination between the student-side wizard and
+the accounting side. The student wizard advances `schools.current_academic_year`
+and reassigns classes; the accountant has to remember to:
+
+1. Close the prior year's final accounting period
+2. Deactivate prior fee_plans by hand
+3. Recreate each plan for the new year (manually)
+4. Update FX rates
+
+Forget any one of these and you get silent inconsistencies: a parent
+gets billed against last year's plan, late fees apply against an
+old installment, the trial balance straddles two years.
+
+### What it needs
+
+**Backend** — premium-gated (`tuition_fees`):
+- `GET /accounting/year-end/preview` — returns the proposed plan: list of periods to close, plans to deactivate, plans to clone (with proposed new dates), FX rates to carry, recurring expenses still on the old next_due_date. Pure read; no side effects.
+- `POST /accounting/year-end/commit` — executes the chosen subset of actions. Per-step `skip`/`include` flags so the accountant can opt in/out. Wraps the writes in an `accounting_audit` log entry (entity_type='year_end_close', action='create') so the operation is traceable.
+- Both endpoints in [accounting.controller.ts](backend/src/controllers/accounting.controller.ts) or a new `yearEndClose.controller.ts`. Uses the existing [glPosting.ts](backend/src/utils/glPosting.ts) helpers for nothing — this is a config + plan-management operation, not a GL post.
+- Audit on commit (new `audit_logs.entity_type` value would need a CHECK update, similar to PR 1's `'report'` addition).
+
+**Frontend** — new accountant wizard:
+- `frontend/src/pages/admin/YearEndCloseModal.tsx` — multi-step component mirroring `YearTransitionModal.tsx`'s shape (Preview → Pick actions → Confirm → Done).
+- Entry point: a "Year-end close" button on the accountant dashboard. Optional — and ideal — the student-side wizard's "Done" step also surfaces a "Now run the accountant year-end close" CTA if `tuition_fees` is on.
+
+**i18n** — new `accountant.year_end.*` namespace, en/ar/ku web (no mobile surface — accountant is desktop-only by AC-12).
+
+### Why "informational" in the audit and not a defensive fix
+
+No data corruption happens if this never ships — books just stay tedious
+to keep clean. The student-side wizard already runs without it. Saving
+this for a deliberate UX pass keeps the defensive PRs (PR A + PR B) tight.
+
+### Notes for whoever picks this up
+
+- Don't void old plans — voiding triggers the cleanup cron (now safer per migration 043 but still meant for "this plan was a mistake"). Deactivate via `is_active=false`.
+- The new fee_installments dates need explicit re-billing — cloning a plan creates the schedule but no `student_fees` rows. The wizard should call the existing batch-assign endpoint (or surface a CTA pointing the accountant to it) so the new plan actually reaches students.
+- Authoritative current academic year lives on `schools.current_academic_year` since migration 042. Read it via `resolveCurrentAcademicYear`.
+- The accountant could legitimately run the wizard MID-year as a "close FY 2025 retroactively" action — don't gate strictly on a date window. Gate on "any open prior-year period exists" or similar state-based check.
+
