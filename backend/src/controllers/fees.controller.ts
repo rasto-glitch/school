@@ -12,6 +12,7 @@ import { streamPaymentReceipt, streamYearSummary } from '../utils/receipts';
 import { streamArchivePaymentPdf, buildArchivePaymentXlsx, type ArchivePaymentExportData, type ArchivePlanEntry } from '../utils/paymentArchiveExport';
 import { logAudit } from '../utils/audit';
 import { postTuitionBilling, postTuitionPayment, postRefund, reverseEntry, reinstateEntry } from '../utils/glPosting';
+import { resolveCurrentAcademicYear } from '../utils/studentEnrollments';
 import { assertPeriodOpen } from '../utils/period';
 import { allocateReceiptNumber } from '../utils/receiptNumber';
 import { parseCursorParams, buildPageWith, keysetAfter } from '../utils/pagination';
@@ -1378,16 +1379,16 @@ export async function getAccountingSetup(req: AuthRequest, res: Response): Promi
   const guard = await ensurePremium(schoolId);
   if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
 
-  const [classesRes, schoolRes] = await Promise.all([
+  const [classesRes, currentAcademicYear] = await Promise.all([
     supabase.from('classes').select('id, name, grade_level').eq('school_id', schoolId).order('name'),
-    supabase.from('schools').select('current_academic_year').eq('id', schoolId).single(),
+    resolveCurrentAcademicYear(schoolId),
   ]);
 
   if (classesRes.error) { res.status(500).json({ error: classesRes.error.message }); return; }
 
   res.json({
     classes: toCC(classesRes.data || []),
-    currentAcademicYear: schoolRes.data?.current_academic_year ?? null,
+    currentAcademicYear,
   });
 }
 

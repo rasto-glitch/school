@@ -51,13 +51,30 @@ export interface EnrollmentRow {
 }
 
 // Academic year boundary: September starts the year (matches the existing
-// toAcademicYear() in archiveExport.ts). A future school-level setting could
-// override this; for now hardcoded to match the rest of the codebase.
+// toAcademicYear() in archiveExport.ts). This is the pure-date fallback;
+// the authoritative source for "current year for school X" is
+// resolveCurrentAcademicYear() below, which consults the school's stored
+// override (migration 042 / HD-4) before falling back here.
 export function academicYearOf(date: Date | string = new Date()): string {
   const d = typeof date === 'string' ? new Date(date) : date;
   const y = d.getUTCFullYear();
   const m = d.getUTCMonth() + 1;
   return m >= 9 ? `${y}-${y + 1}` : `${y - 1}-${y}`;
+}
+
+// HD-4 — authoritative academic-year resolver. Consults
+// schools.current_academic_year (set by the year-transition wizard /
+// School Settings); falls back to the September-boundary calculator
+// above when the column is NULL or malformed. Used by every write path
+// that stamps an academic_year onto a row so toggling the wizard
+// actually changes downstream behaviour.
+const ACADEMIC_YEAR_SHAPE = /^\d{4}-\d{4}$/;
+export async function resolveCurrentAcademicYear(schoolId: string): Promise<string> {
+  const { data } = await supabase
+    .from('schools').select('current_academic_year').eq('id', schoolId).single();
+  const stored = (data as { current_academic_year?: string | null } | null)?.current_academic_year;
+  if (stored && ACADEMIC_YEAR_SHAPE.test(stored)) return stored;
+  return academicYearOf();
 }
 
 // First day of the given academic year as an ISO date string. Used as the
@@ -154,7 +171,7 @@ export async function openEnrollmentForCurrentYear(args: {
   if (!classId) return; // Student without a class on intake — nothing to open yet.
 
   try {
-    const year = academicYearOf();
+    const year = await resolveCurrentAcademicYear(schoolId);
     const cls = await loadClassInfo(schoolId, classId);
     if (!cls) return;
 
@@ -201,7 +218,7 @@ export async function updateClassForCurrentYear(args: {
 }): Promise<void> {
   const { schoolId, studentId, classId } = args;
   try {
-    const year = academicYearOf();
+    const year = await resolveCurrentAcademicYear(schoolId);
     const cls = await loadClassInfo(schoolId, classId);
     if (!cls) return;
 
@@ -252,7 +269,7 @@ export async function closeCurrentEnrollment(args: {
 }): Promise<void> {
   const { schoolId, studentId, status, endedOn } = args;
   try {
-    const year = academicYearOf();
+    const year = await resolveCurrentAcademicYear(schoolId);
     const ended = endedOn || todayIso();
     const archiveOn = await hasArchiveFeature(schoolId);
     const existing = await findRow(schoolId, studentId, year);
@@ -325,7 +342,7 @@ export async function markOnLeaveForCurrentYear(args: {
   endedOn?: string;
 }): Promise<{ ok: true; row: EnrollmentRow } | { ok: false; error: string }> {
   const { schoolId, studentId, endedOn } = args;
-  const year = academicYearOf();
+  const year = await resolveCurrentAcademicYear(schoolId);
   const ended = endedOn || todayIso();
   const archiveOn = await hasArchiveFeature(schoolId);
   const existing = await findRow(schoolId, studentId, year);
@@ -400,7 +417,7 @@ export async function returnFromLeave(args: {
   const last = await findLastRow(schoolId, studentId);
   const gradeLevel = gradeLevelOverride || last?.gradeLevel || cls.gradeLevel;
 
-  const year = academicYearOf();
+  const year = await resolveCurrentAcademicYear(schoolId);
   const existing = await findRow(schoolId, studentId, year);
   if (existing) {
     const { data, error } = await supabase

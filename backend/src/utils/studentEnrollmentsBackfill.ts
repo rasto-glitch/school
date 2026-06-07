@@ -34,6 +34,7 @@ import { adminDb as supabase } from './db';
 import { logger } from './logger';
 import {
   academicYearOf,
+  resolveCurrentAcademicYear,
   academicYearStartDate,
   type EnrollmentSnapshotEntry,
   type EnrollmentStatus,
@@ -114,6 +115,10 @@ interface StudentBuildInput {
   archiveReason?: 'transferred' | 'withdrew' | 'graduated';
   archiveDepartureDate?: string | null;
   classById: Map<string, ClassInfo>;
+  // HD-4: caller resolves the school's authoritative current year once
+  // and passes it in so buildHistory stays synchronous and we don't
+  // hammer the schools table per student.
+  currentYear: string;
 }
 
 interface BuildResult {
@@ -213,7 +218,7 @@ function buildHistory(input: StudentBuildInput): BuildResult {
       } else {
         // Active: this past year was closed; assume promoted (we'll then
         // add a fresh 'enrolled' row for the current year below if needed).
-        const currentYear = academicYearOf();
+        const currentYear = input.currentYear;
         if (cur.year === currentYear) {
           status = 'enrolled';
           endedOn = null;
@@ -241,7 +246,7 @@ function buildHistory(input: StudentBuildInput): BuildResult {
   // For ACTIVE (not graduated) students, ensure there's an 'enrolled' row
   // for the current academic year that points at students.class_id.
   if (input.liveClassId && !input.isGraduated && !input.archiveReason) {
-    const currentYear = academicYearOf();
+    const currentYear = input.currentYear;
     const lastRow = rows[rows.length - 1];
     const liveClass = classRefFor(input.liveClassId, input.classById);
     if (liveClass) {
@@ -316,6 +321,10 @@ export async function backfillSchoolEnrollments(
     return true;
   });
 
+  // Resolve the school's authoritative current year once for every
+  // buildHistory call below (HD-4 / migration 042).
+  const currentYear = await resolveCurrentAcademicYear(schoolId);
+
   const studentsWithRows = new Set((existingEnrollments || []).map((r: any) => r.student_id));
   result.liveStudentsScanned = (liveStudents || []).length;
 
@@ -360,6 +369,7 @@ export async function backfillSchoolEnrollments(
       liveClassId: s.class_id,
       isGraduated: !!s.is_graduated,
       classById,
+      currentYear,
     });
     result.issues.push(...build.issues);
     if (build.rows.length === 0) continue;

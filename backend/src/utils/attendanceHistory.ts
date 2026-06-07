@@ -13,7 +13,7 @@
 import { adminDb as supabase } from './db';
 import {
   loadEnrollmentHistory,
-  academicYearOf,
+  resolveCurrentAcademicYear,
   academicYearStartDate,
   type EnrollmentStatus,
 } from './studentEnrollments';
@@ -89,7 +89,7 @@ export async function buildAttendanceHistory(
   // Synthesize a current-year entry if one's missing and the student is
   // still active. Keeps the page useful for pre-backfill students who
   // already have attendance rows but no per-year enrollment record.
-  const currentYear = academicYearOf();
+  const currentYear = await resolveCurrentAcademicYear(schoolId);
   if (!years.some(y => y.academicYear === currentYear)) {
     const { data: liveStudent } = await supabase
       .from('students')
@@ -140,7 +140,7 @@ export async function loadAttendanceDaysForYear(
   if (enrollment) {
     startedOn = enrollment.startedOn;
     endedOn = enrollment.endedOn;
-  } else if (academicYear === academicYearOf()) {
+  } else if (academicYear === (await resolveCurrentAcademicYear(schoolId))) {
     // Synthesized current-year fallback — matches buildAttendanceHistory
     // so the calendar still shows today's marks for pre-backfill students.
     startedOn = academicYearStartDate(academicYear);

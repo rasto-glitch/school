@@ -25,6 +25,14 @@ CREATE TABLE IF NOT EXISTS schools (
   features_version INTEGER NOT NULL DEFAULT 1,
   tuition_config JSONB DEFAULT '{"currency":"USD","siblingDiscount":{"enabled":false,"type":"percent","tiers":[]}}'::jsonb,
   timezone TEXT NOT NULL DEFAULT 'Asia/Baghdad',
+  -- Authoritative academic year (migration 042). Readers consult this
+  -- via studentEnrollments#resolveCurrentAcademicYear and fall back to
+  -- the Sep calendar boundary when NULL. The year-transition wizard
+  -- writes here; admin "School settings → academic year" also writes
+  -- here. NULL is allowed for fresh schools.
+  current_academic_year TEXT CHECK (
+    current_academic_year IS NULL OR current_academic_year ~ '^\d{4}-\d{4}$'
+  ),
   chat_restrictions JSONB NOT NULL DEFAULT '{"enabled":false}'::jsonb,
   -- Grading display mode. Lives OUTSIDE `features` so changing it does NOT
   -- bump features_version / force a re-login.

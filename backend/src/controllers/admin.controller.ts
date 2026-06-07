@@ -39,7 +39,7 @@ import {
   openEnrollmentForYear,
   loadEnrolledRosterForClass,
   nextAcademicYear,
-  academicYearOf,
+  resolveCurrentAcademicYear,
   type EnrollmentSnapshotEntry,
 } from '../utils/studentEnrollments';
 import { backfillSchoolEnrollments } from '../utils/studentEnrollmentsBackfill';
@@ -1290,7 +1290,9 @@ export async function commitEnrollmentBackfill(req: AuthRequest, res: Response):
 export async function previewPromoteClass(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
   const { id } = req.params;
-  const academicYear = String(req.query.academicYear || academicYearOf());
+  const academicYear = req.query.academicYear
+    ? String(req.query.academicYear)
+    : await resolveCurrentAcademicYear(schoolId);
 
   const { data: cls } = await supabase
     .from('classes')
@@ -1349,7 +1351,9 @@ export async function commitPromoteClass(req: AuthRequest, res: Response): Promi
     outcomes?: PromoteOutcome[];
   };
 
-  const academicYear = String(body.academicYear || academicYearOf());
+  const academicYear = body.academicYear
+    ? String(body.academicYear)
+    : await resolveCurrentAcademicYear(schoolId);
   const nextYear = String(body.nextAcademicYear || nextAcademicYear(academicYear));
   const yearEndDate = String(body.yearEndDate || new Date().toISOString().slice(0, 10));
   const outcomes = Array.isArray(body.outcomes) ? body.outcomes : [];
@@ -3503,10 +3507,11 @@ export async function yearTransition(req: AuthRequest, res: Response): Promise<v
     }
   }
 
-  // 3. Advance the school's current_academic_year column. Note: readers
-  //    derive the authoritative year from the calendar via academicYearOf()
-  //    (Sep boundary), so this field is informational — useful for "what
-  //    year is the school in" UI but never gates a read path.
+  // 3. Advance the school's current_academic_year column. Migration 042
+  //    made this authoritative: resolveCurrentAcademicYear consults it
+  //    first and falls back to the Sep boundary only when it's NULL or
+  //    malformed. So flipping the year here actually changes which year
+  //    new grades / reports / enrollment rows get stamped with.
   const { error: yearErr } = await supabase.from('schools')
     .update({ current_academic_year: newAcademicYear }).eq('id', schoolId);
   if (yearErr) { res.status(safeDbErrorStatus(yearErr)).json({ error: safeDbErrorMessage(yearErr) }); return; }

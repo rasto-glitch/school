@@ -11,7 +11,7 @@ import {
   buildAttendanceNotificationCopy,
   type AttendanceWriteStatus,
 } from '../utils/attendance';
-import { academicYearOf, loadEnrollmentHistory, rowsToSnapshot } from '../utils/studentEnrollments';
+import { resolveCurrentAcademicYear, loadEnrollmentHistory, rowsToSnapshot } from '../utils/studentEnrollments';
 import { logAudit } from '../utils/audit';
 // Elevated client for STORAGE-only operations — see chat.controller.ts
 // for the rationale.
@@ -236,9 +236,9 @@ export async function deleteAssignment(req: AuthRequest, res: Response): Promise
 // ---- REPORTS ----
 // Reports are the year-by-year academic narrative of each student
 // (migration 041). Every write stamps:
-//   * academic_year — derived from the calendar via academicYearOf() (Sep
-//     boundary). NOT from schools.current_academic_year, which is purely
-//     informational and can lag the real boundary — see audit finding HD-4.
+//   * academic_year — from resolveCurrentAcademicYear(schoolId), which
+//     consults schools.current_academic_year first (migration 042 / HD-4)
+//     and falls back to the September boundary when the column is NULL.
 //   * class_id + class_name_snapshot — captured from the student's current
 //     class. The snapshot column survives a class rename or delete.
 //   * teacher_name_snapshot — captured from the teacher's profile. Survives
@@ -250,9 +250,10 @@ export async function createReport(req: AuthRequest, res: Response): Promise<voi
   const { schoolId, userId } = req.user!;
   const { studentId, subject, attendanceNotes, behaviorNotes, marks, teacherNotes, sharedWithOtherTeachers } = req.body;
 
-  const [{ data: teacher }, { data: studentRow }] = await Promise.all([
+  const [{ data: teacher }, { data: studentRow }, academicYear] = await Promise.all([
     req.db!.from('teachers').select('id, full_name').eq('user_id', userId).eq('school_id', schoolId).single(),
     req.db!.from('students').select('class_id, classes(name)').eq('id', studentId).eq('school_id', schoolId).maybeSingle(),
+    resolveCurrentAcademicYear(schoolId),
   ]);
   if (!teacher) { res.status(404).json({ error: 'Teacher not found' }); return; }
   if (!(await subjectAllowedForClass(schoolId, teacher.id, (studentRow as any)?.class_id, subject))) {
@@ -271,7 +272,7 @@ export async function createReport(req: AuthRequest, res: Response): Promise<voi
     behavior_notes: behaviorNotes,
     marks: marks || [],
     teacher_notes: teacherNotes,
-    academic_year: academicYearOf(),
+    academic_year: academicYear,
     class_id: classId,
     class_name_snapshot: className,
     teacher_name_snapshot: (teacher as { full_name?: string }).full_name ?? null,
@@ -298,15 +299,14 @@ export async function upsertGrade(req: AuthRequest, res: Response): Promise<void
   const { schoolId, userId } = req.user!;
   const { studentId, classId, subject, marks, gradingPeriod } = req.body;
 
-  const [teacherRes, schoolRes] = await Promise.all([
+  const [teacherRes, academicYear] = await Promise.all([
     req.db!.from('teachers').select('id').eq('user_id', userId).eq('school_id', schoolId).single(),
-    req.db!.from('schools').select('current_academic_year').eq('id', schoolId).single(),
+    resolveCurrentAcademicYear(schoolId),
   ]);
   if (!teacherRes.data) { res.status(404).json({ error: 'Teacher not found' }); return; }
   if (!(await subjectAllowedForClass(schoolId, teacherRes.data.id, classId, subject))) {
     res.status(403).json({ error: `You aren't assigned to teach ${subject} for this class.` }); return;
   }
-  const academicYear = schoolRes.data?.current_academic_year || null;
 
   // Grades are gated: a teacher write always lands UNRELEASED (pending admin
   // review). This also means editing an already-released grade reverts it to
