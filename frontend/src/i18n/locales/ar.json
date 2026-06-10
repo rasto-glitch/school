@@ -548,6 +548,9 @@
     "recorded_by": "سُجّل بواسطة",
     "inst_short": "قسط {{sequence}}",
     "other": "أخرى",
+    "refund_badge": "استرداد",
+    "voided_badge": "ملغى",
+    "voided_on": "ألغي في {{date}}",
     "status": {
       "paid_up": "مدفوع بالكامل",
       "current": "على المسار",
@@ -2585,6 +2588,7 @@
       "record_payment": "تسجيل دفعة",
       "no_payments_yet": "لا توجد مدفوعات مسجلة بعد لهذه الخطة.",
       "refund_badge": "استرداد",
+      "refunds_payment": "يرد دفعة",
       "ref": "مرجع {{ref}}",
       "tax": "ضريبة {{amount}}",
       "recorded_by": "سجّلها",

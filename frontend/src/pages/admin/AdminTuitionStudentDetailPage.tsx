@@ -394,7 +394,15 @@ export default function AdminTuitionStudentDetailPage() {
             ) : (
               <Card className="!p-0">
                 <div className="divide-y divide-gray-100">
-                  {activePlan.payments.map(p => (
+                  {/* HD-18 — index payments by id so a refund row can show
+                      a "Refunds RCP-..." pointer back to the original it
+                      offsets. Builds in O(n); lookup is O(1) per row. */}
+                  {(() => null)()}
+                  {(() => {
+                    const byId = new Map(activePlan.payments.map(x => [x.id, x] as const));
+                    return activePlan.payments.map(p => {
+                      const orig = p.isRefund && p.refundOfPaymentId ? byId.get(p.refundOfPaymentId) : null;
+                      return (
                     <div key={p.id} className={`flex items-center gap-3 px-4 py-3 ${p.isRefund ? 'bg-rose-50/30' : ''}`}>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -408,6 +416,15 @@ export default function AdminTuitionStudentDetailPage() {
                           {p.reference && <span className="text-xs text-gray-500">· {t('accounting.detail.ref', { ref: p.reference })}</span>}
                           {(p.taxAmount ?? 0) > 0 && <span className="text-xs text-gray-500">· {t('accounting.detail.tax', { amount: fmt(p.taxAmount ?? 0, p.currency || activePlan.currency) })}{p.taxLabel ? ` (${p.taxLabel})` : ''}</span>}
                         </div>
+                        {orig && (
+                          <div className="text-xs text-rose-700 mt-0.5">
+                            {t('accounting.detail.refunds_payment', { defaultValue: 'Refunds' })}{' '}
+                            {orig.receiptYear && orig.receiptNumber
+                              ? <span className="font-mono">RCP-{orig.receiptYear}-{String(orig.receiptNumber).padStart(5, '0')}</span>
+                              : <span>· {orig.paidOn}</span>}{' '}
+                            <span className="text-gray-500">· {fmt(orig.amount, orig.currency || activePlan.currency)}</span>
+                          </div>
+                        )}
                         <div className="text-xs text-gray-700 mt-0.5">
                           <span className="text-gray-500">{t('accounting.detail.recorded_by')} </span>
                           <span className="font-medium">{p.recorderName || '—'}</span>
@@ -445,7 +462,9 @@ export default function AdminTuitionStudentDetailPage() {
                         </button>
                       )}
                     </div>
-                  ))}
+                    );
+                  });
+                  })()}
                 </div>
               </Card>
             )}

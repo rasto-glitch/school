@@ -161,14 +161,21 @@ export default function TuitionPage() {
                         <div>
                           <div className="text-xs font-semibold text-gray-700 uppercase mb-1.5">{t('tuition.payments')}</div>
                           <div className="divide-y divide-gray-100">
-                            {r.payments.map(p => (
-                              <div key={p.id} className="flex items-center gap-3 py-2">
+                            {r.payments.map(p => {
+                              const isVoided = Boolean(p.voidedAt);
+                              return (
+                              <div key={p.id} className={`flex items-center gap-3 py-2 ${p.isRefund ? 'bg-rose-50/30' : ''} ${isVoided ? 'opacity-60' : ''}`}>
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-2 flex-wrap">
-                                    <span className="font-semibold text-gray-900">{fmt(p.amount, r.currency)}</span>
+                                    <span className={`font-semibold ${isVoided ? 'line-through text-gray-500' : p.isRefund ? 'text-rose-700' : 'text-gray-900'}`}>{p.isRefund ? '−' : ''}{fmt(p.amount, r.currency)}</span>
                                     <span className="text-xs text-gray-500">· {p.paidOn}</span>
+                                    {p.isRefund && <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-rose-100 text-rose-700">{t('tuition.refund_badge')}</span>}
+                                    {isVoided && <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-gray-200 text-gray-700">{t('tuition.voided_badge')}</span>}
                                     {p.method && <span className="text-xs text-gray-500">· {p.method}</span>}
                                   </div>
+                                  {isVoided && (
+                                    <div className="text-xs text-rose-700 mt-0.5">{t('tuition.voided_on', { date: String(p.voidedAt).slice(0, 10) })}{p.voidReason ? ` · ${p.voidReason}` : ''}</div>
+                                  )}
                                   <div className="text-xs text-gray-700 mt-0.5">
                                     <span className="text-gray-500">{t('tuition.recorded_by')} </span>
                                     <span className="font-medium">{p.recorderName || '—'}</span>
@@ -195,7 +202,8 @@ export default function TuitionPage() {
                                   <FileDown className="w-4 h-4" />
                                 </button>
                               </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         </div>
                       )}

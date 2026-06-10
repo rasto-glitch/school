@@ -21,7 +21,7 @@ false-positives dropped.
 | HD-4 | 🟥 Critical | DONE (PR D) | Audit logging | Chart-of-accounts CRUD + manual journal + opening balances unaudited. (Period close/reopen, payment-account, FX-rate were already audited — agent claim partially wrong.) |
 | HD-5 | 🟧 High | DONE (PR C) | File tenancy | `uploadPostFile` + `uploadEbook` write to `posts/...` and `ebooks/...` — no `school_id` prefix (other upload sites are scoped) |
 | HD-6 | 🟧 High | TODO | Accountant exports | `buildLedger` and ledger PDF/XLSX omit archived-student/staff payments (extends AC-13) |
-| HD-7 | 🟧 High | TODO | Parent UI | Parent fee screens (web + mobile) don't render `is_refund` or `voided_at` |
+| HD-7 | 🟧 High | DONE (PR F) | Parent UI | Parent fee screens (web + mobile) now render refund badge + voided strike-through; `getParentFees` includes void/refund metadata; i18n in 6 locales |
 | HD-8 | 🟧 High | TODO | Archive restore | `restoreArchivedStudent` doesn't recreate enrollment rows, doesn't restore class/driver |
 | HD-9 | 🟧 High | DONE (PR C) | Backup integrity | `archive_backups` table has no `prevent_archive_mutation` trigger |
 | HD-10 | 🟧 High | TODO | Web archive UX | Web `ArchivedStudentsTab` detail omits payment history; mobile shows it (inverse parity) |
@@ -32,7 +32,7 @@ false-positives dropped.
 | HD-15 | 🟨 Medium | FEATURE | Storage orphans | No cleanup cron for orphaned files in `homework-attachments` |
 | HD-16 | 🟨 Medium | FEATURE | Master portal UX | Backups modal shows metadata only — no snapshot drill-down |
 | HD-17 | 🟨 Medium | TODO | Year navigation | GL/P&L/AR force manual date entry; no academic-year preset |
-| HD-18 | 🟨 Medium | TODO | Refund pairing | Admin UI shows refund badge but doesn't link refund row ↔ original |
+| HD-18 | 🟨 Medium | DONE (PR F) | Refund pairing | Admin UI now shows "Refunds RCP-YYYY-NNNNN · {amount}" under each refund row, pointing at the original payment in the same list |
 | HD-19 | 🟦 Info | NOTE | Per-archive purge | No row-level purge; only school-wide via `purge_school_archive` / `delete_school_cascade` |
 | HD-20 | 🟦 Info | NOTE | Tax rate history | No `tax_rates` table — fine today because `tax_amount`/`tax_label` are per-row |
 | HD-21 | 🟦 Info | RESOLVED | Chart account code | `updateAccount` does not accept `code` in the request body — code is immutable post-creation. Not a bug |

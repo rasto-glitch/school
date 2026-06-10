@@ -364,6 +364,9 @@ export interface FeePayment {
   receiptNumber?: number | null;
   isRefund?: boolean;
   refundOfPaymentId?: string | null;
+  // HD-7 — voided payment markers (parent + admin UI render strike-through).
+  voidedAt?: string | null;
+  voidReason?: string | null;
 }
 
 export interface StudentFeeRow {

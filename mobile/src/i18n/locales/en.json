@@ -690,6 +690,9 @@
     "status_current": "On track",
     "status_due_soon": "Due soon",
     "status_overdue": "Overdue",
+    "refund_badge": "REFUND",
+    "voided_badge": "VOIDED",
+    "voided_on": "Voided on {{date}}",
     "download_failed_title": "Download failed",
     "statement_failed": "Could not download the statement.",
     "receipt_failed": "Could not download the receipt."

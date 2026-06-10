@@ -1995,13 +1995,18 @@ export async function getParentFees(req: AuthRequest, res: Response): Promise<vo
   const all = await buildStudentFeeRows(schoolId);
   const mine = all.filter(r => studentIds.includes(r.studentId));
 
-  // Attach payments per student_fee
+  // Attach payments per student_fee.
+  // HD-7 — surface refund + voided rows to parents so the payment list is
+  // truthful. is_refund / refund_of_payment_id pair to the original (which
+  // is still visible too); voided_at + void_reason render the row as a
+  // strike-through so a refunded school year reads correctly. The family
+  // rollup totals come from buildStudentFeeRows() which already handles
+  // void/refund signs — this section only changes what the list shows.
   const sfIds = mine.map(r => r.id);
   const { data: payments } = await supabase
     .from('fee_payments')
-    .select('id, student_fee_id, amount, paid_on, method, reference, notes, unallocated_note, recorded_by, created_at')
+    .select('id, student_fee_id, amount, paid_on, method, reference, notes, unallocated_note, recorded_by, created_at, is_refund, refund_of_payment_id, voided_at, void_reason, receipt_year, receipt_number')
     .in('student_fee_id', sfIds.length ? sfIds : ['00000000-0000-0000-0000-000000000000'])
-    .is('voided_at', null)
     .order('paid_on', { ascending: false });
 
   const paymentIds = (payments ?? []).map(p => (p as any).id);
@@ -2052,6 +2057,13 @@ export async function getParentFees(req: AuthRequest, res: Response): Promise<vo
       recorderName: (p as any).recorded_by ? nameByUser.get((p as any).recorded_by) ?? null : null,
       allocations: sortedAllocs,
       createdAt: (p as any).created_at,
+      // HD-7 — markers the parent UI renders as badges / strike-through.
+      isRefund: Boolean((p as any).is_refund),
+      refundOfPaymentId: (p as any).refund_of_payment_id ?? null,
+      voidedAt: (p as any).voided_at ?? null,
+      voidReason: (p as any).void_reason ?? null,
+      receiptYear: (p as any).receipt_year ?? null,
+      receiptNumber: (p as any).receipt_number ?? null,
     });
     paysBySf.set((p as any).student_fee_id, arr);
   }

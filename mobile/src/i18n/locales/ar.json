@@ -690,6 +690,9 @@
     "status_current": "على المسار",
     "status_due_soon": "مستحق قريباً",
     "status_overdue": "متأخر",
+    "refund_badge": "استرداد",
+    "voided_badge": "ملغى",
+    "voided_on": "ألغي في {{date}}",
     "download_failed_title": "فشل التنزيل",
     "statement_failed": "تعذر تنزيل كشف الحساب.",
     "receipt_failed": "تعذر تنزيل الإيصال."

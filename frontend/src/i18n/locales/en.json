@@ -548,6 +548,9 @@
     "recorded_by": "Recorded by",
     "inst_short": "Inst. {{sequence}}",
     "other": "Other",
+    "refund_badge": "Refund",
+    "voided_badge": "Voided",
+    "voided_on": "Voided on {{date}}",
     "status": {
       "paid_up": "Paid up",
       "current": "On track",
@@ -2585,6 +2588,7 @@
       "record_payment": "Record payment",
       "no_payments_yet": "No payments recorded yet for this plan.",
       "refund_badge": "Refund",
+      "refunds_payment": "Refunds",
       "ref": "ref {{ref}}",
       "tax": "tax {{amount}}",
       "recorded_by": "Recorded by",

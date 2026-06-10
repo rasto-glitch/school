@@ -548,6 +548,9 @@
     "recorded_by": "تۆمارکراوە لەلایەن",
     "inst_short": "قیست {{sequence}}",
     "other": "هیتر",
+    "refund_badge": "گەڕاندنەوە",
+    "voided_badge": "هەڵوەشێنرایەوە",
+    "voided_on": "هەڵوەشێنرایەوە لە {{date}}",
     "status": {
       "paid_up": "تەواو دراوە",
       "current": "لەسەر ڕێگا",
@@ -2585,6 +2588,7 @@
       "record_payment": "تۆمارکردنی پارەدان",
       "no_payments_yet": "هێشتا هیچ پارەدانێک تۆمار نەکراوە بۆ ئەم پلانە.",
       "refund_badge": "گەڕاندنەوە",
+      "refunds_payment": "دەگەڕێنێتەوە",
       "ref": "ئاماژە {{ref}}",
       "tax": "باج {{amount}}",
       "recorded_by": "تۆمارکرا لەلایەن",

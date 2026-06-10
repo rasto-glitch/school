@@ -690,6 +690,9 @@
     "status_current": "لەسەر ڕێگا",
     "status_due_soon": "بەمزووانە کاتی",
     "status_overdue": "دواکەوتوو",
+    "refund_badge": "گەڕاندنەوە",
+    "voided_badge": "هەڵوەشێنرایەوە",
+    "voided_on": "هەڵوەشێنرایەوە لە {{date}}",
     "download_failed_title": "دابەزاندن سەرکەوتوو نەبوو",
     "statement_failed": "نەتوانرا کشفی هەژمار دابەزێنرێت.",
     "receipt_failed": "نەتوانرا پسووڵە دابەزێنرێت."

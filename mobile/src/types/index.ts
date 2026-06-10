@@ -276,6 +276,11 @@ export interface FeePayment {
   reference: string | null;
   notes: string | null;
   createdAt?: string;
+  // HD-7 — refund + voided markers (parent screen renders these)
+  isRefund?: boolean;
+  refundOfPaymentId?: string | null;
+  voidedAt?: string | null;
+  voidReason?: string | null;
 }
 
 export interface StudentFeeRow {

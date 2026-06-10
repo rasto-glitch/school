@@ -215,13 +215,40 @@ export default function TuitionScreen() {
                     <Text style={styles.paymentsHeader}>{t('tuition.payments', 'Payments')}</Text>
                     {r.payments.map(p => {
                       const recBusy = busyId === `p:${p.id}`;
+                      // HD-7 — mirror the web parent UI: refund rows show a
+                      // negative amount + Refund badge; voided rows render
+                      // with strike-through + Voided label.
+                      const isVoided = Boolean(p.voidedAt);
                       return (
-                        <View key={p.id} style={styles.paymentRow}>
+                        <View key={p.id} style={[styles.paymentRow, isVoided && { opacity: 0.6 }]}>
                           <View style={{ flex: 1 }}>
-                            <Text style={styles.paymentAmount}>{fmt(p.amount, r.currency)}</Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+                              <Text style={[
+                                styles.paymentAmount,
+                                isVoided && { textDecorationLine: 'line-through', color: colors.textMuted },
+                                p.isRefund && !isVoided && { color: '#B91C1C' },
+                              ]}>
+                                {p.isRefund ? '−' : ''}{fmt(p.amount, r.currency)}
+                              </Text>
+                              {p.isRefund && (
+                                <View style={styles.refundBadge}>
+                                  <Text style={styles.refundBadgeText}>{t('tuition.refund_badge', 'REFUND')}</Text>
+                                </View>
+                              )}
+                              {isVoided && (
+                                <View style={styles.voidedBadge}>
+                                  <Text style={styles.voidedBadgeText}>{t('tuition.voided_badge', 'VOIDED')}</Text>
+                                </View>
+                              )}
+                            </View>
                             <Text style={styles.paymentMeta}>
                               {p.paidOn}{p.method ? ` · ${p.method}` : ''}
                             </Text>
+                            {isVoided && (
+                              <Text style={styles.voidedMeta}>
+                                {t('tuition.voided_on', { date: String(p.voidedAt).slice(0, 10), defaultValue: 'Voided on {{date}}' })}{p.voidReason ? ` · ${p.voidReason}` : ''}
+                              </Text>
+                            )}
                           </View>
                           <TouchableOpacity
                             onPress={() => downloadReceipt(p.id)}
@@ -319,6 +346,17 @@ const makeStyles = (colors: ReturnType<typeof useColors>, isDark: boolean) => St
   },
   paymentAmount: { fontSize: font.sm, fontWeight: '700', color: colors.text },
   paymentMeta: { fontSize: font.xs, color: colors.textMuted, marginTop: 2 },
+  voidedMeta: { fontSize: font.xs, color: '#B91C1C', marginTop: 2 },
+  refundBadge: {
+    paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4,
+    backgroundColor: isDark ? 'rgba(239,68,68,0.18)' : '#FEE2E2',
+  },
+  refundBadgeText: { fontSize: 9, fontWeight: '800', color: '#B91C1C', letterSpacing: 0.4 },
+  voidedBadge: {
+    paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4,
+    backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : '#E5E7EB',
+  },
+  voidedBadgeText: { fontSize: 9, fontWeight: '800', color: colors.textMuted, letterSpacing: 0.4 },
   receiptBtn: {
     width: 32, height: 32, borderRadius: 16,
     backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : colors.primaryLight,
