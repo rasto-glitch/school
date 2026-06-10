@@ -99,6 +99,13 @@ export default function AdminTuitionStudentDetailPage() {
   const [refundAccountId, setRefundAccountId] = useState<string>('');
   const [refundBusy, setRefundBusy] = useState(false);
 
+  // HD-14 — itemised late-fee history for the active plan. The plan card
+  // shows the aggregate `lateFees` stat; this list shows each applied
+  // late-fee row with its date, amount, and void marker so the parent
+  // dispute "why is there a $X charge?" has a clear answer.
+  interface LateFeeRow { id: string; appliedOn: string; amount: number; voidedAt: string | null; voidReason: string | null }
+  const [lateFees, setLateFees] = useState<LateFeeRow[]>([]);
+
   const load = async () => {
     if (!studentId) return;
     const r = await feesApi.getStudentDetail(studentId);
@@ -132,6 +139,24 @@ export default function AdminTuitionStudentDetailPage() {
     }).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [studentId]);
+
+  // HD-14 — fetch the late-fee history whenever the active tab changes.
+  // No pagination here; per-plan late-fee counts are small (one per
+  // overdue installment per cycle).
+  useEffect(() => {
+    if (!activeTab) { setLateFees([]); return; }
+    feesApi.listLateFees(activeTab).then(r => {
+      const rows = (r.data?.data ?? []) as any[];
+      setLateFees(rows.map(x => ({
+        id: String(x.id),
+        appliedOn: String(x.appliedOn ?? x.applied_on ?? ''),
+        amount: Number(x.amount ?? 0),
+        voidedAt: x.voidedAt ?? x.voided_at ?? null,
+        voidReason: x.voidReason ?? x.void_reason ?? null,
+      })));
+    }).catch(() => setLateFees([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, data]);
 
   // The "currently visible" plan derived from the active tab.
   const activePlan: StudentDetailPlan | null = useMemo(() => {
@@ -379,6 +404,36 @@ export default function AdminTuitionStudentDetailPage() {
               </div>
             )}
           </Card>
+
+          {/* HD-14 — itemised late-fee list. Hidden when there are no
+              applied late fees so the page stays uncluttered for the
+              common case. Each row is dated; voided rows render with
+              strike-through + label so the audit trail is visible
+              even though the live aggregate ignores them. */}
+          {lateFees.length > 0 && (
+            <div className="mt-4">
+              <h3 className="font-semibold text-gray-900 mb-2">{t('accounting.detail.late_fees_history', 'Late fees applied')}</h3>
+              <Card className="!p-0">
+                <div className="divide-y divide-gray-100">
+                  {lateFees.map(lf => {
+                    const isVoided = Boolean(lf.voidedAt);
+                    return (
+                      <div key={lf.id} className={`flex items-center justify-between px-4 py-2 text-xs ${isVoided ? 'opacity-60' : ''}`}>
+                        <div>
+                          <span className={`font-semibold ${isVoided ? 'line-through text-gray-500' : 'text-gray-900'}`}>{fmt(lf.amount, activePlan.currency)}</span>
+                          <span className="text-gray-500 ml-2">· {lf.appliedOn}</span>
+                          {isVoided && <span className="ml-2 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-gray-200 text-gray-700">{t('tuition.voided_badge')}</span>}
+                        </div>
+                        {isVoided && (
+                          <span className="text-[11px] text-rose-700">{t('tuition.voided_on', { date: String(lf.voidedAt).slice(0, 10) })}{lf.voidReason ? ` · ${lf.voidReason}` : ''}</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </Card>
+            </div>
+          )}
 
           {/* Payments for the active plan */}
           <div className="mt-4">

@@ -421,6 +421,84 @@ export default function ArchivedStudentsTab() {
               )}
             </div>
 
+            {/* HD-10 — surface the frozen tuition payment_history snapshot.
+                Mobile parent ParentArchiveScreen has shown this since
+                migration 008; the web admin detail used to omit it
+                entirely, so accountants who navigated here saw less than
+                the parent did. Each plan card lists per-payment receipts
+                with the same refund / voided markers as the live admin
+                tuition view (HD-7 / HD-18). */}
+            {(() => {
+              const ph: any[] = Array.isArray(detail?.paymentHistory) ? detail.paymentHistory : [];
+              if (ph.length === 0) return null;
+              return (
+                <div className="border-t border-gray-100 pt-5">
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">{t('admin.arch_students.tuition_payments', 'Tuition payments')}</p>
+                  <div className="space-y-4">
+                    {ph.map((plan: any, idx: number) => {
+                      const cur: string = String(plan.currency ?? 'USD');
+                      const payments: any[] = Array.isArray(plan.payments) ? plan.payments : [];
+                      const due = Number(plan.totalAmount ?? 0) + Number(plan.adjustment ?? 0) - Number(plan.siblingDiscount ?? 0) + Number(plan.lateFees ?? 0);
+                      const paid = payments.reduce((s: number, p: any) => s + (p.voidedAt ? 0 : Number(p.amount) * (p.isRefund ? -1 : 1)), 0);
+                      const byId = new Map<string, any>(payments.filter((p: any) => p?.id).map((p: any) => [String(p.id), p]));
+                      return (
+                        <div key={idx} className="rounded-lg border border-gray-200 overflow-hidden">
+                          <div className="px-3 py-2 bg-gray-50 flex items-center justify-between text-xs">
+                            <div className="font-semibold text-gray-800">
+                              {plan.planName || 'Plan'}
+                              {plan.academicYear && <span className="text-gray-500 font-normal"> · {plan.academicYear}</span>}
+                            </div>
+                            <div className="text-gray-600">
+                              {paid.toFixed(2)} {cur} <span className="text-gray-400">/ {due.toFixed(2)} {cur}</span>
+                            </div>
+                          </div>
+                          {payments.length === 0 ? (
+                            <p className="text-xs text-gray-400 px-3 py-3">{t('admin.arch_students.no_payments', 'No payments recorded')}</p>
+                          ) : (
+                            <div className="divide-y divide-gray-100">
+                              {payments.map((p: any, i: number) => {
+                                const isVoided = Boolean(p.voidedAt);
+                                const orig = p.isRefund && p.refundOfPaymentId ? byId.get(String(p.refundOfPaymentId)) : null;
+                                return (
+                                  <div key={p.id ?? i} className={`flex items-start gap-3 px-3 py-2 text-xs ${p.isRefund ? 'bg-rose-50/30' : ''} ${isVoided ? 'opacity-60' : ''}`}>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <span className={`font-semibold ${isVoided ? 'line-through text-gray-500' : p.isRefund ? 'text-rose-700' : 'text-gray-900'}`}>
+                                          {p.isRefund ? '−' : ''}{Number(p.amount ?? 0).toFixed(2)} {p.currency || cur}
+                                        </span>
+                                        <span className="text-gray-500">· {p.paidOn}</span>
+                                        {p.isRefund && <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-rose-100 text-rose-700">{t('tuition.refund_badge')}</span>}
+                                        {isVoided && <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-gray-200 text-gray-700">{t('tuition.voided_badge')}</span>}
+                                        {p.receiptYear && p.receiptNumber && (
+                                          <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">RCP-{p.receiptYear}-{String(p.receiptNumber).padStart(5, '0')}</span>
+                                        )}
+                                        {p.method && <span className="text-gray-500">· {p.method}</span>}
+                                      </div>
+                                      {orig && (
+                                        <div className="text-[11px] text-rose-700 mt-0.5">
+                                          {t('accounting.detail.refunds_payment')}{' '}
+                                          {orig.receiptYear && orig.receiptNumber
+                                            ? <span className="font-mono">RCP-{orig.receiptYear}-{String(orig.receiptNumber).padStart(5, '0')}</span>
+                                            : <span>· {orig.paidOn}</span>}
+                                        </div>
+                                      )}
+                                      {isVoided && (
+                                        <div className="text-[11px] text-rose-700 mt-0.5">{t('tuition.voided_on', { date: String(p.voidedAt).slice(0, 10) })}{p.voidReason ? ` · ${p.voidReason}` : ''}</div>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
+
             <div className="flex justify-end gap-2 pt-4 border-t border-gray-100">
               <button
                 onClick={exportRecord}

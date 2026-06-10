@@ -24,14 +24,14 @@ false-positives dropped.
 | HD-7 | 🟧 High | DONE (PR F) | Parent UI | Parent fee screens (web + mobile) now render refund badge + voided strike-through; `getParentFees` includes void/refund metadata; i18n in 6 locales |
 | HD-8 | 🟧 High | TODO | Archive restore | `restoreArchivedStudent` doesn't recreate enrollment rows, doesn't restore class/driver |
 | HD-9 | 🟧 High | DONE (PR C) | Backup integrity | `archive_backups` table has no `prevent_archive_mutation` trigger |
-| HD-10 | 🟧 High | TODO | Web archive UX | Web `ArchivedStudentsTab` detail omits payment history; mobile shows it (inverse parity) |
+| HD-10 | 🟧 High | DONE (PR G) | Web archive UX | `ArchivedStudentsTab` detail now renders the frozen `payment_history` JSONB per plan, with refund / voided markers matching the live admin view |
 | HD-11 | 🟧 High | TODO | Storage orphans | Chat message attachments never persisted to DB — orphaned the moment they're sent |
 | HD-12 | 🟨 Medium | INFO | Salary history | Mid-tenure salary mutations have no `salary_history` table — relies on `audit_logs` |
 | HD-13 | 🟨 Medium | DONE (PR E) | Snapshot gaps | Verified: no `staff_attendance` / `employee_attendance` / `performance_review` tables exist; insurance-payout history is covered by `audit_logs`. PR C HD-3 already covered voided payments. Nothing left to snapshot |
-| HD-14 | 🟨 Medium | TODO | Late-fee UX | UI shows aggregate `lateFees` only — no itemized list, no per-late-fee void marker |
+| HD-14 | 🟨 Medium | DONE (PR G) | Late-fee UX | `AdminTuitionStudentDetailPage` now lists each applied late fee with date + amount + voided marker, fetched via the existing `listLateFees` endpoint |
 | HD-15 | 🟨 Medium | FEATURE | Storage orphans | No cleanup cron for orphaned files in `homework-attachments` |
 | HD-16 | 🟨 Medium | FEATURE | Master portal UX | Backups modal shows metadata only — no snapshot drill-down |
-| HD-17 | 🟨 Medium | TODO | Year navigation | GL/P&L/AR force manual date entry; no academic-year preset |
+| HD-17 | 🟨 Medium | DONE (PR G) | Year navigation | `ProfitLossPage` got "This month / This academic year / Previous academic year" preset chips using a Sept-boundary helper. GL/AR-aging not retrofitted (AR is point-in-time so doesn't benefit; GL ledger is a candidate for a future pass) |
 | HD-18 | 🟨 Medium | DONE (PR F) | Refund pairing | Admin UI now shows "Refunds RCP-YYYY-NNNNN · {amount}" under each refund row, pointing at the original payment in the same list |
 | HD-19 | 🟦 Info | NOTE | Per-archive purge | No row-level purge; only school-wide via `purge_school_archive` / `delete_school_cascade` |
 | HD-20 | 🟦 Info | NOTE | Tax rate history | No `tax_rates` table — fine today because `tax_amount`/`tax_label` are per-row |

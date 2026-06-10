@@ -27,6 +27,19 @@ function firstOfMonthISO(): string {
 }
 function todayISO(): string { return new Date().toISOString().slice(0, 10); }
 
+// HD-17 — academic-year range helper. Scholify uses a September boundary
+// (matches academicYearOf() on the backend). Returns ISO dates so the
+// existing date inputs accept the value with no further parsing.
+function academicYearRange(offset: 0 | -1 = 0): { start: string; end: string } {
+  const now = new Date();
+  const y = now.getUTCFullYear();
+  const inFall = now.getUTCMonth() + 1 >= 9;
+  const startYear = (inFall ? y : y - 1) + offset;
+  const start = `${startYear}-09-01`;
+  const end = `${startYear + 1}-08-31`;
+  return { start, end };
+}
+
 export default function ProfitLossPage() {
   const { t } = useTranslation();
   const { school } = useAuthStore();
@@ -63,6 +76,15 @@ export default function ProfitLossPage() {
             {t('accounting.pl.compare')}
           </label>
           <div className="flex items-end"><Button onClick={run} fullWidth loading={loading}>{t('accounting.pl.run')}</Button></div>
+        </div>
+        {/* HD-17 — preset chips for the most common ranges. Saves the
+            accountant from typing two ISO dates every time they want
+            this-academic-year vs. last-academic-year P&Ls. The current
+            month is the existing default; keeping that chip for parity. */}
+        <div className="mt-3 flex flex-wrap gap-2 text-xs">
+          <button type="button" className="px-2 py-1 rounded border border-gray-200 text-gray-600 hover:bg-gray-50" onClick={() => { setStartDate(firstOfMonthISO()); setEndDate(todayISO()); }}>{t('accounting.pl.preset_this_month', 'This month')}</button>
+          <button type="button" className="px-2 py-1 rounded border border-gray-200 text-gray-600 hover:bg-gray-50" onClick={() => { const r = academicYearRange(0); setStartDate(r.start); setEndDate(r.end); }}>{t('accounting.pl.preset_this_year', 'This academic year')}</button>
+          <button type="button" className="px-2 py-1 rounded border border-gray-200 text-gray-600 hover:bg-gray-50" onClick={() => { const r = academicYearRange(-1); setStartDate(r.start); setEndDate(r.end); }}>{t('accounting.pl.preset_prev_year', 'Previous academic year')}</button>
         </div>
       </Card>
 

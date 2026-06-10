@@ -551,6 +551,7 @@
     "refund_badge": "Refund",
     "voided_badge": "Voided",
     "voided_on": "Voided on {{date}}",
+    "late_fee_applied": "Late fee · {{date}}",
     "status": {
       "paid_up": "Paid up",
       "current": "On track",
@@ -2589,6 +2590,10 @@
       "no_payments_yet": "No payments recorded yet for this plan.",
       "refund_badge": "Refund",
       "refunds_payment": "Refunds",
+      "late_fees_history": "Late fees applied",
+      "preset_this_month": "This month",
+      "preset_this_year": "This academic year",
+      "preset_prev_year": "Previous academic year",
       "ref": "ref {{ref}}",
       "tax": "tax {{amount}}",
       "recorded_by": "Recorded by",

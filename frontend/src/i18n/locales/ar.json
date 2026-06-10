@@ -551,6 +551,7 @@
     "refund_badge": "استرداد",
     "voided_badge": "ملغى",
     "voided_on": "ألغي في {{date}}",
+    "late_fee_applied": "غرامة تأخير · {{date}}",
     "status": {
       "paid_up": "مدفوع بالكامل",
       "current": "على المسار",
@@ -2589,6 +2590,10 @@
       "no_payments_yet": "لا توجد مدفوعات مسجلة بعد لهذه الخطة.",
       "refund_badge": "استرداد",
       "refunds_payment": "يرد دفعة",
+      "late_fees_history": "غرامات التأخير المطبقة",
+      "preset_this_month": "هذا الشهر",
+      "preset_this_year": "هذه السنة الدراسية",
+      "preset_prev_year": "السنة الدراسية السابقة",
       "ref": "مرجع {{ref}}",
       "tax": "ضريبة {{amount}}",
       "recorded_by": "سجّلها",
