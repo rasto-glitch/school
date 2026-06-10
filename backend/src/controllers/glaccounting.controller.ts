@@ -6,6 +6,7 @@ import { toCC } from '../utils/transform';
 import { ensureChartSeeded } from '../utils/glSeed';
 import { postEntryResult, type PostLine } from '../utils/glPosting';
 import { assertPeriodOpen } from '../utils/period';
+import { logAudit } from '../utils/audit';
 import {
   streamTrialBalancePdf, streamIncomeStatementPdf, streamBalanceSheetPdf,
   buildTrialBalanceXlsx, buildIncomeStatementXlsx, buildBalanceSheetXlsx, buildJournalXlsx,
@@ -386,6 +387,8 @@ export async function createAccount(req: AuthRequest, res: Response): Promise<vo
     subtype: subtype?.trim() || null, is_system: false, is_active: true,
   }).select().single();
   if (error) { res.status(500).json({ error: error.message }); return; }
+  // HD-4 — accountant CRUD on the chart was previously unaudited.
+  await logAudit({ req, entityType: 'chart_of_account', entityId: String(data.id), action: 'create', after: data, label: `${data.code} ${data.name}` });
   res.status(201).json(toCC(data));
 }
 
@@ -397,8 +400,10 @@ export async function updateAccount(req: AuthRequest, res: Response): Promise<vo
   const id = String(req.params.id);
   const { name, subtype, isActive } = req.body as { name?: string; subtype?: string | null; isActive?: boolean };
 
+  // HD-4 — pull the full row so the audit diff captures every field that
+  // actually changed (name + subtype + is_active), not just the is_system flag.
   const { data: before } = await supabase
-    .from('chart_of_accounts').select('id, is_system').eq('school_id', schoolId).eq('id', id).single();
+    .from('chart_of_accounts').select('*').eq('school_id', schoolId).eq('id', id).single();
   if (!before) { res.status(404).json({ error: 'Account not found' }); return; }
   // System accounts are renamable but must stay active — posting depends on them.
   if (isActive === false && (before as { is_system: boolean }).is_system) {
@@ -411,10 +416,11 @@ export async function updateAccount(req: AuthRequest, res: Response): Promise<vo
   if (isActive !== undefined) updates.is_active = isActive;
   if (Object.keys(updates).length === 0) { res.status(400).json({ error: 'Nothing to update' }); return; }
 
-  const { data, error } = await supabase.from('chart_of_accounts')
+  const { data: after, error } = await supabase.from('chart_of_accounts')
     .update(updates).eq('school_id', schoolId).eq('id', id).select().single();
   if (error) { res.status(500).json({ error: error.message }); return; }
-  res.json(toCC(data));
+  await logAudit({ req, entityType: 'chart_of_account', entityId: id, action: 'update', before, after, label: `${(after as any).code} ${(after as any).name}` });
+  res.json(toCC(after));
 }
 
 export async function deleteAccount(req: AuthRequest, res: Response): Promise<void> {
@@ -423,8 +429,10 @@ export async function deleteAccount(req: AuthRequest, res: Response): Promise<vo
   if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
 
   const id = String(req.params.id);
+  // HD-4 — capture the full row before deletion so the audit log keeps a
+  // recoverable snapshot of what was removed.
   const { data: acct } = await supabase
-    .from('chart_of_accounts').select('id, is_system').eq('school_id', schoolId).eq('id', id).single();
+    .from('chart_of_accounts').select('*').eq('school_id', schoolId).eq('id', id).single();
   if (!acct) { res.status(404).json({ error: 'Account not found' }); return; }
   if ((acct as { is_system: boolean }).is_system) { res.status(409).json({ error: 'System accounts cannot be deleted' }); return; }
 
@@ -434,6 +442,7 @@ export async function deleteAccount(req: AuthRequest, res: Response): Promise<vo
 
   const { error } = await supabase.from('chart_of_accounts').delete().eq('school_id', schoolId).eq('id', id);
   if (error) { res.status(500).json({ error: error.message }); return; }
+  await logAudit({ req, entityType: 'chart_of_account', entityId: id, action: 'delete', before: acct, label: `${(acct as any).code} ${(acct as any).name}` });
   res.json({ success: true });
 }
 
@@ -484,6 +493,14 @@ export async function createJournalEntry(req: AuthRequest, res: Response): Promi
     postedBy: userId, lines,
   });
   if (!result.ok) { res.status(400).json({ error: result.error }); return; }
+  // HD-4 — manual journal entries are the highest-trust accountant write
+  // path. The GL chain itself is hash-chained, but logAudit also gives the
+  // admin viewer a labelled record of "who posted what and when."
+  await logAudit({
+    req, entityType: 'journal_entry', entityId: result.entryId, action: 'create',
+    after: { entryDate, currency, memo: memo?.trim() || null, source: source === 'opening' ? 'opening' : 'manual', totalDebit, totalCredit, lineCount: lines.length },
+    label: `${entryDate} · ${currency} · ${totalDebit.toFixed(2)}`,
+  });
   res.status(201).json({ id: result.entryId });
 }
 
@@ -537,6 +554,13 @@ export async function postOpeningBalances(req: AuthRequest, res: Response): Prom
     memo: memo?.trim() || 'Opening balances', postedBy: userId, lines,
   });
   if (!result.ok) { res.status(400).json({ error: result.error }); return; }
+  // HD-4 — opening balances are a once-per-school event; auditing them is
+  // worth more than any other manual entry.
+  await logAudit({
+    req, entityType: 'journal_entry', entityId: result.entryId, action: 'create',
+    after: { entryDate, currency, memo: memo?.trim() || 'Opening balances', source: 'opening', totalDebit, totalCredit, lineCount: lines.length },
+    label: `Opening balances · ${entryDate} · ${currency}`,
+  });
   res.status(201).json({ id: result.entryId });
 }
 

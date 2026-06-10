@@ -52,7 +52,10 @@ export type AuditEntityType =
   // Login + session lifecycle events (migration 040)
   | 'user_session'
   // Reports — handoff share-toggle audit (migration 041 + PR 2)
-  | 'report';
+  | 'report'
+  // HD-4 (migration 046) — chart-of-accounts CRUD + manual journal entries
+  | 'chart_of_account'
+  | 'journal_entry';
 
 interface LogParams {
   req: AuthRequest;

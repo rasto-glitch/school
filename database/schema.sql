@@ -1254,11 +1254,23 @@ CREATE INDEX IF NOT EXISTS idx_chat_access_log_school ON chat_access_log(school_
 CREATE TABLE IF NOT EXISTS audit_logs (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  -- The constraint is rewritten by migrations 015 / 028 / 029 / 037 / 038
+  -- / 039 / 040 / 041 / 046 — kept in sync here as the consolidated set.
   entity_type TEXT NOT NULL CHECK (entity_type IN (
     'student','fee_plan','student_fee','fee_payment','staff_member','staff_salary_payment',
     'expense_category','expense_template','expense',
     'accounting_period','payment_account','fx_rate','late_fee',
-    'teacher','driver','supervisor','admin'
+    'teacher','driver','supervisor','admin','reception','accountant',
+    'employee_document','employee_profile',
+    'employee_extended_profile','employee_emergency_contact',
+    'school_policy','employee_acknowledgement','employee_action',
+    'hr_officer',
+    'archived_employee','archived_student',
+    'class','student_transfer','attendance',
+    'user_account','user_mfa','trusted_device','user_session',
+    'report',
+    -- HD-4 (migration 046) — accountant chart + manual journal entries
+    'chart_of_account','journal_entry'
   )),
   entity_id UUID NOT NULL,
   action TEXT NOT NULL CHECK (action IN ('create','update','delete')),

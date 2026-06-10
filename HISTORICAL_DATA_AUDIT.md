@@ -18,7 +18,7 @@ false-positives dropped.
 | HD-1 | 🟥 Critical | TODO | Student archive | Snapshot omits attendance, bus_ride_records, ebook_progress, student_access_locks — all CASCADE-deleted on archive |
 | HD-2 | 🟥 Critical | DONE (PR C) | Tamper evidence | Canonical hash for `archived_students` omits `enrollment_history`, `transfer_id`; v1↔v2 back-compat on `reports` unclear |
 | HD-3 | 🟥 Critical | DONE (PR C) | Staff archive | `snapshotStaffArchive` filters `voided_at IS NULL` — voided salary payments lost at archive time |
-| HD-4 | 🟥 Critical | TODO | Audit logging | Chart-of-accounts CRUD, manual journal entries, period close/reopen, payment-account CRUD, FX-rate CRUD: zero `logAudit()` calls |
+| HD-4 | 🟥 Critical | DONE (PR D) | Audit logging | Chart-of-accounts CRUD + manual journal + opening balances unaudited. (Period close/reopen, payment-account, FX-rate were already audited — agent claim partially wrong.) |
 | HD-5 | 🟧 High | DONE (PR C) | File tenancy | `uploadPostFile` + `uploadEbook` write to `posts/...` and `ebooks/...` — no `school_id` prefix (other upload sites are scoped) |
 | HD-6 | 🟧 High | TODO | Accountant exports | `buildLedger` and ledger PDF/XLSX omit archived-student/staff payments (extends AC-13) |
 | HD-7 | 🟧 High | TODO | Parent UI | Parent fee screens (web + mobile) don't render `is_refund` or `voided_at` |
