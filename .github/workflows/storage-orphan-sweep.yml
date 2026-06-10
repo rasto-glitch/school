@@ -1,0 +1,75 @@
+name: Storage orphan sweep
+
+# Weekly inventory of the storage buckets whose ownership is fully
+# tracked in the database (chat-files, employee-documents). Reports
+# orphans by default — never deletes on the schedule. To actually clean
+# up, trigger the workflow manually with mode=delete; that still honours
+# the grace window so in-flight uploads survive.
+#
+# See backend/scripts/storage-orphan-sweep.cjs for the logic. The
+# homework-attachments and operator-mail buckets are intentionally
+# excluded until those tables have a single source of truth for each
+# stored key (HD-15 phase 2).
+
+on:
+  schedule:
+    # Sunday 02:30 UTC — separate from the nightly backups so a slow
+    # listing doesn't compete with the backup window.
+    - cron: '30 2 * * 0'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'report (default) lists orphans; delete removes those older than grace-days'
+        required: false
+        default: 'report'
+        type: choice
+        options: [report, delete]
+      grace_days:
+        description: 'Files newer than this many days are NEVER deleted, even in delete mode.'
+        required: false
+        default: '7'
+        type: string
+      bucket:
+        description: 'Restrict to one bucket; leave empty to sweep all in-scope buckets.'
+        required: false
+        default: ''
+        type: choice
+        options: ['', 'chat-files', 'employee-documents']
+
+concurrency:
+  group: storage-orphan-sweep
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Sweep
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          MODE: ${{ github.event.inputs.mode || 'report' }}
+          GRACE_DAYS: ${{ github.event.inputs.grace_days || '7' }}
+          BUCKET: ${{ github.event.inputs.bucket || '' }}
+        run: |
+          set -euo pipefail
+          # `${VAR:+--flag=$VAR}` only emits the flag when VAR is set + non-empty
+          # — keeps the command tidy and the script's defaults effective.
+          node scripts/storage-orphan-sweep.cjs \
+            --mode="${MODE}" \
+            --grace-days="${GRACE_DAYS}" \
+            ${BUCKET:+--bucket="${BUCKET}"} \
+            | tee "$GITHUB_STEP_SUMMARY"

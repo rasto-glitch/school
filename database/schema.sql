@@ -1220,6 +1220,27 @@ CREATE TABLE IF NOT EXISTS conversation_reads (
   PRIMARY KEY (conversation_id, user_id)
 );
 
+-- HD-11 (migration 047) — ownership row per uploaded chat attachment.
+-- Inserted by chat.controller#uploadAttachment so the orphan sweep
+-- (HD-15) can distinguish tracked files from leftovers. No FK to
+-- messages: upload happens before the message exists, and the link
+-- from the message side is already messages.attachment_url.
+CREATE TABLE IF NOT EXISTS chat_attachments (
+  id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id     UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  uploader_id   UUID,
+  storage_bucket TEXT NOT NULL DEFAULT 'chat-files',
+  storage_path  TEXT NOT NULL,
+  content_type  TEXT,
+  byte_size     BIGINT,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (school_id, storage_path)
+);
+CREATE INDEX IF NOT EXISTS idx_chat_attachments_school
+  ON chat_attachments (school_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_chat_attachments_age
+  ON chat_attachments (school_id, created_at);
+
 -- Prior versions of edited messages, preserved for audit / legal review.
 -- Rows are appended on every edit; the current content still lives on messages.content.
 CREATE TABLE IF NOT EXISTS message_edits (

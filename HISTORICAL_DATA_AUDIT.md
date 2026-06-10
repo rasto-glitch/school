@@ -25,11 +25,11 @@ false-positives dropped.
 | HD-8 | 🟧 High | TODO | Archive restore | `restoreArchivedStudent` doesn't recreate enrollment rows, doesn't restore class/driver |
 | HD-9 | 🟧 High | DONE (PR C) | Backup integrity | `archive_backups` table has no `prevent_archive_mutation` trigger |
 | HD-10 | 🟧 High | DONE (PR G) | Web archive UX | `ArchivedStudentsTab` detail now renders the frozen `payment_history` JSONB per plan, with refund / voided markers matching the live admin view |
-| HD-11 | 🟧 High | TODO | Storage orphans | Chat message attachments never persisted to DB — orphaned the moment they're sent |
+| HD-11 | 🟧 High | DONE (PR H) | Storage orphans | New `chat_attachments` table (migration 047) + `chat.controller#uploadAttachment` writes a row per upload; sweep can now distinguish tracked from leftover |
 | HD-12 | 🟨 Medium | INFO | Salary history | Mid-tenure salary mutations have no `salary_history` table — relies on `audit_logs` |
 | HD-13 | 🟨 Medium | DONE (PR E) | Snapshot gaps | Verified: no `staff_attendance` / `employee_attendance` / `performance_review` tables exist; insurance-payout history is covered by `audit_logs`. PR C HD-3 already covered voided payments. Nothing left to snapshot |
 | HD-14 | 🟨 Medium | DONE (PR G) | Late-fee UX | `AdminTuitionStudentDetailPage` now lists each applied late fee with date + amount + voided marker, fetched via the existing `listLateFees` endpoint |
-| HD-15 | 🟨 Medium | FEATURE | Storage orphans | No cleanup cron for orphaned files in `homework-attachments` |
+| HD-15 | 🟨 Medium | DONE (PR H) | Storage orphans | Weekly sweep workflow (`storage-orphan-sweep.yml`) + `backend/scripts/storage-orphan-sweep.cjs` reports + optionally deletes orphans in `chat-files` and `employee-documents` (clean-ownership buckets); `homework-attachments` + `operator-mail` deferred to phase 2 |
 | HD-16 | 🟨 Medium | FEATURE | Master portal UX | Backups modal shows metadata only — no snapshot drill-down |
 | HD-17 | 🟨 Medium | DONE (PR G) | Year navigation | `ProfitLossPage` got "This month / This academic year / Previous academic year" preset chips using a Sept-boundary helper. GL/AR-aging not retrofitted (AR is point-in-time so doesn't benefit; GL ledger is a candidate for a future pass) |
 | HD-18 | 🟨 Medium | DONE (PR F) | Refund pairing | Admin UI now shows "Refunds RCP-YYYY-NNNNN · {amount}" under each refund row, pointing at the original payment in the same list |

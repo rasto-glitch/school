@@ -615,6 +615,26 @@ export async function uploadAttachment(req: AuthRequest, res: Response): Promise
 
   if (error) { res.status(500).json({ error: 'Upload failed' }); return; }
 
+  // HD-11 — record the upload in chat_attachments so the orphan sweep
+  // (HD-15) can tell tracked files from leftovers, and so we can answer
+  // "who uploaded the file at <key>?" given just the path. Best-effort:
+  // if the DB write fails the upload still succeeds (the file is already
+  // in storage and the user shouldn't see a transient failure), but
+  // we log so it's visible in operator monitoring.
+  const { error: trackErr } = await adminDb
+    .from('chat_attachments')
+    .insert({
+      school_id: schoolId,
+      uploader_id: userId,
+      storage_bucket: 'chat-files',
+      storage_path: path,
+      content_type: file.mimetype,
+      byte_size: file.size,
+    });
+  if (trackErr) {
+    console.error(`[chat-upload] failed to record attachment ${path}: ${trackErr.message}`);
+  }
+
   const { data: { publicUrl } } = adminDb.storage.from('chat-files').getPublicUrl(path);
 
   const isImage = file.mimetype.startsWith('image/');
