@@ -31,12 +31,17 @@ async function snapshotStaffArchive(
   // audit after archive still has tax_amount + tax_label, plus the
   // payment_account_id / recorded_by attribution the original receipt
   // carried. The id is included so receipt regen (AC-2) can key on it.
+  // HD-3 — include voided rows (and their voided_at / voided_by /
+  // void_reason fields). Filtering them out at archive time silently
+  // erased the reversal trail; cleanup_voided_records then deletes the
+  // live rows 30 days later, so the snapshot is the last surviving copy.
   const { data: payments } = await supabase
     .from('staff_salary_payments')
     .select(`id, amount, currency, paid_on, period_label, notes,
              insurance_amount, insurance_percentage,
-             tax_amount, tax_label, payment_account_id, recorded_by`)
-    .eq('staff_id', staff.id).eq('school_id', schoolId).is('voided_at', null)
+             tax_amount, tax_label, payment_account_id, recorded_by,
+             voided_at, voided_by, void_reason`)
+    .eq('staff_id', staff.id).eq('school_id', schoolId)
     .order('paid_on', { ascending: true });
 
   let account: Record<string, unknown> | null = null;
@@ -58,6 +63,9 @@ async function snapshotStaffArchive(
     taxLabel: p.tax_label ?? null,
     paymentAccountId: p.payment_account_id ?? null,
     recordedBy: p.recorded_by ?? null,
+    voidedAt: p.voided_at ?? null,
+    voidedBy: p.voided_by ?? null,
+    voidReason: p.void_reason ?? null,
   }));
 
   const { data, error } = await supabase
@@ -1097,10 +1105,15 @@ async function buildExportDataFromArchive(
     .from('schools').select('name, logo_url').eq('id', schoolId).single();
   const employment = ((row as any).employment ?? {}) as Record<string, any>;
   const baseCurrency = String(employment.currency ?? 'USD');
-  const payments = Array.isArray((row as any).payment_history) ? (row as any).payment_history : [];
+  const allPayments = Array.isArray((row as any).payment_history) ? (row as any).payment_history : [];
+  // HD-3 — snapshot now captures voided rows, but the export PDF should
+  // match the live exporter's filter (voided rows excluded from totals
+  // and the printed list). Snapshot keeps the void record for forensic /
+  // future use; this view hides them.
+  const payments = (allPayments as any[]).filter(p => !p.voidedAt);
 
   let insuranceHeld = 0;
-  for (const p of payments as any[]) {
+  for (const p of payments) {
     if (String(p.currency) === baseCurrency) insuranceHeld += Number(p.insuranceAmount ?? 0);
   }
   insuranceHeld = Math.round(insuranceHeld * 100) / 100;

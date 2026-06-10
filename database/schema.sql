@@ -822,10 +822,10 @@ CREATE TABLE IF NOT EXISTS archived_students (
   parent_phone TEXT,
   classes_attended JSONB DEFAULT '[]',           -- LEGACY (migration 030): attendance-derived class list, no longer populated (always []). NOT REMOVED because migration 019's tamper-evidence hash _canon_archived_student includes classes_attended::text in its canonical input — dropping the column would invalidate the integrity chain on every existing archive. Reads come from enrollment_history below.
   enrollment_history JSONB NOT NULL DEFAULT '[]', -- per-year academic progression snapshot; see migration 030. Source of truth for the archive's academic record.
-  transfer_id UUID,                              -- migration 032: links back to student_transfers row when reason='transferred' was driven by the transfer wizard. NOT in _canon_archived_student.
+  transfer_id UUID,                              -- migration 032: links back to student_transfers row when reason='transferred' was driven by the transfer wizard. Included in _canon_archived_student as of migration 045 (as.v3).
   grades JSONB DEFAULT '[]',
   payment_history JSONB DEFAULT '[]',
-  reports JSONB NOT NULL DEFAULT '[]',  -- migration 041: per-year teacher reports snapshot; included in _canon_archived_student (as.v2)
+  reports JSONB NOT NULL DEFAULT '[]',  -- migration 041: per-year teacher reports snapshot; included in _canon_archived_student (as.v3, migration 045)
   archived_by UUID,  -- FK-less actor ref (append-only/hashed row): keeps its value when the user is deleted; text copies below stay readable
   archived_by_name TEXT,
   archived_by_role TEXT,
@@ -1002,6 +1002,44 @@ DROP TRIGGER IF EXISTS trg_audit_logs_append_only ON audit_logs;
 CREATE TRIGGER trg_audit_logs_append_only
   BEFORE UPDATE OR DELETE ON audit_logs
   FOR EACH ROW EXECUTE FUNCTION prevent_archive_mutation();
+
+-- HD-9 (migration 045) — selective append-only on archive_backups. The
+-- nightly verify sweep needs to stamp verify_status / verified_at /
+-- verify_detail, so a blanket trigger would block legitimate writes.
+-- Every other column is frozen post-insert; same GUC bypass for the
+-- purge path so delete_school_cascade still works.
+CREATE OR REPLACE FUNCTION prevent_archive_backups_core_mutation() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  IF current_setting('app.allow_archive_purge', true) = 'on' THEN
+    IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
+  END IF;
+  IF TG_OP = 'DELETE' THEN
+    RAISE EXCEPTION 'archive_backups is append-only — DELETE is not permitted';
+  END IF;
+  IF NEW.school_id        IS DISTINCT FROM OLD.school_id
+     OR NEW.kind            IS DISTINCT FROM OLD.kind
+     OR NEW.storage_bucket  IS DISTINCT FROM OLD.storage_bucket
+     OR NEW.storage_path    IS DISTINCT FROM OLD.storage_path
+     OR NEW.byte_size       IS DISTINCT FROM OLD.byte_size
+     OR NEW.student_count   IS DISTINCT FROM OLD.student_count
+     OR NEW.employee_count  IS DISTINCT FROM OLD.employee_count
+     OR NEW.journal_entry_count IS DISTINCT FROM OLD.journal_entry_count
+     OR NEW.journal_line_count  IS DISTINCT FROM OLD.journal_line_count
+     OR NEW.reason          IS DISTINCT FROM OLD.reason
+     OR NEW.created_by_name IS DISTINCT FROM OLD.created_by_name
+     OR NEW.sha256          IS DISTINCT FROM OLD.sha256
+     OR NEW.created_at      IS DISTINCT FROM OLD.created_at
+  THEN
+    RAISE EXCEPTION 'archive_backups core fields are immutable — only verify_status / verified_at / verify_detail may change after insert';
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS trg_archive_backups_append_only ON archive_backups;
+CREATE TRIGGER trg_archive_backups_append_only
+  BEFORE UPDATE OR DELETE ON archive_backups
+  FOR EACH ROW EXECUTE FUNCTION prevent_archive_backups_core_mutation();
 
 CREATE OR REPLACE FUNCTION purge_school_archive(p_school_id UUID) RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER AS $$
@@ -1261,16 +1299,21 @@ CREATE OR REPLACE FUNCTION _sha(t text) RETURNS text
 LANGUAGE sql IMMUTABLE SET search_path = public, extensions
 AS $$ SELECT encode(digest(coalesce(t,''), 'sha256'), 'hex') $$;
 
--- Canonical form bumped to as.v2 in migration 041 to include `reports`.
+-- Canonical form bumped to as.v3 in migration 045 (HD-2) to include
+-- `enrollment_history` (added migration 031) and `transfer_id` (033).
 CREATE OR REPLACE FUNCTION _canon_archived_student(r archived_students) RETURNS text
 LANGUAGE sql IMMUTABLE AS $$
-  SELECT concat_ws('|', 'as.v2',
+  SELECT concat_ws('|', 'as.v3',
     r.school_id::text, coalesce(r.original_student_id::text,''),
     coalesce(r.full_name,''), coalesce(r.date_of_birth::text,''),
     coalesce(r.enrollment_date::text,''), coalesce(r.departure_date::text,''),
     coalesce(r.reason,''), coalesce(r.parent_full_name,''), coalesce(r.parent_phone,''),
-    coalesce(r.classes_attended::text,'[]'), coalesce(r.grades::text,'[]'),
-    coalesce(r.payment_history::text,'[]'), coalesce(r.reports::text,'[]'),
+    coalesce(r.classes_attended::text,'[]'),
+    coalesce(r.enrollment_history::text,'[]'),
+    coalesce(r.grades::text,'[]'),
+    coalesce(r.payment_history::text,'[]'),
+    coalesce(r.reports::text,'[]'),
+    coalesce(r.transfer_id::text,''),
     coalesce(r.archived_by::text,''),
     coalesce(r.archived_by_name,''), coalesce(r.archived_by_role,''),
     coalesce(r.original_parent_id::text,''), coalesce(r.snapshot_version::text,'1'),

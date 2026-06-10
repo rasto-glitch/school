@@ -427,11 +427,15 @@ export async function deletePost(req: AuthRequest, res: Response): Promise<void>
 }
 
 export async function uploadPostFile(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
   const file = (req as any).file;
   if (!file) { res.status(400).json({ error: 'No file provided' }); return; }
 
   const ext = safeExt(file.originalname, '.bin');
-  const path = `posts/${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`;
+  // HD-5 — every upload path is school-scoped so a leaked URL never grants
+  // cross-tenant access. Other upload sites (announcements, avatars)
+  // already follow this; posts + ebooks were the outliers.
+  const path = `${schoolId}/posts/${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`;
 
   // Storage write via adminDb — authz already enforced by the route
   // (teacher|supervisor only), path is server-built.
@@ -851,7 +855,8 @@ export async function uploadEbook(req: AuthRequest, res: Response): Promise<void
 
   try {
     const ext = safeExt(file.originalname, '.bin');
-    const path = `ebooks/${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`;
+    // HD-5 — school-scoped storage key (see uploadPostFile).
+    const path = `${schoolId}/ebooks/${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`;
 
     const bucket = process.env.SUPABASE_STORAGE_BUCKET || 'homework-attachments';
 
