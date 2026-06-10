@@ -15,7 +15,7 @@ false-positives dropped.
 
 | # | Severity | Status | Area | Issue |
 |---|---|---|---|---|
-| HD-1 | 🟥 Critical | TODO | Student archive | Snapshot omits attendance, bus_ride_records, ebook_progress, student_access_locks — all CASCADE-deleted on archive |
+| HD-1 | 🟥 Critical | DONE (PR E) | Student archive | Attendance days now snapshotted per year into `enrollment_history[].attendanceDays`. Bus rides / ebook progress / access locks left out: operational state, not historical record |
 | HD-2 | 🟥 Critical | DONE (PR C) | Tamper evidence | Canonical hash for `archived_students` omits `enrollment_history`, `transfer_id`; v1↔v2 back-compat on `reports` unclear |
 | HD-3 | 🟥 Critical | DONE (PR C) | Staff archive | `snapshotStaffArchive` filters `voided_at IS NULL` — voided salary payments lost at archive time |
 | HD-4 | 🟥 Critical | DONE (PR D) | Audit logging | Chart-of-accounts CRUD + manual journal + opening balances unaudited. (Period close/reopen, payment-account, FX-rate were already audited — agent claim partially wrong.) |
@@ -27,7 +27,7 @@ false-positives dropped.
 | HD-10 | 🟧 High | TODO | Web archive UX | Web `ArchivedStudentsTab` detail omits payment history; mobile shows it (inverse parity) |
 | HD-11 | 🟧 High | TODO | Storage orphans | Chat message attachments never persisted to DB — orphaned the moment they're sent |
 | HD-12 | 🟨 Medium | INFO | Salary history | Mid-tenure salary mutations have no `salary_history` table — relies on `audit_logs` |
-| HD-13 | 🟨 Medium | TODO | Snapshot gaps | Staff archive omits attendance, performance reviews, insurance-payout reversal history |
+| HD-13 | 🟨 Medium | DONE (PR E) | Snapshot gaps | Verified: no `staff_attendance` / `employee_attendance` / `performance_review` tables exist; insurance-payout history is covered by `audit_logs`. PR C HD-3 already covered voided payments. Nothing left to snapshot |
 | HD-14 | 🟨 Medium | TODO | Late-fee UX | UI shows aggregate `lateFees` only — no itemized list, no per-late-fee void marker |
 | HD-15 | 🟨 Medium | FEATURE | Storage orphans | No cleanup cron for orphaned files in `homework-attachments` |
 | HD-16 | 🟨 Medium | FEATURE | Master portal UX | Backups modal shows metadata only — no snapshot drill-down |

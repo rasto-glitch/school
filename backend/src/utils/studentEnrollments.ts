@@ -597,6 +597,12 @@ export async function loadEnrollmentHistory(
 // Compact JSONB shape stored on archived_students.enrollment_history.
 // Kept narrow on purpose — only the fields the archive viewer + PDF / Excel
 // export need. Matches the COMMENT on the column added by migration 030.
+export interface AttendanceDay {
+  date: string;
+  status: 'present' | 'absent' | 'late' | 'excused';
+  notes: string | null;
+}
+
 export interface EnrollmentSnapshotEntry {
   academicYear: string;
   gradeLevel: string;
@@ -609,9 +615,17 @@ export interface EnrollmentSnapshotEntry {
   // enrollment row at archive time. NULL for archive-off (legacy) rows
   // and for rows that were closed before the totals column existed.
   attendanceTotals: AttendanceTotals | null;
+  // HD-1 — granular per-day attendance for this academic year. The live
+  // `attendance` table CASCADE-deletes with the student row, so unless
+  // we snapshot it here, the daily log is lost forever the moment a
+  // student is archived. Bounded to that year's ~180 entries.
+  attendanceDays: AttendanceDay[];
 }
 
-export function rowsToSnapshot(rows: EnrollmentRow[]): EnrollmentSnapshotEntry[] {
+export function rowsToSnapshot(
+  rows: EnrollmentRow[],
+  attendanceByYear?: Map<string, AttendanceDay[]>,
+): EnrollmentSnapshotEntry[] {
   return rows.map(r => ({
     academicYear: r.academicYear,
     gradeLevel: r.gradeLevel,
@@ -621,5 +635,6 @@ export function rowsToSnapshot(rows: EnrollmentRow[]): EnrollmentSnapshotEntry[]
     startedOn: r.startedOn,
     endedOn: r.endedOn,
     attendanceTotals: r.attendanceTotals,
+    attendanceDays: attendanceByYear?.get(r.academicYear) ?? [],
   }));
 }

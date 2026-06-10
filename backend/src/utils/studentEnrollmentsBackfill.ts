@@ -240,6 +240,7 @@ function buildHistory(input: StudentBuildInput): BuildResult {
       // Backfilled rows have no frozen totals — they were built from
       // grade-level signals, not from a real attendance count.
       attendanceTotals: null,
+      attendanceDays: [],
     });
   }
 
@@ -268,6 +269,7 @@ function buildHistory(input: StudentBuildInput): BuildResult {
           startedOn: academicYearStartDate(currentYear),
           endedOn: null,
           attendanceTotals: null,
+          attendanceDays: [],
         });
       }
     }

@@ -40,6 +40,7 @@ import {
   loadEnrolledRosterForClass,
   nextAcademicYear,
   resolveCurrentAcademicYear,
+  academicYearOf,
   type EnrollmentSnapshotEntry,
 } from '../utils/studentEnrollments';
 import { backfillSchoolEnrollments } from '../utils/studentEnrollmentsBackfill';
@@ -1039,7 +1040,26 @@ async function buildStudentArchiveSnapshot(schoolId: string, studentId: string):
   // migration 019's tamper-evidence hash includes classes_attended in the
   // canonical input — dropping it would invalidate every existing archive.
   const enrollmentRows = await loadEnrollmentHistory(schoolId, studentId);
-  const enrollmentHistory = rowsToSnapshot(enrollmentRows);
+
+  // HD-1 — pull every attendance row for this student and bucket them by
+  // academic year (Sept boundary), then attach to enrollment_history.
+  // Live attendance CASCADE-deletes with the student row, so this is the
+  // last chance to capture the granular daily log.
+  const { data: attendanceRows } = await supabase
+    .from('attendance')
+    .select('date, status, notes')
+    .eq('student_id', studentId)
+    .eq('school_id', schoolId)
+    .order('date', { ascending: true });
+  const attendanceByYear = new Map<string, { date: string; status: 'present' | 'absent' | 'late' | 'excused'; notes: string | null }[]>();
+  for (const a of (attendanceRows ?? []) as any[]) {
+    const yr = academicYearOf(String(a.date));
+    const arr = attendanceByYear.get(yr) ?? [];
+    arr.push({ date: a.date, status: a.status, notes: a.notes ?? null });
+    attendanceByYear.set(yr, arr);
+  }
+
+  const enrollmentHistory = rowsToSnapshot(enrollmentRows, attendanceByYear);
 
   return { student, classesAttended, enrollmentHistory, gradesSnapshot, reportsSnapshot, paymentHistory };
 }
