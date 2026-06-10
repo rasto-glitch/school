@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { randomUUID } from 'crypto';
 import { supabase } from '../config/supabase';
 import { sanitizeFilename } from '../utils/upload';
+import { safeAttachmentMime } from '../utils/storageMime';
 import { logger } from '../utils/logger';
 import type { AuthRequest } from '../middleware/auth';
 
@@ -182,25 +183,30 @@ export async function submitBugReport(req: AuthRequest, res: Response): Promise<
     const f = req.file;
     const safe = sanitizeFilename(f.originalname || 'attachment', 'attachment');
     const key = `inbound/${emailId}/0-${safe}`;
+    // Bug-report attachments arrive on the operator-mail bucket — the same
+    // bucket the master operator opens in their inbox. Sanitize the stored
+    // Content-Type so a malicious uploader can never land text/html or
+    // image/svg+xml on a bucket where the operator may open it (pentest H-2).
+    const storedMime = safeAttachmentMime(f.mimetype);
     try {
       const { error: upErr } = await supabase.storage
         .from(STORAGE_BUCKET)
         .upload(key, f.buffer, {
-          contentType: f.mimetype || 'application/octet-stream',
+          contentType: storedMime,
           upsert: false,
         });
       if (upErr) {
         logger.error('Bug report attachment upload failed', { error: upErr, key });
         attachmentRecord = {
           name: f.originalname || safe,
-          type: f.mimetype || 'application/octet-stream',
+          type: storedMime,
           size: f.size,
           storageKey: null,
         };
       } else {
         attachmentRecord = {
           name: f.originalname || safe,
-          type: f.mimetype || 'application/octet-stream',
+          type: storedMime,
           size: f.size,
           storageKey: key,
         };
@@ -209,7 +215,7 @@ export async function submitBugReport(req: AuthRequest, res: Response): Promise<
       logger.error('Bug report attachment upload threw', { err });
       attachmentRecord = {
         name: f.originalname || safe,
-        type: f.mimetype || 'application/octet-stream',
+        type: storedMime,
         size: f.size,
         storageKey: null,
       };

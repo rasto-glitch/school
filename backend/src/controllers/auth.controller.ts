@@ -9,6 +9,7 @@ import crypto from 'crypto';
 // elevated-path inventory).
 import { adminDb as supabase } from '../utils/db';
 import { safeExt } from '../utils/upload';
+import { safeImageMime } from '../utils/storageMime';
 import { toCC } from '../utils/transform';
 import { emitToAdmins, getIo, notify } from '../utils/notify';
 import { logger } from '../utils/logger';
@@ -647,10 +648,13 @@ export async function uploadProfilePicture(req: AuthRequest, res: Response): Pro
   const ext = safeExt(file.originalname, '.jpg');
   const storagePath = `avatars/${schoolId}/${userId}${ext}`;
   const bucket = process.env.SUPABASE_STORAGE_BUCKET || 'homework-attachments';
+  // Avatars are images only — anything else stores as octet-stream so a
+  // text/html upload can never render inline (pentest H-2).
+  const storedMime = safeImageMime(file.mimetype);
 
   const { data: uploadData, error: uploadErr } = await supabase.storage
     .from(bucket)
-    .upload(storagePath, file.buffer, { contentType: file.mimetype, upsert: true });
+    .upload(storagePath, file.buffer, { contentType: storedMime, upsert: true });
 
   if (uploadErr || !uploadData) {
     res.status(500).json({ error: 'Upload failed' }); return;

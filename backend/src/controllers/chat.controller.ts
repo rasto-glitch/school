@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { safeExt } from '../utils/upload';
+import { safeAttachmentMime } from '../utils/storageMime';
 import { toCC } from '../utils/transform';
 import type { AuthRequest } from '../middleware/auth';
 import { getIo, chatPush } from '../utils/notify';
@@ -605,13 +606,16 @@ export async function uploadAttachment(req: AuthRequest, res: Response): Promise
 
   const ext = safeExt(file.originalname, '.bin');
   const path = `${schoolId}/${userId}/${Date.now()}_${Math.random().toString(36).slice(2)}${ext}`;
+  const storedMime = safeAttachmentMime(file.mimetype);
 
   // Storage write goes through adminDb — see the import banner. Authz
   // is enforced at the route layer (chatRoles) and the path is built
-  // from JWT claims above.
+  // from JWT claims above. contentType comes from the allowlist
+  // (storageMime.ts) so client-claimed text/html / image/svg+xml never
+  // lands as the stored Content-Type — pentest H-2 belt-and-suspenders.
   const { error } = await adminDb.storage
     .from('chat-files')
-    .upload(path, file.buffer, { contentType: file.mimetype, upsert: false });
+    .upload(path, file.buffer, { contentType: storedMime, upsert: false });
 
   if (error) { res.status(500).json({ error: 'Upload failed' }); return; }
 
@@ -628,7 +632,7 @@ export async function uploadAttachment(req: AuthRequest, res: Response): Promise
       uploader_id: userId,
       storage_bucket: 'chat-files',
       storage_path: path,
-      content_type: file.mimetype,
+      content_type: storedMime,
       byte_size: file.size,
     });
   if (trackErr) {
@@ -637,7 +641,7 @@ export async function uploadAttachment(req: AuthRequest, res: Response): Promise
 
   const { data: { publicUrl } } = adminDb.storage.from('chat-files').getPublicUrl(path);
 
-  const isImage = file.mimetype.startsWith('image/');
+  const isImage = storedMime.startsWith('image/');
 
   res.json({
     url: publicUrl,
