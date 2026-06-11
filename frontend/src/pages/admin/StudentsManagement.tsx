@@ -513,7 +513,10 @@ export default function StudentsManagement() {
               <div className="mt-3 text-sm space-y-1">
                 <p className="text-green-700 font-medium">{t('admin.students_mgmt.upload_summary', { created: uploadResult.created, skipped: uploadResult.skipped, total: uploadResult.total })}</p>
                 {uploadResult.parentAccountsCreated > 0 && (
-                  <p className="text-green-600 text-xs">{t('admin.students_mgmt.parent_accounts_created', { count: uploadResult.parentAccountsCreated })} <span className="font-mono font-semibold">Parent@123</span></p>
+                  <>
+                    <p className="text-green-600 text-xs">{t('admin.students_mgmt.parent_accounts_created', { count: uploadResult.parentAccountsCreated })} <span className="font-mono font-semibold">Parent@123</span></p>
+                    <p className="text-gray-500 text-xs italic">{t('admin.students_mgmt.parent_accounts_change_hint')}</p>
+                  </>
                 )}
                 {uploadResult.autoCreatedClasses.length > 0 && (
                   <p className="text-blue-600 text-xs">{t('admin.students_mgmt.auto_created_classes', { list: uploadResult.autoCreatedClasses.join(', ') })}</p>

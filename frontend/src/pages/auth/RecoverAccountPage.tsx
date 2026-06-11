@@ -9,6 +9,7 @@ import { useAuthStore } from '../../store/authStore';
 import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from '../../utils/passwordPolicy';
 import Input from '../../components/common/Input';
 import Button from '../../components/common/Button';
+import PreLoginLanguageSwitcher from '../../components/auth/PreLoginLanguageSwitcher';
 
 type FormData = { newPassword: string; confirmPassword: string };
 
@@ -52,7 +53,7 @@ export default function RecoverAccountPage() {
 
   if (!token) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4"><PreLoginLanguageSwitcher />
         <div className="max-w-md w-full bg-white rounded-2xl shadow-sm border border-gray-200 p-6 text-center">
           <ShieldAlert className="w-10 h-10 text-red-500 mx-auto mb-3" />
           <h1 className="text-lg font-bold text-gray-900">{t('recover.bad_link_title', 'Invalid recovery link')}</h1>
@@ -67,7 +68,7 @@ export default function RecoverAccountPage() {
 
   if (done) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4"><PreLoginLanguageSwitcher />
         <div className="max-w-md w-full bg-white rounded-2xl shadow-sm border border-gray-200 p-6 text-center">
           <div className="w-12 h-12 bg-green-100 rounded-full mx-auto mb-3 flex items-center justify-center">
             <ShieldAlert className="w-6 h-6 text-green-600" />

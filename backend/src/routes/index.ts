@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import rateLimit from 'express-rate-limit';
-import { login, changePassword, getSchools, forgotPassword, registerDeviceToken, removeDeviceToken, updateDeviceLanguage, uploadProfilePicture, updateMyEmail, verifyEmailCode, getMe, forgotPasswordEmail, resetWithToken, confirmEmail, recoverAccount, refreshToken, logout, logoutAll, verifyMfaLogin } from '../controllers/auth.controller';
+import { login, changePassword, firstTimeChangePassword, getSchools, forgotPassword, registerDeviceToken, removeDeviceToken, updateDeviceLanguage, uploadProfilePicture, updateMyEmail, verifyEmailCode, getMe, forgotPasswordEmail, resetWithToken, confirmEmail, recoverAccount, refreshToken, logout, logoutAll, verifyMfaLogin } from '../controllers/auth.controller';
 import { getMfaStatus, setupMfa, confirmMfa, disableMfaSelf, regenerateRecoveryCodes, adminDisableMfa, enrollSetupViaTicket, enrollConfirmViaTicket } from '../controllers/mfa.controller';
 import { listTrustedDevices, revokeTrustedDevice, revokeAllTrustedDevicesEndpoint } from '../controllers/trustedDevice.controller';
 import { listSessions, revokeSession } from '../controllers/sessions.controller';
@@ -129,6 +129,7 @@ export function createRouter(io: SocketServer) {
   router.post('/auth/logout', validate({ body: v.logoutSchema }), (req, res) => logout(req, res));
   router.post('/auth/logout-all', authenticate, (req, res) => logoutAll(req as AuthRequest, res));
   router.post('/auth/change-password', authenticate, validate({ body: v.changePasswordSchema }), (req, res) => changePassword(req as AuthRequest, res));
+  router.post('/auth/first-time-change-password', authenticate, validate({ body: v.firstTimeChangePasswordSchema }), (req, res) => firstTimeChangePassword(req as AuthRequest, res));
   router.get('/auth/me', authenticate, (req, res) => getMe(req as AuthRequest, res));
   router.patch('/auth/me/email', authenticate, emailChangeLimiter, validate({ body: v.updateMyEmailSchema }), (req, res) => updateMyEmail(req as AuthRequest, res));
   router.post('/auth/me/email/verify-code', authenticate, verifyEmailCodeLimiter, validate({ body: v.verifyEmailCodeSchema }), (req, res) => verifyEmailCode(req as AuthRequest, res));

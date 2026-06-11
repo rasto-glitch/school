@@ -78,11 +78,13 @@ CREATE TABLE IF NOT EXISTS users (
   phone TEXT,
   is_active BOOLEAN DEFAULT TRUE,
   password_changed_at TIMESTAMPTZ,
+  must_change_password BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(school_id, username)
 );
 -- Run this if the table already exists:
 -- ALTER TABLE users ADD COLUMN IF NOT EXISTS password_changed_at TIMESTAMPTZ;
+-- ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT FALSE;
 -- ALTER TABLE schools ADD COLUMN IF NOT EXISTS abbreviation TEXT UNIQUE;
 -- UPDATE schools SET abbreviation = UPPER(slug) WHERE abbreviation IS NULL;
 

@@ -119,6 +119,8 @@ export const authApi = {
     api.put('/auth/device-language', { language }),
   changePassword: (currentPassword: string, newPassword: string) =>
     api.post('/auth/change-password', { currentPassword, newPassword }),
+  firstTimeChangePassword: (newPassword: string) =>
+    api.post('/auth/first-time-change-password', { newPassword }),
   forgotPassword: (username: string) =>
     api.post('/auth/forgot-password', { username }),
   forgotPasswordEmail: (username: string) =>

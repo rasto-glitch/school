@@ -128,7 +128,7 @@ const templateBase = {
   amount: amount,
   currency: currency.optional(),
   cadence,
-  nextDueDate: isoDate.optional(),
+  nextDueDate: isoDate.nullable().optional(),
   categoryId: optionalId,
   vendor: optText(200),
   notes: optText(),

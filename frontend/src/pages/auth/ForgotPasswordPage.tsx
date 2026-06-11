@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { GraduationCap, ArrowLeft, Mail, ShieldCheck, CheckCircle2 } from 'lucide-react';
 import { authApi } from '../../services/api';
 import Input from '../../components/common/Input';
+import PreLoginLanguageSwitcher from '../../components/auth/PreLoginLanguageSwitcher';
 
 const schema = z.object({
   username: z.string().min(1, 'auth.username_required'),
@@ -60,6 +61,7 @@ export default function ForgotPasswordPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-600 via-primary-700 to-secondary-600 flex items-center justify-center p-4">
+      <PreLoginLanguageSwitcher />
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-white rounded-2xl shadow-lg mb-4">

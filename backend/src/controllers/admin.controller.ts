@@ -23,6 +23,7 @@ import { loadArchivedEmployeeForPdf, streamArchivedEmployeePdf } from '../utils/
 import { loadArchivedStudentForPdf, streamArchivedStudentPdf } from '../utils/archivedStudentPdf';
 import { pickLang } from '../utils/archivePdfShared';
 import { hrColumns, hrSnapshot } from '../utils/employeeHr';
+import { defaultPasswordFor } from '../utils/defaultPasswords';
 import { isUrlSafeToFetch } from '../utils/urlSafety';
 import { logger } from '../utils/logger';
 import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from '../utils/passwordPolicy';
@@ -271,7 +272,7 @@ export async function createStudent(req: AuthRequest, res: Response): Promise<vo
         while (taken.has(username)) { username = `${base}${n++}`; }
 
         const rounds = parseInt(process.env.BCRYPT_ROUNDS || '10');
-        const passwordHash = await bcrypt.hash('Parent@123', rounds);
+        const passwordHash = await bcrypt.hash(defaultPasswordFor('parent'), rounds);
 
         const { data: newUser, error: userErr } = await supabase
           .from('users').insert({
@@ -283,6 +284,7 @@ export async function createStudent(req: AuthRequest, res: Response): Promise<vo
             role: 'parent',
             email: cleanedParentEmail,
             is_active: true,
+            must_change_password: true,
           }).select('id').single();
 
         if (userErr || !newUser) {
@@ -316,7 +318,7 @@ export async function createStudent(req: AuthRequest, res: Response): Promise<vo
         }
 
         resolvedParentId = newParent.id;
-        parentAccountCreated = { username, password: 'Parent@123', fullName: parentFullName };
+        parentAccountCreated = { username, password: defaultPasswordFor('parent'), fullName: parentFullName };
       }
     }
   }
@@ -561,7 +563,7 @@ export async function bulkUploadStudents(req: AuthRequest, res: Response): Promi
   );
 
   const rounds = parseInt(process.env.BCRYPT_ROUNDS || '10');
-  const defaultParentPasswordHash = await bcrypt.hash('Parent@123', rounds);
+  const defaultParentPasswordHash = await bcrypt.hash(defaultPasswordFor('parent'), rounds);
 
   // =========================================================
   // PASS 1 — parse all rows in memory, zero DB calls
@@ -780,6 +782,7 @@ export async function bulkUploadStudents(req: AuthRequest, res: Response): Promi
         role: 'parent',
         email: p.email,
         is_active: true,
+        must_change_password: true,
       })))
       .select('id');
 
@@ -2156,7 +2159,8 @@ export async function createTeacher(req: AuthRequest, res: Response): Promise<vo
   const finalUsername = abbrev && !rawUsername.startsWith(`${abbrev}_`) ? `${abbrev}_${rawUsername}` : rawUsername;
 
   const rounds = parseInt(process.env.BCRYPT_ROUNDS || '10');
-  const finalPassword = password || 'Teacher@123';
+  const usedDefault = !password;
+  const finalPassword = password || defaultPasswordFor('teacher');
   const passwordHash = await bcrypt.hash(finalPassword, rounds);
 
   const nameParts = fullName.trim().split(' ');
@@ -2170,6 +2174,7 @@ export async function createTeacher(req: AuthRequest, res: Response): Promise<vo
     username: finalUsername,
     password_hash: passwordHash,
     role: 'teacher',
+    must_change_password: usedDefault,
   }).select('id, school_id, username, email, phone, role, first_name, last_name, profile_picture, is_active, created_at, password_changed_at').single();
 
   if (userErr) {
@@ -2283,7 +2288,8 @@ export async function createDriver(req: AuthRequest, res: Response): Promise<voi
   const finalUsername = abbrev && !rawUsername.startsWith(`${abbrev}_`) ? `${abbrev}_${rawUsername}` : rawUsername;
 
   const rounds = parseInt(process.env.BCRYPT_ROUNDS || '10');
-  const finalPassword = password || 'Driver@123';
+  const usedDefault = !password;
+  const finalPassword = password || defaultPasswordFor('driver');
   const passwordHash = await bcrypt.hash(finalPassword, rounds);
 
   const nameParts = fullName.trim().split(' ');
@@ -2295,6 +2301,7 @@ export async function createDriver(req: AuthRequest, res: Response): Promise<voi
     username: finalUsername,
     password_hash: passwordHash,
     role: 'driver',
+    must_change_password: usedDefault,
   }).select('id, school_id, username, email, phone, role, first_name, last_name, profile_picture, is_active, created_at, password_changed_at').single();
 
   if (userErr) {
@@ -2414,8 +2421,26 @@ export async function createAccount(req: AuthRequest, res: Response): Promise<vo
   const abbrev = (schoolData?.abbreviation || '').toLowerCase();
   const finalUsername = abbrev && !username.startsWith(`${abbrev}_`) ? `${abbrev}_${username}` : username;
 
+  // Fall back to per-role default password if the admin didn't type one
+  // (supervisor / accountant / reception). Admin role still requires an
+  // explicit typed password — first-admin bootstrap shouldn't default.
   const rounds = parseInt(process.env.BCRYPT_ROUNDS || '10');
-  const passwordHash = await bcrypt.hash(password, rounds);
+  let finalPassword: string = password;
+  let usedDefault = false;
+  if (!finalPassword) {
+    if (role === 'admin') {
+      res.status(400).json({ error: 'Password is required when creating an admin account.' });
+      return;
+    }
+    if (role === 'supervisor' || role === 'accountant' || role === 'reception') {
+      finalPassword = defaultPasswordFor(role);
+      usedDefault = true;
+    } else {
+      res.status(400).json({ error: 'Password is required.' });
+      return;
+    }
+  }
+  const passwordHash = await bcrypt.hash(finalPassword, rounds);
 
   const { data: newUser, error } = await supabase.from('users').insert({
     school_id: schoolId,
@@ -2426,6 +2451,7 @@ export async function createAccount(req: AuthRequest, res: Response): Promise<vo
     username: finalUsername,
     password_hash: passwordHash,
     role,
+    must_change_password: usedDefault,
     ...hrColumns(req.body, { includeEmergency: true }),
   }).select('id, school_id, username, email, phone, role, first_name, last_name, profile_picture, is_active, created_at, password_changed_at').single();
 
@@ -2456,7 +2482,14 @@ export async function createAccount(req: AuthRequest, res: Response): Promise<vo
     });
   }
 
-  res.status(201).json({ id: newUser.id, username, role, firstName, lastName });
+  res.status(201).json({
+    id: newUser.id,
+    username,
+    role,
+    firstName,
+    lastName,
+    ...(usedDefault ? { tempPassword: finalPassword } : {}),
+  });
 }
 
 // ---- APPOINTMENTS ----
@@ -3642,7 +3675,10 @@ export async function resetUserPassword(req: AuthRequest, res: Response): Promis
   if (!user) { res.status(404).json({ error: 'User not found' }); return; }
   const rounds = parseInt(process.env.BCRYPT_ROUNDS || '10');
   const hash = await bcrypt.hash(newPassword, rounds);
-  const { error } = await supabase.from('users').update({ password_hash: hash, password_changed_at: new Date().toISOString() }).eq('id', userId).eq('school_id', schoolId);
+  // Force change on next login: the admin typed a password they had to
+  // communicate to the user, so it's effectively a "default" credential
+  // until the user picks their own. Same reasoning as the create flows.
+  const { error } = await supabase.from('users').update({ password_hash: hash, password_changed_at: new Date().toISOString(), must_change_password: true }).eq('id', userId).eq('school_id', schoolId);
   if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   await supabase.from('password_reset_requests').update({ status: 'resolved' })
     .eq('user_id', userId).eq('school_id', schoolId).eq('status', 'pending');

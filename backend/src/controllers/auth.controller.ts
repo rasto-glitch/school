@@ -15,6 +15,7 @@ import { emitToAdmins, getIo, notify } from '../utils/notify';
 import { logger } from '../utils/logger';
 import { sendMail } from '../utils/mailer';
 import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from '../utils/passwordPolicy';
+import { isDefaultPassword } from '../utils/defaultPasswords';
 import { logAudit } from '../utils/audit';
 import { isMfaActive, verifyMfaCodeForUser } from './mfa.controller';
 import { checkTrustedDevice, issueTrustedDevice } from '../utils/trustedDevice';
@@ -305,7 +306,7 @@ export async function login(req: Request, res: Response): Promise<void> {
   // Find user
   const { data: user, error: userErr } = await supabase
     .from('users')
-    .select('id, username, password_hash, role, first_name, last_name, profile_picture, email, is_active')
+    .select('id, username, password_hash, role, first_name, last_name, profile_picture, email, is_active, must_change_password')
     .eq('school_id', school.id)
     .eq('username', username)
     .single();
@@ -394,6 +395,7 @@ export async function login(req: Request, res: Response): Promise<void> {
       lastName: user.last_name,
       profilePicture: user.profile_picture,
       email: user.email || null,
+      mustChangePassword: !!user.must_change_password,
     },
     school: {
       id: school.id,
@@ -462,7 +464,7 @@ export async function verifyMfaLogin(req: Request, res: Response): Promise<void>
   // tenant-check-allow: payload.userId comes from the just-verified MFA ticket, minted in login() only after a school-scoped password match
   const { data: user } = await supabase
     .from('users')
-    .select('id, username, role, first_name, last_name, profile_picture, email, is_active')
+    .select('id, username, role, first_name, last_name, profile_picture, email, is_active, must_change_password')
     .eq('id', payload.userId)
     .single();
   if (!user || !(user as { is_active: boolean }).is_active) {
@@ -497,7 +499,7 @@ export async function verifyMfaLogin(req: Request, res: Response): Promise<void>
   const signInIp = req.ip || null;
   const newSignIn = await isNewSignIn(payload.userId, signInUa, signInIp);
 
-  const u = user as { id: string; username: string; role: string; first_name: string; last_name: string; profile_picture: string | null; email: string | null };
+  const u = user as { id: string; username: string; role: string; first_name: string; last_name: string; profile_picture: string | null; email: string | null; must_change_password?: boolean };
   const s = school as { id: string; name: string; slug: string; logo_url: string | null; primary_color: string | null; secondary_color: string | null; features: Record<string, unknown> | null; features_version: number | null; timezone: string | null };
   const featuresVersion = s.features_version ?? 1;
   const { token, refreshToken } = await issueTokenPair(
@@ -527,6 +529,7 @@ export async function verifyMfaLogin(req: Request, res: Response): Promise<void>
       lastName: u.last_name,
       profilePicture: u.profile_picture,
       email: u.email || null,
+      mustChangePassword: !!u.must_change_password,
     },
     school: {
       id: s.id,
@@ -691,7 +694,7 @@ export async function getMe(req: AuthRequest, res: Response): Promise<void> {
   }
   const { data: user, error } = await supabase
     .from('users')
-    .select('id, username, role, first_name, last_name, profile_picture, email')
+    .select('id, username, role, first_name, last_name, profile_picture, email, must_change_password')
     .eq('id', userId)
     .single();
   if (error || !user) {
@@ -706,6 +709,7 @@ export async function getMe(req: AuthRequest, res: Response): Promise<void> {
     lastName: user.last_name,
     profilePicture: user.profile_picture,
     email: user.email || null,
+    mustChangePassword: !!(user as { must_change_password?: boolean }).must_change_password,
   });
 }
 
@@ -1408,9 +1412,12 @@ export async function resetWithToken(req: Request, res: Response): Promise<void>
   const passwordHash = await bcrypt.hash(newPassword, rounds);
 
   // tenant-check-allow: user_id sourced from token row above (token uniquely identifies the user)
+  // The user typed their own new password, so clear must_change_password
+  // — they've satisfied "pick a real password" without needing the
+  // force-change screen on next login.
   const { error: upErr } = await supabase
     .from('users')
-    .update({ password_hash: passwordHash, password_changed_at: new Date().toISOString() })
+    .update({ password_hash: passwordHash, password_changed_at: new Date().toISOString(), must_change_password: false })
     .eq('id', r.user_id);
   if (upErr) { res.status(safeDbErrorStatus(upErr)).json({ error: safeDbErrorMessage(upErr) }); return; }
 
@@ -1437,6 +1444,14 @@ export async function changePassword(req: AuthRequest, res: Response): Promise<v
     return;
   }
 
+  // Reject any of the well-known shipping defaults (Parent@123 etc.) —
+  // otherwise the user could "change" Parent@123 → Teacher@123 and the
+  // attack surface is unchanged.
+  if (isDefaultPassword(newPassword)) {
+    res.status(400).json({ error: 'You cannot use a default password. Please choose a different password.' });
+    return;
+  }
+
   const { data: user } = await supabase
     .from('users')
     .select('password_hash')
@@ -1457,7 +1472,66 @@ export async function changePassword(req: AuthRequest, res: Response): Promise<v
   const rounds = parseInt(process.env.BCRYPT_ROUNDS || '10');
   const newHash = await bcrypt.hash(newPassword, rounds);
 
-  await supabase.from('users').update({ password_hash: newHash, password_changed_at: new Date().toISOString() }).eq('id', userId);
+  // Clear must_change_password too — anyone using this endpoint has just
+  // satisfied the "pick a real password" requirement.
+  await supabase.from('users').update({
+    password_hash: newHash,
+    password_changed_at: new Date().toISOString(),
+    must_change_password: false,
+  }).eq('id', userId);
+
+  res.json({ message: 'Password changed successfully' });
+}
+
+// First-time password change. Issued to users whose accounts were
+// created with a shipping default (Parent@123 / Driver@123 / etc.) and
+// who therefore have users.must_change_password = true.
+//
+// Differs from changePassword in two ways:
+//   1. Does NOT ask for the current password. The user just logged in;
+//      the JWT proves they know it. Re-typing the default would be
+//      pointless friction on the screen we're trying to push them off.
+//   2. Refuses to run unless must_change_password is still true on the
+//      DB row — so a regular user can't use this endpoint to bypass the
+//      current-password check on their own account.
+export async function firstTimeChangePassword(req: AuthRequest, res: Response): Promise<void> {
+  const { newPassword } = req.body;
+  const userId = req.user?.userId;
+
+  if (!newPassword) {
+    res.status(400).json({ error: 'newPassword required' });
+    return;
+  }
+  if (!isStrongPassword(newPassword)) {
+    res.status(400).json({ error: PASSWORD_POLICY_MESSAGE });
+    return;
+  }
+  if (isDefaultPassword(newPassword)) {
+    res.status(400).json({ error: 'You cannot use a default password. Please choose a different password.' });
+    return;
+  }
+
+  const { data: user } = await supabase
+    .from('users')
+    .select('must_change_password')
+    .eq('id', userId)
+    .single();
+  if (!user) {
+    res.status(404).json({ error: 'User not found' });
+    return;
+  }
+  if (!(user as { must_change_password?: boolean }).must_change_password) {
+    res.status(409).json({ error: 'No first-time password change is required for this account.' });
+    return;
+  }
+
+  const rounds = parseInt(process.env.BCRYPT_ROUNDS || '10');
+  const newHash = await bcrypt.hash(newPassword, rounds);
+  await supabase.from('users').update({
+    password_hash: newHash,
+    password_changed_at: new Date().toISOString(),
+    must_change_password: false,
+  }).eq('id', userId);
 
   res.json({ message: 'Password changed successfully' });
 }

@@ -1,0 +1,24 @@
+{
+  "name": "scholify-e2e",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Playwright end-to-end tests against the live Scholify deployment. Runs as a real user — same JWT, same Supabase, same WebSocket — so failures here are failures the real users would hit. Findings land in FINDINGS.md.",
+  "scripts": {
+    "test": "playwright test",
+    "test:admin": "playwright test 01-admin",
+    "test:teacher": "playwright test 02-teacher",
+    "test:supervisor": "playwright test 03-supervisor",
+    "test:driver": "playwright test 04-driver",
+    "test:parent": "playwright test 06-parent",
+    "test:accountant": "playwright test 05-accountant",
+    "test:headed": "playwright test --headed",
+    "report": "playwright show-report results/html"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.49.1",
+    "@types/node": "22.10.5",
+    "dotenv": "16.4.7",
+    "typescript": "5.9.3",
+    "xlsx": "0.18.5"
+  }
+}

@@ -12,6 +12,7 @@ import { getTrustedDeviceToken, setTrustedDeviceToken, clearTrustedDeviceToken }
 import { downloadRecoveryCodes } from '../../utils/downloadCodes';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
+import PreLoginLanguageSwitcher from '../../components/auth/PreLoginLanguageSwitcher';
 
 const schema = z.object({
   username: z.string().min(1, 'auth.username_required'),
@@ -63,9 +64,21 @@ export default function LoginPage() {
   const [copiedSecret, setCopiedSecret] = useState(false);
   const [copiedCodes, setCopiedCodes] = useState(false);
 
+  // Where to send a freshly-authenticated user. Force-change short-
+  // circuits the role dashboards — until the flag is cleared, no other
+  // route is reachable. Stay-on-/login is the natural fallback if the
+  // user object is missing or has no role we know.
+  const goAfterLogin = (u: { role: string; mustChangePassword?: boolean }) => {
+    if (u.mustChangePassword) {
+      navigate('/force-change-password', { replace: true });
+      return;
+    }
+    navigate(ROLE_DASHBOARDS[u.role] || '/');
+  };
+
   useEffect(() => {
     if (isAuthenticated() && user) {
-      navigate(ROLE_DASHBOARDS[user.role] || '/admin/dashboard', { replace: true });
+      goAfterLogin(user);
     }
   }, []);
 
@@ -112,7 +125,7 @@ export default function LoginPage() {
       }
       const { token, refreshToken, user, school } = res.data;
       setAuth(token, refreshToken, user, school, data.rememberMe);
-      navigate(ROLE_DASHBOARDS[user.role] || '/');
+      goAfterLogin(user);
     } catch (err: any) {
       toast.error(err.response?.data?.error || t('auth.login_failed'));
     } finally {
@@ -140,7 +153,7 @@ export default function LoginPage() {
         setTrustedDeviceToken(mfaUsername, trustedDeviceToken);
       }
       setAuth(token, refreshToken, user, school, mfaRemember);
-      navigate(ROLE_DASHBOARDS[user.role] || '/');
+      goAfterLogin(user);
     } catch (err: any) {
       const status = err.response?.status;
       const msg = err.response?.data?.error;
@@ -186,7 +199,7 @@ export default function LoginPage() {
         setTrustedDeviceToken(enrollUsername, trustedDeviceToken);
       }
       setAuth(token, refreshToken, user, school, mfaRemember);
-      navigate(ROLE_DASHBOARDS[user.role] || '/');
+      goAfterLogin(user);
     } catch (err: any) {
       const status = err.response?.status;
       const msg = err.response?.data?.error;
@@ -212,6 +225,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-600 via-primary-700 to-secondary-600 flex items-center justify-center p-4">
+      <PreLoginLanguageSwitcher />
       <div className="w-full max-w-md">
         {/* Header */}
         <div className="text-center mb-8">

@@ -4,6 +4,7 @@ import { useAuthStore } from '../store/authStore';
 import { useColors, useIsDark } from '../store/themeStore';
 import LoginScreen from '../screens/auth/LoginScreen';
 import ForgotPasswordScreen from '../screens/auth/ForgotPasswordScreen';
+import ForceChangePasswordScreen from '../screens/auth/ForceChangePasswordScreen';
 import ParentTabs from './ParentTabs';
 import DriverTabs from './DriverTabs';
 import DriverSettingsScreen from '../screens/driver/DriverSettingsScreen';
@@ -43,6 +44,7 @@ import type { Homework, Announcement, Conversation, Ebook, Report } from '../typ
 export type RootStackParamList = {
   Login: undefined;
   ForgotPassword: { prefillUsername?: string } | undefined;
+  ForceChangePassword: undefined;
   ParentTabs: undefined;
   DriverTabs: undefined;
   DriverSettings: undefined;
@@ -122,6 +124,12 @@ export default function Navigation() {
             <Stack.Screen name="Login" component={LoginScreen} />
             <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
           </>
+        ) : user?.mustChangePassword ? (
+          // Account was created with a shipping default (Parent@123 etc.)
+          // — until the user picks a real password, no other authenticated
+          // screen is reachable. The screen itself dismisses the stack
+          // once it clears mustChangePassword via setAuth.
+          <Stack.Screen name="ForceChangePassword" component={ForceChangePasswordScreen} />
         ) : user?.role === 'driver' ? (
           <>
             <Stack.Screen name="DriverTabs" component={DriverTabs} />

@@ -10,6 +10,7 @@ import { authApi } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { getTrustedDeviceToken, setTrustedDeviceToken, clearTrustedDeviceToken } from '../../utils/trustedDevice';
 import MfaEnrollPanel, { type MfaEnrollSuccessForced } from '../../components/MfaEnrollPanel';
+import PreLoginLanguageSwitcher from '../../components/PreLoginLanguageSwitcher';
 import { colors, spacing, radius, font, shadow } from '../../theme';
 
 const MOBILE_ROLES = ['parent', 'teacher', 'driver', 'supervisor'];
@@ -124,6 +125,7 @@ export default function LoginScreen() {
 
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <PreLoginLanguageSwitcher />
       <ScrollView
         contentContainerStyle={[styles.scroll, { paddingTop: insets.top + 40, paddingBottom: insets.bottom + 24 }]}
         keyboardShouldPersistTaps="handled"

@@ -10,6 +10,7 @@ import ChatPage from './pages/chat/ChatPage';
 import LoginPage from './pages/auth/LoginPage';
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage';
 import RecoverAccountPage from './pages/auth/RecoverAccountPage';
+import ForceChangePasswordPage from './pages/auth/ForceChangePasswordPage';
 
 // Parent
 import ParentDashboard from './pages/parent/ParentDashboard';
@@ -148,15 +149,32 @@ const ROLE_REDIRECTS: Record<string, string> = {
 function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode; allowedRoles?: string[] }) {
   const { isAuthenticated, user } = useAuthStore();
   if (!isAuthenticated()) return <Navigate to="/login" replace />;
+  // Force-change interception: a user with mustChangePassword=true cannot
+  // reach any protected surface until they pick a real password. Bounce
+  // them to the force-change screen from every other route.
+  if (user?.mustChangePassword) return <Navigate to="/force-change-password" replace />;
   if (allowedRoles && user && !allowedRoles.includes(user.role)) {
     return <Navigate to={ROLE_REDIRECTS[user.role] || '/login'} replace />;
   }
   return <>{children}</>;
 }
 
+// Guard for the force-change screen itself. Logged-out users go to login;
+// users who have already cleared the flag get sent to their dashboard so
+// the screen isn't accessible after the fact.
+function ForceChangeRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, user } = useAuthStore();
+  if (!isAuthenticated()) return <Navigate to="/login" replace />;
+  if (!user?.mustChangePassword) return <Navigate to={ROLE_REDIRECTS[user?.role || ''] || '/login'} replace />;
+  return <>{children}</>;
+}
+
 function RootRedirect() {
   const { isAuthenticated, user } = useAuthStore();
-  if (isAuthenticated()) return <Navigate to={ROLE_REDIRECTS[user?.role || ''] || '/login'} replace />;
+  if (isAuthenticated()) {
+    if (user?.mustChangePassword) return <Navigate to="/force-change-password" replace />;
+    return <Navigate to={ROLE_REDIRECTS[user?.role || ''] || '/login'} replace />;
+  }
   return <Navigate to="/login" replace />;
 }
 
@@ -171,6 +189,7 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/recover-account" element={<RecoverAccountPage />} />
+        <Route path="/force-change-password" element={<ForceChangeRoute><ForceChangePasswordPage /></ForceChangeRoute>} />
 
         {/* Parent Portal */}
         <Route path="/parent/dashboard" element={<ProtectedRoute allowedRoles={['parent']}><ParentDashboard /></ProtectedRoute>} />

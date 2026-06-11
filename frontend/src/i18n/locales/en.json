@@ -413,6 +413,19 @@
     "confirm_with_password": "Confirm with current password",
     "password_required": "Enter your current password to confirm."
   },
+  "force_change": {
+    "title": "Choose a new password",
+    "subtitle": "One-time setup for your account",
+    "body": "For your security, the temporary password you just used cannot be kept. Pick a new password to continue.",
+    "new_password": "New password",
+    "confirm": "Confirm new password",
+    "submit": "Set new password",
+    "sign_out": "Sign out",
+    "success": "Password changed. Welcome.",
+    "failed": "Could not change password.",
+    "both_required": "Enter and confirm your new password.",
+    "policy_hint": "Password must be at least 8 characters and include an uppercase letter and a special character."
+  },
   "recover": {
     "title": "Recover your account",
     "subtitle": "Reset password and revert email",
@@ -1143,6 +1156,7 @@
       "upload": "Upload",
       "upload_summary": "{{created}} added · {{skipped}} skipped (already exist) · {{total}} total in file",
       "parent_accounts_created": "{{count}} parent account(s) created — default password:",
+      "parent_accounts_change_hint": "Parents will be asked to change this password on their first login.",
       "auto_created_classes": "Auto-created classes: {{list}}",
       "search_ph": "Search students by name, address or phone...",
       "all_classes": "All Classes",

@@ -8,6 +8,7 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { ArrowLeft, Mail, ShieldCheck, CheckCircle2 } from 'lucide-react-native';
 import { authApi } from '../../services/api';
+import PreLoginLanguageSwitcher from '../../components/PreLoginLanguageSwitcher';
 import { colors, spacing, radius, font, shadow } from '../../theme';
 
 // Reached from LoginScreen's "Forgot password?" link. The user enters their
@@ -62,6 +63,7 @@ export default function ForgotPasswordScreen() {
 
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <PreLoginLanguageSwitcher />
       <ScrollView
         contentContainerStyle={[styles.scroll, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 24 }]}
         keyboardShouldPersistTaps="handled"

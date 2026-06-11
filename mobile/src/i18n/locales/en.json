@@ -133,6 +133,19 @@
     "revoke_confirm": "Sign this session out? The device will need to log in again.",
     "revoke_failed": "Could not sign out session."
   },
+  "force_change": {
+    "title": "Choose a new password",
+    "subtitle": "One-time setup for your account",
+    "body": "For your security, the temporary password you just used cannot be kept. Pick a new password to continue.",
+    "new_password": "New password",
+    "confirm": "Confirm new password",
+    "submit": "Set new password",
+    "sign_out": "Sign out",
+    "success": "Password changed. Welcome.",
+    "failed": "Could not change password.",
+    "both_required": "Enter and confirm your new password.",
+    "policy_hint": "Password must be at least 8 characters and include an uppercase letter and a special character."
+  },
   "common": {
     "day": "Day",
     "present": "Present",

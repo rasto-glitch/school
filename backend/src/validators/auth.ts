@@ -37,6 +37,10 @@ export const changePasswordSchema = z.object({
   newPassword,
 });
 
+export const firstTimeChangePasswordSchema = z.object({
+  newPassword,
+});
+
 export const resetWithTokenSchema = z.object({
   token: opaqueToken,
   newPassword,

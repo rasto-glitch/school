@@ -85,6 +85,10 @@ export interface AuthUser {
   lastName: string;
   profilePicture?: string;
   email?: string | null;
+  // True when the account was created with a shipping default password
+  // (Parent@123 etc.) and the user must change it before they can reach
+  // any normal screen. Cleared by /auth/first-time-change-password.
+  mustChangePassword?: boolean;
 }
 
 export interface Student {

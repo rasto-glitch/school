@@ -1,0 +1,9 @@
+node_modules/
+.env.test
+results/
+screenshots/
+playwright-report/
+test-results/
+data/students.xlsx
+data/*.xlsx
+!data/.gitkeep
