@@ -4099,6 +4099,27 @@ export async function updateAccount(req: AuthRequest, res: Response): Promise<vo
     else if (user.role === 'parent') await supabase.from('parents').update({ full_name: fullName }).eq('user_id', userId).eq('school_id', schoolId);
   }
 
+  // Admin-trusted phone propagation (migration 050). This is the
+  // universal post-create phone edit path — used by /admin/accounts/:id
+  // for every role, and is the ONLY admin path for bare roles
+  // (admin / supervisor / reception / accountant) since they don't
+  // have a role-specific table. Also mirror the canonical form back
+  // to the role-table phone_number for parent/teacher/driver so the
+  // role-specific edit pages don't drift.
+  if (phone !== undefined) {
+    await propagateAdminSetPhone(String(userId), phone);
+    const roleTableByRole: Record<string, string> = {
+      parent: 'parents', teacher: 'teachers', driver: 'drivers',
+    };
+    const roleTable = roleTableByRole[user.role as string];
+    if (roleTable) {
+      await supabase
+        .from(roleTable)
+        .update({ phone_number: phone || null })
+        .eq('user_id', userId).eq('school_id', schoolId);
+    }
+  }
+
   res.json(toCC(user));
 }
 
