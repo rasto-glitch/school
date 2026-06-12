@@ -37,6 +37,10 @@ CREATE TABLE IF NOT EXISTS schools (
   -- Grading display mode. Lives OUTSIDE `features` so changing it does NOT
   -- bump features_version / force a re-login.
   grading_config JSONB NOT NULL DEFAULT '{"mode":"scale"}'::jsonb,
+  -- School-wide raw-to-percentage normalisation factor used by the metrics
+  -- rollup (migration 049). Default /100; schools using /20 or other scales
+  -- should configure this before the metrics feature ships.
+  grade_scale_max NUMERIC(5,2) DEFAULT 100,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 -- Run this if the table already exists:
@@ -45,6 +49,7 @@ CREATE TABLE IF NOT EXISTS schools (
 -- ALTER TABLE schools ADD COLUMN IF NOT EXISTS timezone TEXT NOT NULL DEFAULT 'Asia/Baghdad';
 -- ALTER TABLE schools ADD COLUMN IF NOT EXISTS chat_restrictions JSONB NOT NULL DEFAULT '{"enabled":false}'::jsonb;
 -- ALTER TABLE schools ADD COLUMN IF NOT EXISTS grading_config JSONB NOT NULL DEFAULT '{"mode":"scale"}'::jsonb;
+-- ALTER TABLE schools ADD COLUMN IF NOT EXISTS grade_scale_max NUMERIC(5,2) DEFAULT 100;
 
 -- Trigger: auto-increment features_version whenever the features JSONB column changes
 CREATE OR REPLACE FUNCTION increment_features_version()
@@ -465,6 +470,11 @@ CREATE TABLE IF NOT EXISTS grades (
   -- Admin-only note. Written during review; visible to parents on release
   -- (only when non-empty). Teachers do not see it.
   admin_note TEXT,
+  -- Frozen copy of schools.grade_scale_max at row insert (migration 049).
+  -- Used by the future metrics rollup to normalise raw grades to percent
+  -- without being broken by mid-year scale changes. Populated by trigger
+  -- trg_grades_scale_snapshot — do not write directly from app code.
+  grade_scale_snapshot NUMERIC(5,2),
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 -- Run if table already exists:
@@ -473,6 +483,7 @@ CREATE TABLE IF NOT EXISTS grades (
 -- ALTER TABLE grades ADD COLUMN IF NOT EXISTS released_at TIMESTAMPTZ;
 -- ALTER TABLE grades ADD COLUMN IF NOT EXISTS released_by UUID REFERENCES users(id);
 -- ALTER TABLE grades ADD COLUMN IF NOT EXISTS admin_note TEXT;
+-- ALTER TABLE grades ADD COLUMN IF NOT EXISTS grade_scale_snapshot NUMERIC(5,2);
 -- Don't retroactively hide grades parents already see:
 -- UPDATE grades SET is_released = true WHERE is_released = false;
 
@@ -503,12 +514,28 @@ CREATE TABLE IF NOT EXISTS reports (
   class_name_snapshot TEXT,
   teacher_name_snapshot TEXT,
   shared_with_other_teachers BOOLEAN NOT NULL DEFAULT false,
+  -- Migration 049 — metrics foundation.
+  -- year_month is a generated YYYY-MM bucket derived from report_date,
+  -- indexed for the future UPSERT pattern that enforces one report per
+  -- (student, subject, month). The UNIQUE constraint itself ships with
+  -- the metrics feature build, not in 049.
+  year_month TEXT GENERATED ALWAYS AS (TO_CHAR(report_date, 'YYYY-MM')) STORED,
+  -- behavior_tag_codes references report_behavior_tags.code per-school.
+  -- NULL/empty until schools configure their behavior-tag vocabulary
+  -- through the future admin UI.
+  behavior_tag_codes TEXT[] DEFAULT '{}',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_reports_student_year
   ON reports(student_id, academic_year DESC, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_reports_school_year
   ON reports(school_id, academic_year);
+-- Migration 049 — metric rollup support.
+CREATE INDEX IF NOT EXISTS idx_reports_student_yearmonth
+  ON reports(school_id, student_id, subject, year_month);
+CREATE INDEX IF NOT EXISTS idx_reports_teacher_yearmonth
+  ON reports(school_id, teacher_id, year_month)
+  WHERE teacher_id IS NOT NULL;
 -- Run if table already exists:
 -- ALTER TABLE reports ADD COLUMN IF NOT EXISTS marks JSONB DEFAULT '[]';
 
@@ -2350,7 +2377,9 @@ DECLARE
     'payment_accounts','fx_rates',
     -- newly denormalized in section 1 above:
     'teacher_classes','messages','conversation_reads','message_edits','fee_plan_classes',
-    'chart_of_accounts','journal_entries','journal_lines'
+    'chart_of_accounts','journal_entries','journal_lines',
+    -- migration 049 — metrics foundation
+    'homework_submissions','assignment_completions','report_behavior_tags'
   ];
 BEGIN
   FOREACH t IN ARRAY tables LOOP
@@ -2410,7 +2439,9 @@ DECLARE
     'expense_recurring_templates','expenses','student_fee_late_fees','accounting_periods',
     'payment_accounts','fx_rates',
     'teacher_classes','messages','conversation_reads','message_edits','fee_plan_classes',
-    'chart_of_accounts','journal_entries','journal_lines'
+    'chart_of_accounts','journal_entries','journal_lines',
+    -- migration 049 — metrics foundation
+    'homework_submissions','assignment_completions','report_behavior_tags'
   ];
 BEGIN
   FOREACH t IN ARRAY tables LOOP
@@ -2434,3 +2465,111 @@ END $$;
 -- Rollback for a single table (if it misbehaves):
 --   ALTER TABLE <table> NO FORCE ROW LEVEL SECURITY;
 --   ALTER TABLE <table> DISABLE ROW LEVEL SECURITY;
+
+-- ============================================================
+-- METRICS FEATURE FOUNDATION (migration 049)
+-- ============================================================
+-- The metrics feature itself (writers, dashboards, materialized
+-- rollups, nightly job) is shelved until later. The persistent
+-- pieces that would be expensive to add against populated tables
+-- after the fact live here.
+
+-- Trigger: snapshot the school's grade_scale_max into each new grade
+-- row, so mid-year scale changes don't corrupt historical metrics.
+CREATE OR REPLACE FUNCTION populate_grade_scale_snapshot()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.grade_scale_snapshot IS NULL THEN
+    SELECT grade_scale_max INTO NEW.grade_scale_snapshot
+    FROM schools WHERE id = NEW.school_id;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_grades_scale_snapshot ON grades;
+CREATE TRIGGER trg_grades_scale_snapshot
+  BEFORE INSERT ON grades
+  FOR EACH ROW
+  EXECUTE FUNCTION populate_grade_scale_snapshot();
+
+-- Per-school behavior-tag dictionary referenced by reports.behavior_tag_codes.
+-- Empty until schools configure their vocabulary via the future admin UI.
+CREATE TABLE IF NOT EXISTS report_behavior_tags (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  code TEXT NOT NULL,
+  label_en TEXT NOT NULL,
+  label_ar TEXT,
+  label_ku TEXT,
+  polarity TEXT NOT NULL CHECK (polarity IN ('positive', 'neutral', 'negative')),
+  order_index INTEGER DEFAULT 0,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(school_id, code)
+);
+CREATE INDEX IF NOT EXISTS idx_report_behavior_tags_school
+  ON report_behavior_tags(school_id, is_active, order_index);
+
+-- Per-student per-homework completion record. Empty until the future
+-- teacher mark-complete UI ships. v1 actor: teacher only. v2 actors:
+-- parent submits → teacher verifies. The CHECK constraint already
+-- allows the v2 statuses so v2 doesn't need another migration.
+CREATE TABLE IF NOT EXISTS homework_submissions (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  homework_id UUID NOT NULL REFERENCES homework(id) ON DELETE CASCADE,
+  student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending', 'completed', 'submitted_by_parent', 'verified_by_teacher')),
+  marked_at TIMESTAMPTZ,
+  marked_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  marked_by_role TEXT,
+  verified_at TIMESTAMPTZ,
+  verified_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  attachment_url TEXT,
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(homework_id, student_id)
+);
+CREATE INDEX IF NOT EXISTS idx_homework_submissions_lookup
+  ON homework_submissions(school_id, student_id, status);
+CREATE INDEX IF NOT EXISTS idx_homework_submissions_homework
+  ON homework_submissions(homework_id);
+
+-- Per-student per-assignment completion record. Mirrors
+-- homework_submissions. The existing assignments.submission_status
+-- column is intentionally kept (live readers still resolve it) and
+-- becomes ignorable once the feature switches readers to this table.
+CREATE TABLE IF NOT EXISTS assignment_completions (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  assignment_id UUID NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
+  student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending', 'completed', 'submitted_by_parent', 'verified_by_teacher')),
+  marked_at TIMESTAMPTZ,
+  marked_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  marked_by_role TEXT,
+  verified_at TIMESTAMPTZ,
+  verified_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  attachment_url TEXT,
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(assignment_id, student_id)
+);
+CREATE INDEX IF NOT EXISTS idx_assignment_completions_lookup
+  ON assignment_completions(school_id, student_id, status);
+CREATE INDEX IF NOT EXISTS idx_assignment_completions_assignment
+  ON assignment_completions(assignment_id);
+
+-- Supporting indexes for future teacher-performance rollup queries.
+CREATE INDEX IF NOT EXISTS idx_weekly_summaries_teacher_week
+  ON weekly_summaries(school_id, teacher_id, week_start_date);
+CREATE INDEX IF NOT EXISTS idx_homework_teacher_created
+  ON homework(school_id, teacher_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_assignments_teacher_created
+  ON assignments(school_id, teacher_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_grades_teacher_created
+  ON grades(school_id, teacher_id, created_at);
+

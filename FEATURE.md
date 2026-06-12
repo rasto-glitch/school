@@ -349,3 +349,203 @@ sends it.
   feature is that the key is short-lived in browser memory; persisting
   it would re-introduce the problem we're avoiding.
 
+---
+
+## Student & teacher performance metrics
+
+**Status:** Foundation shipped in **migration 049** (2026-06-12).
+Writers, dashboards, and the nightly rollup job are paused until the
+WhatsApp-OTP work ships. No UI changes landed — pure DB scaffolding
+designed to be invisible until the feature build resumes.
+
+### What the feature does (when finished)
+
+Role-specific dashboards that combine engagement, outcome, and presence
+signals into one student-performance picture, plus a teacher-performance
+view for HR.
+
+| Audience | Question they're trying to answer |
+|---|---|
+| Parent | Is my child keeping up? |
+| Teacher | Which of my students aren't doing homework? Where is the class trending? |
+| Supervisor | Which classes have low engagement or falling outcomes? |
+| Admin (+ HR when added) | School-level engagement/outcome trends + teacher performance |
+
+The interesting metric that combining these unlocks is the **engagement
+× outcome correlation**: "students with >80% completion average X
+grade; students with <60% average Y". That signal is invisible from any
+single source today.
+
+### Why shelved
+
+WhatsApp-OTP work is the active priority. The metrics feature needs a
+month of UI build + dashboards across web and mobile across four roles,
+which is too much to interleave. Better to land the foundation now (so
+nothing decays) and pick the feature up cleanly later.
+
+### What migration 049 ships (the foundation)
+
+The pieces that would be expensive to add later against populated tables:
+
+| Change | Why now (instead of with the feature) |
+|---|---|
+| `schools.grade_scale_max NUMERIC DEFAULT 100` | School-wide raw-to-percentage normalisation factor. Most KRG schools use /100; schools using /20 should set this via the future admin UI before historical grades accumulate. |
+| `grades.grade_scale_snapshot NUMERIC` + BEFORE INSERT trigger | Per-row snapshot of the school's scale at write time. Mid-year scale changes can't corrupt historical interpretation. App code is unaware — trigger populates automatically. |
+| `reports.year_month` generated STORED column + lookup indexes | Bucket column for the future UPSERT pattern. UNIQUE constraint is **NOT** yet enforced — it would break current multi-report teacher workflow without the UPSERT UX. |
+| `report_behavior_tags` per-school dictionary (empty) + `reports.behavior_tag_codes TEXT[]` | School-managed behaviour vocabulary with polarity (positive/neutral/negative). Drives metrics without sentiment analysis. |
+| `homework_submissions` table (empty) | Per-student per-homework completion. v1 actor: teacher only. v2 columns (`verified_at`, `verified_by_user_id`, `attachment_url`) included so parent-uploads-proof needs zero schema work later. CHECK constraint allows all v1+v2 status values. |
+| `assignment_completions` table (empty) | Mirrors `homework_submissions`. The existing `assignments.submission_status` column is **kept** — live readers still resolve it. Becomes ignorable when the feature switches readers to this table. |
+| `idx_weekly_summaries_teacher_week`, `idx_homework_teacher_created`, `idx_assignments_teacher_created`, `idx_grades_teacher_created` | Supporting indexes for the future teacher-performance rollup queries. Cheap to build now on small tables. |
+
+What 049 deliberately does NOT do:
+
+- No `UNIQUE(school_id, student_id, subject, year_month)` on reports
+  (ships with the UPSERT UI).
+- No drop of `assignments.submission_status` (live readers still
+  resolve it).
+- No `student_monthly_metrics` / `teacher_monthly_metrics` materialised
+  tables (empty tables serve no purpose until writers exist).
+- No `audit_logs.entity_type` CHECK extension (ships with the
+  controllers that actually emit the new types).
+- No application code changes.
+
+### Locked design decisions (do not re-litigate)
+
+**Actor for completion (v1):** teacher only marks completion. Parents
+do not. v2 expands to "parent uploads proof → teacher verifies" without
+further schema work — `homework_submissions.status` CHECK already
+allows `submitted_by_parent` and `verified_by_teacher`.
+
+**Model:** unified completion tables (`homework_submissions` +
+`assignment_completions`), not polymorphic. `assignments.submission_status`
+becomes a dead column once the feature ships — kept for backward
+compatibility with live readers, not dropped.
+
+**Grade scale:** school-wide single max per school, snapshotted per
+grade row at write time. No cross-school benchmarking planned, so per
+school suffices. The snapshot column protects against mid-year scale
+changes.
+
+**Reports cadence:** enforce one report per (student, subject, month)
+via UPSERT when the feature ships. Foundation prepares the bucket
+column + index; the UNIQUE constraint ships with the UPSERT UI so
+teachers don't hit cryptic errors before the new UX exists.
+
+**Behaviour tags:** hybrid model. Free-text `behavior_notes` stays as
+the qualitative record; structured `behavior_tag_codes` (from per-school
+dictionary) drives the metrics. Polarity field on tags supplies the
+positive/neutral/negative bucketing. Tags are **optional**, not
+required — forcing them produces low-quality data.
+
+**Monthly summary strategy:** materialised tables
+`student_monthly_metrics` and `teacher_monthly_metrics`, written by a
+nightly job. Dashboard reads are single-row or simple aggregations.
+
+**Teacher performance metric split:**
+
+- **Bucket A — documentation** (controlled by teacher): weekly summary
+  posting rate, report posting rate, grade entry timeliness,
+  behaviour-note fill rate. Valid for performance review.
+- **Bucket B — outcomes** (depend on student population): show as
+  **trends** over time, never absolute side-by-side comparisons.
+  Class-level completion / grades / attendance averages live here.
+
+**Access control:**
+
+| Role | Sees student metrics | Sees teacher performance metrics |
+|---|---|---|
+| Parent | their own child only | ❌ never |
+| Teacher | students they teach | their **own** metrics only |
+| Supervisor | classes they supervise | ❌ **explicitly excluded** |
+| Admin | all | ✅ all |
+| HR (when added) | all | ✅ all |
+
+When the future endpoint lands, the role gate is `role === 'admin'`.
+If an explicit `hr` role is added to `users.role`, extend the gate to
+`['admin', 'hr']`.
+
+### What's left to build (in suggested order)
+
+1. **Migration 050** — `student_monthly_metrics` + `teacher_monthly_metrics`.
+2. **Migration 051** — `audit_logs.entity_type` CHECK extension
+   (`homework_submission`, `assignment_completion`, `report_behavior_tag`,
+   `student_monthly_metrics`, `teacher_monthly_metrics`).
+3. **Backend writers** — `PATCH /teacher/homework/:id/students/:studentId/complete`
+   + assignment equivalent + admin CRUD for `report_behavior_tags`.
+4. **Frontend writer UI** — checkboxes per student on `WriteHomeworkPage`
+   + `WriteAssignmentsPage` + mobile equivalents.
+5. **Migration 052** — add `UNIQUE(school_id, student_id, subject, year_month)`
+   on `reports` after a dedupe pass. Pair with the UPSERT UX update.
+6. **Backend rollup job** — nightly cron writing the materialised
+   tables. Backfill the past 2-3 months from existing `grades`,
+   `reports`, `attendance`. Completion data starts only from the
+   moment the writer UI ships.
+7. **Backend readers** —
+   - `GET /metrics/student/:id?from=&to=`
+   - `GET /metrics/class/:id?...`
+   - `GET /metrics/school?...`
+   - `GET /metrics/teacher/:id?from=&to=` *(admin/HR only)*
+8. **Frontend dashboards** per role.
+9. **Behaviour-tag admin settings page** for managing the per-school
+   dictionary.
+10. **i18n** — reserve namespaces `homework.completion.*`,
+    `assignment.completion.*`, `metrics.*`, `behavior_tags.*` across
+    en/ar/ku.
+
+### Open questions to resolve before code lands
+
+- **Per-student fan-out on write** — when a teacher posts homework to
+  a 30-student class, eager-create 30 `pending` rows or lazy-create on
+  first mark? **Lean eager.** Reads dominate; 30 rows per homework is
+  trivial storage; `% completion` becomes a simple aggregation.
+- **Class-wide vs individual assignments** — `assignments.student_id`
+  is nullable for class-wide. Same eager-vs-lazy question.
+- **Reports dedupe before UNIQUE** — run `SELECT student_id, subject,
+  year_month, COUNT(*) FROM reports GROUP BY 1,2,3 HAVING COUNT(*) > 1`
+  before adding the constraint. Decide keep-newest vs merge.
+- **Subject weighting in `grades_overall_avg`** — currently all
+  subjects weight equally. Schools may want religion/PE deweighted vs
+  math/science. Decide whether weighting lives in the rollup job, on
+  the school config, or in the dashboard layer.
+- **Computation version bumps** — when the rollup formula changes,
+  recomputing past months is the right move. Plan for a one-shot
+  re-run script.
+- **Storage bucket for v2 parent-upload proof** — reuse the
+  `chat-attachments` pattern (per-row ownership table + orphan sweep,
+  per migration 047). Don't roll a new pattern.
+- **HR role** — does it stay as an admin sub-permission, or become its
+  own role in the `users.role` enum? If the latter, all role gates in
+  the controllers need a parallel update.
+
+### Notes for whoever picks this up
+
+- The data foundation is already there — every grade entered since
+  2026-06-12 carries `grade_scale_snapshot`; every report has a
+  `year_month` bucket. You can write the rollup job against real data
+  the day you start.
+- **Don't drop** `assignments.submission_status`. Switch readers to
+  `assignment_completions` and let the column quietly die. Active
+  readers today: mobile AssignmentDetailScreen (line ~24), parent
+  AssignmentsPage (line ~17). Dropping it without those switchovers
+  breaks both screens.
+- **Don't add the UNIQUE constraint on reports** as part of foundation
+  changes. The current schema lets teachers post multiple reports per
+  (student, subject, month) and the feature build is what gives them
+  the UPSERT UX that replaces the duplicate-post error path.
+- **Behaviour-tag inflation is a real risk** — teachers may over-
+  report positive tags if Bucket A includes "behaviour-note fill rate".
+  Watch the positive/neutral/negative ratio when the feature ships;
+  schools where all teachers report 95% positive are either in heaven
+  or gaming the system.
+- **"Expected" definition for documentation metrics** matters. Naive
+  count breaks down when a student joins mid-month or a class is
+  cancelled. Prorate by enrolment days. `weekly_summary_periods.is_open`
+  gives the school-level "school was open this week" signal.
+- The user asked for this scope on 2026-06-12 (this commit's session
+  transcript covers the design conversation). Re-reading the
+  conversation before re-starting is recommended — several edge cases
+  (mid-year scale changes, behaviour-tag gaming, supervisor access
+  exclusion, monthly cadence enforcement) were each settled with
+  explicit user calls that aren't obvious from the schema alone.
+
+
