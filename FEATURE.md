@@ -613,6 +613,46 @@ https://docs.otpiq.com) and the Iraqi market default.
   `phone_otp_delivery_events` policy permits `school_id IS NULL`
   for the moment between webhook landing and school_id back-fill.
 
+### Admin-trusted phone propagation
+
+When an admin creates or updates a parent / teacher / driver and
+provides a phone number, the role-table `phone_number` write is
+followed by a best-effort mirror onto `users.phone_e164` with
+`users.phone_verified_at` stamped. This matches how
+`users.email` works today — admin sets it, the system trusts it,
+the user gets OTPs at that number from day one without re-entering
+or verifying.
+
+The mirror lives in `backend/src/utils/adminPhonePropagation.ts`
+and is wired into:
+  - `createStudent` (new-parent path)
+  - `bulkUploadStudents` (the parent batch)
+  - `createTeacher` / `updateTeacher`
+  - `createDriver` / `updateDriver`
+  - `createAccount` (unified parent/teacher/driver create endpoint)
+
+Normalization rules (also in `phoneE164.ts`):
+  - `0750…` / `+9647…` / `00964…` / spaced / parenthesised → all
+    converge to `+9647xxxxxxxxx`.
+  - Non-IQ or malformed input → `users.phone_e164` stays NULL,
+    `users.phone_verified_at` stays NULL. The role-table column
+    keeps the original text (it's contact info), but the OTP layer
+    refuses to send to a number it can't validate.
+  - Admin clears the field → both `phone_e164` and `phone_verified_at`
+    are cleared.
+
+If an admin update has `phoneNumber === undefined` in the request
+body (the field wasn't touched at all), we don't touch
+`users.phone_e164` either — only an explicit value (string, '', or
+null) causes a propagation.
+
+**Cost of this design** (explicitly accepted): admin typos route
+OTPs to whoever holds the typo'd number. Mitigation: normalisation
+catches "wrong country code" / "missing digit" / "leading zero"
+errors, and Stage A (login MFA) is parents/drivers only — admin /
+accountant / HR roles keep TOTP regardless of what's on
+`users.phone_e164`.
+
 ### Backend (Stage B + reusable by Stage A/C)
 
 - `backend/src/utils/otpiq.ts` — typed HTTP client (`sendVerification`,

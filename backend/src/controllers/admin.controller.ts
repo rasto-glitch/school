@@ -24,6 +24,7 @@ import { loadArchivedStudentForPdf, streamArchivedStudentPdf } from '../utils/ar
 import { pickLang } from '../utils/archivePdfShared';
 import { hrColumns, hrSnapshot } from '../utils/employeeHr';
 import { defaultPasswordFor } from '../utils/defaultPasswords';
+import { propagateAdminSetPhone } from '../utils/adminPhonePropagation';
 import { isUrlSafeToFetch } from '../utils/urlSafety';
 import { logger } from '../utils/logger';
 import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from '../utils/passwordPolicy';
@@ -319,6 +320,10 @@ export async function createStudent(req: AuthRequest, res: Response): Promise<vo
 
         resolvedParentId = newParent.id;
         parentAccountCreated = { username, password: defaultPasswordFor('parent'), fullName: parentFullName };
+        // Admin-trusted phone propagation (migration 050). Mirrors the
+        // resolved phone onto users.phone_e164 + stamps phone_verified_at
+        // so the new parent gets OTPs at this number from day one.
+        await propagateAdminSetPhone(newUser.id, resolvedPhone);
       }
     }
   }
@@ -815,6 +820,12 @@ export async function bulkUploadStudents(req: AuthRequest, res: Response): Promi
           if (key.includes('|')) parentByNamePhone.set(key, record.id);
         }
         parentAccountsCreated = newParentRecords.length;
+        // Admin-trusted phone propagation (migration 050) for the bulk
+        // batch. Parallel — each entry is independent and the helper
+        // swallows its own errors.
+        await Promise.all(parentEntries.map(([, p], idx) =>
+          propagateAdminSetPhone(newUsers[idx].id, p.phone),
+        ));
       }
     }
   }
@@ -2202,6 +2213,10 @@ export async function createTeacher(req: AuthRequest, res: Response): Promise<vo
 
   if (teacherErr) { res.status(safeDbErrorStatus(teacherErr)).json({ error: safeDbErrorMessage(teacherErr) }); return; }
 
+  // Admin-trusted phone propagation (migration 050). Stamps users.phone_e164
+  // + phone_verified_at when phoneNumber parses as a valid IQ mobile.
+  await propagateAdminSetPhone(newUser.id, phoneNumber);
+
   const idsToAssign: string[] = Array.isArray(classIds) ? classIds : classId ? [classId] : [];
   if (idsToAssign.length > 0) {
     await supabase.from('teacher_classes').insert(idsToAssign.map(cid => ({ teacher_id: teacher.id, class_id: cid })));
@@ -2232,6 +2247,13 @@ export async function updateTeacher(req: AuthRequest, res: Response): Promise<vo
     : await supabase.from('teachers').select('*').eq('id', id).eq('school_id', schoolId).single();
 
   if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+
+  // Admin-trusted phone propagation (migration 050). Only fires when the
+  // admin explicitly sent phoneNumber in the request body — undefined
+  // means "didn't touch the field" and we leave users.phone_e164 alone.
+  if (phoneNumber !== undefined && (data as { user_id?: string } | null)?.user_id) {
+    await propagateAdminSetPhone((data as { user_id: string }).user_id, phoneNumber);
+  }
 
   // Handle the teacher's class list. teachers.subject / curriculum rows are scoped per class,
   // so dropping a class also drops any curriculum rows the teacher had for it.
@@ -2344,6 +2366,9 @@ export async function createDriver(req: AuthRequest, res: Response): Promise<voi
 
   if (driverErr) { res.status(safeDbErrorStatus(driverErr)).json({ error: safeDbErrorMessage(driverErr) }); return; }
 
+  // Admin-trusted phone propagation (migration 050).
+  await propagateAdminSetPhone(newUser.id, phoneNumber);
+
   // Assign students to this driver
   if (studentIds && Array.isArray(studentIds) && studentIds.length > 0) {
     await supabase.from('students').update({ driver_id: driver.id }).in('id', studentIds).eq('school_id', schoolId);
@@ -2392,6 +2417,13 @@ export async function updateDriver(req: AuthRequest, res: Response): Promise<voi
     .eq('id', id).eq('school_id', schoolId).select().single();
 
   if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+
+  // Admin-trusted phone propagation (migration 050). Only fires when
+  // the admin sent phoneNumber explicitly — undefined leaves users.phone_e164
+  // alone.
+  if (phoneNumber !== undefined && (data as { user_id?: string } | null)?.user_id) {
+    await propagateAdminSetPhone((data as { user_id: string }).user_id, phoneNumber);
+  }
 
   // Update student assignments — only when explicitly provided in the request
   if (req.body.hasOwnProperty('studentIds') && Array.isArray(studentIds)) {
@@ -2481,6 +2513,13 @@ export async function createAccount(req: AuthRequest, res: Response): Promise<vo
       full_name: `${firstName} ${lastName}`, phone_number: phone,
     });
   }
+
+  // Admin-trusted phone propagation (migration 050). Applies to every
+  // role that carries a phone here (parent/teacher/driver). Supervisor/
+  // reception/accountant accounts via this endpoint don't currently
+  // set a phone, so propagation no-ops on null input — safe to call
+  // unconditionally.
+  await propagateAdminSetPhone(newUser.id, phone);
 
   res.status(201).json({
     id: newUser.id,
