@@ -128,10 +128,22 @@ export async function confirmVerifyPhoneOtp(req: AuthRequest, res: Response): Pr
   }
 
   const now = new Date().toISOString();
-  const { error: updErr } = await supabase
+  const { data: stamped, error: updErr } = await supabase
     .from('users')
     .update({ phone_verified_at: now })
-    .eq('id', userId);
+    .eq('id', userId)
+    .select('phone_e164, role')
+    .single();
+  if (!updErr && stamped) {
+    // Back-sync the now-verified canonical phone into the role-table
+    // phone_number contact column so admin lists / employee edit pages
+    // show the same number the user just verified. Best-effort.
+    await syncVerifiedPhoneToRoleTable(
+      userId, schoolId,
+      (stamped as { role: string }).role,
+      (stamped as { phone_e164: string | null }).phone_e164,
+    );
+  }
   if (updErr) {
     logger.error('confirmVerifyPhoneOtp stamp failed', { userId, error: updErr.message });
     // The user gave the right code; surfacing 500 here loses that. We
@@ -158,6 +170,44 @@ function mapVerifyReasonToStatus(r: string): number {
     case 'mismatch':           return 400;
     case 'invalid_format':     return 400;
     default:                   return 400;
+  }
+}
+
+// Back-sync the user-verified canonical phone to the role-table
+// phone_number contact column. This is the reverse of the
+// admin → users.phone_e164 propagation (utils/adminPhonePropagation.ts).
+// Together they keep the role-table contact column and the auth-grade
+// users.phone_e164 column in sync from both directions, so the admin's
+// teacher/parent/driver edit pages always show the latest number.
+//
+// Only the three roles with a role-specific table get a write here —
+// admin / supervisor / reception / accountant are "bare-users-row"
+// roles that have no role table, so their phone lives only on users.
+async function syncVerifiedPhoneToRoleTable(
+  userId: string,
+  schoolId: string,
+  role: string,
+  phoneE164: string | null,
+): Promise<void> {
+  const tableByRole: Record<string, string> = {
+    parent: 'parents',
+    teacher: 'teachers',
+    driver: 'drivers',
+  };
+  const table = tableByRole[role];
+  if (!table) return;
+  try {
+    // tenant-check-allow: filtered by school_id (from req.user) + user_id (the verifying caller)
+    const { error } = await supabase
+      .from(table)
+      .update({ phone_number: phoneE164 })
+      .eq('user_id', userId)
+      .eq('school_id', schoolId);
+    if (error) {
+      logger.warn('role-table phone back-sync failed', { table, userId, error: error.message });
+    }
+  } catch (err) {
+    logger.warn('role-table phone back-sync threw', { table, userId, error: (err as Error).message });
   }
 }
 
