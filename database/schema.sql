@@ -519,7 +519,13 @@ CREATE TABLE IF NOT EXISTS reports (
   -- indexed for the future UPSERT pattern that enforces one report per
   -- (student, subject, month). The UNIQUE constraint itself ships with
   -- the metrics feature build, not in 049.
-  year_month TEXT GENERATED ALWAYS AS (TO_CHAR(report_date, 'YYYY-MM')) STORED,
+  -- Expression composed from EXTRACT + LPAD + || because TO_CHAR is
+  -- STABLE in Postgres (depends on datestyle / lc_time) and generated
+  -- column expressions must be strictly IMMUTABLE.
+  year_month TEXT GENERATED ALWAYS AS (
+    LPAD(EXTRACT(YEAR  FROM report_date)::text, 4, '0') || '-' ||
+    LPAD(EXTRACT(MONTH FROM report_date)::text, 2, '0')
+  ) STORED,
   -- behavior_tag_codes references report_behavior_tags.code per-school.
   -- NULL/empty until schools configure their behavior-tag vocabulary
   -- through the future admin UI.

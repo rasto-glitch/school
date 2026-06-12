@@ -110,9 +110,18 @@ CREATE TRIGGER trg_grades_scale_snapshot
 -- Generated column derived from report_date. Lets the future UPSERT
 -- pattern (one report per student-subject-month) bucket cleanly
 -- without on-the-fly date math, and gives us an indexable key now.
+--
+-- IMMUTABLE expression required by Postgres for generated columns —
+-- TO_CHAR(date, format) is STABLE (consults datestyle / lc_time) and
+-- gets rejected as "generation expression is not immutable". Composing
+-- the YYYY-MM string from EXTRACT + LPAD + || keeps every function
+-- IMMUTABLE and produces the same '2026-06' shape.
 ALTER TABLE reports
   ADD COLUMN IF NOT EXISTS year_month TEXT
-  GENERATED ALWAYS AS (TO_CHAR(report_date, 'YYYY-MM')) STORED;
+  GENERATED ALWAYS AS (
+    LPAD(EXTRACT(YEAR  FROM report_date)::text, 4, '0') || '-' ||
+    LPAD(EXTRACT(MONTH FROM report_date)::text, 2, '0')
+  ) STORED;
 
 -- Student-side metric lookups (parent dashboard, student rollup).
 CREATE INDEX IF NOT EXISTS idx_reports_student_yearmonth
