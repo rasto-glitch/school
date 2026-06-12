@@ -306,7 +306,7 @@ export async function login(req: Request, res: Response): Promise<void> {
   // Find user
   const { data: user, error: userErr } = await supabase
     .from('users')
-    .select('id, username, password_hash, role, first_name, last_name, profile_picture, email, is_active, must_change_password')
+    .select('id, username, password_hash, role, first_name, last_name, profile_picture, email, is_active, must_change_password, phone_e164, phone_verified_at')
     .eq('school_id', school.id)
     .eq('username', username)
     .single();
@@ -396,6 +396,8 @@ export async function login(req: Request, res: Response): Promise<void> {
       profilePicture: user.profile_picture,
       email: user.email || null,
       mustChangePassword: !!user.must_change_password,
+      phoneE164: (user as { phone_e164?: string | null }).phone_e164 || null,
+      phoneVerifiedAt: (user as { phone_verified_at?: string | null }).phone_verified_at || null,
     },
     school: {
       id: school.id,
@@ -464,7 +466,7 @@ export async function verifyMfaLogin(req: Request, res: Response): Promise<void>
   // tenant-check-allow: payload.userId comes from the just-verified MFA ticket, minted in login() only after a school-scoped password match
   const { data: user } = await supabase
     .from('users')
-    .select('id, username, role, first_name, last_name, profile_picture, email, is_active, must_change_password')
+    .select('id, username, role, first_name, last_name, profile_picture, email, is_active, must_change_password, phone_e164, phone_verified_at')
     .eq('id', payload.userId)
     .single();
   if (!user || !(user as { is_active: boolean }).is_active) {
@@ -530,6 +532,8 @@ export async function verifyMfaLogin(req: Request, res: Response): Promise<void>
       profilePicture: u.profile_picture,
       email: u.email || null,
       mustChangePassword: !!u.must_change_password,
+      phoneE164: (u as { phone_e164?: string | null }).phone_e164 || null,
+      phoneVerifiedAt: (u as { phone_verified_at?: string | null }).phone_verified_at || null,
     },
     school: {
       id: s.id,

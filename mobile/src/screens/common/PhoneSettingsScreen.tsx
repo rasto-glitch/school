@@ -11,7 +11,7 @@ import {
 } from 'lucide-react-native';
 import { useColors } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
-import { phoneOtpApi } from '../../services/api';
+import { phoneOtpApi, authApi } from '../../services/api';
 import { spacing, radius, font } from '../../theme';
 
 // Phone verification — Stage B of the WhatsApp OTP feature
@@ -48,6 +48,24 @@ export default function PhoneSettingsScreen() {
     const id = setInterval(() => setResendCooldown(n => Math.max(0, n - 1)), 1000);
     return () => clearInterval(id);
   }, [resendCooldown]);
+
+  // Pull the canonical phone state from the server on mount. Without
+  // this the screen shows whatever was cached in the auth store at
+  // login time, which misses admin-set phones and cross-device verifies.
+  useEffect(() => {
+    let cancelled = false;
+    authApi.getMe()
+      .then(r => {
+        if (cancelled) return;
+        setStorePhone(r.data.phoneE164 ?? null, r.data.phoneVerifiedAt ?? null);
+        if (r.data.phoneE164 && !phoneDraft) setPhoneDraft(r.data.phoneE164);
+      })
+      .catch(() => { /* non-fatal */ });
+    return () => { cancelled = true; };
+    // intentionally only on mount — re-syncs aren't required after the
+    // user starts editing the field
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const onSend = async () => {
     const trimmed = phoneDraft.trim();

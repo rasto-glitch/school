@@ -113,6 +113,19 @@ export const authApi = {
     api.post<{ qrDataUrl: string; secret: string; otpauthUri: string; recoveryCodes: string[] }>('/auth/login/mfa-enroll-setup', { enrollmentTicket }),
   enrollMfaConfirm: (enrollmentTicket: string, code: string, rememberDevice?: boolean) =>
     api.post('/auth/login/mfa-enroll-confirm', { enrollmentTicket, code, rememberDevice }),
+  getMe: () =>
+    api.get<{
+      id: string;
+      username: string;
+      role: string;
+      firstName: string;
+      lastName: string;
+      profilePicture: string | null;
+      email: string | null;
+      mustChangePassword?: boolean;
+      phoneE164?: string | null;
+      phoneVerifiedAt?: string | null;
+    }>('/auth/me'),
 };
 
 // ---- Phone OTP (migration 050, Stage B — verify phone) ----

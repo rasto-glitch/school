@@ -30,6 +30,7 @@ export default function TeacherSettingsScreen() {
   const { t } = useTranslation();
   const { logout, user } = useAuthStore();
   const setEmailInStore = useAuthStore(s => s.setEmail);
+  const setPhoneInStore = useAuthStore(s => s.setPhone);
   const { isDark, toggleTheme } = useThemeStore();
   const colors = useColors();
   const navigation = useNavigation<any>();
@@ -53,15 +54,21 @@ export default function TeacherSettingsScreen() {
     return () => { i18n.off('languageChanged', handler); };
   }, []);
 
-  // Refresh email from server so stale cached tokens don't show "Not set"
-  // when the user actually has an email on file.
+  // Refresh email + phone from server so stale cached tokens don't show
+  // "Not set" when the user actually has them on file. Also covers
+  // cross-device sync (admin set the phone, or user verified on another
+  // device — this picks it up).
   useEffect(() => {
     let cancelled = false;
     authApi.getMe()
-      .then(r => { if (!cancelled) setEmailInStore(r.data.email ?? null); })
+      .then(r => {
+        if (cancelled) return;
+        setEmailInStore(r.data.email ?? null);
+        setPhoneInStore(r.data.phoneE164 ?? null, r.data.phoneVerifiedAt ?? null);
+      })
       .catch(() => { /* non-fatal */ });
     return () => { cancelled = true; };
-  }, [setEmailInStore]);
+  }, [setEmailInStore, setPhoneInStore]);
 
   const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
 

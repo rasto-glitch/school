@@ -91,6 +91,23 @@ export default function AccountSettingsModal({ isOpen, onClose }: AccountSetting
     }
   }, [isOpen, user?.email]);
 
+  // Pull the canonical email + phone state from the server every time
+  // the modal opens. Without this the modal shows whatever was cached
+  // at login time — admin-set phones and cross-device verifies are
+  // missed otherwise.
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    authApi.getMe()
+      .then(r => {
+        if (cancelled) return;
+        setStoreEmail(r.data.email ?? null);
+        setStorePhone(r.data.phoneE164 ?? null, r.data.phoneVerifiedAt ?? null);
+      })
+      .catch(() => { /* non-fatal */ });
+    return () => { cancelled = true; };
+  }, [isOpen, setStoreEmail, setStorePhone]);
+
   // Load MFA status whenever the modal opens. Eligible roles see the
   // section; for everyone else it's hidden so we don't fetch.
   const refreshMfaStatus = async () => {

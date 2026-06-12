@@ -28,6 +28,7 @@ const LANGUAGES = [
 export default function SupervisorSettingsScreen() {
   const { t } = useTranslation();
   const { logout, user } = useAuthStore();
+  const setPhoneInStore = useAuthStore(s => s.setPhone);
   const { isDark, toggleTheme } = useThemeStore();
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -48,6 +49,19 @@ export default function SupervisorSettingsScreen() {
     i18n.on('languageChanged', handler);
     return () => { i18n.off('languageChanged', handler); };
   }, []);
+
+  // Refresh phone from server so admin-set or cross-device-verified
+  // phones show up on this screen without requiring re-login.
+  useEffect(() => {
+    let cancelled = false;
+    authApi.getMe()
+      .then(r => {
+        if (cancelled) return;
+        setPhoneInStore(r.data.phoneE164 ?? null, r.data.phoneVerifiedAt ?? null);
+      })
+      .catch(() => { /* non-fatal */ });
+    return () => { cancelled = true; };
+  }, [setPhoneInStore]);
 
   const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
 

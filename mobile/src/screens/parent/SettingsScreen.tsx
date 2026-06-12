@@ -30,6 +30,7 @@ export default function SettingsScreen() {
   const { t } = useTranslation();
   const { logout, user } = useAuthStore();
   const setEmailInStore = useAuthStore(s => s.setEmail);
+  const setPhoneInStore = useAuthStore(s => s.setPhone);
   const { isDark, toggleTheme } = useThemeStore();
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -59,17 +60,23 @@ export default function SettingsScreen() {
     return () => { i18n.off('languageChanged', handler); };
   }, []);
 
-  // On mount, refresh the cached email from the server. Handles the case
-  // where the user logged in BEFORE the login response started including
-  // email — without this they'd see "Not set" forever even if they do have
-  // an email on file.
+  // On mount, refresh the cached email + phone from the server. Handles
+  // the case where the user logged in BEFORE the login response started
+  // including these — without this they'd see "Not set" forever even
+  // if they do have one on file. Also covers cross-device sync: admin
+  // sets the phone, or the user verifies on web, and this device picks
+  // up the change next time the settings screen opens.
   useEffect(() => {
     let cancelled = false;
     authApi.getMe()
-      .then(r => { if (!cancelled) setEmailInStore(r.data.email ?? null); })
+      .then(r => {
+        if (cancelled) return;
+        setEmailInStore(r.data.email ?? null);
+        setPhoneInStore(r.data.phoneE164 ?? null, r.data.phoneVerifiedAt ?? null);
+      })
       .catch(() => { /* non-fatal */ });
     return () => { cancelled = true; };
-  }, [setEmailInStore]);
+  }, [setEmailInStore, setPhoneInStore]);
 
   // Re-check whether a pickup location is set every time this screen is
   // focused, so the icon turns green immediately after the user saves one.
