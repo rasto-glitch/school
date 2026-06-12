@@ -115,6 +115,18 @@ export const authApi = {
     api.post('/auth/login/mfa-enroll-confirm', { enrollmentTicket, code, rememberDevice }),
 };
 
+// ---- Phone OTP (migration 050, Stage B — verify phone) ----
+export const phoneOtpApi = {
+  sendVerify: (phone: string) =>
+    api.post<{
+      codeId: string;
+      expiresAt: string;
+      deliveryAttempted: { whatsapp: boolean; emailFallbackImmediate: boolean };
+    }>('/me/phone/send-verify-otp', { phone }),
+  confirmVerify: (code: string) =>
+    api.post<{ verifiedAt: string }>('/me/phone/confirm-verify-otp', { code }),
+};
+
 // ---- MFA (Phase 1: admin + accountant) ----
 export const mfaApi = {
   status: () => api.get<{ eligible: boolean; enrolled: boolean; confirmed: boolean; recoveryCodesRemaining: number }>('/auth/mfa/status'),

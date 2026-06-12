@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import {
   Bell, MapPin, Globe, Lock, LogOut, FileText, ShieldCheck,
-  Moon, ChevronRight, CheckCircle, XCircle, AlertCircle, X, Activity,
+  Moon, ChevronRight, CheckCircle, XCircle, AlertCircle, X, Activity, Phone,
 } from 'lucide-react-native';
 import { openLegalPage } from '../../utils/legal';
 import i18n, { changeLanguageAndApply } from '../../i18n';
@@ -216,6 +216,25 @@ export default function DriverSettingsScreen() {
 
         {/* Account */}
         <Text style={styles.sectionTitle}>{t('settings.account_section')}</Text>
+        <TouchableOpacity style={styles.row} onPress={() => navigation.navigate('PhoneSettings')}>
+          <View style={[styles.iconBox, { backgroundColor: user?.phoneVerifiedAt ? '#ECFDF5' : '#FEF3C7' }]}>
+            <Phone size={18} color={user?.phoneVerifiedAt ? '#10B981' : '#D97706'} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.rowLabel}>{t('account_settings.phone_section', 'Phone number')}</Text>
+            <Text
+              style={[styles.rowSub, !user?.phoneVerifiedAt && { color: colors.warning }]}
+              numberOfLines={1}
+            >
+              {user?.phoneE164
+                ? (user.phoneVerifiedAt
+                    ? user.phoneE164
+                    : `${user.phoneE164} · ${t('account_settings.phone_unverified_chip', 'Not verified')}`)
+                : t('account_settings.phone_not_set', 'Not set')}
+            </Text>
+          </View>
+          <ChevronRight size={18} color={colors.textMuted} />
+        </TouchableOpacity>
         <TouchableOpacity style={styles.row} onPress={() => setShowPasswordModal(true)}>
           <View style={[styles.iconBox, { backgroundColor: '#EFF6FF' }]}>
             <Lock size={18} color="#2563EB" />

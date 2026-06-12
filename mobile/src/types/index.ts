@@ -89,6 +89,10 @@ export interface AuthUser {
   // (Parent@123 etc.) and the user must change it before they can reach
   // any normal screen. Cleared by /auth/first-time-change-password.
   mustChangePassword?: boolean;
+  // Canonical phone in E.164 form (+9647…) once the user has saved it.
+  // phoneVerifiedAt is stamped after a successful OTP confirm.
+  phoneE164?: string | null;
+  phoneVerifiedAt?: string | null;
 }
 
 export interface Student {

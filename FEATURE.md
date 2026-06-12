@@ -548,4 +548,180 @@ If an explicit `hr` role is added to `users.role`, extend the gate to
   exclusion, monthly cadence enforcement) were each settled with
   explicit user calls that aren't obvious from the schema alone.
 
+---
+
+## Phone OTP (WhatsApp via OTPIQ + email fallback)
+
+**Status:** Stage B (phone verification) shipping in **migration 050**
+(2026-06-13). Stages C (forgot-password by phone) and A (login MFA by
+phone) are scheduled to follow on top of the same foundation — no
+further schema changes required for either.
+
+### Why
+
+Parents and drivers in the user base often (a) don't have an email,
+(b) have an email but don't read it, or (c) read English well enough
+to fail a forgot-password flow that depends on email. WhatsApp is
+ubiquitous in Iraq — the OTP arrives in the same app they already
+read all day. OTPIQ is the local provider (https://otpiq.com /
+https://docs.otpiq.com) and the Iraqi market default.
+
+### Locked design decisions (asked + answered before code)
+
+- **Staging:** B (verify phone) → C (forgot-password by phone) →
+  A (login MFA). Each stage is a separate PR; A and C reuse the
+  same `phone_otp_codes` table.
+- **Role policy for Stage A:** phone OTP is available as an MFA
+  factor for **parents + drivers only**. Teachers, supervisors,
+  reception, accountants, HR, and admin keep TOTP as the required
+  factor — a stolen SIM should not unlock money-moving or data-purge
+  roles. Phone verification (Stage B) is available to ALL roles —
+  it's used by HR contact records + future forgot-password by phone.
+- **Channel:** OTPIQ provider = `whatsapp` ONLY. We deliberately do
+  NOT use OTPIQ's `whatsapp-sms` provider (which would let OTPIQ pay
+  for SMS fallback at 80 IQD/msg). If WhatsApp delivery fails, our
+  own Resend SMTP fires the same code via email. Email fallback is
+  free, uses infrastructure we already own, and matches the user's
+  preference. Users with no email on file get a hard "couldn't
+  deliver" error and must request again.
+- **Country:** Iraqi mobile only (`+964` followed by 10 digits,
+  leading 7). `users_phone_e164_format` CHECK enforces it.
+  Landlines (leading 1) and any other country code rejected at
+  validation time. International support is a deliberate future
+  call.
+- **Code shape:** 6-digit numeric, sha256-hashed at rest, 5-minute
+  TTL, max 5 verify attempts. Matches the posture of the existing
+  TOTP recovery codes + email-change codes.
+
+### What migration 050 ships (the foundation)
+
+- `users.phone_e164` + `users.phone_verified_at` — canonical phone
+  + verification timestamp on the users table. `users.phone`
+  (existing display column) is preserved as legacy contact info;
+  the OTP layer never reads it.
+- CHECK `users_phone_e164_format` — `+964[0-9]{10}` regex.
+- `phone_otp_codes` — one row per generated code. Channel lifecycle
+  via per-channel timestamp columns (`whatsapp_sent_at`,
+  `whatsapp_delivered_at`, `whatsapp_failed_at`,
+  `email_fallback_sent_at`). `purpose` enum carries all three
+  stages now (`verify_phone`, `forgot_password`, `login_mfa`) so
+  Stage A/C don't need a CHECK alter.
+- `phone_otp_delivery_events` — ops/debug landing pad for OTPIQ
+  delivery webhooks. Append-only. Auth decisions never read from
+  it — the orchestrator updates `phone_otp_codes` directly.
+- RLS: `tenant_isolation` + ENABLE + FORCE on both new tables.
+  `phone_otp_delivery_events` policy permits `school_id IS NULL`
+  for the moment between webhook landing and school_id back-fill.
+
+### Backend (Stage B + reusable by Stage A/C)
+
+- `backend/src/utils/otpiq.ts` — typed HTTP client (`sendVerification`,
+  `trackSms`, `getProjectInfo`) with structured `OtpiqError`
+  (`isAuthError` / `isCreditError` / `isRateLimitError` /
+  `isValidationError` / `isTransientError` / `isTrialModeError`).
+  Native `fetch`, 15s timeout, per-request webhook config.
+- `backend/src/utils/phoneE164.ts` — normalise local 07…, 7…,
+  00964…, +964…, spaced/parenthesised inputs to canonical
+  `+9647xxxxxxxxx`. `parseIraqiPhone()` returns a tagged
+  `PhoneParseResult` so callers can render specific error messages.
+  `maskPhone()` is used in logs.
+- `backend/src/utils/phoneOtp.ts` — `sendPhoneOtp()` generates a
+  code, hashes it, inserts the row, queues WhatsApp via OTPIQ, and
+  on synchronous OTPIQ failure fires immediate email fallback (if
+  the user has an email on file). `processDeliveryEvent()` is
+  called from the webhook controller: on async `failed`/`expired`
+  delivery state, fires an email that tells the user the WhatsApp
+  send failed and they should re-request (we deliberately do NOT
+  email the code itself in fallback, because at webhook time the
+  cleartext is gone — it was hashed at send). `verifyPhoneOtp()`
+  is the constant-time check with attempts cap + consume-on-match.
+- `backend/src/controllers/phoneOtp.controller.ts` — Stage B
+  endpoints + webhook:
+  - `POST /me/phone/send-verify-otp` — auth-gated, normalises
+    phone, stamps `users.phone_e164` (clears `phone_verified_at`
+    if changed), calls `sendPhoneOtp` with `purpose='verify_phone'`.
+  - `POST /me/phone/confirm-verify-otp` — auth-gated,
+    `verifyPhoneOtp` + stamps `users.phone_verified_at` on success.
+  - `POST /public/otpiq-webhook` — public, HMAC-verifies the raw
+    body against `OTPIQ_WEBHOOK_SECRET`, inserts into
+    `phone_otp_delivery_events`, calls `processDeliveryEvent`.
+- `backend/src/server.ts` — `express.json({ verify })` captures the
+  raw OTPIQ webhook body onto `req.rawBody` so signature
+  verification works against the exact bytes OTPIQ signed.
+- Rate limits at the route layer (express-rate-limit, keyed on
+  user id, with IP fallback):
+  - `POST /me/phone/send-verify-otp`: 3 / 5min/user + 10 / 1h/user
+  - `POST /me/phone/confirm-verify-otp`: 30 / 15min/user
+  - `POST /public/otpiq-webhook`: 200/min/IP (modest, deflects
+    misaddressed flood without dropping legitimate OTPIQ traffic)
+- `/auth/me` now also returns `phoneE164` + `phoneVerifiedAt`.
+
+### Frontend + mobile (Stage B)
+
+- **Web** — `frontend/src/components/layout/AccountSettingsModal.tsx`
+  grew a "Phone number" section between Email and MFA. Same flow as
+  the email section: enter phone → send code → enter 6-digit code →
+  verified. Pre-login language switcher already ships on
+  `/login` + `/forgot-password`, so non-English-reading users
+  arriving at this screen are not stranded.
+- **Mobile** — `mobile/src/screens/common/PhoneSettingsScreen.tsx`
+  (new) registered in `mobile/src/navigation/index.tsx` for all 4
+  role branches. Each role's settings screen got a "Phone number"
+  row (parent / driver / teacher / supervisor) with a green/amber
+  status chip.
+- Both surfaces use the same `phoneOtpApi.sendVerify` +
+  `confirmVerify` shape and read `user.phoneE164` +
+  `user.phoneVerifiedAt` from the auth store.
+
+### Environment (`backend/.env.example`)
+
+```
+OTPIQ_API_KEY=             # sk_dev_… in dev (test phone), sk_live_… in prod
+OTPIQ_BASE_URL=https://api.otpiq.com/api
+OTPIQ_PROVIDER=whatsapp    # do NOT change to whatsapp-sms (we want our SMTP fallback)
+OTPIQ_WEBHOOK_SECRET=      # 32 random bytes b64; paste same value into OTPIQ dashboard
+OTPIQ_WEBHOOK_URL=         # public URL OTPIQ POSTs delivery events to (Railway or ngrok)
+```
+
+### What's deferred to Stage C and Stage A
+
+- **Stage C — forgot-password by phone:** new public endpoint
+  `POST /auth/forgot-password-phone { username, phone }` that
+  looks up the user by username, checks `users.phone_e164`
+  matches, calls `sendPhoneOtp({ purpose: 'forgot_password' })`.
+  Then `POST /auth/reset-with-phone-otp { token, code, newPassword }`
+  to apply. UI on login screen "Forgot via phone instead?".
+- **Stage A — login MFA by phone (parents/drivers only):** at
+  enrollment, the user picks "WhatsApp" instead of (or in addition
+  to) TOTP. Login response carries an `mfaTicket` as today; a new
+  `POST /auth/login/verify-mfa-phone` exchanges the ticket + a
+  phone OTP for tokens. Eligibility gated server-side by role.
+- Neither stage needs a new migration. Everything they require is
+  already in `phone_otp_codes` (purpose enum + indexes).
+
+### Gotchas captured for future-you
+
+- OTPIQ phone format is **no leading `+`** (`9647…`, not `+9647…`).
+  `toOtpiqFormat()` strips it; never hand-build the request body.
+- OTPIQ webhook signature: `sha256=` prefix is sometimes present
+  (and sometimes not depending on header used); the controller
+  strips it. Webhook body is JSON but we verify against the raw
+  bytes — never re-serialise before HMAC.
+- Email fallback at webhook time CANNOT email the original code:
+  we hashed it at send and don't keep cleartext. The fallback
+  email is "we couldn't deliver, please request a new code." This
+  is a deliberate trade-off — emailing the cleartext code would
+  require keeping it in memory longer or storing it reversibly.
+- `users.phone` (existing TEXT column) is **NOT** the auth-grade
+  field. The OTP layer reads `users.phone_e164`. Future writers
+  who touch user profiles must keep these two columns conceptually
+  separate — `phone` is display contact info, `phone_e164` is
+  verified canonical.
+- The Laravel client at https://github.com/Rstacode/otpiq is the
+  closest thing OTPIQ has to a written contract — refer to it
+  before assuming any undocumented behaviour.
+- Dev keys (`sk_dev_…`) route ALL sends to a single configured
+  development phone regardless of `phoneNumber` in the payload.
+  Use them in e2e + local dev so we never spam real numbers.
+
 

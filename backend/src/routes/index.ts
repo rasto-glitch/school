@@ -6,6 +6,8 @@ import { getMfaStatus, setupMfa, confirmMfa, disableMfaSelf, regenerateRecoveryC
 import { listTrustedDevices, revokeTrustedDevice, revokeAllTrustedDevicesEndpoint } from '../controllers/trustedDevice.controller';
 import { listSessions, revokeSession } from '../controllers/sessions.controller';
 import { submitBugReport } from '../controllers/bugReport.controller';
+import { sendVerifyPhoneOtp, confirmVerifyPhoneOtp, otpiqDeliveryWebhook } from '../controllers/phoneOtp.controller';
+import * as vphone from '../validators/phoneOtp';
 import * as admin from '../controllers/admin.controller';
 import * as archivedProfile from '../controllers/archivedEmployeeProfile.controller';
 import * as transfer from '../controllers/studentTransfer.controller';
@@ -103,6 +105,51 @@ const mfaSelfLimiter = rateLimit({
   message: { error: 'Too many requests. Please try again later.' },
 });
 
+// Phone OTP send — outbound SMS/WhatsApp cost money + abuse risk, so
+// this is tightly capped per user (3 in 5 minutes, 10 in 1 hour). The
+// route layer is the outer ring; OTPIQ has its own anti-fraud
+// throttling on the inside.
+const phoneOtpSendShortLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 3,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: userKey,
+  message: { error: 'Too many code requests in a short window. Please wait a few minutes.' },
+});
+const phoneOtpSendLongLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: userKey,
+  message: { error: 'Daily code-request limit reached. Please try again later.' },
+});
+
+// Phone OTP verify — bound mostly so an attacker who guesses the
+// userId can't burn through 6-digit space across many sessions. The
+// inner per-code attempts cap (5) is the security boundary; this is
+// the outer rate cap.
+const phoneOtpVerifyLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: userKey,
+  message: { error: 'Too many verification attempts. Please request a new code.' },
+});
+
+// OTPIQ webhook — public endpoint, signature-verified inside the
+// handler. A modest IP-keyed cap deflects a misaddressed flood without
+// blocking the real OTPIQ origin under load.
+const otpiqWebhookLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'webhook flood detected' },
+});
+
 export function createRouter(io: SocketServer) {
   const router = Router();
 
@@ -119,6 +166,12 @@ export function createRouter(io: SocketServer) {
   // limiter (which is keyed on /api/public/), gated by the general
   // /api/ limiter only.
   router.post('/inbound/email', (req, res) => { inbound.inboundEmail(req, res); });
+
+  // ---- OTPIQ DELIVERY WEBHOOK ----
+  // Called by OTPIQ when a WhatsApp/SMS delivery state changes. HMAC
+  // signature verification is inside the controller; raw request body
+  // is captured by the express.json verify hook in server.ts.
+  router.post('/public/otpiq-webhook', otpiqWebhookLimiter, (req, res) => { otpiqDeliveryWebhook(req, res); });
 
   // ---- AUTH ----
   router.post('/auth/login', validate({ body: v.loginSchema }), login);
@@ -177,6 +230,26 @@ export function createRouter(io: SocketServer) {
   router.delete('/auth/device-token', authenticate, validate({ body: v.removeDeviceTokenSchema }), (req, res) => removeDeviceToken(req as AuthRequest, res));
   router.put('/auth/device-language', authenticate, validate({ body: v.deviceLanguageSchema }), (req, res) => updateDeviceLanguage(req as AuthRequest, res));
   router.patch('/auth/profile-picture', authenticate, upload.single('avatar'), (req, res) => uploadProfilePicture(req as AuthRequest, res));
+
+  // ---- PHONE OTP (migration 050, Stage B — verify phone) ----
+  // Send + confirm a phone verification code. Stages C (forgot-password
+  // by phone) and A (login MFA by phone) will add their own endpoints
+  // backed by the same utils/phoneOtp.ts + phone_otp_codes table.
+  router.post(
+    '/me/phone/send-verify-otp',
+    authenticate,
+    phoneOtpSendShortLimiter,
+    phoneOtpSendLongLimiter,
+    validate({ body: vphone.sendPhoneOtpSchema }),
+    (req, res) => sendVerifyPhoneOtp(req as AuthRequest, res),
+  );
+  router.post(
+    '/me/phone/confirm-verify-otp',
+    authenticate,
+    phoneOtpVerifyLimiter,
+    validate({ body: vphone.verifyPhoneOtpSchema }),
+    (req, res) => confirmVerifyPhoneOtp(req as AuthRequest, res),
+  );
 
   // ---- ADMIN ----
   router.get('/admin/students', authenticate, authorize('admin'), (req, res) => admin.getStudents(req as AuthRequest, res));

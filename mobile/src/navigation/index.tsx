@@ -38,6 +38,7 @@ import ParentAttendanceHistoryScreen from '../screens/parent/ParentAttendanceHis
 import ChatScreen from '../screens/chat/ChatScreen';
 import ReportBugScreen from '../screens/common/ReportBugScreen';
 import MfaSettingsScreen from '../screens/common/MfaSettingsScreen';
+import PhoneSettingsScreen from '../screens/common/PhoneSettingsScreen';
 import SessionsScreen from '../screens/common/SessionsScreen';
 import type { Homework, Announcement, Conversation, Ebook, Report } from '../types';
 
@@ -63,6 +64,7 @@ export type RootStackParamList = {
   Settings: undefined;
   ReportBug: undefined;
   MfaSettings: undefined;
+  PhoneSettings: undefined;
   Sessions: undefined;
   Reports: undefined;
   Notifications: undefined;
@@ -138,6 +140,7 @@ export default function Navigation() {
               component={DriverSettingsScreen}
               options={{ headerShown: true, headerTitle: 'Settings', headerBackTitle: 'Back', presentation: 'card' }}
             />
+            <Stack.Screen name="PhoneSettings" component={PhoneSettingsScreen} options={{ headerShown: false }} />
             <Stack.Screen name="Sessions" component={SessionsScreen} options={{ headerShown: false }} />
           </>
         ) : user?.role === 'supervisor' ? (
@@ -159,6 +162,7 @@ export default function Navigation() {
               options={{ headerShown: true, headerTitle: 'My Salary', headerBackTitle: 'Back' }}
             />
             <Stack.Screen name="MfaSettings" component={MfaSettingsScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="PhoneSettings" component={PhoneSettingsScreen} options={{ headerShown: false }} />
             <Stack.Screen name="Sessions" component={SessionsScreen} options={{ headerShown: false }} />
             <Stack.Screen
               name="AnnouncementDetail"
@@ -205,6 +209,7 @@ export default function Navigation() {
               options={{ headerShown: true, headerTitle: 'My Salary', headerBackTitle: 'Back' }}
             />
             <Stack.Screen name="MfaSettings" component={MfaSettingsScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="PhoneSettings" component={PhoneSettingsScreen} options={{ headerShown: false }} />
             <Stack.Screen name="Sessions" component={SessionsScreen} options={{ headerShown: false }} />
             <Stack.Screen
               name="PostDetail"
@@ -230,6 +235,7 @@ export default function Navigation() {
         ) : (
           <>
             <Stack.Screen name="ParentTabs" component={ParentTabs} />
+            <Stack.Screen name="PhoneSettings" component={PhoneSettingsScreen} options={{ headerShown: false }} />
             <Stack.Screen name="SetPickupLocation" component={SetPickupLocationScreen} options={{ headerShown: true, headerTitle: 'Set Pickup Location', headerBackTitle: 'Back' }} />
             <Stack.Screen
               name="Notifications"

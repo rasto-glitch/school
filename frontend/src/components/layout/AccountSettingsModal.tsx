@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useForm } from 'react-hook-form';
 import { toast } from 'react-toastify';
-import { Globe, Mail, Lock, Loader2, LogOut, ShieldCheck, Copy, CheckCircle2, Monitor, Trash2, Download, Activity } from 'lucide-react';
-import { authApi, mfaApi, trustedDeviceApi, sessionsApi } from '../../services/api';
+import { Globe, Mail, Lock, Loader2, LogOut, ShieldCheck, Copy, CheckCircle2, Monitor, Trash2, Download, Activity, Phone, PhoneCall } from 'lucide-react';
+import { authApi, mfaApi, trustedDeviceApi, sessionsApi, phoneOtpApi } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from '../../utils/passwordPolicy';
 import { downloadRecoveryCodes } from '../../utils/downloadCodes';
@@ -25,7 +25,7 @@ const RESEND_COOLDOWN_SECONDS = 30;
 export default function AccountSettingsModal({ isOpen, onClose }: AccountSettingsModalProps) {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
-  const { user, school, setEmail: setStoreEmail, logout } = useAuthStore() as any;
+  const { user, school, setEmail: setStoreEmail, setPhone: setStorePhone, logout } = useAuthStore() as any;
   const [changing, setChanging] = useState(false);
   const [signingOutAll, setSigningOutAll] = useState(false);
   const { register, handleSubmit, reset } = useForm<PwForm>();
@@ -69,6 +69,16 @@ export default function AccountSettingsModal({ isOpen, onClose }: AccountSetting
   const [code, setCode] = useState('');
   const [verifying, setVerifying] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
+
+  // Phone verification state machine (migration 050, Stage B). Locally
+  // tracks the editable draft + the pending-confirmation state. Mirrors
+  // the email flow above.
+  const [phoneDraft, setPhoneDraft] = useState<string>(user?.phoneE164 || '');
+  const [phoneSubmitting, setPhoneSubmitting] = useState(false);
+  const [pendingPhone, setPendingPhone] = useState<string | null>(null);
+  const [phoneCode, setPhoneCode] = useState('');
+  const [phoneVerifying, setPhoneVerifying] = useState(false);
+  const [phoneResendCooldown, setPhoneResendCooldown] = useState(0);
 
   // Reset email draft when modal opens or user changes
   useEffect(() => {
@@ -271,6 +281,81 @@ export default function AccountSettingsModal({ isOpen, onClose }: AccountSetting
     setEmailPassword('');
   };
 
+  // ── Phone verification handlers (migration 050 / Stage B) ──
+  const submitPhoneSend = async () => {
+    const trimmed = phoneDraft.trim();
+    if (!trimmed) {
+      toast.error(t('account_settings.phone_required', 'Phone number is required.'));
+      return;
+    }
+    setPhoneSubmitting(true);
+    try {
+      const res = await phoneOtpApi.sendVerify(trimmed);
+      setPendingPhone(trimmed);
+      setPhoneCode('');
+      setPhoneResendCooldown(RESEND_COOLDOWN_SECONDS);
+      if (res.data?.deliveryAttempted?.whatsapp) {
+        toast.success(t('account_settings.phone_code_sent_whatsapp', 'Verification code sent via WhatsApp.'));
+      } else if (res.data?.deliveryAttempted?.emailFallbackImmediate) {
+        toast.success(t('account_settings.phone_code_sent_email', 'WhatsApp delivery is unavailable; we emailed you the code instead.'));
+      } else {
+        toast.info(t('account_settings.phone_code_sending', 'Sending your verification code…'));
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || t('account_settings.phone_send_failed', 'Could not send verification code.'));
+    } finally {
+      setPhoneSubmitting(false);
+    }
+  };
+
+  const submitPhoneCode = async () => {
+    if (!/^\d{6}$/.test(phoneCode)) {
+      toast.error(t('account_settings.code_invalid_format', 'Enter the 6-digit code.'));
+      return;
+    }
+    setPhoneVerifying(true);
+    try {
+      const res = await phoneOtpApi.confirmVerify(phoneCode);
+      const verifiedAt = res.data?.verifiedAt || new Date().toISOString();
+      setStorePhone(pendingPhone || phoneDraft, verifiedAt);
+      setPendingPhone(null);
+      setPhoneCode('');
+      toast.success(t('account_settings.phone_verified', 'Phone verified.'));
+    } catch (err: any) {
+      const data = err.response?.data;
+      toast.error(data?.error || t('account_settings.phone_verify_failed', 'Could not verify code.'));
+      if (data?.error?.toLowerCase?.().includes('expired') || data?.error?.toLowerCase?.().includes('too many')) {
+        setPendingPhone(null);
+        setPhoneCode('');
+      }
+    } finally {
+      setPhoneVerifying(false);
+    }
+  };
+
+  const cancelPhonePending = () => {
+    setPendingPhone(null);
+    setPhoneCode('');
+    setPhoneDraft(user?.phoneE164 || '');
+  };
+
+  // Resend cooldown ticker for the phone flow — mirrors the email one.
+  useEffect(() => {
+    if (phoneResendCooldown <= 0) return;
+    const id = setInterval(() => setPhoneResendCooldown(n => Math.max(0, n - 1)), 1000);
+    return () => clearInterval(id);
+  }, [phoneResendCooldown]);
+
+  // Sync phoneDraft from the auth store whenever the modal opens.
+  useEffect(() => {
+    if (isOpen) {
+      setPhoneDraft(user?.phoneE164 || '');
+      setPendingPhone(null);
+      setPhoneCode('');
+      setPhoneResendCooldown(0);
+    }
+  }, [isOpen, user?.phoneE164]);
+
   const onDisableMfa = async () => {
     if (!mfaDisablePassword || !/^\d{6}$/.test(mfaDisableCode)) {
       toast.error(t('mfa.disable_inputs_required', 'Enter your current password and a 6-digit code.'));
@@ -447,6 +532,92 @@ export default function AccountSettingsModal({ isOpen, onClose }: AccountSetting
                   disabled={!emailDraft.trim() || !emailPassword || emailDraft.trim().toLowerCase() === (user?.email || '').toLowerCase()}
                 >
                   {t('common.save', 'Save')}
+                </Button>
+              </div>
+            </div>
+          )}
+        </section>
+
+        {/* Phone verification (migration 050, Stage B). WhatsApp via OTPIQ;
+            email fallback if WhatsApp delivery fails. Iraqi (+964) only. */}
+        <section>
+          <div className="flex items-center gap-2 mb-3">
+            <Phone className="w-[18px] h-[18px] text-primary-600" />
+            <h3 className="font-semibold text-gray-900 text-[15px]">
+              {t('account_settings.phone_section', 'Phone number')}
+            </h3>
+            {user?.phoneE164 && user?.phoneVerifiedAt && (
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-full px-2 py-0.5">
+                <CheckCircle2 className="w-3 h-3" />
+                {t('account_settings.phone_verified_chip', 'Verified')}
+              </span>
+            )}
+          </div>
+
+          {pendingPhone ? (
+            <div className="space-y-3">
+              <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3">
+                <p className="text-sm text-amber-900">
+                  {t('account_settings.phone_code_sent_to', 'We sent a 6-digit code to')}{' '}
+                  <strong>{pendingPhone}</strong>.{' '}
+                  {t('account_settings.phone_code_expires_in', 'It expires in 5 minutes.')}
+                </p>
+              </div>
+              <Input
+                label={t('account_settings.verification_code', 'Verification code')}
+                value={phoneCode}
+                onChange={e => setPhoneCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="123456"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                className="tracking-[0.3em] font-mono text-center text-lg"
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <Button onClick={submitPhoneCode} loading={phoneVerifying} disabled={phoneCode.length !== 6}>
+                  {t('account_settings.verify', 'Verify')}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={submitPhoneSend}
+                  disabled={phoneResendCooldown > 0 || phoneSubmitting}
+                >
+                  {phoneSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  {phoneResendCooldown > 0
+                    ? `${t('account_settings.resend_in', 'Resend in')} ${phoneResendCooldown}s`
+                    : t('account_settings.resend_code', 'Resend code')}
+                </Button>
+                <Button type="button" variant="ghost" onClick={cancelPhonePending}>
+                  {t('common.cancel', 'Cancel')}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <Input
+                label={t('account_settings.phone_label', 'Iraqi mobile (+964)')}
+                type="tel"
+                value={phoneDraft}
+                onChange={e => setPhoneDraft(e.target.value)}
+                placeholder="0750 123 4567"
+                autoComplete="tel"
+                inputMode="tel"
+                dir="ltr"
+              />
+              <p className="text-xs text-gray-500">
+                <PhoneCall className="inline w-3 h-3 mr-1" />
+                {t('account_settings.phone_hint', "We'll send a verification code via WhatsApp. Only Iraqi (+964) numbers are supported right now.")}
+              </p>
+              <div className="flex justify-end">
+                <Button
+                  onClick={submitPhoneSend}
+                  loading={phoneSubmitting}
+                  disabled={!phoneDraft.trim()}
+                >
+                  {user?.phoneE164 && phoneDraft.trim() === user.phoneE164 && user?.phoneVerifiedAt
+                    ? t('account_settings.phone_re_verify', 'Re-verify')
+                    : t('account_settings.phone_send_code', 'Send code')}
                 </Button>
               </div>
             </div>

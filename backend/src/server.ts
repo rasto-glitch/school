@@ -86,7 +86,18 @@ app.use(cors({
   },
   credentials: true,
 }));
-app.use(express.json({ limit: '10mb' }));
+// JSON body parser. The `verify` callback captures the raw request
+// bytes onto req.rawBody for routes that need to HMAC-verify the
+// payload (currently only the OTPIQ delivery webhook — modifying the
+// parsed object after the fact would break the signature).
+app.use(express.json({
+  limit: '10mb',
+  verify: (req, _res, buf) => {
+    if ((req as { url?: string }).url?.startsWith('/api/public/otpiq-webhook')) {
+      (req as { rawBody?: Buffer }).rawBody = buf;
+    }
+  },
+}));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Rate limiting

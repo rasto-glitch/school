@@ -80,7 +80,10 @@ CREATE TABLE IF NOT EXISTS users (
   profile_picture TEXT,
   first_name TEXT NOT NULL,
   last_name TEXT NOT NULL,
-  phone TEXT,
+  phone TEXT,                                       -- display-only contact phone; whatever the user typed
+  phone_e164 TEXT
+    CHECK (phone_e164 IS NULL OR phone_e164 ~ '^\+964[0-9]{10}$'),
+  phone_verified_at TIMESTAMPTZ,                    -- timestamp of successful phone OTP verification
   is_active BOOLEAN DEFAULT TRUE,
   password_changed_at TIMESTAMPTZ,
   must_change_password BOOLEAN NOT NULL DEFAULT FALSE,
@@ -90,7 +93,11 @@ CREATE TABLE IF NOT EXISTS users (
 -- Run this if the table already exists:
 -- ALTER TABLE users ADD COLUMN IF NOT EXISTS password_changed_at TIMESTAMPTZ;
 -- ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT FALSE;
+-- ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_e164 TEXT;
+-- ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_verified_at TIMESTAMPTZ;
 -- ALTER TABLE schools ADD COLUMN IF NOT EXISTS abbreviation TEXT UNIQUE;
+CREATE INDEX IF NOT EXISTS idx_users_phone_e164
+  ON users(phone_e164) WHERE phone_e164 IS NOT NULL;
 -- UPDATE schools SET abbreviation = UPPER(slug) WHERE abbreviation IS NULL;
 
 -- Employee HR fields (migration 024). Account-only roles (supervisor / admin /
@@ -2385,7 +2392,9 @@ DECLARE
     'teacher_classes','messages','conversation_reads','message_edits','fee_plan_classes',
     'chart_of_accounts','journal_entries','journal_lines',
     -- migration 049 — metrics foundation
-    'homework_submissions','assignment_completions','report_behavior_tags'
+    'homework_submissions','assignment_completions','report_behavior_tags',
+    -- migration 050 — phone OTP foundation
+    'phone_otp_codes'
   ];
 BEGIN
   FOREACH t IN ARRAY tables LOOP
@@ -2398,6 +2407,15 @@ BEGIN
     );
   END LOOP;
 END $$;
+
+-- phone_otp_delivery_events has a relaxed policy: webhook lands without
+-- a JWT and the controller (admin client) inserts with school_id NULL
+-- until back-fill. NULL-school rows are visible to no authenticated
+-- query but visible to the bypass-RLS admin client used by ops tools.
+DROP POLICY IF EXISTS tenant_isolation ON phone_otp_delivery_events;
+CREATE POLICY tenant_isolation ON phone_otp_delivery_events
+  USING      (school_id IS NULL OR school_id = app_current_school_id())
+  WITH CHECK (school_id IS NULL OR school_id = app_current_school_id());
 
 -- (No ENABLE ROW LEVEL SECURITY here — Phase 4 owns that, table by table.)
 
@@ -2447,7 +2465,9 @@ DECLARE
     'teacher_classes','messages','conversation_reads','message_edits','fee_plan_classes',
     'chart_of_accounts','journal_entries','journal_lines',
     -- migration 049 — metrics foundation
-    'homework_submissions','assignment_completions','report_behavior_tags'
+    'homework_submissions','assignment_completions','report_behavior_tags',
+    -- migration 050 — phone OTP foundation
+    'phone_otp_codes','phone_otp_delivery_events'
   ];
 BEGIN
   FOREACH t IN ARRAY tables LOOP
@@ -2578,4 +2598,62 @@ CREATE INDEX IF NOT EXISTS idx_assignments_teacher_created
   ON assignments(school_id, teacher_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_grades_teacher_created
   ON grades(school_id, teacher_id, created_at);
+
+-- ============================================================
+-- Migration 050 — Phone OTP foundation (Stage B + ready for A & C)
+-- ============================================================
+-- One row per outbound phone OTP. Hashed at rest (sha256). 5-minute
+-- TTL. Channel lifecycle tracked via per-channel timestamp columns:
+-- whatsapp_sent_at when OTPIQ accepts the send; whatsapp_delivered_at
+-- when OTPIQ's webhook reports delivery; whatsapp_failed_at when the
+-- webhook reports failure/expiry; email_fallback_sent_at when our
+-- SMTP fires the same code via email after WhatsApp failure. purpose
+-- carries all three stages now (Stage B verify_phone; Stage C
+-- forgot_password; Stage A login_mfa) so future stages don't need a
+-- CHECK alter.
+CREATE TABLE IF NOT EXISTS phone_otp_codes (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  phone_e164 TEXT NOT NULL,
+  code_hash TEXT NOT NULL,
+  purpose TEXT NOT NULL
+    CHECK (purpose IN ('verify_phone', 'forgot_password', 'login_mfa')),
+  provider_sms_id TEXT,
+  whatsapp_sent_at TIMESTAMPTZ,
+  whatsapp_delivered_at TIMESTAMPTZ,
+  whatsapp_failed_at TIMESTAMPTZ,
+  email_fallback_sent_at TIMESTAMPTZ,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  consumed_at TIMESTAMPTZ,
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_phone_otp_codes_user_purpose_recent
+  ON phone_otp_codes(user_id, purpose, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_phone_otp_codes_phone_recent
+  ON phone_otp_codes(phone_e164, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_phone_otp_codes_sms_id
+  ON phone_otp_codes(provider_sms_id) WHERE provider_sms_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_phone_otp_codes_active
+  ON phone_otp_codes(user_id, purpose, expires_at)
+  WHERE consumed_at IS NULL;
+
+-- OTPIQ delivery-webhook landing pad. Append-only, ops/debug only —
+-- auth decisions NEVER read from this table; the orchestrator updates
+-- phone_otp_codes directly. school_id is nullable: the webhook arrives
+-- without our JWT and the controller back-fills school_id from the
+-- linked phone_otp_codes row when resolvable.
+CREATE TABLE IF NOT EXISTS phone_otp_delivery_events (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID REFERENCES schools(id) ON DELETE CASCADE,
+  otp_code_id UUID REFERENCES phone_otp_codes(id) ON DELETE SET NULL,
+  provider_sms_id TEXT NOT NULL,
+  status TEXT NOT NULL,
+  last_channel TEXT,
+  payload_json JSONB,
+  received_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_phone_otp_delivery_events_sms_id
+  ON phone_otp_delivery_events(provider_sms_id, received_at DESC);
 

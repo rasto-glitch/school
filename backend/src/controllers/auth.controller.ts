@@ -694,22 +694,36 @@ export async function getMe(req: AuthRequest, res: Response): Promise<void> {
   }
   const { data: user, error } = await supabase
     .from('users')
-    .select('id, username, role, first_name, last_name, profile_picture, email, must_change_password')
+    .select('id, username, role, first_name, last_name, profile_picture, email, must_change_password, phone_e164, phone_verified_at')
     .eq('id', userId)
     .single();
   if (error || !user) {
     res.status(404).json({ error: 'user not found' });
     return;
   }
+  const u = user as {
+    id: string;
+    username: string;
+    role: string;
+    first_name: string;
+    last_name: string;
+    profile_picture: string | null;
+    email: string | null;
+    must_change_password?: boolean;
+    phone_e164?: string | null;
+    phone_verified_at?: string | null;
+  };
   res.json({
-    id: user.id,
-    username: user.username,
-    role: user.role,
-    firstName: user.first_name,
-    lastName: user.last_name,
-    profilePicture: user.profile_picture,
-    email: user.email || null,
-    mustChangePassword: !!(user as { must_change_password?: boolean }).must_change_password,
+    id: u.id,
+    username: u.username,
+    role: u.role,
+    firstName: u.first_name,
+    lastName: u.last_name,
+    profilePicture: u.profile_picture,
+    email: u.email || null,
+    mustChangePassword: !!u.must_change_password,
+    phoneE164: u.phone_e164 || null,
+    phoneVerifiedAt: u.phone_verified_at || null,
   });
 }
 
