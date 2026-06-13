@@ -1,9 +1,12 @@
 # Cloudflare Worker that handles inbound mail for scholify.krd.
 #
 # Routing: Cloudflare → Email Routing → "Send to a Worker" → this worker.
-# It then (a) forwards the message to GMAIL_FORWARD so you keep the Gmail
-# inbox as a backup, and (b) POSTs the parsed JSON to INBOUND_URL on the
-# Railway backend.
+# It POSTs the parsed JSON to INBOUND_URL on the Railway backend.
+#
+# (The previous personal-Gmail mirror via GMAIL_FORWARD was removed:
+# parent correspondence about minors should not be mirrored into a
+# personal Google Workspace account. The backend stores inbound mail in
+# Supabase and surfaces it through the operator inbox.)
 #
 # Secrets are set with:   wrangler secret put INBOUND_EMAIL_SECRET
 # Plain vars live in [vars] below — non-secret config only.
@@ -17,7 +20,3 @@ compatibility_flags = ["nodejs_compat"]
 # The backend endpoint that ingests parsed emails. Override per-environment
 # if needed; this default points at the Railway deployment.
 INBOUND_URL = "https://school-production-3ccc.up.railway.app/api/inbound/email"
-
-# Personal mailbox to mirror every incoming message to. Must be verified as
-# a destination address in the Cloudflare Email Routing dashboard first.
-GMAIL_FORWARD = "rasto.elkurdi@gmail.com"

@@ -20,7 +20,6 @@ import PostalMime from 'postal-mime';
 
 interface Env {
   INBOUND_URL: string;
-  GMAIL_FORWARD: string;
   INBOUND_EMAIL_SECRET: string; // wrangler secret put INBOUND_EMAIL_SECRET
 }
 
@@ -102,19 +101,15 @@ function flattenRefs(refs: ParsedEmail['references']): string | undefined {
 
 export default {
   async email(message: ForwardableEmailMessage, env: Env, ctx: ExecutionContext): Promise<void> {
-    // 1) Gmail mirror — best-effort. Run first so a webhook outage doesn't
-    //    cause the operator to miss the email entirely.
-    if (env.GMAIL_FORWARD) {
-      try {
-        await message.forward(env.GMAIL_FORWARD);
-      } catch (err) {
-        console.error('gmail forward failed', err);
-      }
-    }
-
-    // 2) Backend webhook. We must finish reading the raw body BEFORE the
-    //    worker exits, but we don't want to block returning either — wrap
-    //    the rest in waitUntil so Cloudflare keeps the worker alive.
+    // Backend webhook is the only destination. The previous personal-Gmail
+    // mirror (env.GMAIL_FORWARD → rasto.elkurdi@gmail.com) was removed
+    // because parent correspondence about minors should not be mirrored
+    // into a personal Google Workspace account; the backend stores
+    // inbound mail in Supabase and surfaces it via the operator inbox.
+    //
+    // We must finish reading the raw body BEFORE the worker exits, but
+    // we don't want to block returning either — wrap the rest in
+    // waitUntil so Cloudflare keeps the worker alive.
     const work = (async () => {
       let raw: Uint8Array;
       try {
