@@ -46,6 +46,18 @@ export const email = z.string().trim().toLowerCase()
 /** Keyset pagination cursor (opaque base64url) — optional everywhere. */
 export const cursor = z.string().max(512).optional();
 
+/**
+ * Step-up proof of an existing factor (migration 051) — submitted when
+ * changing an already-verified contact channel. `code` is bounded
+ * generously so an MFA recovery code (longer than 6 digits) is accepted
+ * for the 'totp' method; sms/email codes are 6 digits and re-checked in
+ * the step-up layer.
+ */
+export const stepUpProof = z.object({
+  method: z.enum(['totp', 'sms', 'email']),
+  code: z.string().trim().min(1).max(64),
+});
+
 // ── Employee HR fields (migration 024) ────────────────────────────────────
 // Shared across every employee write schema (account / teacher / driver /
 // staff). All optional + nullable + tolerant of '' (the controller converts

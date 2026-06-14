@@ -1,6 +1,7 @@
 import { z } from 'zod';
+import { stepUpProof } from './common';
 
-// Phone OTP request schemas (migration 050 / Stage B).
+// Phone OTP request schemas (migration 050 / Stage B; hardened in 051).
 //
 // We accept any phone string and normalize via utils/phoneE164.ts at
 // the controller layer — keeps the validation rule "non-empty bounded
@@ -12,6 +13,12 @@ const otpCode = z.string().trim().regex(/^\d{6}$/, 'A 6-digit code is required.'
 
 export const sendPhoneOtpSchema = z.object({
   phone: phoneRaw,
+  // Re-auth: always required by the controller (first-time set + change).
+  currentPassword: z.string().min(1).max(200),
+  // Step-up proof of an existing factor — required by the controller when
+  // CHANGING an already-verified number (migration 051). Optional here:
+  // first-time set doesn't send it.
+  proof: stepUpProof.optional(),
 });
 
 export const verifyPhoneOtpSchema = z.object({

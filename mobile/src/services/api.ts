@@ -134,8 +134,11 @@ export const authApi = {
     api.patch<{ email?: string; pending?: boolean; sentTo?: string }>('/auth/me/email', { email, currentPassword }),
   verifyEmailCode: (code: string) =>
     api.post<{ email: string }>('/auth/me/email/verify-code', { code }),
-  verifyMfaLogin: (mfaTicket: string, code: string, rememberDevice?: boolean) =>
-    api.post<{ token: string; refreshToken: string; user: any; school: any; trustedDeviceToken?: string }>('/auth/login/verify-mfa', { mfaTicket, code, rememberDevice }),
+  verifyMfaLogin: (mfaTicket: string, code: string, rememberDevice?: boolean, method?: LoginFactorMethod) =>
+    api.post<{ token: string; refreshToken: string; user: any; school: any; trustedDeviceToken?: string }>('/auth/login/verify-mfa', { mfaTicket, code, rememberDevice, ...(method ? { method } : {}) }),
+  // Mid-sign-in: dispatch a login OTP to a chosen channel (phone/email).
+  sendLoginOtp: (mfaTicket: string, method: 'phone' | 'email') =>
+    api.post<{ ok: true; channel: 'whatsapp' | 'email' }>('/auth/login/send-otp', { mfaTicket, method }),
   enrollMfaSetup: (enrollmentTicket: string) =>
     api.post<{ qrDataUrl: string; secret: string; otpauthUri: string; recoveryCodes: string[] }>('/auth/login/mfa-enroll-setup', { enrollmentTicket }),
   enrollMfaConfirm: (enrollmentTicket: string, code: string, rememberDevice?: boolean) =>
@@ -144,10 +147,23 @@ export const authApi = {
     api.get<{ id: string; username: string; role: string; firstName: string; lastName: string; profilePicture: string | null; email: string | null; phoneE164?: string | null; phoneVerifiedAt?: string | null }>('/auth/me'),
 };
 
-// ---- Phone OTP (migration 050, Stage B — verify phone) ----
+// ---- Step-up auth for contact changes (migration 051) ----
+export type StepUpMethod = 'totp' | 'sms' | 'email';
+export interface StepUpProof { method: StepUpMethod; code: string }
+export const stepUpApi = {
+  // Dispatch a proof code to an existing factor (sms → current verified
+  // phone, email → email on file). TOTP needs no send.
+  sendProof: (action: 'change_phone' | 'change_email', channel: 'sms' | 'email') =>
+    api.post<{ channel: 'sms' | 'email'; sentTo: string }>('/auth/step-up/send-proof', { action, channel }),
+};
+
+// ---- Phone OTP (migration 050, Stage B — verify phone; hardened in 051) ----
 export const phoneOtpApi = {
-  sendVerify: (phone: string) =>
-    api.post<{ codeId: string; expiresAt: string; deliveryAttempted: { whatsapp: boolean; emailFallbackImmediate: boolean } }>('/me/phone/send-verify-otp', { phone }),
+  // currentPassword is always required; proof is required by the server
+  // only when changing an already-verified number (it answers with a
+  // stepUpRequired 401 otherwise).
+  sendVerify: (phone: string, currentPassword: string, proof?: StepUpProof) =>
+    api.post<{ codeId: string; expiresAt: string; deliveryAttempted: { whatsapp: boolean; emailFallbackImmediate: boolean } }>('/me/phone/send-verify-otp', { phone, currentPassword, proof }),
   confirmVerify: (code: string) =>
     api.post<{ verifiedAt: string }>('/me/phone/confirm-verify-otp', { code }),
 };
@@ -164,6 +180,21 @@ export const mfaApi = {
     api.post<{ ok: true }>('/auth/mfa/disable-self', { currentPassword, code }),
   regenerateRecoveryCodes: (code: string) =>
     api.post<{ recoveryCodes: string[] }>('/auth/mfa/recovery-codes', { code }),
+};
+
+// ---- Login factors (Phase 2/3): phone/email OTP as sign-in second factors ----
+export type LoginFactorMethod = 'totp' | 'phone' | 'email';
+export interface FactorStatus { factor: LoginFactorMethod; available: boolean; armed: boolean; preferred: boolean }
+export const mfaFactorsApi = {
+  list: () => api.get<{ factors: FactorStatus[] }>('/auth/mfa/factors'),
+  sendCode: (factor: 'phone' | 'email') =>
+    api.post<{ ok: true; channel: 'whatsapp' | 'email' }>(`/auth/mfa/factors/${factor}/send-code`, {}),
+  enable: (factor: 'phone' | 'email', currentPassword: string, code: string) =>
+    api.post<{ ok: true; factors: FactorStatus[] }>(`/auth/mfa/factors/${factor}/enable`, { currentPassword, code }),
+  disable: (factor: 'phone' | 'email', currentPassword: string, code: string) =>
+    api.post<{ ok: true; factors: FactorStatus[] }>(`/auth/mfa/factors/${factor}/disable`, { currentPassword, code }),
+  setPreferred: (factor: LoginFactorMethod) =>
+    api.post<{ ok: true; factors: FactorStatus[] }>(`/auth/mfa/factors/${factor}/preferred`, {}),
 };
 
 // ---- Active sessions (refresh-token families) ----

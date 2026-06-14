@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { nonEmptyStr, email } from './common';
+import { nonEmptyStr, email, stepUpProof } from './common';
 import { strongPasswordSchema } from '../utils/passwordPolicy';
 
 // Auth input schemas (Phase 1a). Bounds are generous on purpose — these
@@ -65,6 +65,21 @@ export const updateMyEmailSchema = z.object({
   // password. Legacy callers without this field will fail open at the
   // controller layer with a 401, which the new UIs handle.
   currentPassword: password,
+  // Step-up proof of an existing factor — required by the controller when
+  // CHANGING an email and a factor is enrolled (migration 051). Optional
+  // here: first-time set and factor-less accounts don't send it.
+  proof: stepUpProof.optional(),
+});
+
+// Public revert link from the "your phone was changed" alert.
+export const recoverPhoneSchema = z.object({
+  token: z.string().trim().min(1).max(512),
+});
+
+// Dispatch a step-up proof code to an existing factor.
+export const stepUpSendProofSchema = z.object({
+  action: z.enum(['change_phone', 'change_email']),
+  channel: z.enum(['sms', 'email']),
 });
 
 export const deviceTokenSchema = z.object({
@@ -94,6 +109,16 @@ export const mfaVerifyLoginSchema = z.object({
   mfaTicket: opaqueToken,
   code: totpOrRecovery,
   rememberDevice: z.boolean().optional(),
+  // Which armed factor the code is for. Absent ⇒ 'totp', so clients that
+  // predate phone/email login OTP keep working unchanged.
+  method: z.enum(['totp', 'phone', 'email']).optional(),
+});
+
+// Dispatch a login OTP to a chosen channel mid-sign-in. The mfaTicket is the
+// auth (it proves the password step); totp needs no send, so phone/email only.
+export const sendLoginOtpSchema = z.object({
+  mfaTicket: opaqueToken,
+  method: z.enum(['phone', 'email']),
 });
 export const mfaAdminDisableSchema = z.object({
   reason: z.string().trim().min(4).max(500),
@@ -108,4 +133,15 @@ export const mfaEnrollConfirmSchema = z.object({
   enrollmentTicket: opaqueToken,
   code: z.string().trim().regex(/^\d{6}$/, 'A 6-digit code is required.'),
   rememberDevice: z.boolean().optional(),
+});
+
+// ── Login-factor management (Phase 2) ──
+// phone/email are the user-manageable channels; totp is also a valid
+// preferred-default target but is armed via the existing setup/confirm flow.
+export const manageableFactorParam = z.object({ factor: z.enum(['phone', 'email']) });
+export const preferredFactorParam = z.object({ factor: z.enum(['totp', 'phone', 'email']) });
+// enable + disable share a shape: re-auth password + the 6-digit channel code.
+export const factorManageSchema = z.object({
+  currentPassword: password,
+  code: z.string().trim().regex(/^\d{6}$/, 'A 6-digit code is required.'),
 });

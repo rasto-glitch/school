@@ -7,18 +7,16 @@ import ForgotPasswordScreen from '../screens/auth/ForgotPasswordScreen';
 import ForceChangePasswordScreen from '../screens/auth/ForceChangePasswordScreen';
 import ParentTabs from './ParentTabs';
 import DriverTabs from './DriverTabs';
-import DriverSettingsScreen from '../screens/driver/DriverSettingsScreen';
 import SupervisorTabs from './SupervisorTabs';
-import SupervisorSettingsScreen from '../screens/supervisor/SupervisorSettingsScreen';
 import SupervisorNotificationsScreen from '../screens/supervisor/SupervisorNotificationsScreen';
 import SupervisorSalaryScreen from '../screens/supervisor/SupervisorSalaryScreen';
 import TeacherTabs from './TeacherTabs';
-import TeacherSettingsScreen from '../screens/teacher/TeacherSettingsScreen';
 import TeacherNotificationsScreen from '../screens/teacher/TeacherNotificationsScreen';
 import TeacherScheduleScreen from '../screens/teacher/TeacherScheduleScreen';
 import TeacherSalaryScreen from '../screens/teacher/TeacherSalaryScreen';
 import SetPickupLocationScreen from '../screens/parent/SetPickupLocationScreen';
-import SettingsScreen from '../screens/parent/SettingsScreen';
+import SettingsScreen from '../screens/common/SettingsScreen';
+import SecurityScreen from '../screens/common/SecurityScreen';
 import ReportsScreen from '../screens/parent/ReportsScreen';
 import NotificationsScreen from '../screens/parent/NotificationsScreen';
 import AppointmentsScreen from '../screens/parent/AppointmentsScreen';
@@ -62,6 +60,7 @@ export type RootStackParamList = {
   Tuition: undefined;
   SetPickupLocation: undefined;
   Settings: undefined;
+  Security: undefined;
   ReportBug: undefined;
   MfaSettings: undefined;
   PhoneSettings: undefined;
@@ -137,20 +136,23 @@ export default function Navigation() {
             <Stack.Screen name="DriverTabs" component={DriverTabs} />
             <Stack.Screen
               name="DriverSettings"
-              component={DriverSettingsScreen}
+              component={SettingsScreen}
               options={{ headerShown: true, headerTitle: 'Settings', headerBackTitle: 'Back', presentation: 'card' }}
             />
+            <Stack.Screen name="Security" component={SecurityScreen} options={{ headerShown: false }} />
             <Stack.Screen name="PhoneSettings" component={PhoneSettingsScreen} options={{ headerShown: false }} />
             <Stack.Screen name="Sessions" component={SessionsScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="ReportBug" component={ReportBugScreen} options={{ headerShown: true, headerTitle: 'Report a bug', headerBackTitle: 'Back' }} />
           </>
         ) : user?.role === 'supervisor' ? (
           <>
             <Stack.Screen name="SupervisorTabs" component={SupervisorTabs} />
             <Stack.Screen
               name="SupervisorSettings"
-              component={SupervisorSettingsScreen}
+              component={SettingsScreen}
               options={{ headerShown: true, headerTitle: 'Settings', headerBackTitle: 'Back', presentation: 'card' }}
             />
+            <Stack.Screen name="Security" component={SecurityScreen} options={{ headerShown: false }} />
             <Stack.Screen
               name="SupervisorNotifications"
               component={SupervisorNotificationsScreen}
@@ -164,6 +166,11 @@ export default function Navigation() {
             <Stack.Screen name="MfaSettings" component={MfaSettingsScreen} options={{ headerShown: false }} />
             <Stack.Screen name="PhoneSettings" component={PhoneSettingsScreen} options={{ headerShown: false }} />
             <Stack.Screen name="Sessions" component={SessionsScreen} options={{ headerShown: false }} />
+            <Stack.Screen
+              name="ReportBug"
+              component={ReportBugScreen}
+              options={{ headerShown: true, headerTitle: 'Report a bug', headerBackTitle: 'Back' }}
+            />
             <Stack.Screen
               name="AnnouncementDetail"
               component={AnnouncementDetailScreen}
@@ -190,9 +197,10 @@ export default function Navigation() {
             <Stack.Screen name="TeacherTabs" component={TeacherTabs} />
             <Stack.Screen
               name="TeacherSettings"
-              component={TeacherSettingsScreen}
+              component={SettingsScreen}
               options={{ headerShown: true, headerTitle: 'Settings', headerBackTitle: 'Back', presentation: 'card' }}
             />
+            <Stack.Screen name="Security" component={SecurityScreen} options={{ headerShown: false }} />
             <Stack.Screen
               name="TeacherNotifications"
               component={TeacherNotificationsScreen}
@@ -247,6 +255,7 @@ export default function Navigation() {
               component={SettingsScreen}
               options={{ headerShown: true, headerTitle: 'Settings', headerBackTitle: 'Back', presentation: 'card' }}
             />
+            <Stack.Screen name="Security" component={SecurityScreen} options={{ headerShown: false }} />
             <Stack.Screen
               name="Reports"
               component={ReportsScreen}

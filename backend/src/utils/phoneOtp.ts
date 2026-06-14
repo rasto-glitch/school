@@ -404,7 +404,7 @@ export interface VerifyPhoneOtpInput {
 }
 
 export type VerifyPhoneOtpResult =
-  | { ok: true; codeId: string }
+  | { ok: true; codeId: string; phoneE164: string }
   | { ok: false; reason: VerifyOtpFailureReason };
 
 export type VerifyOtpFailureReason =
@@ -427,7 +427,7 @@ export async function verifyPhoneOtp(input: VerifyPhoneOtpInput): Promise<Verify
   // tenant-check-allow: filtered by school_id + user_id, both sourced from req.user
   const { data: row, error } = await supabase
     .from('phone_otp_codes')
-    .select('id, code_hash, attempts, consumed_at, expires_at')
+    .select('id, code_hash, attempts, consumed_at, expires_at, phone_e164')
     .eq('school_id', input.schoolId)
     .eq('user_id', input.userId)
     .eq('purpose', input.purpose)
@@ -479,5 +479,5 @@ export async function verifyPhoneOtp(input: VerifyPhoneOtpInput): Promise<Verify
     // the code twice within 5 minutes, which is acceptable.
   }
 
-  return { ok: true, codeId: row.id as string };
+  return { ok: true, codeId: row.id as string, phoneE164: row.phone_e164 as string };
 }

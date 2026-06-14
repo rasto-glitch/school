@@ -1,31 +1,44 @@
+// Per-user account settings — a full-screen page (historically an
+// AccountSettingsModal; now a real page that lives under pages/). Distinct
+// from the admin school-settings page at pages/admin/SettingsPage.tsx.
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useForm } from 'react-hook-form';
 import { toast } from 'react-toastify';
-import { Globe, Mail, Lock, Loader2, LogOut, ShieldCheck, Copy, CheckCircle2, Monitor, Trash2, Download } from 'lucide-react';
-import { authApi, mfaApi, trustedDeviceApi, sessionsApi } from '../../services/api';
-import { useAuthStore } from '../../store/authStore';
-import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from '../../utils/passwordPolicy';
-import { downloadRecoveryCodes } from '../../utils/downloadCodes';
-import Modal from '../common/Modal';
-import Input from '../common/Input';
-import Button from '../common/Button';
-import MfaSetupModal from './MfaSetupModal';
-
-interface AccountSettingsModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-}
+import { Globe, Mail, Lock, Loader2, LogOut, ShieldCheck, Copy, CheckCircle2, Monitor, Trash2, Download, Activity, Phone, PhoneCall, ArrowLeft, LifeBuoy, Bug, Paperclip, Send, User } from 'lucide-react';
+import { authApi, mfaApi, mfaFactorsApi, trustedDeviceApi, sessionsApi, phoneOtpApi, bugReportApi, type StepUpMethod, type StepUpProof, type FactorStatus } from '../services/api';
+import { useAuthStore } from '../store/authStore';
+import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from '../utils/passwordPolicy';
+import { downloadRecoveryCodes } from '../utils/downloadCodes';
+import Input from '../components/common/Input';
+import Button from '../components/common/Button';
+import MfaSetupModal from '../components/layout/MfaSetupModal';
+import StepUpPrompt from '../components/layout/StepUpPrompt';
+import LoginFactorToggle from '../components/layout/LoginFactorToggle';
 
 type PwForm = { currentPassword: string; newPassword: string; confirmPassword: string };
 
 const RESEND_COOLDOWN_SECONDS = 30;
 
-export default function AccountSettingsModal({ isOpen, onClose }: AccountSettingsModalProps) {
+// Left-nav sections for the settings page (anchor-scroll targets).
+const NAV_SECTIONS = [
+  { id: 'account', labelKey: 'account_settings.nav_account', fallback: 'Account', icon: User },
+  { id: 'password', labelKey: 'account_settings.nav_password', fallback: 'Password', icon: Lock },
+  { id: 'twofactor', labelKey: 'mfa.section_title', fallback: 'Two-factor', icon: ShieldCheck },
+  { id: 'sessions', labelKey: 'account_settings.nav_sessions', fallback: 'Sessions', icon: Activity },
+  { id: 'appearance', labelKey: 'account_settings.nav_appearance', fallback: 'Appearance', icon: Globe },
+  { id: 'support', labelKey: 'account_settings.nav_support', fallback: 'Support', icon: LifeBuoy },
+] as const;
+
+export default function AccountSettingsPage() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
-  const { user, school, setEmail: setStoreEmail, logout } = useAuthStore() as any;
+  // This is a full page now, not a modal: "close" navigates back, and the
+  // effects that used to gate on `isOpen` run once on mount (isOpen = true).
+  const onClose = () => navigate(-1);
+  const isOpen = true;
+  const { user, school, setEmail: setStoreEmail, setPhone: setStorePhone, logout } = useAuthStore() as any;
   const [changing, setChanging] = useState(false);
   const [signingOutAll, setSigningOutAll] = useState(false);
   const { register, handleSubmit, reset } = useForm<PwForm>();
@@ -51,6 +64,13 @@ export default function AccountSettingsModal({ isOpen, onClose }: AccountSetting
   const [trustedLoading, setTrustedLoading] = useState(false);
   const [revokingId, setRevokingId] = useState<string | null>(null);
 
+  // Active sessions (refresh-token families). Independent of MFA — every
+  // logged-in user has at least one session.
+  type Session = { familyId: string; deviceLabel: string; userAgent: string | null; ip: string | null; createdAt: string; lastActivityAt: string; expiresAt: string };
+  const [sessions, setSessions] = useState<Session[] | null>(null);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [revokingSessionId, setRevokingSessionId] = useState<string | null>(null);
+
   // Email change state machine
   const [emailDraft, setEmailDraft] = useState(user?.email || '');
   // Held across resends so the user doesn't have to re-type to refresh
@@ -62,6 +82,32 @@ export default function AccountSettingsModal({ isOpen, onClose }: AccountSetting
   const [code, setCode] = useState('');
   const [verifying, setVerifying] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
+  // Step-up challenge for an email CHANGE (migration 051): the server
+  // demands proof of an existing factor; these are the methods it offered.
+  const [emailStepUp, setEmailStepUp] = useState<StepUpMethod[] | null>(null);
+
+  // Phone verification state machine (migration 050, Stage B). Locally
+  // tracks the editable draft + the pending-confirmation state. Mirrors
+  // the email flow above.
+  const [phoneDraft, setPhoneDraft] = useState<string>(user?.phoneE164 || '');
+  const [phoneSubmitting, setPhoneSubmitting] = useState(false);
+  const [pendingPhone, setPendingPhone] = useState<string | null>(null);
+  const [phoneCode, setPhoneCode] = useState('');
+  const [phoneVerifying, setPhoneVerifying] = useState(false);
+  const [phoneResendCooldown, setPhoneResendCooldown] = useState(0);
+  // Re-auth password for any phone change (now always required) + the
+  // step-up challenge when CHANGING an already-verified number (051).
+  const [phonePassword, setPhonePassword] = useState('');
+  const [phoneStepUp, setPhoneStepUp] = useState<StepUpMethod[] | null>(null);
+
+  // Support — bug report
+  const [bugText, setBugText] = useState('');
+  const [bugFile, setBugFile] = useState<File | null>(null);
+  const [bugSubmitting, setBugSubmitting] = useState(false);
+
+  // Login factors (Phase 3) — which channels are armed as sign-in second
+  // factors. Drives the "use at sign-in" toggles in the Phone/Email sections.
+  const [loginFactors, setLoginFactors] = useState<FactorStatus[]>([]);
 
   // Reset email draft when modal opens or user changes
   useEffect(() => {
@@ -71,8 +117,28 @@ export default function AccountSettingsModal({ isOpen, onClose }: AccountSetting
       setPendingEmail(null);
       setCode('');
       setResendCooldown(0);
+      setEmailStepUp(null);
+      setPhonePassword('');
+      setPhoneStepUp(null);
     }
   }, [isOpen, user?.email]);
+
+  // Pull the canonical email + phone state from the server every time
+  // the modal opens. Without this the modal shows whatever was cached
+  // at login time — admin-set phones and cross-device verifies are
+  // missed otherwise.
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    authApi.getMe()
+      .then(r => {
+        if (cancelled) return;
+        setStoreEmail(r.data.email ?? null);
+        setStorePhone(r.data.phoneE164 ?? null, r.data.phoneVerifiedAt ?? null);
+      })
+      .catch(() => { /* non-fatal */ });
+    return () => { cancelled = true; };
+  }, [isOpen, setStoreEmail, setStorePhone]);
 
   // Load MFA status whenever the modal opens. Eligible roles see the
   // section; for everyone else it's hidden so we don't fetch.
@@ -87,6 +153,15 @@ export default function AccountSettingsModal({ isOpen, onClose }: AccountSetting
       setMfaLoading(false);
     }
   };
+
+  const refreshLoginFactors = async () => {
+    try {
+      const r = await mfaFactorsApi.list();
+      setLoginFactors(r.data.factors || []);
+    } catch {
+      setLoginFactors([]);
+    }
+  };
   const refreshTrustedDevices = async () => {
     setTrustedLoading(true);
     try {
@@ -99,10 +174,37 @@ export default function AccountSettingsModal({ isOpen, onClose }: AccountSetting
     }
   };
 
+  const refreshSessions = async () => {
+    setSessionsLoading(true);
+    try {
+      const r = await sessionsApi.list();
+      setSessions(r.data.sessions || []);
+    } catch {
+      setSessions([]);
+    } finally {
+      setSessionsLoading(false);
+    }
+  };
+
+  const onRevokeSession = async (familyId: string) => {
+    setRevokingSessionId(familyId);
+    try {
+      await sessionsApi.revoke(familyId);
+      setSessions((prev) => (prev || []).filter((s) => s.familyId !== familyId));
+      toast.success(t('sessions.revoke_success', 'Session signed out.'));
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || t('sessions.revoke_failed', 'Could not sign out session.'));
+    } finally {
+      setRevokingSessionId(null);
+    }
+  };
+
   useEffect(() => {
     if (isOpen) {
       void refreshMfaStatus();
       void refreshTrustedDevices();
+      void refreshSessions();
+      void refreshLoginFactors();
       setMfaShowDisable(false);
       setMfaShowRegen(false);
       setMfaDisablePassword('');
@@ -165,7 +267,7 @@ export default function AccountSettingsModal({ isOpen, onClose }: AccountSetting
     }
   };
 
-  const submitEmail = async () => {
+  const submitEmail = async (proof?: StepUpProof) => {
     const trimmed = emailDraft.trim().toLowerCase();
     if (!trimmed) {
       toast.error(t('account_settings.email_required', 'Email is required'));
@@ -181,8 +283,9 @@ export default function AccountSettingsModal({ isOpen, onClose }: AccountSetting
     }
     setEmailSubmitting(true);
     try {
-      const res = await authApi.updateMyEmail(trimmed, emailPassword);
+      const res = await authApi.updateMyEmail(trimmed, emailPassword, proof);
       const { pending, email: applied } = res.data || {};
+      setEmailStepUp(null);
       if (pending) {
         setPendingEmail(trimmed);
         setCode('');
@@ -194,7 +297,14 @@ export default function AccountSettingsModal({ isOpen, onClose }: AccountSetting
         toast.success(t('account_settings.email_saved', 'Email saved.'));
       }
     } catch (err: any) {
-      toast.error(err.response?.data?.error || t('account_settings.email_change_failed', 'Could not update email.'));
+      const data = err.response?.data;
+      // The server wants proof of an existing factor before changing email.
+      if (data?.stepUpRequired) {
+        setEmailStepUp(data.methods || []);
+        if (proof) toast.error(data.error || t('step_up.verify_failed', 'Verification failed. Try again.'));
+        return;
+      }
+      toast.error(data?.error || t('account_settings.email_change_failed', 'Could not update email.'));
     } finally {
       setEmailSubmitting(false);
     }
@@ -236,7 +346,100 @@ export default function AccountSettingsModal({ isOpen, onClose }: AccountSetting
     setCode('');
     setEmailDraft(user?.email || '');
     setEmailPassword('');
+    setEmailStepUp(null);
   };
+
+  // ── Phone verification handlers (migration 050 / Stage B) ──
+  const submitPhoneSend = async (proof?: StepUpProof) => {
+    const trimmed = phoneDraft.trim();
+    if (!trimmed) {
+      toast.error(t('account_settings.phone_required', 'Phone number is required.'));
+      return;
+    }
+    if (!phonePassword) {
+      toast.error(t('account_settings.password_required', 'Enter your current password to confirm.'));
+      return;
+    }
+    setPhoneSubmitting(true);
+    try {
+      const res = await phoneOtpApi.sendVerify(trimmed, phonePassword, proof);
+      setPhoneStepUp(null);
+      setPendingPhone(trimmed);
+      setPhoneCode('');
+      setPhoneResendCooldown(RESEND_COOLDOWN_SECONDS);
+      if (res.data?.deliveryAttempted?.whatsapp) {
+        toast.success(t('account_settings.phone_code_sent_whatsapp', 'Verification code sent via WhatsApp.'));
+      } else if (res.data?.deliveryAttempted?.emailFallbackImmediate) {
+        toast.success(t('account_settings.phone_code_sent_email', 'WhatsApp delivery is unavailable; we emailed you the code instead.'));
+      } else {
+        toast.info(t('account_settings.phone_code_sending', 'Sending your verification code…'));
+      }
+    } catch (err: any) {
+      const data = err.response?.data;
+      // The server wants proof of an existing factor before changing the
+      // (already-verified) number.
+      if (data?.stepUpRequired) {
+        setPhoneStepUp(data.methods || []);
+        if (proof) toast.error(data.error || t('step_up.verify_failed', 'Verification failed. Try again.'));
+        return;
+      }
+      toast.error(data?.error || t('account_settings.phone_send_failed', 'Could not send verification code.'));
+    } finally {
+      setPhoneSubmitting(false);
+    }
+  };
+
+  const submitPhoneCode = async () => {
+    if (!/^\d{6}$/.test(phoneCode)) {
+      toast.error(t('account_settings.code_invalid_format', 'Enter the 6-digit code.'));
+      return;
+    }
+    setPhoneVerifying(true);
+    try {
+      const res = await phoneOtpApi.confirmVerify(phoneCode);
+      const verifiedAt = res.data?.verifiedAt || new Date().toISOString();
+      setStorePhone(pendingPhone || phoneDraft, verifiedAt);
+      setPendingPhone(null);
+      setPhoneCode('');
+      setPhonePassword('');
+      setPhoneStepUp(null);
+      toast.success(t('account_settings.phone_verified', 'Phone verified.'));
+    } catch (err: any) {
+      const data = err.response?.data;
+      toast.error(data?.error || t('account_settings.phone_verify_failed', 'Could not verify code.'));
+      if (data?.error?.toLowerCase?.().includes('expired') || data?.error?.toLowerCase?.().includes('too many')) {
+        setPendingPhone(null);
+        setPhoneCode('');
+      }
+    } finally {
+      setPhoneVerifying(false);
+    }
+  };
+
+  const cancelPhonePending = () => {
+    setPendingPhone(null);
+    setPhoneCode('');
+    setPhoneDraft(user?.phoneE164 || '');
+    setPhonePassword('');
+    setPhoneStepUp(null);
+  };
+
+  // Resend cooldown ticker for the phone flow — mirrors the email one.
+  useEffect(() => {
+    if (phoneResendCooldown <= 0) return;
+    const id = setInterval(() => setPhoneResendCooldown(n => Math.max(0, n - 1)), 1000);
+    return () => clearInterval(id);
+  }, [phoneResendCooldown]);
+
+  // Sync phoneDraft from the auth store whenever the modal opens.
+  useEffect(() => {
+    if (isOpen) {
+      setPhoneDraft(user?.phoneE164 || '');
+      setPendingPhone(null);
+      setPhoneCode('');
+      setPhoneResendCooldown(0);
+    }
+  }, [isOpen, user?.phoneE164]);
 
   const onDisableMfa = async () => {
     if (!mfaDisablePassword || !/^\d{6}$/.test(mfaDisableCode)) {
@@ -311,11 +514,54 @@ export default function AccountSettingsModal({ isOpen, onClose }: AccountSetting
     }
   };
 
+  const submitBugReport = async () => {
+    const desc = bugText.trim();
+    if (desc.length < 5) {
+      toast.error(t('support.bug_too_short', 'Please describe the problem (at least a few words).'));
+      return;
+    }
+    setBugSubmitting(true);
+    try {
+      await bugReportApi.submit(
+        desc,
+        { userAgent: navigator.userAgent, platform: 'web', language: i18n.language, url: window.location.href },
+        bugFile,
+      );
+      setBugText('');
+      setBugFile(null);
+      toast.success(t('support.bug_sent', "Thanks — your report was sent. We'll follow up by email."));
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || t('support.bug_failed', 'Could not send your report. Please try again.'));
+    } finally {
+      setBugSubmitting(false);
+    }
+  };
+
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={t('account_settings.title', 'Account Settings')} size="lg">
-      <div className="space-y-6">
-        {/* Language & region */}
-        <section>
+    <div className="min-h-screen bg-gray-50">
+      <header className="sticky top-0 z-10 bg-white/90 backdrop-blur border-b border-gray-200">
+        <div className="mx-auto max-w-5xl px-4 h-14 flex items-center gap-3">
+          <button type="button" onClick={onClose} className="p-2 -ms-2 rounded-lg hover:bg-gray-100 text-gray-600" aria-label={t('common.back', 'Back')}>
+            <ArrowLeft className="w-5 h-5 rtl:rotate-180" />
+          </button>
+          <h1 className="text-lg font-bold text-gray-900">{t('account_settings.title', 'Account Settings')}</h1>
+        </div>
+      </header>
+      <div className="mx-auto max-w-5xl px-4 py-6 grid grid-cols-1 lg:grid-cols-[210px_1fr] gap-6 items-start">
+        <nav className="hidden lg:flex flex-col gap-1 sticky top-20 text-sm">
+          {NAV_SECTIONS.map(s => {
+            const Icon = s.icon;
+            return (
+              <a key={s.id} href={`#${s.id}`} className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-gray-600 hover:bg-white hover:text-gray-900 hover:shadow-sm font-medium transition-colors">
+                <Icon className="w-4 h-4 text-gray-400" />
+                {t(s.labelKey, s.fallback)}
+              </a>
+            );
+          })}
+        </nav>
+        <div className="space-y-5 min-w-0 [&>section]:scroll-mt-24 [&>section]:bg-white [&>section]:border [&>section]:border-gray-200 [&>section]:rounded-2xl [&>section]:p-5 [&>section]:shadow-sm">
+        {/* Appearance — language & region */}
+        <section id="appearance">
           <div className="flex items-center gap-2 mb-3">
             <Globe className="w-[18px] h-[18px] text-primary-600" />
             <h3 className="font-semibold text-gray-900 text-[15px]">
@@ -337,7 +583,7 @@ export default function AccountSettingsModal({ isOpen, onClose }: AccountSetting
         </section>
 
         {/* Account email */}
-        <section>
+        <section id="account">
           <div className="flex items-center gap-2 mb-3">
             <Mail className="w-[18px] h-[18px] text-primary-600" />
             <h3 className="font-semibold text-gray-900 text-[15px]">
@@ -358,6 +604,7 @@ export default function AccountSettingsModal({ isOpen, onClose }: AccountSetting
                 label={t('account_settings.verification_code', 'Verification code')}
                 value={code}
                 onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                dir="ltr"
                 placeholder="123456"
                 inputMode="numeric"
                 autoComplete="one-time-code"
@@ -371,7 +618,7 @@ export default function AccountSettingsModal({ isOpen, onClose }: AccountSetting
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={submitEmail}
+                  onClick={() => submitEmail()}
                   disabled={resendCooldown > 0 || emailSubmitting}
                 >
                   {emailSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
@@ -393,6 +640,7 @@ export default function AccountSettingsModal({ isOpen, onClose }: AccountSetting
                 onChange={e => setEmailDraft(e.target.value)}
                 placeholder="you@example.com"
                 autoComplete="email"
+                dir="ltr"
               />
               <Input
                 label={t('account_settings.confirm_with_password', 'Confirm with current password')}
@@ -407,27 +655,194 @@ export default function AccountSettingsModal({ isOpen, onClose }: AccountSetting
                   ? t('account_settings.email_change_hint', 'Changing your email sends a 6-digit code to the new address to confirm.')
                   : t('account_settings.email_first_hint', "We'll save this immediately since there's no current email on file.")}
               </p>
-              <div className="flex justify-end">
+              {emailStepUp ? (
+                <StepUpPrompt
+                  action="change_email"
+                  methods={emailStepUp}
+                  busy={emailSubmitting}
+                  onCancel={() => setEmailStepUp(null)}
+                  onProof={proof => submitEmail(proof)}
+                />
+              ) : (
+                <div className="flex justify-end">
+                  <Button
+                    onClick={() => submitEmail()}
+                    loading={emailSubmitting}
+                    disabled={!emailDraft.trim() || !emailPassword || emailDraft.trim().toLowerCase() === (user?.email || '').toLowerCase()}
+                  >
+                    {t('common.save', 'Save')}
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+          {loginFactors.find(f => f.factor === 'email') && (
+            <LoginFactorToggle
+              factor="email"
+              status={loginFactors.find(f => f.factor === 'email')!}
+              canEnable={loginFactors.some(f => f.armed && (f.factor === 'phone' || f.factor === 'totp'))}
+              multipleArmed={loginFactors.filter(f => f.armed).length > 1}
+              onChanged={setLoginFactors}
+            />
+          )}
+        </section>
+
+        {/* Phone verification (migration 050, Stage B). WhatsApp via OTPIQ;
+            email fallback if WhatsApp delivery fails. Iraqi (+964) only. */}
+        <section>
+          <div className="flex items-center gap-2 mb-3">
+            <Phone className="w-[18px] h-[18px] text-primary-600" />
+            <h3 className="font-semibold text-gray-900 text-[15px]">
+              {t('account_settings.phone_section', 'Phone number')}
+            </h3>
+            {user?.phoneE164 && user?.phoneVerifiedAt && (
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-full px-2 py-0.5">
+                <CheckCircle2 className="w-3 h-3" />
+                {t('account_settings.phone_verified_chip', 'Verified')}
+              </span>
+            )}
+          </div>
+
+          {pendingPhone ? (
+            <div className="space-y-3">
+              <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3">
+                <p className="text-sm text-amber-900">
+                  {t('account_settings.phone_code_sent_to', 'We sent a 6-digit code to')}{' '}
+                  <strong>{pendingPhone}</strong>.{' '}
+                  {t('account_settings.phone_code_expires_in', 'It expires in 5 minutes.')}
+                </p>
+              </div>
+              <Input
+                label={t('account_settings.verification_code', 'Verification code')}
+                value={phoneCode}
+                onChange={e => setPhoneCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                dir="ltr"
+                placeholder="123456"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                className="tracking-[0.3em] font-mono text-center text-lg"
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <Button onClick={submitPhoneCode} loading={phoneVerifying} disabled={phoneCode.length !== 6}>
+                  {t('account_settings.verify', 'Verify')}
+                </Button>
                 <Button
-                  onClick={submitEmail}
-                  loading={emailSubmitting}
-                  disabled={!emailDraft.trim() || !emailPassword || emailDraft.trim().toLowerCase() === (user?.email || '').toLowerCase()}
+                  type="button"
+                  variant="outline"
+                  onClick={() => submitPhoneSend()}
+                  disabled={phoneResendCooldown > 0 || phoneSubmitting}
                 >
-                  {t('common.save', 'Save')}
+                  {phoneSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  {phoneResendCooldown > 0
+                    ? `${t('account_settings.resend_in', 'Resend in')} ${phoneResendCooldown}s`
+                    : t('account_settings.resend_code', 'Resend code')}
+                </Button>
+                <Button type="button" variant="ghost" onClick={cancelPhonePending}>
+                  {t('common.cancel', 'Cancel')}
                 </Button>
               </div>
             </div>
+          ) : (
+            <div className="space-y-3">
+              <Input
+                label={t('account_settings.phone_label', 'Iraqi mobile (+964)')}
+                type="tel"
+                value={phoneDraft}
+                onChange={e => setPhoneDraft(e.target.value)}
+                placeholder="0750 123 4567"
+                autoComplete="tel"
+                inputMode="tel"
+                dir="ltr"
+              />
+              <Input
+                label={t('account_settings.confirm_with_password', 'Confirm with current password')}
+                type="password"
+                value={phonePassword}
+                onChange={e => setPhonePassword(e.target.value)}
+                placeholder="••••••••"
+                autoComplete="current-password"
+              />
+              <p className="text-xs text-gray-500">
+                <PhoneCall className="inline w-3 h-3 mr-1" />
+                {t('account_settings.phone_hint', "We'll send a verification code via WhatsApp. Only Iraqi (+964) numbers are supported right now.")}
+              </p>
+              {phoneStepUp ? (
+                <StepUpPrompt
+                  action="change_phone"
+                  methods={phoneStepUp}
+                  busy={phoneSubmitting}
+                  onCancel={() => setPhoneStepUp(null)}
+                  onProof={proof => submitPhoneSend(proof)}
+                />
+              ) : (
+                <div className="flex justify-end">
+                  <Button
+                    onClick={() => submitPhoneSend()}
+                    loading={phoneSubmitting}
+                    disabled={!phoneDraft.trim() || !phonePassword}
+                  >
+                    {user?.phoneE164 && phoneDraft.trim() === user.phoneE164 && user?.phoneVerifiedAt
+                      ? t('account_settings.phone_re_verify', 'Re-verify')
+                      : t('account_settings.phone_send_code', 'Send code')}
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+          {loginFactors.find(f => f.factor === 'phone') && (
+            <LoginFactorToggle
+              factor="phone"
+              status={loginFactors.find(f => f.factor === 'phone')!}
+              canEnable
+              multipleArmed={loginFactors.filter(f => f.armed).length > 1}
+              onChanged={setLoginFactors}
+            />
           )}
         </section>
 
         {/* Two-factor authentication (admin + accountant only) */}
         {mfaStatus?.eligible && (
-        <section>
+        <section id="twofactor">
           <div className="flex items-center gap-2 mb-3">
             <ShieldCheck className="w-[18px] h-[18px] text-primary-600" />
             <h3 className="font-semibold text-gray-900 text-[15px]">
               {t('mfa.section_title', 'Two-factor authentication')}
             </h3>
+          </div>
+
+          {/* Method hub — choose how to secure sign-in. TOTP is the active
+              login factor today; phone/email are verification + recovery now
+              (login via phone/email OTP is a planned follow-up). */}
+          <p className="text-sm text-gray-600 mb-3">
+            {t('mfa.hub_intro', 'Choose how to protect your account. Pick a method to set it up.')}
+          </p>
+          <div className="grid sm:grid-cols-3 gap-2 mb-5">
+            <button
+              type="button"
+              onClick={() => { if (!mfaStatus?.confirmed) setMfaSetupOpen(true); }}
+              className="text-start rounded-xl border border-gray-200 p-3 hover:border-primary-300 hover:bg-primary-50/30 transition-colors"
+            >
+              <div className="flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-primary-600" /><span className="text-sm font-semibold text-gray-900">{t('mfa.method_totp', 'Authenticator app')}</span></div>
+              <p className="text-xs text-gray-500 mt-1">{t('mfa.method_totp_desc', '6-digit codes from an app. Active at sign-in.')}</p>
+              <span className={`inline-block mt-2 text-[11px] font-semibold px-2 py-0.5 rounded-full ${mfaStatus?.confirmed ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-gray-100 text-gray-600'}`}>
+                {mfaStatus?.confirmed ? t('mfa.status_on', 'On') : t('mfa.status_setup', 'Set up')}
+              </span>
+            </button>
+            <a href="#account" className="text-start rounded-xl border border-gray-200 p-3 hover:border-primary-300 hover:bg-primary-50/30 transition-colors block">
+              <div className="flex items-center gap-2"><Phone className="w-4 h-4 text-primary-600" /><span className="text-sm font-semibold text-gray-900">{t('mfa.method_phone', 'WhatsApp / SMS code')}</span></div>
+              <p className="text-xs text-gray-500 mt-1">{t('mfa.method_phone_desc', 'Codes to your phone. For verification & recovery.')}</p>
+              <span className={`inline-block mt-2 text-[11px] font-semibold px-2 py-0.5 rounded-full ${user?.phoneVerifiedAt ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-gray-100 text-gray-600'}`}>
+                {user?.phoneVerifiedAt ? t('mfa.status_verified', 'Verified') : t('mfa.status_setup', 'Set up')}
+              </span>
+            </a>
+            <a href="#account" className="text-start rounded-xl border border-gray-200 p-3 hover:border-primary-300 hover:bg-primary-50/30 transition-colors block">
+              <div className="flex items-center gap-2"><Mail className="w-4 h-4 text-primary-600" /><span className="text-sm font-semibold text-gray-900">{t('mfa.method_email', 'Email code')}</span></div>
+              <p className="text-xs text-gray-500 mt-1">{t('mfa.method_email_desc', 'Codes to your email. For verification & recovery.')}</p>
+              <span className={`inline-block mt-2 text-[11px] font-semibold px-2 py-0.5 rounded-full ${user?.email ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-gray-100 text-gray-600'}`}>
+                {user?.email ? t('mfa.status_verified', 'Verified') : t('mfa.status_setup', 'Set up')}
+              </span>
+            </a>
           </div>
 
           {mfaLoading ? (
@@ -630,7 +1045,7 @@ export default function AccountSettingsModal({ isOpen, onClose }: AccountSetting
         )}
 
         {/* Sessions */}
-        <section>
+        <section id="sessions">
           <div className="flex items-center gap-2 mb-3">
             <LogOut className="w-[18px] h-[18px] text-primary-600" />
             <h3 className="font-semibold text-gray-900 text-[15px]">
@@ -651,10 +1066,55 @@ export default function AccountSettingsModal({ isOpen, onClose }: AccountSetting
           >
             {t('account_settings.sign_out_all_action', 'Sign out everywhere')}
           </Button>
+
+          {/* Active sessions subsection — one row per device family. */}
+          <div className="mt-4 pt-4 border-t border-gray-200">
+            <div className="flex items-center gap-2 mb-2">
+              <Activity className="w-4 h-4 text-gray-500" />
+              <h4 className="text-sm font-semibold text-gray-900">
+                {t('sessions.section_title', 'Active sessions')}
+              </h4>
+            </div>
+            <p className="text-xs text-gray-500 mb-3">
+              {t('sessions.section_body', "Each row is a device you're currently signed in on. Sign out individual devices if you don't recognize one.")}
+            </p>
+            {sessionsLoading ? (
+              <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+            ) : !sessions || sessions.length === 0 ? (
+              <p className="text-xs text-gray-500 italic">
+                {t('sessions.none', 'No active sessions.')}
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {sessions.map((s) => (
+                  <li key={s.familyId} className="flex items-center justify-between gap-3 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium text-gray-900 truncate">{s.deviceLabel}</div>
+                      <div className="text-xs text-gray-500">
+                        {t('sessions.started', 'Started')}: {new Date(s.createdAt).toLocaleString()}
+                        {' · '}
+                        {t('sessions.last_active', 'last active')} {new Date(s.lastActivityAt).toLocaleString()}
+                        {s.ip ? ` · ${s.ip}` : ''}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onRevokeSession(s.familyId)}
+                      disabled={revokingSessionId === s.familyId}
+                      className="flex-shrink-0 inline-flex items-center gap-1 text-xs font-semibold text-red-600 hover:text-red-700 disabled:opacity-50"
+                    >
+                      {revokingSessionId === s.familyId ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <LogOut className="w-3.5 h-3.5" />}
+                      {t('sessions.revoke', 'Sign out')}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </section>
 
         {/* Password */}
-        <section>
+        <section id="password">
           <div className="flex items-center gap-2 mb-3">
             <Lock className="w-[18px] h-[18px] text-primary-600" />
             <h3 className="font-semibold text-gray-900 text-[15px]">
@@ -691,12 +1151,68 @@ export default function AccountSettingsModal({ isOpen, onClose }: AccountSetting
             </div>
           </form>
         </section>
+
+        {/* Support */}
+        <section id="support">
+          <div className="flex items-center gap-2 mb-3">
+            <LifeBuoy className="w-[18px] h-[18px] text-primary-600" />
+            <h3 className="font-semibold text-gray-900 text-[15px]">
+              {t('support.section', 'Support')}
+            </h3>
+          </div>
+          <p className="text-sm text-gray-600 mb-3">
+            {t('support.intro', "Something not working right? Send us a bug report and we'll look into it. Add a screenshot if it helps.")}
+          </p>
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Bug className="w-4 h-4 text-gray-500" />
+              <h4 className="text-sm font-semibold text-gray-900">{t('support.bug_title', 'Report a bug')}</h4>
+            </div>
+            <textarea
+              value={bugText}
+              onChange={e => setBugText(e.target.value)}
+              rows={4}
+              placeholder={t('support.bug_placeholder', 'Describe what happened — what you did, what you expected, and what went wrong.')}
+              className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200 resize-y"
+            />
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 text-sm text-gray-700 cursor-pointer hover:bg-gray-50">
+                <Paperclip className="w-4 h-4 text-gray-500" />
+                {bugFile ? t('support.attachment_change', 'Change attachment') : t('support.attachment_add', 'Add screenshot / video')}
+                <input
+                  type="file"
+                  accept="image/*,video/*"
+                  className="hidden"
+                  onChange={e => setBugFile(e.target.files?.[0] || null)}
+                />
+              </label>
+              {bugFile && (
+                <span className="inline-flex items-center gap-2 text-xs text-gray-600 min-w-0">
+                  <span className="truncate max-w-[180px]">{bugFile.name}</span>
+                  <button type="button" onClick={() => setBugFile(null)} className="text-red-600 hover:text-red-700" aria-label={t('common.remove', 'Remove')}>
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-gray-500">
+              {t('support.privacy_note', 'Your name, school, and basic device info are included so we can reproduce the issue.')}
+            </p>
+            <div className="flex justify-end">
+              <Button onClick={submitBugReport} loading={bugSubmitting} disabled={bugText.trim().length < 5}>
+                <Send className="w-4 h-4" />
+                {t('support.bug_submit', 'Send report')}
+              </Button>
+            </div>
+          </div>
+        </section>
+        </div>
       </div>
       <MfaSetupModal
         isOpen={mfaSetupOpen}
         onClose={() => setMfaSetupOpen(false)}
         onCompleted={() => void refreshMfaStatus()}
       />
-    </Modal>
+    </div>
   );
 }

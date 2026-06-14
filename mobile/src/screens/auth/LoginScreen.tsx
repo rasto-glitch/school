@@ -6,7 +6,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
-import { authApi } from '../../services/api';
+import { authApi, type LoginFactorMethod } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { getTrustedDeviceToken, setTrustedDeviceToken, clearTrustedDeviceToken } from '../../utils/trustedDevice';
 import MfaEnrollPanel, { type MfaEnrollSuccessForced } from '../../components/MfaEnrollPanel';
@@ -31,6 +31,13 @@ export default function LoginScreen() {
   const [mfaVerifying, setMfaVerifying] = useState(false);
   const [rememberDevice, setRememberDevice] = useState(false);
   const [mfaUsername, setMfaUsername] = useState<string | null>(null);
+  // Method chooser (Phase 3). For TOTP-only users methods is ['totp'] and the
+  // UI below is unchanged.
+  const [mfaMethods, setMfaMethods] = useState<LoginFactorMethod[]>([]);
+  const [mfaMethod, setMfaMethod] = useState<LoginFactorMethod>('totp');
+  const [mfaCodeSent, setMfaCodeSent] = useState(false);
+  const [mfaSending, setMfaSending] = useState(false);
+  const [mfaChannel, setMfaChannel] = useState<'whatsapp' | 'email' | null>(null);
   // Phase 2 forced enrollment
   const [enrollTicket, setEnrollTicket] = useState<string | null>(null);
   const [enrollUsername, setEnrollUsername] = useState<string | null>(null);
@@ -53,10 +60,16 @@ export default function LoginScreen() {
       const trustedToken = await getTrustedDeviceToken(username);
       const res = await authApi.login(username, password, trustedToken);
       if (res.data?.mfaRequired && res.data?.mfaTicket) {
+        const methods: LoginFactorMethod[] = res.data.methods?.length ? res.data.methods : ['totp'];
+        const preferred: LoginFactorMethod = methods.includes(res.data.preferred) ? res.data.preferred : methods[0];
         setMfaTicket(res.data.mfaTicket);
         setMfaUsername(username);
         setRememberDevice(false);
         setMfaCode('');
+        setMfaMethods(methods);
+        setMfaMethod(preferred);
+        setMfaChannel(null);
+        setMfaCodeSent(preferred === 'totp');
         return;
       }
       if (res.data?.mfaEnrollmentRequired && res.data?.enrollmentTicket) {
@@ -88,16 +101,15 @@ export default function LoginScreen() {
     }
     setMfaVerifying(true);
     try {
-      const res = await authApi.verifyMfaLogin(mfaTicket, trimmed, rememberDevice);
+      const res = await authApi.verifyMfaLogin(mfaTicket, trimmed, rememberDevice, mfaMethod);
       await finalizeLogin(res.data, mfaUsername || username);
     } catch (err: any) {
       const status = err.response?.status;
       const msg = err.response?.data?.error || t('auth.mfa_failed');
       Alert.alert(t('auth.sign_in_failed'), msg);
       if (status === 401 && msg && /sign in again/i.test(msg)) {
-        setMfaTicket(null);
-        setMfaCode('');
         if (mfaUsername) await clearTrustedDeviceToken(mfaUsername);
+        cancelMfa();
       }
     } finally {
       setMfaVerifying(false);
@@ -109,6 +121,36 @@ export default function LoginScreen() {
     setMfaCode('');
     setMfaUsername(null);
     setRememberDevice(false);
+    setMfaMethods([]);
+    setMfaMethod('totp');
+    setMfaCodeSent(false);
+    setMfaChannel(null);
+  };
+
+  const selectMethod = (m: LoginFactorMethod) => {
+    setMfaMethod(m);
+    setMfaCode('');
+    setMfaChannel(null);
+    setMfaCodeSent(m === 'totp');
+  };
+
+  const onSendLoginCode = async () => {
+    if (!mfaTicket || mfaMethod === 'totp') return;
+    setMfaSending(true);
+    try {
+      const res = await authApi.sendLoginOtp(mfaTicket, mfaMethod);
+      setMfaChannel(res.data?.channel ?? (mfaMethod === 'phone' ? 'whatsapp' : 'email'));
+      setMfaCodeSent(true);
+    } catch (err: any) {
+      const serverMsg = err.response?.data?.error;
+      Alert.alert(t('auth.sign_in_failed'), serverMsg || t('auth.login_otp_send_failed', 'Could not send a code. Try another method.'));
+      if (err.response?.status === 401 && serverMsg && /sign in again/i.test(serverMsg)) {
+        if (mfaUsername) await clearTrustedDeviceToken(mfaUsername);
+        cancelMfa();
+      }
+    } finally {
+      setMfaSending(false);
+    }
   };
 
   const onEnrollSuccess = async (payload: MfaEnrollSuccessForced) => {
@@ -149,42 +191,92 @@ export default function LoginScreen() {
           ) : mfaTicket ? (
             <>
               <Text style={styles.mfaTitle}>{t('auth.mfa_title')}</Text>
-              <Text style={styles.mfaSub}>{t('auth.mfa_subtitle')}</Text>
+              <Text style={styles.mfaSub}>
+                {mfaMethod === 'totp'
+                  ? t('auth.mfa_subtitle')
+                  : mfaMethod === 'phone'
+                    ? t('auth.login_otp_phone_sub', 'Get a 6-digit code on your phone to finish signing in.')
+                    : t('auth.login_otp_email_sub', 'Get a 6-digit code by email to finish signing in.')}
+              </Text>
 
-              <Text style={styles.label}>{t('auth.mfa_code_label')}</Text>
-              <TextInput
-                style={[styles.input, styles.mfaCodeInput]}
-                value={mfaCode}
-                onChangeText={v => setMfaCode(v.replace(/\D/g, '').slice(0, 6))}
-                keyboardType="number-pad"
-                placeholder="123456"
-                placeholderTextColor={colors.textMuted}
-                maxLength={6}
-                autoFocus
-                textContentType="oneTimeCode"
-                autoComplete="one-time-code"
-                returnKeyType="done"
-                onSubmitEditing={handleMfaVerify}
-              />
+              {mfaMethods.length > 1 && (
+                <View style={styles.methodRow}>
+                  {mfaMethods.map(m => (
+                    <TouchableOpacity
+                      key={m}
+                      onPress={() => selectMethod(m)}
+                      style={[styles.methodTab, mfaMethod === m && styles.methodTabActive]}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.methodTabText, mfaMethod === m && styles.methodTabTextActive]}>
+                        {m === 'totp' ? t('auth.method_totp', 'Authenticator') : m === 'phone' ? t('auth.method_phone', 'Phone') : t('auth.method_email', 'Email')}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
 
-              <TouchableOpacity
-                onPress={() => setRememberDevice(!rememberDevice)}
-                style={styles.checkboxRow}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.checkbox, rememberDevice && { backgroundColor: colors.primary, borderColor: colors.primary }]} />
-                <Text style={styles.checkboxLabel}>{t('auth.remember_device_30d')}</Text>
-              </TouchableOpacity>
+              {mfaMethod !== 'totp' && !mfaCodeSent ? (
+                <TouchableOpacity
+                  style={[styles.btn, mfaSending && { opacity: 0.6 }]}
+                  onPress={onSendLoginCode}
+                  disabled={mfaSending}
+                >
+                  {mfaSending
+                    ? <ActivityIndicator color={colors.textInverse} />
+                    : <Text style={styles.btnText}>{t('auth.login_otp_send', 'Send code')}</Text>}
+                </TouchableOpacity>
+              ) : (
+                <>
+                  {mfaMethod !== 'totp' && (
+                    <Text style={styles.mfaSentNote}>
+                      {mfaChannel === 'whatsapp'
+                        ? t('auth.login_otp_sent_whatsapp', 'We sent a code via WhatsApp.')
+                        : t('auth.login_otp_sent_email', 'We sent a code to your email.')}
+                    </Text>
+                  )}
+                  <Text style={styles.label}>{t('auth.mfa_code_label')}</Text>
+                  <TextInput
+                    style={[styles.input, styles.mfaCodeInput]}
+                    value={mfaCode}
+                    onChangeText={v => setMfaCode(v.replace(/\D/g, '').slice(0, 6))}
+                    keyboardType="number-pad"
+                    placeholder="123456"
+                    placeholderTextColor={colors.textMuted}
+                    maxLength={6}
+                    autoFocus
+                    textContentType="oneTimeCode"
+                    autoComplete="one-time-code"
+                    returnKeyType="done"
+                    onSubmitEditing={handleMfaVerify}
+                  />
 
-              <TouchableOpacity
-                style={[styles.btn, (mfaVerifying || mfaCode.length !== 6) && { opacity: 0.6 }]}
-                onPress={handleMfaVerify}
-                disabled={mfaVerifying || mfaCode.length !== 6}
-              >
-                {mfaVerifying
-                  ? <ActivityIndicator color={colors.textInverse} />
-                  : <Text style={styles.btnText}>{t('auth.mfa_verify_action')}</Text>}
-              </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => setRememberDevice(!rememberDevice)}
+                    style={styles.checkboxRow}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.checkbox, rememberDevice && { backgroundColor: colors.primary, borderColor: colors.primary }]} />
+                    <Text style={styles.checkboxLabel}>{t('auth.remember_device_30d')}</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.btn, (mfaVerifying || mfaCode.length !== 6) && { opacity: 0.6 }]}
+                    onPress={handleMfaVerify}
+                    disabled={mfaVerifying || mfaCode.length !== 6}
+                  >
+                    {mfaVerifying
+                      ? <ActivityIndicator color={colors.textInverse} />
+                      : <Text style={styles.btnText}>{t('auth.mfa_verify_action')}</Text>}
+                  </TouchableOpacity>
+
+                  {mfaMethod !== 'totp' && (
+                    <TouchableOpacity onPress={onSendLoginCode} disabled={mfaSending} style={styles.forgotWrap}>
+                      <Text style={styles.forgotLink}>{t('auth.login_otp_resend', 'Resend code')}</Text>
+                    </TouchableOpacity>
+                  )}
+                </>
+              )}
 
               <TouchableOpacity onPress={cancelMfa} style={styles.forgotWrap}>
                 <Text style={styles.forgotLink}>{t('auth.mfa_back')}</Text>
@@ -257,4 +349,10 @@ const styles = StyleSheet.create({
   checkboxRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm, marginBottom: spacing.xs },
   checkbox: { width: 18, height: 18, borderRadius: 4, borderWidth: 1.5, borderColor: colors.border },
   checkboxLabel: { fontSize: font.sm, color: colors.text },
+  methodRow: { flexDirection: 'row', gap: spacing.xs, marginBottom: spacing.md },
+  methodTab: { flex: 1, borderWidth: 1.5, borderColor: colors.border, borderRadius: radius.md, paddingVertical: 9, alignItems: 'center' },
+  methodTabActive: { borderColor: colors.primary, backgroundColor: colors.primary + '14' },
+  methodTabText: { fontSize: font.xs, fontWeight: '700', color: colors.textSecondary },
+  methodTabTextActive: { color: colors.primary },
+  mfaSentNote: { fontSize: font.sm, color: colors.textSecondary, marginBottom: spacing.sm },
 });

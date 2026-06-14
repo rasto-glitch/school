@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { View, Text, TouchableOpacity, Modal, StyleSheet, FlatList } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Globe, Check } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import i18n, { changeLanguageAndApply } from '../i18n';
@@ -26,6 +27,7 @@ const LANGUAGES = [
 
 export default function PreLoginLanguageSwitcher() {
   const colors = useColors();
+  const insets = useSafeAreaInsets();
   // useTranslation isn't used for translation here — we only need it
   // to subscribe to languageChanged so the pill text re-renders when
   // the user picks a new language from the sheet.
@@ -40,7 +42,7 @@ export default function PreLoginLanguageSwitcher() {
   };
 
   return (
-    <View style={styles.wrap} pointerEvents="box-none">
+    <View style={[styles.wrap, { top: insets.top + 8 }]} pointerEvents="box-none">
       <TouchableOpacity
         accessibilityRole="button"
         accessibilityLabel="Language"

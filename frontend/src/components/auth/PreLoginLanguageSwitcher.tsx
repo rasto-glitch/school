@@ -3,7 +3,7 @@ import { Globe } from 'lucide-react';
 
 // Minimal language picker rendered on the unauthenticated screens
 // (login / forgot-password / recover-account / force-change-password).
-// Authenticated users get a richer picker inside AccountSettingsModal —
+// Authenticated users get a richer picker inside the account settings page —
 // this one is intentionally tiny so it doesn't compete with the form.
 //
 // Persistence + RTL flip happens centrally inside i18n/index.ts on

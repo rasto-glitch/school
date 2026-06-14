@@ -17,8 +17,15 @@ import { sendMail } from '../utils/mailer';
 import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from '../utils/passwordPolicy';
 import { isDefaultPassword } from '../utils/defaultPasswords';
 import { logAudit } from '../utils/audit';
-import { isMfaActive, verifyMfaCodeForUser } from './mfa.controller';
+import {
+  getArmedLoginFactors, sendLoginOtp, verifyLoginSecondFactor,
+  type LoginFactorMethod, type LoginVerifyFailure,
+} from '../utils/loginFactors';
 import { checkTrustedDevice, issueTrustedDevice } from '../utils/trustedDevice';
+import {
+  getAvailableFactors, hasAnyFactor, verifyStepUp, stepUpReasonMessage,
+  type StepUpProof,
+} from '../utils/stepUp';
 import type { AuthRequest } from '../middleware/auth';
 // Public landing host where /reset-password and /confirm-email live.
 // First value is treated as canonical; the rest are accepted at runtime
@@ -45,6 +52,36 @@ const MFA_ENROLLMENT_TICKET_TTL = '15m';
 // Duplicated here as a local constant to avoid a cross-controller import
 // cycle (mfa.controller already imports from auth.controller).
 const MFA_ELIGIBLE_ROLES = new Set(['admin', 'accountant', 'teacher', 'supervisor', 'reception']);
+
+// Verify a login MFA ticket (minted in login() after a password match) and
+// return the identity it binds. Shared by verifyMfaLogin and the send-login-
+// OTP handler. Returns null on any tamper / expiry / wrong type.
+function verifyMfaTicket(token: string): { userId: string; schoolId: string } | null {
+  try {
+    const p = jwt.verify(token, process.env.JWT_SECRET!, { algorithms: ['HS256'] }) as { userId?: string; schoolId?: string; type?: string };
+    if (p.type !== 'mfa_ticket' || !p.userId || !p.schoolId) return null;
+    return { userId: p.userId, schoolId: p.schoolId };
+  } catch {
+    return null;
+  }
+}
+
+// Map a login second-factor verify failure to a safe, user-facing message.
+// `method` preserves the historical TOTP copy ("no longer required") that
+// verify-mfa returned when MFA had been disabled between the two steps.
+function loginFactorFailureMessage(reason: LoginVerifyFailure, method: LoginFactorMethod): string {
+  switch (reason) {
+    case 'unavailable':
+      return method === 'totp'
+        ? 'Two-factor verification is no longer required. Please sign in again.'
+        : 'That sign-in method is no longer available. Please sign in again.';
+    case 'no_code':  return 'Your code is no longer valid. Request a new one.';
+    case 'expired':  return 'That code expired. Request a new one.';
+    case 'too_many': return 'Too many incorrect attempts. Request a new code.';
+    case 'wrong':
+    default:         return 'Wrong code.';
+  }
+}
 
 // Access token is deliberately short-lived: a leaked one dies fast. The
 // 7-day user-visible session is preserved by the rotating refresh token.
@@ -339,7 +376,11 @@ export async function login(req: Request, res: Response): Promise<void> {
   //   3. Otherwise — no MFA needed — proceed with normal token issue.
   const eligibleForMfa = MFA_ELIGIBLE_ROLES.has(user.role);
   const schoolMfaRequired = !!(school as { mfa_required?: boolean }).mfa_required && eligibleForMfa;
-  const mfaActive = await isMfaActive(user.id);
+  // Armed login factors — TOTP folded in for back-compat (a confirmed
+  // authenticator is always a factor), plus phone/email once the user arms
+  // them (Phase 2). Empty ⇒ no second factor required, same as before.
+  const armed = await getArmedLoginFactors(user.id);
+  const mfaActive = armed.methods.length > 0;
 
   // Track which factor path got the user in for the post-response audit row.
   let factor: 'password' | 'password_trusted_device' | 'password_mfa' | 'forced_enrollment' = 'password';
@@ -358,7 +399,9 @@ export async function login(req: Request, res: Response): Promise<void> {
         process.env.JWT_SECRET!,
         { expiresIn: MFA_TICKET_TTL } as jwt.SignOptions,
       );
-      res.json({ mfaRequired: true, mfaTicket });
+      // methods/preferred drive the Phase-3 method chooser. Extra fields are
+      // ignored by clients that predate it (today methods is just ['totp']).
+      res.json({ mfaRequired: true, mfaTicket, methods: armed.methods, preferred: armed.preferred });
       return;
     }
     factor = 'password_trusted_device';
@@ -440,7 +483,7 @@ export async function login(req: Request, res: Response): Promise<void> {
 // Public — the ticket itself is the auth proving the user passed the
 // password step. Rate-limited at the route layer.
 export async function verifyMfaLogin(req: Request, res: Response): Promise<void> {
-  const { mfaTicket, code, rememberDevice } = req.body as { mfaTicket?: string; code?: string; rememberDevice?: boolean };
+  const { mfaTicket, code, rememberDevice, method } = req.body as { mfaTicket?: string; code?: string; rememberDevice?: boolean; method?: string };
   if (!mfaTicket || typeof mfaTicket !== 'string') {
     res.status(400).json({ error: 'mfaTicket is required' });
     return;
@@ -483,15 +526,17 @@ export async function verifyMfaLogin(req: Request, res: Response): Promise<void>
     return;
   }
 
-  const result = await verifyMfaCodeForUser(payload.userId, code.trim());
-  if (result === 'no_mfa') {
-    // Ticket says MFA, DB says no. Edge case: someone admin-disabled
-    // MFA between login and this call. Tell the user to start over.
-    res.status(401).json({ error: 'Two-factor verification is no longer required. Please sign in again.' });
-    return;
-  }
-  if (result === 'wrong') {
-    res.status(401).json({ error: 'Wrong code.' });
+  // Dispatch on the chosen factor. Absent/unknown method ⇒ 'totp', so older
+  // clients (and the trusted TOTP path) behave exactly as before.
+  const loginMethod: LoginFactorMethod = (method === 'phone' || method === 'email') ? method : 'totp';
+  const verified = await verifyLoginSecondFactor({
+    userId: payload.userId,
+    schoolId: payload.schoolId,
+    method: loginMethod,
+    code: code.trim(),
+  });
+  if (!verified.ok) {
+    res.status(401).json({ error: loginFactorFailureMessage(verified.reason, loginMethod) });
     return;
   }
 
@@ -567,6 +612,43 @@ export async function verifyMfaLogin(req: Request, res: Response): Promise<void>
       ip: signInIp,
     });
   }
+}
+
+// Mid-sign-in OTP dispatch: send a code to a chosen channel (phone WhatsApp/
+// SMS or email) for a user who has armed that factor. The mfaTicket proves
+// the password step — no code is sent at /auth/login itself, so a wrong-
+// password spammer never triggers a message. Rate-limited at the route layer.
+export async function sendLoginOtpHandler(req: Request, res: Response): Promise<void> {
+  const { mfaTicket, method } = req.body as { mfaTicket?: string; method?: string };
+  const ticket = typeof mfaTicket === 'string' ? verifyMfaTicket(mfaTicket) : null;
+  if (!ticket) {
+    res.status(401).json({ error: 'Your verification session has expired. Please sign in again.' });
+    return;
+  }
+  if (method !== 'phone' && method !== 'email') {
+    res.status(400).json({ error: 'Unsupported verification method.' });
+    return;
+  }
+
+  // Best-effort school name for the message copy.
+  // tenant-check-allow: ticket.schoolId comes from the signed mfa_ticket minted in login() after a school-scoped password match
+  const { data: school } = await supabase
+    .from('schools')
+    .select('name')
+    .eq('id', ticket.schoolId)
+    .maybeSingle();
+  const schoolName = (school as { name?: string } | null)?.name ?? null;
+
+  const r = await sendLoginOtp({ schoolId: ticket.schoolId, userId: ticket.userId, method, schoolName });
+  if (!r.ok) {
+    if (r.reason === 'not_armed' || r.reason === 'unavailable') {
+      res.status(400).json({ error: 'That sign-in method is not available on your account.' });
+      return;
+    }
+    res.status(502).json({ error: "We couldn't send your code. Please try another method." });
+    return;
+  }
+  res.json({ ok: true, channel: r.channel });
 }
 
 export async function forgotPassword(req: Request, res: Response): Promise<void> {
@@ -830,6 +912,26 @@ export async function updateMyEmail(req: AuthRequest, res: Response): Promise<vo
       label: 'email_set_initial',
     });
     return;
+  }
+
+  // Step-up: changing an EXISTING email (we're past the !currentEmail
+  // first-time path) must prove control of an existing factor when one is
+  // enrolled — not just the password. The email-change flow already has
+  // the old-address alert + 7-day recovery anchor below; this adds the
+  // prevention layer so a session-only attacker who knows the password
+  // still can't redirect the recovery channel without a second factor.
+  const emailFactors = await getAvailableFactors(userId!);
+  if (hasAnyFactor(emailFactors)) {
+    const su = await verifyStepUp(userId!, 'change_email', (req.body as { proof?: StepUpProof }).proof);
+    if (!su.ok) {
+      res.status(401).json({
+        error: stepUpReasonMessage(su.reason),
+        stepUpRequired: true,
+        reason: su.reason,
+        methods: su.offered,
+      });
+      return;
+    }
   }
 
   // Change confirmation. Invalidate any pending tokens for this user so
@@ -1429,10 +1531,10 @@ export async function resetWithToken(req: Request, res: Response): Promise<void>
   const rounds = parseInt(process.env.BCRYPT_ROUNDS || '10');
   const passwordHash = await bcrypt.hash(newPassword, rounds);
 
-  // tenant-check-allow: user_id sourced from token row above (token uniquely identifies the user)
   // The user typed their own new password, so clear must_change_password
   // — they've satisfied "pick a real password" without needing the
   // force-change screen on next login.
+  // tenant-check-allow: user_id sourced from token row above (token uniquely identifies the user)
   const { error: upErr } = await supabase
     .from('users')
     .update({ password_hash: passwordHash, password_changed_at: new Date().toISOString(), must_change_password: false })
@@ -1446,6 +1548,53 @@ export async function resetWithToken(req: Request, res: Response): Promise<void>
     .eq('id', r.id);
 
   res.json({ ok: true });
+}
+
+// Best-effort "your password was changed" alert — the detective control
+// for a password change. If it wasn't the user, they find out on the
+// email on file and can lock the account back down. Same non-blocking
+// posture as the MFA / email-change alerts.
+async function sendPasswordChangedAlert(userId: string): Promise<void> {
+  try {
+    // tenant-check-allow: userId sourced from req.user by the caller
+    const { data: u } = await supabase
+      .from('users')
+      .select('email, first_name, schools(name)')
+      .eq('id', userId)
+      .single();
+    const row = u as { email?: string | null; first_name?: string; schools?: { name?: string } | null } | null;
+    const email = row?.email;
+    if (!email || !email.includes('@')) return;
+    const firstName = row?.first_name || '';
+    const schoolName = row?.schools?.name || '';
+    const schoolSuffix = schoolName ? ` (${schoolName})` : '';
+    const subject = `Your Scholify password was changed${schoolSuffix}`;
+    const lines = [
+      `Hi ${firstName || 'there'},`,
+      '',
+      `The password on your Scholify account${schoolName ? ` at ${schoolName}` : ''} was just changed, and every device was signed out.`,
+      '',
+      'If this was you, no action is needed — just sign in again with your new password.',
+      '',
+      'If this wasn\'t you, use "Forgot password" on the sign-in screen right away to lock the account back down, and contact your school administrator.',
+    ];
+    const text = lines.join('\n');
+    const html = `
+      <div style="font-family:-apple-system,BlinkMacSystemFont,Inter,sans-serif;background:#f8fafc;padding:24px">
+        <div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden">
+          <div style="background:#b91c1c;padding:20px 24px;color:#fff">
+            <div style="font-size:12px;opacity:.85;letter-spacing:.06em;text-transform:uppercase">Scholify${schoolName ? ` · ${escapeHtml(schoolName)}` : ''} · Security alert</div>
+            <div style="font-size:20px;font-weight:800;margin-top:4px">${escapeHtml(subject)}</div>
+          </div>
+          <div style="padding:24px;color:#0f172a">
+            ${lines.map(l => l ? `<p style="margin:0 0 12px;font-size:14px;line-height:1.55">${escapeHtml(l)}</p>` : '').join('')}
+          </div>
+        </div>
+      </div>`;
+    await sendMail(email, subject, html, text);
+  } catch (err) {
+    logger.error('password-changed alert send failed', { err, userId });
+  }
 }
 
 export async function changePassword(req: AuthRequest, res: Response): Promise<void> {
@@ -1498,7 +1647,22 @@ export async function changePassword(req: AuthRequest, res: Response): Promise<v
     must_change_password: false,
   }).eq('id', userId);
 
-  res.json({ message: 'Password changed successfully' });
+  // Sign out every session on a password change — same posture as the
+  // account-recovery flow, and what the security-alert emails already
+  // promise ("change your password — that signs out every device"). The
+  // current device's access token keeps working until it expires (≤15
+  // min), then re-login is required. Kicks any hijacker out within that
+  // window.
+  // tenant-check-allow: refresh_tokens is user-keyed
+  await supabase.from('refresh_tokens')
+    .update({ revoked_at: new Date().toISOString() })
+    .eq('user_id', userId)
+    .is('revoked_at', null);
+
+  // Detective control — best-effort, never blocks the change.
+  void sendPasswordChangedAlert(userId!);
+
+  res.json({ message: 'Password changed successfully', sessionsRevoked: true });
 }
 
 // First-time password change. Issued to users whose accounts were

@@ -552,10 +552,52 @@ If an explicit `hr` role is added to `users.role`, extend the gate to
 
 ## Phone OTP (WhatsApp via OTPIQ + email fallback)
 
-**Status:** Stage B (phone verification) shipping in **migration 050**
-(2026-06-13). Stages C (forgot-password by phone) and A (login MFA by
-phone) are scheduled to follow on top of the same foundation — no
-further schema changes required for either.
+**Status:** Stage B (phone verification) shipped in **migration 050**
+(2026-06-13). **Stage A — login MFA by phone AND email — SHIPPED
+2026-06-14** as a 3-phase build (migrations 052/053 + an
+`mfa_login_factors` registry + a login method-chooser + settings
+"use at sign-in" toggles; web + mobile). Stage C (forgot-password by
+phone) is still scheduled on the same foundation. One deliberate
+follow-up to Stage A is **shelved — see "Phase 2b" below.**
+
+> **Role-policy update (supersedes the bullet below):** the original
+> "phone OTP for parents + drivers only" decision was **superseded** —
+> Stage A shipped for **all roles**, voluntary opt-in, with the guardrail
+> that **email can't be a user's sole factor** (must pair with phone or
+> TOTP). TOTP remains available to the staff/admin roles as before.
+
+### Phase 2b (SHELVED 2026-06-14): account-level recovery codes for non-TOTP login factors
+
+**What it is:** Stage A lets any role arm phone/email OTP as a login
+second factor. The break-glass for a lost factor is recovery codes — but
+those live in `user_mfa.recovery_codes_hash`, which is TOTP-only. So a
+phone-only user (e.g. a parent who armed WhatsApp OTP and never set up
+TOTP) who loses their phone has **no self-service recovery** — only an
+admin can rescue them (via the admin-disable cascade, which IS shipped).
+
+**Why shelved (not a blocker):** the admin-rescue path exists and is the
+same escape hatch a TOTP user gets after losing both authenticator and
+codes. Doing recovery codes *properly* for phone/email means moving them
+out of the TOTP-shaped `user_mfa` row — otherwise minting codes for a
+phone-only user makes `getMfaStatus()` wrongly report "MFA enrolled" and
+corrupts the TOTP hub. That's its own migration + refactor and deserves
+deliberate design rather than being bolted onto Stage A.
+
+**What it needs (when picked up):**
+1. An account-level recovery-code store (new `user_recovery_codes` table,
+   or a column independent of `user_mfa.confirmed_at`).
+2. Mint codes on **first factor armed, any channel** (today: only at TOTP
+   setup) and surface them once in the enable flow.
+3. A login-time recovery path in `verifyLoginSecondFactor`
+   (`backend/src/utils/loginFactors.ts`) that accepts a recovery code for
+   any method, without entangling TOTP's disabled state.
+4. Fix `getMfaStatus` so a recovery-only row doesn't read as TOTP-enrolled.
+
+**Where Stage A lives:** backend `utils/loginFactors.ts` +
+`controllers/mfaFactors.controller.ts` + migrations 052/053; clients —
+`LoginFactorToggle` (web `components/layout/`, mobile
+`components/settings/`) + the login method-chooser in the auth screens.
+Full plan + locked decisions: `memory/phone-email-otp-login-plan.md`.
 
 ### Why
 

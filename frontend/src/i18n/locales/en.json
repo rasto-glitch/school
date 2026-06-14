@@ -34,7 +34,17 @@
     "email_sent_note": "If your account has an email on file, a reset link is on its way. The link expires in 1 hour.",
     "admin_sent_note": "Your school administrator will reset your password and contact you.",
     "server_error": "Could not reach the server. Please try again.",
-    "back_to_sign_in": "Back to Sign In"
+    "back_to_sign_in": "Back to Sign In",
+    "method_totp": "Authenticator",
+    "method_phone": "Phone",
+    "method_email": "Email",
+    "login_otp_phone_sub": "Get a 6-digit code on your phone to finish signing in.",
+    "login_otp_email_sub": "Get a 6-digit code by email to finish signing in.",
+    "login_otp_send": "Send code",
+    "login_otp_resend": "Resend code",
+    "login_otp_sent_whatsapp": "We sent a code via WhatsApp.",
+    "login_otp_sent_email": "We sent a code to your email.",
+    "login_otp_send_failed": "Could not send a code. Try another method."
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -85,6 +95,7 @@
     "logout": "Logout"
   },
   "common": {
+    "remove": "Remove",
     "search": "Search",
     "save": "Save",
     "cancel": "Cancel",
@@ -304,7 +315,15 @@
     "daily_subtitle": "Day-by-day attendance for this academic year.",
     "choose_child": "Choose child",
     "choose_child_ph": "— pick a child —",
-    "weekday_short": ["S", "M", "T", "W", "T", "F", "S"],
+    "weekday_short": [
+      "S",
+      "M",
+      "T",
+      "W",
+      "T",
+      "F",
+      "S"
+    ],
     "status_enrolled": "Enrolled",
     "status_promoted": "Promoted",
     "status_retained": "Retained",
@@ -411,7 +430,27 @@
     "sign_out_all_action": "Sign out everywhere",
     "sign_out_all_confirm": "This signs you out on every device, including this one. Continue?",
     "confirm_with_password": "Confirm with current password",
-    "password_required": "Enter your current password to confirm."
+    "password_required": "Enter your current password to confirm.",
+    "phone_section": "Phone number",
+    "phone_verified_chip": "Verified",
+    "phone_label": "Iraqi mobile (+964)",
+    "phone_hint": "We'll send a verification code via WhatsApp. Only Iraqi (+964) numbers are supported right now.",
+    "phone_required": "Phone number is required.",
+    "phone_send_code": "Send code",
+    "phone_re_verify": "Re-verify",
+    "phone_code_sent_to": "We sent a 6-digit code to",
+    "phone_code_expires_in": "It expires in 5 minutes.",
+    "phone_code_sent_whatsapp": "Verification code sent via WhatsApp.",
+    "phone_code_sent_email": "WhatsApp delivery is unavailable; we emailed you the code instead.",
+    "phone_code_sending": "Sending your verification code…",
+    "phone_send_failed": "Could not send verification code.",
+    "phone_verified": "Phone verified.",
+    "phone_verify_failed": "Could not verify code.",
+    "nav_account": "Account",
+    "nav_password": "Password",
+    "nav_sessions": "Sessions",
+    "nav_appearance": "Appearance",
+    "nav_support": "Support"
   },
   "force_change": {
     "title": "Choose a new password",
@@ -425,6 +464,45 @@
     "failed": "Could not change password.",
     "both_required": "Enter and confirm your new password.",
     "policy_hint": "Password must be at least 8 characters and include an uppercase letter and a special character."
+  },
+  "step_up": {
+    "title": "Verify it's really you",
+    "subtitle": "For your security, this change needs one more check using a method already on your account.",
+    "method_totp": "Authenticator app",
+    "method_sms": "Code to my current phone",
+    "method_email": "Code to my email",
+    "send": "Send code",
+    "resend": "Resend code",
+    "sent_to": "Code sent to {{dest}}.",
+    "code_sent": "Code sent to {{dest}}.",
+    "send_failed": "Could not send the code. Try another method.",
+    "code_required": "Enter the verification code.",
+    "code_label": "Verification code",
+    "totp_label": "Authenticator or recovery code",
+    "verify_continue": "Verify & continue",
+    "verify_failed": "Verification failed. Try again."
+  },
+  "recover_phone": {
+    "title": "Restore your phone number",
+    "subtitle": "Undo a phone-number change",
+    "explain": "If you didn't change the phone number on your account, restore it here. We'll put your previous number back and sign out every device.",
+    "action": "Restore my number & sign out everywhere",
+    "failed": "Could not restore your number. The link may be expired or already used.",
+    "done_title": "Phone number restored",
+    "done_body": "Your previous phone number has been restored and every device has been signed out. If you didn't change it, also change your password from the sign-in screen."
+  },
+  "support": {
+    "section": "Support",
+    "intro": "Something not working right? Send us a bug report and we'll look into it. Add a screenshot if it helps.",
+    "bug_title": "Report a bug",
+    "bug_placeholder": "Describe what happened — what you did, what you expected, and what went wrong.",
+    "attachment_add": "Add screenshot / video",
+    "attachment_change": "Change attachment",
+    "privacy_note": "Your name, school, and basic device info are included so we can reproduce the issue.",
+    "bug_submit": "Send report",
+    "bug_too_short": "Please describe the problem (at least a few words).",
+    "bug_sent": "Thanks — your report was sent. We'll follow up by email.",
+    "bug_failed": "Could not send your report. Please try again."
   },
   "recover": {
     "title": "Recover your account",
@@ -440,6 +518,16 @@
     "failed": "Could not recover your account. The link may be expired or already used."
   },
   "mfa": {
+    "hub_intro": "Choose how to protect your account. Pick a method to set it up.",
+    "method_totp": "Authenticator app",
+    "method_totp_desc": "6-digit codes from an app. Active at sign-in.",
+    "method_phone": "WhatsApp / SMS code",
+    "method_phone_desc": "Codes to your phone. For verification & recovery.",
+    "method_email": "Email code",
+    "method_email_desc": "Codes to your email. For verification & recovery.",
+    "status_on": "On",
+    "status_setup": "Set up",
+    "status_verified": "Verified",
     "section_title": "Two-factor authentication",
     "not_enrolled_body": "Protect your sign-in with a 6-digit code from an authenticator app. You can use Google Authenticator, Authy, 1Password, or any TOTP app.",
     "enroll_action": "Set up two-factor",
@@ -1290,7 +1378,7 @@
       "mfa_required_state_off": "Off — eligible staff may opt in from their account settings.",
       "mfa_required_on_toast": "Two-factor is now required for eligible staff.",
       "mfa_required_off_toast": "Two-factor is no longer required.",
-      "failed_save": "Could not save changes.",
+      "failed_save": "Failed to save",
       "eoy_transition": "End-of-Year Transition",
       "eoy_hint": "Run this once at the end of each school year. The wizard will walk you through graduating students, clearing reports, and advancing the academic year — all in one step.",
       "begin_transition": "Begin Year Transition",
@@ -1321,7 +1409,6 @@
       "logo_updated": "Logo updated",
       "upload_failed": "Upload failed",
       "year_updated": "Academic year updated",
-      "failed_save": "Failed to save",
       "failed_add_mark": "Failed to add mark type",
       "failed_delete": "Failed to delete",
       "failed_add_term": "Failed to add term",
@@ -2378,13 +2465,34 @@
       "reports_tools": "Reports & tools"
     },
     "reports": {
-      "ar_aging": { "label": "AR aging", "desc": "Outstanding balances bucketed by overdue days" },
-      "profit_loss": { "label": "Profit & Loss", "desc": "Income vs expense by category, period compare" },
-      "cash_flow": { "label": "Cash flow forecast", "desc": "Projected inflows and outflows by week" },
-      "tax": { "label": "Tax report", "desc": "Tax / withholding collected by label" },
-      "ledger": { "label": "Ledger", "desc": "Every money movement, exportable" },
-      "periods": { "label": "Periods", "desc": "Close months/years to lock history" },
-      "payment_accounts": { "label": "Payment accounts", "desc": "Cash drawers, bank tills, balances" }
+      "ar_aging": {
+        "label": "AR aging",
+        "desc": "Outstanding balances bucketed by overdue days"
+      },
+      "profit_loss": {
+        "label": "Profit & Loss",
+        "desc": "Income vs expense by category, period compare"
+      },
+      "cash_flow": {
+        "label": "Cash flow forecast",
+        "desc": "Projected inflows and outflows by week"
+      },
+      "tax": {
+        "label": "Tax report",
+        "desc": "Tax / withholding collected by label"
+      },
+      "ledger": {
+        "label": "Ledger",
+        "desc": "Every money movement, exportable"
+      },
+      "periods": {
+        "label": "Periods",
+        "desc": "Close months/years to lock history"
+      },
+      "payment_accounts": {
+        "label": "Payment accounts",
+        "desc": "Cash drawers, bank tills, balances"
+      }
     },
     "tuition": {
       "tab_students": "Students",
@@ -2403,8 +2511,21 @@
       "students_title": "Students",
       "students_sub_rw": "Plans, payments, reminders",
       "students_sub_ro": "View tuition status (read-only)",
-      "status": { "paid_up": "Paid up", "current": "On track", "due_soon": "Due soon", "overdue": "Overdue" },
-      "kind": { "tuition": "Tuition", "transport": "Transport", "lunch": "Lunch", "uniform": "Uniform", "exam": "Exam", "registration": "Registration", "other": "Other" },
+      "status": {
+        "paid_up": "Paid up",
+        "current": "On track",
+        "due_soon": "Due soon",
+        "overdue": "Overdue"
+      },
+      "kind": {
+        "tuition": "Tuition",
+        "transport": "Transport",
+        "lunch": "Lunch",
+        "uniform": "Uniform",
+        "exam": "Exam",
+        "registration": "Registration",
+        "other": "Other"
+      },
       "load_failed": "Failed to load tuition",
       "all": "All",
       "search_ph": "Search student, parent, class…",
@@ -3235,5 +3356,26 @@
       "days": "days",
       "send_reminders": "Send reminders"
     }
+  },
+  "login_factors": {
+    "use_at_signin": "Use at sign-in",
+    "default": "Default",
+    "on_hint": "A code from this channel is required when you sign in.",
+    "off_hint": "Turn on to require a code at sign-in.",
+    "turn_on": "Turn on",
+    "turn_off": "Turn off",
+    "email_needs_partner": "Add phone or an authenticator first — email can’t be your only sign-in code.",
+    "make_default": "Make default",
+    "send_code": "Send code",
+    "send_failed": "Could not send a code.",
+    "need_password_code": "Enter your password and the 6-digit code.",
+    "enabled": "Sign-in codes turned on.",
+    "disabled": "Sign-in codes turned off.",
+    "failed": "Could not update. Try again.",
+    "default_set": "Set as your default sign-in method.",
+    "unavailable_phone": "Verify your phone to use it for sign-in.",
+    "unavailable_email": "Add an email to use it for sign-in.",
+    "confirm_on": "Turn on",
+    "confirm_off": "Turn off"
   }
 }

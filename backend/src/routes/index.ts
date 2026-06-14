@@ -1,12 +1,14 @@
 import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import rateLimit from 'express-rate-limit';
-import { login, changePassword, firstTimeChangePassword, getSchools, forgotPassword, registerDeviceToken, removeDeviceToken, updateDeviceLanguage, uploadProfilePicture, updateMyEmail, verifyEmailCode, getMe, forgotPasswordEmail, resetWithToken, confirmEmail, recoverAccount, refreshToken, logout, logoutAll, verifyMfaLogin } from '../controllers/auth.controller';
+import { login, changePassword, firstTimeChangePassword, getSchools, forgotPassword, registerDeviceToken, removeDeviceToken, updateDeviceLanguage, uploadProfilePicture, updateMyEmail, verifyEmailCode, getMe, forgotPasswordEmail, resetWithToken, confirmEmail, recoverAccount, refreshToken, logout, logoutAll, verifyMfaLogin, sendLoginOtpHandler } from '../controllers/auth.controller';
 import { getMfaStatus, setupMfa, confirmMfa, disableMfaSelf, regenerateRecoveryCodes, adminDisableMfa, enrollSetupViaTicket, enrollConfirmViaTicket } from '../controllers/mfa.controller';
+import { listLoginFactors, sendFactorCode, enableFactor, disableFactor, setPreferred } from '../controllers/mfaFactors.controller';
 import { listTrustedDevices, revokeTrustedDevice, revokeAllTrustedDevicesEndpoint } from '../controllers/trustedDevice.controller';
 import { listSessions, revokeSession } from '../controllers/sessions.controller';
 import { submitBugReport } from '../controllers/bugReport.controller';
-import { sendVerifyPhoneOtp, confirmVerifyPhoneOtp, otpiqDeliveryWebhook } from '../controllers/phoneOtp.controller';
+import { sendVerifyPhoneOtp, confirmVerifyPhoneOtp, recoverPhone, otpiqDeliveryWebhook } from '../controllers/phoneOtp.controller';
+import { sendStepUpProofHandler } from '../controllers/stepUp.controller';
 import * as vphone from '../validators/phoneOtp';
 import * as admin from '../controllers/admin.controller';
 import * as archivedProfile from '../controllers/archivedEmployeeProfile.controller';
@@ -94,6 +96,23 @@ const mfaVerifyLoginLimiter = rateLimit({
   message: { error: 'Too many verification attempts. Please sign in again.' },
 });
 
+// Login-OTP send (phone WhatsApp/SMS or email) — each call dispatches a real
+// message, so this is the toll-fraud surface. Keyed on the mfaTicket so the
+// cap is per sign-in attempt (a fresh ticket needs another password match),
+// which protects cost without penalising a whole school behind one NAT.
+// Falls back to IP when the ticket is missing/malformed.
+const loginOtpSendLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: Request): string => {
+    const t = (req.body?.mfaTicket as string | undefined) || '';
+    return t ? `t:${t.slice(-32)}` : (req.ip || 'anon');
+  },
+  message: { error: 'Too many code requests. Please sign in again to request a new one.' },
+});
+
 // MFA enrollment-side actions (setup, confirm, disable-self, regen).
 // Per-user; modest limit because these are interactive UI flows.
 const mfaSelfLimiter = rateLimit({
@@ -150,6 +169,19 @@ const otpiqWebhookLimiter = rateLimit({
   message: { error: 'webhook flood detected' },
 });
 
+// Step-up proof send (migration 051) — dispatches an SMS (OTPIQ, costs
+// money) or email code to an existing factor before a contact change.
+// Per-user, tight: 5 / 10 min. The verify side is the change endpoints'
+// own limiters + the per-challenge attempt cap.
+const stepUpProofLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: userKey,
+  message: { error: 'Too many verification code requests. Please wait a few minutes.' },
+});
+
 export function createRouter(io: SocketServer) {
   const router = Router();
 
@@ -188,11 +220,19 @@ export function createRouter(io: SocketServer) {
   router.post('/auth/me/email/verify-code', authenticate, verifyEmailCodeLimiter, validate({ body: v.verifyEmailCodeSchema }), (req, res) => verifyEmailCode(req as AuthRequest, res));
   router.post('/auth/confirm-email', validate({ body: v.confirmEmailSchema }), (req, res) => confirmEmail(req, res));
   router.post('/auth/recover-account', validate({ body: v.recoverAccountSchema }), (req, res) => recoverAccount(req, res));
+  // Public revert from the "your phone number was changed" security alert.
+  router.post('/auth/recover-phone', validate({ body: v.recoverPhoneSchema }), (req, res) => recoverPhone(req, res));
+  // Step-up: dispatch a proof code to an existing factor (used by the phone
+  // + email change flows when changing an already-verified channel).
+  router.post('/auth/step-up/send-proof', authenticate, stepUpProofLimiter, validate({ body: v.stepUpSendProofSchema }), (req, res) => sendStepUpProofHandler(req as AuthRequest, res));
   router.post('/auth/forgot-password-email', validate({ body: v.forgotPasswordSchema }), (req, res) => forgotPasswordEmail(req, res));
   router.post('/auth/reset-with-token', validate({ body: v.resetWithTokenSchema }), (req, res) => resetWithToken(req, res));
 
   // ---- MFA (Phase 1 + 2: admin + accountant + teacher + supervisor + reception) ----
   router.post('/auth/login/verify-mfa', mfaVerifyLoginLimiter, validate({ body: v.mfaVerifyLoginSchema }), (req, res) => verifyMfaLogin(req, res));
+  // Mid-sign-in: dispatch a phone/email OTP for an armed login factor. The
+  // mfaTicket (not a session) is the auth; no code is sent at /auth/login.
+  router.post('/auth/login/send-otp', loginOtpSendLimiter, validate({ body: v.sendLoginOtpSchema }), (req, res) => sendLoginOtpHandler(req, res));
   // Phase 2 forced enrollment — ticket-authenticated, mirrors the
   // authenticated setup/confirm flow for users the school is forcing in.
   router.post('/auth/login/mfa-enroll-setup', mfaVerifyLoginLimiter, validate({ body: v.mfaEnrollSetupSchema }), (req, res) => enrollSetupViaTicket(req, res));
@@ -203,6 +243,15 @@ export function createRouter(io: SocketServer) {
   router.post('/auth/mfa/disable-self', authenticate, mfaSelfLimiter, validate({ body: v.mfaDisableSelfSchema }), (req, res) => disableMfaSelf(req as AuthRequest, res));
   router.post('/auth/mfa/recovery-codes', authenticate, mfaSelfLimiter, validate({ body: v.mfaConfirmSchema }), (req, res) => regenerateRecoveryCodes(req as AuthRequest, res));
   router.post('/admin/users/:userId/mfa-disable', authenticate, authorize('admin'), validate({ params: vu.userIdParam, body: v.mfaAdminDisableSchema }), (req, res) => adminDisableMfa(req as AuthRequest, res));
+
+  // ---- Login factors (Phase 2): arm phone/email OTP as sign-in second
+  // factors. All roles (locked decision) — no role gate. TOTP keeps using the
+  // setup/confirm endpoints above; these cover phone/email + preferred default.
+  router.get('/auth/mfa/factors', authenticate, (req, res) => listLoginFactors(req as AuthRequest, res));
+  router.post('/auth/mfa/factors/:factor/send-code', authenticate, phoneOtpSendShortLimiter, phoneOtpSendLongLimiter, validate({ params: v.manageableFactorParam }), (req, res) => sendFactorCode(req as AuthRequest, res));
+  router.post('/auth/mfa/factors/:factor/enable', authenticate, mfaSelfLimiter, validate({ params: v.manageableFactorParam, body: v.factorManageSchema }), (req, res) => enableFactor(req as AuthRequest, res));
+  router.post('/auth/mfa/factors/:factor/disable', authenticate, mfaSelfLimiter, validate({ params: v.manageableFactorParam, body: v.factorManageSchema }), (req, res) => disableFactor(req as AuthRequest, res));
+  router.post('/auth/mfa/factors/:factor/preferred', authenticate, mfaSelfLimiter, validate({ params: v.preferredFactorParam }), (req, res) => setPreferred(req as AuthRequest, res));
 
   // ---- Trusted devices (Phase 3) ----
   router.get('/auth/trusted-devices', authenticate, (req, res) => listTrustedDevices(req as AuthRequest, res));

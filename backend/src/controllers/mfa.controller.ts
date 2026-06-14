@@ -10,6 +10,7 @@ import {
   encryptSecret, decryptSecret, generateRecoveryCodes,
 } from '../utils/mfa';
 import { revokeAllTrustedDevicesForUser, issueTrustedDevice } from '../utils/trustedDevice';
+import { getArmedLoginFactors, canRemoveFactor, cascadeDisarmAll } from '../utils/loginFactors';
 import type { AuthRequest } from '../middleware/auth';
 
 // Best-effort security-alert emails for MFA state changes. Same threat
@@ -353,6 +354,12 @@ export async function disableMfaSelf(req: AuthRequest, res: Response): Promise<v
     return;
   }
 
+  // Don't strand email as a lone sign-in factor when its TOTP partner goes.
+  if (!(await canRemoveFactor(userId!, 'totp'))) {
+    res.status(400).json({ error: 'Turn off email sign-in codes before disabling your authenticator — email can’t be your only factor.' });
+    return;
+  }
+
   const now = new Date().toISOString();
   // Keep the row for audit; mark disabled and clear secret bytes so a
   // future DB compromise can't recover it. Recovery codes are wiped too.
@@ -476,23 +483,33 @@ export async function adminDisableMfa(req: AuthRequest, res: Response): Promise<
     .eq('user_id', targetUserId)
     .maybeSingle();
   const r = row as { confirmed_at: string | null; disabled_at: string | null } | null;
-  if (!r || !r.confirmed_at || r.disabled_at) {
+  const hasActiveTotp = !!(r && r.confirmed_at && !r.disabled_at);
+  // Rescue covers phone/email login factors too, not just TOTP — a user locked
+  // out of a phone-only factor (no recovery codes yet) needs an admin path in.
+  const armedFactors = (await getArmedLoginFactors(targetUserId)).methods;
+  if (!hasActiveTotp && armedFactors.length === 0) {
     res.status(400).json({ error: 'Two-factor is not active for this user.' });
     return;
   }
 
   const now = new Date().toISOString();
-  // tenant-check-allow: user_mfa is user-keyed
-  await supabase
-    .from('user_mfa')
-    .update({
-      disabled_at: now,
-      disabled_by: adminId,
-      secret_encrypted: bytea(Buffer.from([])),
-      recovery_codes_hash: [],
-      updated_at: now,
-    })
-    .eq('user_id', targetUserId);
+  if (hasActiveTotp) {
+    // tenant-check-allow: user_mfa is user-keyed
+    await supabase
+      .from('user_mfa')
+      .update({
+        disabled_at: now,
+        disabled_by: adminId,
+        secret_encrypted: bytea(Buffer.from([])),
+        recovery_codes_hash: [],
+        updated_at: now,
+      })
+      .eq('user_id', targetUserId);
+  }
+
+  // Disarm every login factor (phone/email/totp registry rows) so the rescue
+  // clears the user's sign-in second factor whatever channel it used.
+  await cascadeDisarmAll(targetUserId);
 
   // Same reasoning as self-disable: trust dies when MFA dies.
   await revokeAllTrustedDevicesForUser(targetUserId);

@@ -102,13 +102,19 @@ export const authApi = {
     fd.append('avatar', file);
     return api.patch('/auth/profile-picture', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
   },
-  updateMyEmail: (email: string, currentPassword: string) =>
-    api.patch('/auth/me/email', { email, currentPassword }),
+  updateMyEmail: (email: string, currentPassword: string, proof?: StepUpProof) =>
+    api.patch('/auth/me/email', { email, currentPassword, proof }),
   verifyEmailCode: (code: string) => api.post('/auth/me/email/verify-code', { code }),
   recoverAccount: (token: string, newPassword: string) =>
     api.post('/auth/recover-account', { token, newPassword }),
-  verifyMfaLogin: (mfaTicket: string, code: string, rememberDevice?: boolean) =>
-    api.post('/auth/login/verify-mfa', { mfaTicket, code, rememberDevice }),
+  recoverPhone: (token: string) =>
+    api.post<{ phone: string | null }>('/auth/recover-phone', { token }),
+  verifyMfaLogin: (mfaTicket: string, code: string, rememberDevice?: boolean, method?: LoginFactorMethod) =>
+    api.post('/auth/login/verify-mfa', { mfaTicket, code, rememberDevice, ...(method ? { method } : {}) }),
+  // Mid-sign-in: dispatch a login OTP to a chosen channel (phone/email). TOTP
+  // needs no send (the code comes from the authenticator app).
+  sendLoginOtp: (mfaTicket: string, method: 'phone' | 'email') =>
+    api.post<{ ok: true; channel: 'whatsapp' | 'email' }>('/auth/login/send-otp', { mfaTicket, method }),
   enrollMfaSetup: (enrollmentTicket: string) =>
     api.post<{ qrDataUrl: string; secret: string; otpauthUri: string; recoveryCodes: string[] }>('/auth/login/mfa-enroll-setup', { enrollmentTicket }),
   enrollMfaConfirm: (enrollmentTicket: string, code: string, rememberDevice?: boolean) =>
@@ -128,16 +134,51 @@ export const authApi = {
     }>('/auth/me'),
 };
 
-// ---- Phone OTP (migration 050, Stage B — verify phone) ----
+// ---- Step-up auth for contact changes (migration 051) ----
+export type StepUpMethod = 'totp' | 'sms' | 'email';
+export interface StepUpProof { method: StepUpMethod; code: string }
+// Shape of a 401 body when the server demands a step-up proof.
+export interface StepUpChallenge {
+  stepUpRequired: true;
+  reason: string;
+  methods: StepUpMethod[];
+  error: string;
+}
+export const stepUpApi = {
+  // Dispatch a proof code to an existing factor (sms → current verified
+  // phone, email → email on file). TOTP needs no send.
+  sendProof: (action: 'change_phone' | 'change_email', channel: 'sms' | 'email') =>
+    api.post<{ channel: 'sms' | 'email'; sentTo: string }>('/auth/step-up/send-proof', { action, channel }),
+};
+
+// ---- Phone OTP (migration 050, Stage B — verify phone; hardened in 051) ----
 export const phoneOtpApi = {
-  sendVerify: (phone: string) =>
+  // currentPassword is always required; proof is required by the server
+  // only when changing an already-verified number (a StepUpChallenge 401
+  // is returned otherwise).
+  sendVerify: (phone: string, currentPassword: string, proof?: StepUpProof) =>
     api.post<{
       codeId: string;
       expiresAt: string;
       deliveryAttempted: { whatsapp: boolean; emailFallbackImmediate: boolean };
-    }>('/me/phone/send-verify-otp', { phone }),
+    }>('/me/phone/send-verify-otp', { phone, currentPassword, proof }),
   confirmVerify: (code: string) =>
     api.post<{ verifiedAt: string }>('/me/phone/confirm-verify-otp', { code }),
+};
+
+// ---- Bug report (Support section) ----
+export const bugReportApi = {
+  submit: async (
+    description: string,
+    deviceInfo: Record<string, string | undefined>,
+    attachment: File | null,
+  ): Promise<void> => {
+    const form = new FormData();
+    form.append('description', description);
+    form.append('deviceInfo', JSON.stringify(deviceInfo));
+    if (attachment) form.append('attachment', attachment);
+    await api.post('/bug-report', form, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
 };
 
 // ---- MFA (Phase 1: admin + accountant) ----
@@ -151,6 +192,22 @@ export const mfaApi = {
     api.post<{ recoveryCodes: string[] }>('/auth/mfa/recovery-codes', { code }),
   adminDisable: (userId: string, reason: string) =>
     api.post<{ ok: true }>(`/admin/users/${userId}/mfa-disable`, { reason }),
+};
+
+// ---- Login factors (Phase 2/3): phone/email OTP as sign-in second factors ----
+export type LoginFactorMethod = 'totp' | 'phone' | 'email';
+export interface FactorStatus { factor: LoginFactorMethod; available: boolean; armed: boolean; preferred: boolean }
+export const mfaFactorsApi = {
+  list: () => api.get<{ factors: FactorStatus[] }>('/auth/mfa/factors'),
+  // Confirmation code to the channel (used by both enable and disable).
+  sendCode: (factor: 'phone' | 'email') =>
+    api.post<{ ok: true; channel: 'whatsapp' | 'email' }>(`/auth/mfa/factors/${factor}/send-code`, {}),
+  enable: (factor: 'phone' | 'email', currentPassword: string, code: string) =>
+    api.post<{ ok: true; factors: FactorStatus[] }>(`/auth/mfa/factors/${factor}/enable`, { currentPassword, code }),
+  disable: (factor: 'phone' | 'email', currentPassword: string, code: string) =>
+    api.post<{ ok: true; factors: FactorStatus[] }>(`/auth/mfa/factors/${factor}/disable`, { currentPassword, code }),
+  setPreferred: (factor: LoginFactorMethod) =>
+    api.post<{ ok: true; factors: FactorStatus[] }>(`/auth/mfa/factors/${factor}/preferred`, {}),
 };
 
 // ---- Active sessions (refresh-token families) ----

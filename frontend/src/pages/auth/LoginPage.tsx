@@ -6,7 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Eye, EyeOff, LogIn, ShieldCheck, ArrowLeft, Copy, CheckCircle2, Loader2, Download } from 'lucide-react';
 import { toast } from 'react-toastify';
-import { authApi } from '../../services/api';
+import { authApi, type LoginFactorMethod } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { getTrustedDeviceToken, setTrustedDeviceToken, clearTrustedDeviceToken } from '../../utils/trustedDevice';
 import { downloadRecoveryCodes } from '../../utils/downloadCodes';
@@ -49,6 +49,14 @@ export default function LoginPage() {
   // device persistence keys by user, and the MFA-verify response can
   // store the new token against the right account.
   const [mfaUsername, setMfaUsername] = useState<string | null>(null);
+  // Method chooser (Phase 3): the server reports which factors are armed
+  // (totp / phone / email) + a preferred default. For TOTP-only users this is
+  // exactly ['totp'] and the UI below is unchanged.
+  const [mfaMethods, setMfaMethods] = useState<LoginFactorMethod[]>([]);
+  const [mfaMethod, setMfaMethod] = useState<LoginFactorMethod>('totp');
+  const [mfaCodeSent, setMfaCodeSent] = useState(false);   // phone/email: has a code been dispatched?
+  const [mfaSending, setMfaSending] = useState(false);
+  const [mfaChannel, setMfaChannel] = useState<'whatsapp' | 'email' | null>(null);
 
   // Phase 2 forced enrollment state. Same idea as mfaTicket but the
   // exchange path is different: the user enrolls (QR + 6-digit confirm)
@@ -94,11 +102,18 @@ export default function LoginPage() {
       const res = await authApi.login(data.username, data.password, trustedToken);
       // MFA-required users: server returns a ticket instead of tokens.
       if (res.data?.mfaRequired && res.data?.mfaTicket) {
+        const methods: LoginFactorMethod[] = res.data.methods?.length ? res.data.methods : ['totp'];
+        const preferred: LoginFactorMethod = methods.includes(res.data.preferred) ? res.data.preferred : methods[0];
         setMfaTicket(res.data.mfaTicket);
         setMfaRemember(!!data.rememberMe);
         setMfaUsername(data.username);
         setMfaCode('');
         setRememberDevice(false);
+        setMfaMethods(methods);
+        setMfaMethod(preferred);
+        setMfaChannel(null);
+        // totp needs no send; phone/email require the user to request a code.
+        setMfaCodeSent(preferred === 'totp');
         return;
       }
       // Phase 2: school requires MFA for this role, user isn't enrolled.
@@ -143,7 +158,7 @@ export default function LoginPage() {
     }
     setMfaVerifying(true);
     try {
-      const res = await authApi.verifyMfaLogin(mfaTicket, trimmed, rememberDevice);
+      const res = await authApi.verifyMfaLogin(mfaTicket, trimmed, rememberDevice, mfaMethod);
       const { token, refreshToken, user, school, trustedDeviceToken } = res.data;
       // Persist the trusted-device token BEFORE setAuth so a re-render
       // chain triggered by setAuth can read it if needed. Keyed by the
@@ -159,11 +174,10 @@ export default function LoginPage() {
       const msg = err.response?.data?.error;
       toast.error(msg || t('auth.mfa_failed', 'Could not verify code.'));
       if (status === 401 && msg && /sign in again/i.test(msg)) {
-        setMfaTicket(null);
-        setMfaCode('');
         // Drop a possibly-stale trusted token so the next attempt isn't
-        // poisoned by it.
+        // poisoned by it, then reset the whole MFA step.
         if (mfaUsername) clearTrustedDeviceToken(mfaUsername);
+        cancelMfa();
       }
     } finally {
       setMfaVerifying(false);
@@ -175,6 +189,39 @@ export default function LoginPage() {
     setMfaCode('');
     setMfaUsername(null);
     setRememberDevice(false);
+    setMfaMethods([]);
+    setMfaMethod('totp');
+    setMfaCodeSent(false);
+    setMfaChannel(null);
+  };
+
+  // Switch the active factor in the chooser. totp shows the code box straight
+  // away; phone/email drop back to the "send a code" state.
+  const selectMethod = (m: LoginFactorMethod) => {
+    setMfaMethod(m);
+    setMfaCode('');
+    setMfaChannel(null);
+    setMfaCodeSent(m === 'totp');
+  };
+
+  const onSendLoginCode = async () => {
+    if (!mfaTicket || mfaMethod === 'totp') return;
+    setMfaSending(true);
+    try {
+      const res = await authApi.sendLoginOtp(mfaTicket, mfaMethod);
+      setMfaChannel(res.data?.channel ?? (mfaMethod === 'phone' ? 'whatsapp' : 'email'));
+      setMfaCodeSent(true);
+    } catch (err: any) {
+      const status = err.response?.status;
+      const msg = err.response?.data?.error;
+      toast.error(msg || t('auth.login_otp_send_failed', 'Could not send a code. Try another method.'));
+      if (status === 401 && msg && /sign in again/i.test(msg)) {
+        if (mfaUsername) clearTrustedDeviceToken(mfaUsername);
+        cancelMfa();
+      }
+    } finally {
+      setMfaSending(false);
+    }
   };
 
   const copyText = async (text: string, marker: 'secret' | 'codes') => {
@@ -366,42 +413,94 @@ export default function LoginPage() {
                 </div>
                 <div>
                   <h2 className="text-base font-bold text-gray-900">{t('auth.mfa_title', 'Two-factor verification')}</h2>
-                  <p className="text-xs text-gray-500">{t('auth.mfa_subtitle', 'Enter the 6-digit code from your authenticator app, or use a recovery code.')}</p>
+                  <p className="text-xs text-gray-500">
+                    {mfaMethod === 'totp'
+                      ? t('auth.mfa_subtitle', 'Enter the 6-digit code from your authenticator app, or use a recovery code.')
+                      : mfaMethod === 'phone'
+                        ? t('auth.login_otp_phone_sub', 'Get a 6-digit code on your phone to finish signing in.')
+                        : t('auth.login_otp_email_sub', 'Get a 6-digit code by email to finish signing in.')}
+                  </p>
                 </div>
               </div>
-              <Input
-                label={t('auth.mfa_code_label', 'Authentication code')}
-                value={mfaCode}
-                onChange={(e) => setMfaCode(e.target.value)}
-                placeholder="123456"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                autoFocus
-                className="tracking-[0.3em] font-mono text-center text-lg"
-              />
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={rememberDevice}
-                  onChange={(e) => setRememberDevice(e.target.checked)}
-                  className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
-                />
-                <span className="text-sm text-gray-600">{t('auth.remember_device_30d', 'Remember this browser for 30 days')}</span>
-              </label>
-              <Button
-                type="submit"
-                fullWidth
-                loading={mfaVerifying}
-                icon={<LogIn className="w-4 h-4" />}
-              >
-                {t('auth.mfa_verify_action', 'Verify and sign in')}
-              </Button>
+
+              {/* Method chooser — only when more than one factor is armed. */}
+              {mfaMethods.length > 1 && (
+                <div className="grid grid-cols-3 gap-2">
+                  {mfaMethods.map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => selectMethod(m)}
+                      className={`rounded-xl border px-2 py-2 text-xs font-semibold transition-colors ${mfaMethod === m ? 'border-primary-500 bg-primary-50 text-primary-700' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}
+                    >
+                      {m === 'totp' ? t('auth.method_totp', 'Authenticator') : m === 'phone' ? t('auth.method_phone', 'Phone') : t('auth.method_email', 'Email')}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {mfaMethod !== 'totp' && !mfaCodeSent ? (
+                <Button type="button" fullWidth loading={mfaSending} onClick={onSendLoginCode}>
+                  {t('auth.login_otp_send', 'Send code')}
+                </Button>
+              ) : (
+                <>
+                  {mfaMethod !== 'totp' && (
+                    <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-2.5">
+                      <p className="text-xs text-amber-900">
+                        {mfaChannel === 'whatsapp'
+                          ? t('auth.login_otp_sent_whatsapp', 'We sent a code via WhatsApp.')
+                          : t('auth.login_otp_sent_email', 'We sent a code to your email.')}
+                      </p>
+                    </div>
+                  )}
+                  <Input
+                    label={t('auth.mfa_code_label', 'Authentication code')}
+                    value={mfaCode}
+                    onChange={(e) => setMfaCode(e.target.value)}
+                    placeholder="123456"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    dir="ltr"
+                    autoFocus
+                    className="tracking-[0.3em] font-mono text-center text-lg"
+                  />
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={rememberDevice}
+                      onChange={(e) => setRememberDevice(e.target.checked)}
+                      className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
+                    />
+                    <span className="text-sm text-gray-600">{t('auth.remember_device_30d', 'Remember this browser for 30 days')}</span>
+                  </label>
+                  <Button
+                    type="submit"
+                    fullWidth
+                    loading={mfaVerifying}
+                    icon={<LogIn className="w-4 h-4" />}
+                  >
+                    {t('auth.mfa_verify_action', 'Verify and sign in')}
+                  </Button>
+                  {mfaMethod !== 'totp' && (
+                    <button
+                      type="button"
+                      onClick={onSendLoginCode}
+                      disabled={mfaSending}
+                      className="w-full text-center text-sm text-primary-600 hover:text-primary-800 disabled:opacity-50"
+                    >
+                      {t('auth.login_otp_resend', 'Resend code')}
+                    </button>
+                  )}
+                </>
+              )}
+
               <button
                 type="button"
                 onClick={cancelMfa}
                 className="w-full inline-flex items-center justify-center gap-1.5 text-sm text-gray-600 hover:text-gray-800 mt-1"
               >
-                <ArrowLeft className="w-4 h-4" /> {t('auth.mfa_back', 'Back to sign in')}
+                <ArrowLeft className="w-4 h-4 rtl:rotate-180" /> {t('auth.mfa_back', 'Back to sign in')}
               </button>
             </form>
           ) : (

@@ -10,7 +10,9 @@ import ChatPage from './pages/chat/ChatPage';
 import LoginPage from './pages/auth/LoginPage';
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage';
 import RecoverAccountPage from './pages/auth/RecoverAccountPage';
+import RecoverPhonePage from './pages/auth/RecoverPhonePage';
 import ForceChangePasswordPage from './pages/auth/ForceChangePasswordPage';
+import AccountSettingsPage from './pages/AccountSettingsPage';
 
 // Parent
 import ParentDashboard from './pages/parent/ParentDashboard';
@@ -189,7 +191,11 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/recover-account" element={<RecoverAccountPage />} />
+        <Route path="/recover-phone" element={<RecoverPhonePage />} />
         <Route path="/force-change-password" element={<ForceChangeRoute><ForceChangePasswordPage /></ForceChangeRoute>} />
+
+        {/* Account settings — full-screen page, all roles */}
+        <Route path="/settings" element={<ProtectedRoute allowedRoles={['admin', 'parent', 'teacher', 'reception', 'accountant', 'driver', 'supervisor']}><AccountSettingsPage /></ProtectedRoute>} />
 
         {/* Parent Portal */}
         <Route path="/parent/dashboard" element={<ProtectedRoute allowedRoles={['parent']}><ParentDashboard /></ProtectedRoute>} />

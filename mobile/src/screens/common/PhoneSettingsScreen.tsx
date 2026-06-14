@@ -11,7 +11,7 @@ import {
 } from 'lucide-react-native';
 import { useColors } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
-import { phoneOtpApi, authApi } from '../../services/api';
+import { phoneOtpApi, authApi, stepUpApi, type StepUpMethod, type StepUpProof } from '../../services/api';
 import { spacing, radius, font } from '../../theme';
 
 // Phone verification — Stage B of the WhatsApp OTP feature
@@ -42,6 +42,21 @@ export default function PhoneSettingsScreen() {
   const [code, setCode] = useState('');
   const [verifying, setVerifying] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
+  // Re-auth password (now always required) + step-up state for changing
+  // an already-verified number (migration 051).
+  const [password, setPassword] = useState('');
+  const [stepUpMethods, setStepUpMethods] = useState<StepUpMethod[] | null>(null);
+  const [proofMethod, setProofMethod] = useState<StepUpMethod>('totp');
+  const [proofCode, setProofCode] = useState('');
+  const [proofSentTo, setProofSentTo] = useState<string | null>(null);
+  const [proofSending, setProofSending] = useState(false);
+
+  const needsSend = proofMethod === 'sms' || proofMethod === 'email';
+  const methodLabel = (m: StepUpMethod) =>
+    m === 'totp' ? t('step_up.method_totp', 'Authenticator app')
+      : m === 'sms' ? t('step_up.method_sms', 'Code to my current phone')
+        : t('step_up.method_email', 'Code to my email');
+  const pickMethod = (m: StepUpMethod) => { setProofMethod(m); setProofCode(''); setProofSentTo(null); };
 
   useEffect(() => {
     if (resendCooldown <= 0) return;
@@ -67,15 +82,20 @@ export default function PhoneSettingsScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const onSend = async () => {
+  const onSend = async (proof?: StepUpProof) => {
     const trimmed = phoneDraft.trim();
     if (!trimmed) {
       Alert.alert('', t('account_settings.phone_required', 'Phone number is required.'));
       return;
     }
+    if (!password) {
+      Alert.alert('', t('account_settings.password_required', 'Enter your current password to confirm.'));
+      return;
+    }
     setSubmitting(true);
     try {
-      const r = await phoneOtpApi.sendVerify(trimmed);
+      const r = await phoneOtpApi.sendVerify(trimmed, password, proof);
+      setStepUpMethods(null);
       setPendingPhone(trimmed);
       setStep('pending');
       setCode('');
@@ -86,12 +106,41 @@ export default function PhoneSettingsScreen() {
         Alert.alert('', t('account_settings.phone_code_sent_email', 'WhatsApp delivery is unavailable; we emailed you the code instead.'));
       }
     } catch (e: any) {
+      const data = e?.response?.data;
+      // Server wants proof of an existing factor before changing the number.
+      if (data?.stepUpRequired) {
+        const methods: StepUpMethod[] = data.methods || [];
+        setStepUpMethods(methods);
+        if (methods.length) pickMethod(methods[0]);
+        if (proof) {
+          Alert.alert(t('common.error', 'Error'), data.error || t('step_up.verify_failed', 'Verification failed. Try again.'));
+        }
+        return;
+      }
       Alert.alert(
         t('common.error', 'Error'),
-        e?.response?.data?.error || t('account_settings.phone_send_failed', 'Could not send verification code.'),
+        data?.error || t('account_settings.phone_send_failed', 'Could not send verification code.'),
       );
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // Dispatch a step-up proof code to an existing factor (old phone / email).
+  const onSendProof = async () => {
+    if (!needsSend) return;
+    setProofSending(true);
+    try {
+      const r = await stepUpApi.sendProof('change_phone', proofMethod as 'sms' | 'email');
+      setProofSentTo(r.data?.sentTo || null);
+      Alert.alert('✓', t('step_up.code_sent', 'Code sent to {{dest}}.', { dest: r.data?.sentTo || '' }));
+    } catch (e: any) {
+      Alert.alert(
+        t('common.error', 'Error'),
+        e?.response?.data?.error || t('step_up.send_failed', 'Could not send the code. Try another method.'),
+      );
+    } finally {
+      setProofSending(false);
     }
   };
 
@@ -108,6 +157,10 @@ export default function PhoneSettingsScreen() {
       setStep('idle');
       setPendingPhone(null);
       setCode('');
+      setPassword('');
+      setStepUpMethods(null);
+      setProofCode('');
+      setProofSentTo(null);
       Alert.alert('✓', t('account_settings.phone_verified', 'Phone verified.'));
     } catch (e: any) {
       const msg = e?.response?.data?.error || t('account_settings.phone_verify_failed', 'Could not verify code.');
@@ -127,6 +180,10 @@ export default function PhoneSettingsScreen() {
     setPendingPhone(null);
     setCode('');
     setPhoneDraft(user?.phoneE164 || '');
+    setPassword('');
+    setStepUpMethods(null);
+    setProofCode('');
+    setProofSentTo(null);
   };
 
   return (
@@ -202,7 +259,7 @@ export default function PhoneSettingsScreen() {
 
               <TouchableOpacity
                 style={[styles.outlineBtn, (resendCooldown > 0 || submitting) && { opacity: 0.5 }]}
-                onPress={onSend}
+                onPress={() => onSend()}
                 disabled={resendCooldown > 0 || submitting}
               >
                 {submitting ? <ActivityIndicator color={colors.primary} /> : (
@@ -231,6 +288,17 @@ export default function PhoneSettingsScreen() {
                 autoComplete="tel"
                 textContentType="telephoneNumber"
               />
+              <Text style={styles.smallLabel}>{t('account_settings.confirm_with_password', 'Confirm with current password')}</Text>
+              <TextInput
+                style={styles.input}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                placeholder="••••••••"
+                placeholderTextColor={colors.textMuted}
+                autoComplete="current-password"
+                textContentType="password"
+              />
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.xs, marginBottom: spacing.md }}>
                 <PhoneCall size={12} color={colors.textMuted} />
                 <Text style={[styles.cardSub, { flex: 1 }]}>
@@ -238,19 +306,80 @@ export default function PhoneSettingsScreen() {
                 </Text>
               </View>
 
-              <TouchableOpacity
-                style={[styles.primaryBtn, (submitting || !phoneDraft.trim()) && { opacity: 0.5 }]}
-                onPress={onSend}
-                disabled={submitting || !phoneDraft.trim()}
-              >
-                {submitting ? <ActivityIndicator color="#fff" /> : (
-                  <Text style={styles.primaryBtnText}>
-                    {user?.phoneE164 && phoneDraft.trim() === user.phoneE164 && user?.phoneVerifiedAt
-                      ? t('account_settings.phone_re_verify', 'Re-verify')
-                      : t('account_settings.phone_send_code', 'Send code')}
+              {stepUpMethods ? (
+                <View style={styles.stepUpCard}>
+                  <Text style={styles.stepUpTitle}>{t('step_up.title', "Verify it's really you")}</Text>
+                  <Text style={styles.cardSub}>
+                    {t('step_up.subtitle', 'For your security, this change needs one more check using a method already on your account.')}
                   </Text>
-                )}
-              </TouchableOpacity>
+                  {stepUpMethods.length > 1 && (
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.sm }}>
+                      {stepUpMethods.map(m => (
+                        <TouchableOpacity key={m} onPress={() => pickMethod(m)} style={[styles.chip, proofMethod === m && styles.chipActive]}>
+                          <Text style={[styles.chipText, proofMethod === m && styles.chipTextActive]}>{methodLabel(m)}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+                  {needsSend && (
+                    <TouchableOpacity
+                      style={[styles.outlineBtn, { marginTop: spacing.sm }, proofSending && { opacity: 0.5 }]}
+                      onPress={onSendProof}
+                      disabled={proofSending}
+                    >
+                      {proofSending ? <ActivityIndicator color={colors.primary} /> : (
+                        <Text style={[styles.outlineBtnText, { color: colors.primary }]}>
+                          {proofSentTo ? t('step_up.resend', 'Resend code') : t('step_up.send', 'Send code')}
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  )}
+                  {!!proofSentTo && (
+                    <Text style={[styles.cardSub, { marginTop: 4 }]}>
+                      {t('step_up.sent_to', 'Code sent to {{dest}}.', { dest: proofSentTo })}
+                    </Text>
+                  )}
+                  <Text style={styles.smallLabel}>
+                    {proofMethod === 'totp'
+                      ? t('step_up.totp_label', 'Authenticator or recovery code')
+                      : t('step_up.code_label', 'Verification code')}
+                  </Text>
+                  <TextInput
+                    style={[styles.input, styles.codeInput]}
+                    value={proofCode}
+                    onChangeText={v => setProofCode(proofMethod === 'totp' ? v.replace(/[^0-9A-Za-z-]/g, '').slice(0, 24) : v.replace(/\D/g, '').slice(0, 6))}
+                    keyboardType={proofMethod === 'totp' ? 'default' : 'number-pad'}
+                    placeholder="123456"
+                    placeholderTextColor={colors.textMuted}
+                    autoComplete="one-time-code"
+                    textContentType="oneTimeCode"
+                  />
+                  <TouchableOpacity
+                    style={[styles.primaryBtn, { marginTop: spacing.sm }, (submitting || !proofCode.trim() || (needsSend && !proofSentTo)) && { opacity: 0.5 }]}
+                    onPress={() => onSend({ method: proofMethod, code: proofCode.trim() })}
+                    disabled={submitting || !proofCode.trim() || (needsSend && !proofSentTo)}
+                  >
+                    {submitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>{t('step_up.verify_continue', 'Verify & continue')}</Text>}
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.outlineBtn, { borderColor: colors.border }]} onPress={onCancel}>
+                    <Text style={[styles.outlineBtnText, { color: colors.text }]}>{t('common.cancel', 'Cancel')}</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.primaryBtn, (submitting || !phoneDraft.trim() || !password) && { opacity: 0.5 }]}
+                  onPress={() => onSend()}
+                  disabled={submitting || !phoneDraft.trim() || !password}
+                >
+                  {submitting ? <ActivityIndicator color="#fff" /> : (
+                    <Text style={styles.primaryBtnText}>
+                      {user?.phoneE164 && phoneDraft.trim() === user.phoneE164 && user?.phoneVerifiedAt
+                        ? t('account_settings.phone_re_verify', 'Re-verify')
+                        : t('account_settings.phone_send_code', 'Send code')}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              )}
             </>
           )}
         </ScrollView>
@@ -285,6 +414,21 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   input: {
     backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md,
     fontSize: font.md, color: colors.text, borderWidth: 1, borderColor: colors.border,
+    // Phone numbers / codes / emails are LTR data — pin direction so they
+    // don't reverse or mis-space under an RTL (ar/ku) container.
+    writingDirection: 'ltr', textAlign: 'left',
   },
-  codeInput: { textAlign: 'center', letterSpacing: 8, fontSize: 22, fontVariant: ['tabular-nums'] },
+  codeInput: { textAlign: 'center', letterSpacing: 8, fontSize: 22, fontVariant: ['tabular-nums'], writingDirection: 'ltr' },
+  stepUpCard: {
+    backgroundColor: colors.card, borderRadius: radius.md, borderWidth: 1, borderColor: colors.primary,
+    padding: spacing.md, marginTop: spacing.sm, marginBottom: spacing.sm,
+  },
+  stepUpTitle: { fontSize: font.sm, fontWeight: '700', color: colors.text, marginBottom: 4 },
+  chip: {
+    paddingHorizontal: spacing.sm, paddingVertical: 6, borderRadius: 999,
+    borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bg,
+  },
+  chipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  chipText: { fontSize: font.xs, fontWeight: '600', color: colors.text },
+  chipTextActive: { color: '#fff' },
 });
