@@ -45,7 +45,17 @@ process.on('uncaughtException', (err) => {
 });
 
 const app = express();
-app.set('trust proxy', 1); // Trust Railway's reverse proxy for accurate IP in rate limiting
+// Railway fronts the app with TWO proxy hops, confirmed by measuring the
+// live X-Forwarded-For chain on 2026-06-16 (via the /api/debug/ip route):
+//   <real client>, <CDN77/DataCamp edge PoP>   + socket peer in 100.64.0.0/10
+// i.e. client -> CDN77 edge (public ingress, 89.222.x.x, geo-distributed)
+//      -> Railway internal router -> app.
+// trust proxy must be 2 so req.ip resolves to the real client rather than
+// the CDN edge PoP. It was 1, which logged the foreign, country-hopping
+// CDN77 PoP IP for every user. Do NOT raise this to `true` or higher: that
+// trusts client-supplied X-Forwarded-For entries and reintroduces IP
+// spoofing (H-3). Re-measure with /api/debug/ip if Railway changes edges.
+app.set('trust proxy', 2);
 const httpServer = http.createServer(app);
 
 // Socket.io setup
