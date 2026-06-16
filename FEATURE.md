@@ -120,6 +120,17 @@ See [`memory/student-transfer-plan.md`](C:\Users\rasts\.claude\projects\e--maste
 
 When master.elkurdi.co's identity DB grows the student-identity tables and exposes the matching API, Phase C is a couple of days of integration on the Scholify side — the wizard, state machine, bundle format, and UI all stay.
 
+### ⚠️ Scalability flag — added 2026-06-16
+
+Phase C is **dependency-gated, not load-gated** — it waits on
+master.elkurdi.co's identity DB, not on throughput. When it resumes,
+size two things: (1) the one-shot `STU_*` backfill scales linearly with
+total students across every school — batch it, run off-peak; (2) the
+cross-school dedup match (national-ID-hash + DOB) fires on every
+student-create and transfer-accept — the identity DB needs hash + DOB
+indexes before this opens platform-wide. Both are cheap at today's scale;
+neither is a redesign.
+
 ---
 
 ## Lifetime transcript view (HD-9 from the 2026-06 historical-data audit)
@@ -179,6 +190,13 @@ Sized at ~2 days of focused work.
 - Reports in the snapshot already carry `teacher_name_snapshot` + `class_name_snapshot` (PR 1) so the transcript renders correct names even if the writing teacher has been archived since.
 - A graduated student has `is_graduated=true` + an `archived_students` row (`reason='graduated'`) referenced via `original_student_id`. The transcript should pull that snapshot too, not just rely on the live row.
 - Archive-gated like the rest of the historical-data surfaces. Schools without the archive feature get a transcript spanning only their currently-enrolled year and any current `student_enrollments` rows.
+
+### ⚠️ Scalability flag — added 2026-06-16
+
+No scale concern. Read-only, on-demand, one student at a time; the
+`previous_archive_id` walk is bounded by years enrolled (single digits).
+The only heavy step is PDF generation — render server-side and stream the
+response, don't buffer many at once. Safe to ship as designed.
 
 ---
 
@@ -244,6 +262,14 @@ this for a deliberate UX pass keeps the defensive PRs (PR A + PR B) tight.
 - The new fee_installments dates need explicit re-billing — cloning a plan creates the schedule but no `student_fees` rows. The wizard should call the existing batch-assign endpoint (or surface a CTA pointing the accountant to it) so the new plan actually reaches students.
 - Authoritative current academic year lives on `schools.current_academic_year` since migration 042. Read it via `resolveCurrentAcademicYear`.
 - The accountant could legitimately run the wizard MID-year as a "close FY 2025 retroactively" action — don't gate strictly on a date window. Gate on "any open prior-year period exists" or similar state-based check.
+
+### ⚠️ Scalability flag — added 2026-06-16
+
+No scale concern. Runs at most once per school per fiscal year against a
+single school's `fee_plans` / `fee_installments`. The watch-item is
+correctness, not load: cloning a plan builds the schedule but no
+`student_fees` rows — the actual volume lives in the re-billing batch
+(noted above), which already exists and is sized.
 
 ---
 
@@ -348,6 +374,20 @@ sends it.
 - Do not add a "remember my private key" toggle. The point of the
   feature is that the key is short-lived in browser memory; persisting
   it would re-introduce the problem we're avoiding.
+
+### ⚠️ Scalability flag — added 2026-06-16 — the one real ceiling
+
+**This is the only shelved feature with a hard architectural scale
+limit.** The browser holds the *entire* decrypted blob in tab memory
+during parse — the "key never leaves the laptop" guarantee forbids
+server-side decrypt, so there's no offloading it. Fine for 50–500MB
+tarballs; a large production `.tar.age` will OOM the tab if handled as
+one blob. Before building the real-restore path: measure against the
+largest live tarball, and if it's anywhere near the ceiling, build a
+**streamed parse + per-file chunked upload from day one** rather than the
+single-blob shortcut. Drill mode (decrypt + list, no upload) is lower
+risk — ship it first. Don't let "works on my 80MB test file" stand in for
+production size.
 
 ---
 
@@ -464,17 +504,24 @@ When the future endpoint lands, the role gate is `role === 'admin'`.
 If an explicit `hr` role is added to `users.role`, extend the gate to
 `['admin', 'hr']`.
 
+> **⚠️ Migration-number note (added 2026-06-16).** This plan originally
+> reused migration numbers **050 / 051 / 052**, which were later consumed
+> by the phone-OTP / login-MFA work and run against Supabase
+> (`050_phone_otp`, `051_contact_change_stepup`, `052_mfa_login_factors`,
+> `053_step_up_login_mfa_action`). The list below has been **renumbered to
+> 054+** to match — do NOT recreate 050/051/052.
+
 ### What's left to build (in suggested order)
 
-1. **Migration 050** — `student_monthly_metrics` + `teacher_monthly_metrics`.
-2. **Migration 051** — `audit_logs.entity_type` CHECK extension
+1. **Migration 054** — `student_monthly_metrics` + `teacher_monthly_metrics`. *(was 050 — renumbered, see note above)*
+2. **Migration 055** — `audit_logs.entity_type` CHECK extension
    (`homework_submission`, `assignment_completion`, `report_behavior_tag`,
    `student_monthly_metrics`, `teacher_monthly_metrics`).
 3. **Backend writers** — `PATCH /teacher/homework/:id/students/:studentId/complete`
    + assignment equivalent + admin CRUD for `report_behavior_tags`.
 4. **Frontend writer UI** — checkboxes per student on `WriteHomeworkPage`
    + `WriteAssignmentsPage` + mobile equivalents.
-5. **Migration 052** — add `UNIQUE(school_id, student_id, subject, year_month)`
+5. **Migration 056** — add `UNIQUE(school_id, student_id, subject, year_month)`
    on `reports` after a dedupe pass. Pair with the UPSERT UX update.
 6. **Backend rollup job** — nightly cron writing the materialised
    tables. Backfill the past 2-3 months from existing `grades`,
@@ -547,6 +594,23 @@ If an explicit `hr` role is added to `users.role`, extend the gate to
   (mid-year scale changes, behaviour-tag gaming, supervisor access
   exclusion, monthly cadence enforcement) were each settled with
   explicit user calls that aren't obvious from the schema alone.
+
+### ⚠️ Scalability flag — added 2026-06-16
+
+The architecture here is already the scalable one — precomputed
+`*_monthly_metrics` tables that dashboards read single-row, plus the
+supporting indexes shipped in 049. Two job-design choices to get right
+when writers/rollup land (neither needs a schema change):
+
+- **Make the nightly rollup incremental, never a full sweep.** It scales
+  with total grades/reports/attendance across *all* schools — process
+  only rows changed since the last run (a watermark on `updated_at` /
+  `created_at`), not the whole history every night.
+- **Mind the eager fan-out write volume.** One
+  `homework_submissions` / `assignment_completions` row per student per
+  assignment is trivial per-school but compounds platform-wide. It's
+  bounded and accepted per the locked design — just don't be surprised by
+  the row count when you query it.
 
 ---
 
@@ -805,5 +869,16 @@ OTPIQ_WEBHOOK_URL=         # public URL OTPIQ POSTs delivery events to (Railway 
 - Dev keys (`sk_dev_…`) route ALL sends to a single configured
   development phone regardless of `phoneNumber` in the payload.
   Use them in e2e + local dev so we never spam real numbers.
+
+### ⚠️ Scalability flag — added 2026-06-16
+
+Not a throughput problem — a **cost curve**, and it's live now (Stage A
+shipped). Every login by an armed user fires a paid WhatsApp OTP via
+OTPIQ; trusted-device caching + voluntary opt-in bound it, but the bill
+tracks adoption, not infra load. Watch it as uptake grows — the levers
+are a longer trusted-device TTL and nudging users toward TOTP (free)
+where the role allows. Stage C (forgot-password) adds only one-per-reset
+bursts (negligible). The existing rate limits cap abuse, not legitimate
+cost.
 
 
