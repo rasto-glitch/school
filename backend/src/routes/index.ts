@@ -185,30 +185,6 @@ const stepUpProofLimiter = rateLimit({
 export function createRouter(io: SocketServer) {
   const router = Router();
 
-  // ---- TEMPORARY IP DIAGNOSTIC (REMOVE AFTER trust-proxy tuning) ----
-  // Echoes the raw forwarding chain so we can count the real number of
-  // proxy hops in front of the app and set `trust proxy` correctly.
-  // Reflects only the caller's own request metadata — no secrets. Open
-  // it from the same device/network you sign in from and report the JSON.
-  // The raw `x-forwarded-for` value below is independent of the current
-  // `trust proxy` setting, so it shows the FULL chain regardless.
-  router.get('/debug/ip', (req: Request, res: Response) => {
-    res.json({
-      reqIp: req.ip,                                       // what Express computes under trust proxy: 1
-      reqIps: req.ips,                                     // hops Express currently considers trusted
-      socketRemoteAddress: req.socket.remoteAddress,       // the actual TCP peer (immediate upstream)
-      headers: {
-        'x-forwarded-for': req.headers['x-forwarded-for'] ?? null,   // FULL chain, untouched by trust proxy
-        'x-real-ip': req.headers['x-real-ip'] ?? null,
-        'cf-connecting-ip': req.headers['cf-connecting-ip'] ?? null,  // present iff Cloudflare is in path
-        'true-client-ip': req.headers['true-client-ip'] ?? null,
-        'forwarded': req.headers['forwarded'] ?? null,
-        'x-forwarded-host': req.headers['x-forwarded-host'] ?? null,
-        'x-forwarded-proto': req.headers['x-forwarded-proto'] ?? null,
-      },
-    });
-  });
-
   // ---- PUBLIC ----
   router.get('/schools', getSchools);
   router.post('/auth/forgot-password', validate({ body: v.forgotPasswordSchema }), (req, res) => forgotPassword(req, res));

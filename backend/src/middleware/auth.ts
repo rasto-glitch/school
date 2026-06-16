@@ -22,6 +22,21 @@ export interface AuthRequest extends Request {
   db?: SupabaseClient;
 }
 
+// Endpoints a user with must_change_password=true may still reach — the
+// ones needed to actually change the password or sign out. Everything else
+// is blocked until they pick a real password (see the gate in authenticate).
+// Matched by suffix so it's independent of the router's mount prefix.
+const PASSWORD_CHANGE_EXEMPT_SUFFIXES = [
+  '/auth/first-time-change-password',
+  '/auth/change-password',
+  '/auth/logout',
+  '/auth/logout-all',
+  '/auth/me',
+];
+function isPasswordChangeExempt(path: string): boolean {
+  return PASSWORD_CHANGE_EXEMPT_SUFFIXES.some((s) => path === s || path.endsWith(s));
+}
+
 export async function authenticate(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -43,7 +58,7 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
 
   const { data: user } = await supabase
     .from('users')
-    .select('is_active, password_changed_at, schools(is_active, features_version, features)')
+    .select('is_active, password_changed_at, must_change_password, schools(is_active, features_version, features)')
     .eq('id', decoded.userId)
     .single();
 
@@ -90,6 +105,28 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
       res.status(401).json({ error: FORCE_RELOGIN });
       return;
     }
+  }
+
+  // SECURITY: accounts created with a shipped default password
+  // (Parent@123 / Teacher@123 / …) carry must_change_password=true. The web
+  // and mobile clients already force the change screen, but that gate is
+  // UI-only — a non-UI client (raw HTTP, e.g. the okhttp logins observed
+  // against the demo account) could sign in with the public default and
+  // operate the account without ever changing it. Enforce it server-side:
+  // block every endpoint except the ones needed to change the password or
+  // sign out. Distinct 403 + code so a client can route to the change screen
+  // (this isn't an enumeration vector — the caller already holds a valid
+  // token for their own account, unlike the generic-401 cases above).
+  if (
+    (user as { must_change_password?: boolean }).must_change_password &&
+    !isPasswordChangeExempt(req.path)
+  ) {
+    logger.info('authenticate blocked: password change required', { userId: decoded.userId, path: req.path });
+    res.status(403).json({
+      error: 'You must set a new password before continuing.',
+      code: 'PASSWORD_CHANGE_REQUIRED',
+    });
+    return;
   }
 
   req.user = decoded;
