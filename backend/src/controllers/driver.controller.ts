@@ -14,6 +14,12 @@ const THRESH_RANK: Record<ProxThreshold, number> = { '10min': 1, '5min': 2, '2mi
 // Cleared on startDrive / stopDrive; lost on server restart (acceptable)
 const proximityState = new Map<string, Map<string, ProxThreshold>>();
 
+// A GPS fix already this old when it reaches us is treated as stale — the
+// device returned a cached position (screen off / no signal / app sleeping).
+// We still record it for history, but suppress proximity alerts so a frozen
+// location can't keep pinging parents "X minutes away" when the bus isn't moving.
+const STALE_FIX_MS = 60_000;
+
 // Haversine distance in miles
 function distanceMiles(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 3958.8;
@@ -63,7 +69,7 @@ export async function getMyStudents(req: AuthRequest, res: Response): Promise<vo
 
 export async function updateLocation(req: AuthRequest, res: Response, io?: SocketServer): Promise<void> {
   const { schoolId, userId } = req.user!;
-  const { latitude, longitude, speed, heading, isDriving } = req.body;
+  const { latitude, longitude, speed, heading, isDriving, fixAgeMs } = req.body;
 
   const { data: driver } = await req.db!.from('drivers').select('id, bus_id, excluded_student_ids').eq('user_id', userId).eq('school_id', schoolId).single();
   if (!driver) { res.status(404).json({ error: 'Driver not found' }); return; }
@@ -80,8 +86,12 @@ export async function updateLocation(req: AuthRequest, res: Response, io?: Socke
     is_driving: isDriving !== false,
   });
 
-  // Check proximity and send notifications
-  if (isDriving) {
+  // Stale fixes (cached positions from a sleeping device) must not drive
+  // proximity alerts — otherwise a frozen "5 minutes away" keeps pinging.
+  const fixIsStale = typeof fixAgeMs === 'number' && fixAgeMs > STALE_FIX_MS;
+
+  // Check proximity and send notifications (fresh fixes only)
+  if (isDriving && !fixIsStale) {
     const excluded: string[] = (driver as any).excluded_student_ids || [];
     let studentsQuery = req.db!
       .from('students')
@@ -159,7 +169,7 @@ export async function updateLocation(req: AuthRequest, res: Response, io?: Socke
 
   // Broadcast new location to all clients watching this driver (school-scoped room)
   if (io) {
-    io.to(`school:${schoolId}:driver:${driver.id}`).emit('locationUpdate', { driverId: driver.id, latitude, longitude, speed, heading, isDriving });
+    io.to(`school:${schoolId}:driver:${driver.id}`).emit('locationUpdate', { driverId: driver.id, latitude, longitude, speed, heading, isDriving, stale: fixIsStale });
   }
 
   res.json({ success: true });

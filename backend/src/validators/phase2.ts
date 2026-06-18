@@ -129,6 +129,9 @@ export const updateLocationSchema = z.object({
   speed: z.number().nonnegative().max(1000).optional(),
   heading: z.number().min(0).max(360).optional(),
   isDriving: z.boolean().optional(),
+  // Age of the GPS fix (ms) as measured on-device. Used to drop proximity
+  // alerts off stale cached positions. Capped at 24h to reject garbage.
+  fixAgeMs: z.number().nonnegative().max(86_400_000).optional(),
 });
 export const startDriveSchema = z.object({
   studentRides: z.array(z.object({

@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Alert, Switch,
+  ActivityIndicator, Alert, Switch, Modal,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -33,6 +33,7 @@ export default function StartDriveScreen() {
   const [schoolAbsences, setSchoolAbsences] = useState<Map<string, string>>(new Map());
   const [isDriving, setIsDriving] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [showDisclosure, setShowDisclosure] = useState(false);
 
   useEffect(() => {
     driverApi.getStudents().then(r => setStudents(r.data || [])).catch(() => {});
@@ -76,12 +77,28 @@ export default function StartDriveScreen() {
     });
   };
 
+  // Tapping "Start drive": ensure foreground permission, then — if background
+  // isn't granted yet — show the prominent disclosure BEFORE requesting
+  // ACCESS_BACKGROUND_LOCATION (Google Play policy). If already granted, start.
   const startDrive = async () => {
     const { status: fg } = await Location.requestForegroundPermissionsAsync();
     if (fg !== 'granted') {
       Alert.alert(t('driver.perm_required_title'), t('driver.perm_required_body'));
       return;
     }
+    const { status: bg } = await Location.getBackgroundPermissionsAsync();
+    if (bg !== 'granted') {
+      setShowDisclosure(true); // disclosure must precede the OS background-permission request
+      return;
+    }
+    beginDrive();
+  };
+
+  // Driver accepted the disclosure → request background permission, then start.
+  // We start either way: the foreground service tracks while the app is open,
+  // and the alert nudges them to "Allow all the time" for screen-off tracking.
+  const handleDisclosureContinue = async () => {
+    setShowDisclosure(false);
     const { status: bg } = await Location.requestBackgroundPermissionsAsync();
     if (bg !== 'granted') {
       Alert.alert(
@@ -90,7 +107,10 @@ export default function StartDriveScreen() {
         [{ text: t('driver.continue_anyway') }, { text: t('driver.open_settings'), onPress: () => Location.requestBackgroundPermissionsAsync() }]
       );
     }
+    beginDrive();
+  };
 
+  const beginDrive = async () => {
     setLoading(true);
     try {
       // Build ride records for every student
@@ -238,6 +258,25 @@ export default function StartDriveScreen() {
           : <Text style={styles.btnText}>{isDriving ? t('driver.stop_drive') : t('driver.start_drive')}</Text>
         }
       </TouchableOpacity>
+
+      {/* Prominent background-location disclosure (Google Play policy):
+          shown before the OS background-permission request. */}
+      <Modal visible={showDisclosure} transparent animationType="fade" onRequestClose={() => setShowDisclosure(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>{t('driver.disclosure_title', 'Share your location with parents')}</Text>
+            <Text style={styles.modalBody}>
+              {t('driver.disclosure_body', "When you start a route, Scholify collects this device's location and shares it with parents in the background — even when the app is minimized or the screen is off — so they can follow the bus on a live map and get bus-nearby alerts. Location is collected only while a route is active (shown by an ongoing notification) and stops when you end the route.")}
+            </Text>
+            <TouchableOpacity style={styles.modalPrimary} onPress={handleDisclosureContinue}>
+              <Text style={styles.modalPrimaryText}>{t('driver.disclosure_continue', 'Continue')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.modalSecondary} onPress={() => setShowDisclosure(false)}>
+              <Text style={styles.modalSecondaryText}>{t('driver.disclosure_decline', 'Not now')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -280,4 +319,12 @@ const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').u
   btnStart: { backgroundColor: colors.primary },
   btnStop: { backgroundColor: colors.danger },
   btnText: { color: colors.textInverse, fontSize: font.lg, fontWeight: '700' },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: spacing.lg },
+  modalCard: { backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.lg },
+  modalTitle: { fontSize: font.lg, fontWeight: '700', color: colors.text, marginBottom: spacing.sm },
+  modalBody: { fontSize: font.sm, color: colors.textSecondary, lineHeight: 20, marginBottom: spacing.lg },
+  modalPrimary: { backgroundColor: colors.primary, borderRadius: radius.md, paddingVertical: 14, alignItems: 'center' },
+  modalPrimaryText: { color: colors.textInverse, fontSize: font.md, fontWeight: '700' },
+  modalSecondary: { paddingVertical: 12, alignItems: 'center', marginTop: spacing.xs },
+  modalSecondaryText: { color: colors.textSecondary, fontSize: font.sm, fontWeight: '600' },
 });

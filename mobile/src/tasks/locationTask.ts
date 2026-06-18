@@ -39,6 +39,11 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }: TaskManager.T
         speed: loc.coords.speed ?? 0,
         heading: loc.coords.heading ?? 0,
         isDriving: true,
+        // Age of this GPS fix at send time, computed on-device so it's immune
+        // to device/server clock skew. The backend suppresses proximity alerts
+        // when this is large — i.e. the OS handed us a stale cached position
+        // (screen off / no signal) rather than a live fix.
+        fixAgeMs: Math.max(0, Date.now() - loc.timestamp),
       }),
     });
   } catch {}
