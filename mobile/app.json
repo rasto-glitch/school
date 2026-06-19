@@ -7,6 +7,7 @@
     "userInterfaceStyle": "light",
     "icon": "./assets/logo.png",
     "ios": {
+      "runtimeVersion": "1.1",
       "bundleIdentifier": "com.rastoelkurdi.schoolportal",
       "supportsTablet": false,
       "icon": "./assets/logo-ios.png",
@@ -21,6 +22,7 @@
       }
     },
     "android": {
+      "runtimeVersion": "1.0",
       "adaptiveIcon": {
         "foregroundImage": "./assets/logo-android.png",
         "backgroundColor": "#4F46E5"
