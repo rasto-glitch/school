@@ -2,7 +2,7 @@
   "auth": {
     "subtitle": "Sign in to your account",
     "username": "Username",
-    "username_ph": "e.g. fisk_username",
+    "username_ph": "e.g. school_username",
     "password": "Password",
     "password_ph": "Enter your password",
     "remember_me": "Remember me",

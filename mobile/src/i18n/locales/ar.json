@@ -16,7 +16,7 @@
   "auth": {
     "subtitle": "سجّل الدخول إلى حسابك",
     "username": "اسم المستخدم",
-    "username_ph": "مثال: fisk_username",
+    "username_ph": "مثال: school_username",
     "password": "كلمة المرور",
     "password_ph": "أدخل كلمة المرور",
     "sign_in": "تسجيل الدخول",

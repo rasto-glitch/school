@@ -43,7 +43,7 @@ function requireCreds(role: TestRole): { username: string; password: string } {
 export async function loginAs(page: Page, role: TestRole, opts: { rememberMe?: boolean } = {}): Promise<void> {
   const { username, password } = requireCreds(role);
   await page.goto('/login');
-  await page.getByPlaceholder(/fisk_username/i).fill(username);
+  await page.getByPlaceholder(/school_username/i).fill(username);
   await page.getByPlaceholder(/Enter your password/i).fill(password);
   if (opts.rememberMe) {
     await page.getByRole('checkbox', { name: /remember me/i }).check();

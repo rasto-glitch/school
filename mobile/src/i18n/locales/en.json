@@ -16,7 +16,7 @@
   "auth": {
     "subtitle": "Sign in to your account",
     "username": "Username",
-    "username_ph": "e.g. fisk_username",
+    "username_ph": "e.g. school_username",
     "password": "Password",
     "password_ph": "Enter your password",
     "sign_in": "Sign In",
