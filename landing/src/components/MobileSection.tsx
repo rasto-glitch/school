@@ -22,26 +22,22 @@ export default function MobileSection() {
 
             <div className="mt-8 flex flex-col sm:flex-row gap-3">
               <a
-                href="#"
-                aria-disabled
+                href="https://apps.apple.com/us/app/scholify/id6764818420"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="group inline-flex items-center gap-3 rounded-2xl bg-slate-900 px-5 py-3 text-white hover:bg-slate-800 transition"
               >
                 <Apple size={26} />
-                <div className="text-start leading-tight">
-                  <div className="text-[10px] uppercase tracking-wider opacity-80">{t('mobile.comingSoon')}</div>
-                  <div className="text-sm font-semibold">{t('mobile.appStore')}</div>
-                </div>
+                <span className="text-sm font-semibold">{t('mobile.appStore')}</span>
               </a>
               <a
-                href="#"
-                aria-disabled
+                href="https://play.google.com/store/apps/details?id=com.rastoelkurdi.schoolportal&pcampaignid=web_share"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="group inline-flex items-center gap-3 rounded-2xl bg-slate-900 px-5 py-3 text-white hover:bg-slate-800 transition"
               >
                 <Smartphone size={26} />
-                <div className="text-start leading-tight">
-                  <div className="text-[10px] uppercase tracking-wider opacity-80">{t('mobile.comingSoon')}</div>
-                  <div className="text-sm font-semibold">{t('mobile.playStore')}</div>
-                </div>
+                <span className="text-sm font-semibold">{t('mobile.playStore')}</span>
               </a>
             </div>
 
