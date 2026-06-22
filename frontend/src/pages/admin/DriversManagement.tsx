@@ -14,6 +14,7 @@ import Button from '../../components/common/Button';
 import ArchiveReasonModal from '../../components/common/ArchiveReasonModal';
 import ReturningEmployeeSearch, { type ReturningEmployeeCandidate } from '../../components/common/ReturningEmployeeSearch';
 import EmployeeHRFields, { hrPayload, type EmployeeHRFormFields } from '../../components/admin/EmployeeHRFields';
+import EmployeeBulkUpload from '../../components/admin/employees/EmployeeBulkUpload';
 import ProfessionalPhotoField from '../../components/admin/ProfessionalPhotoField';
 import type { Class, Driver, Student } from '../../types';
 
@@ -289,6 +290,9 @@ export default function DriversManagement() {
       </Card>
 
       <div className="space-y-6">
+        {/* Bulk upload — create many drivers from one spreadsheet. */}
+        <EmployeeBulkUpload role="driver" onDone={load} />
+
         {/* Add Driver — full width, two-phase (Add → attach photo → Save) */}
         <Card>
           <h2 className="font-semibold text-gray-900 mb-4">{t('admin.drivers_mgmt.add_driver')}</h2>

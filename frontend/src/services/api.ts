@@ -373,6 +373,14 @@ export const adminApi = {
     fd.append('file', file);
     return api.post('/admin/students/bulk-upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
   },
+  bulkUploadEmployees: (role: 'teacher' | 'driver', file: File) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return api.post('/admin/employees/bulk-upload', fd, {
+      params: { role },
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
   getStudentBrief: (id: string) => api.get(`/admin/students/${id}/brief`),
   // Per-year academic progression (migration 030)
   getStudentEnrollments: (id: string) => api.get(`/admin/students/${id}/enrollments`),

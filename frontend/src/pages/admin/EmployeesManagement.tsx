@@ -19,6 +19,7 @@ import { useTranslation } from 'react-i18next';
 import PageLayout from '../../components/layout/PageLayout';
 import { useAuthStore } from '../../store/authStore';
 import NewEmployeeWizard from '../../components/admin/employees/wizard/NewEmployeeWizard';
+import EmployeeBulkUpload from '../../components/admin/employees/EmployeeBulkUpload';
 import ActiveEmployeeList from './employees/ActiveEmployeeList';
 import ArchivedEmployeeList from './employees/ArchivedEmployeeList';
 import type { EmployeeRole } from '../../types/employeeRecords';
@@ -105,6 +106,7 @@ export default function EmployeesManagement() {
         </div>
 
         {/* Body — switch on (top, sub). */}
+        {top === 'add' && sub === 'teacher' && <EmployeeBulkUpload role="teacher" />}
         {top === 'add' && <NewEmployeeWizard role={sub as EmployeeRole} />}
         {top === 'active' && <ActiveEmployeeList role={sub as EmployeeRole} />}
         {top === 'archived' && <ArchivedEmployeeList role={sub as EmployeeRole} />}

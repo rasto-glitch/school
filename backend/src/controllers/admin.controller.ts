@@ -885,6 +885,388 @@ export async function bulkUploadStudents(req: AuthRequest, res: Response): Promi
   res.json({ created, skipped: skipped.length, total: rows.length, autoCreatedClasses, parentAccountsCreated, errors });
 }
 
+// ---- BULK UPLOAD EMPLOYEES (teachers / drivers) ----
+//
+// Sibling of bulkUploadStudents: same hardened in-memory XLSX parse (multer
+// memoryStorage → the buffer never hits disk), same multi-pass batch-insert
+// shape, with auto-create of any missing classes (teachers) / buses (drivers).
+// One endpoint; the role is chosen via ?role=teacher|driver.
+//
+// PII note: this carries the full migration-024 flat HR columns INCLUDING
+// national_id + date_of_birth — stored plaintext exactly as single-create
+// (createTeacher/createDriver) writes them. The encrypted extended profile
+// (employee_extended_profile) and employee documents are a deliberate later
+// add-on keyed off the user_id/employee id created here, NOT part of this path.
+export async function bulkUploadEmployees(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+
+  const roleParam = String(req.query.role || '').toLowerCase();
+  if (roleParam !== 'teacher' && roleParam !== 'driver') {
+    res.status(400).json({ error: 'Query param "role" must be "teacher" or "driver".' });
+    return;
+  }
+  const role: 'teacher' | 'driver' = roleParam;
+
+  if (!req.file) {
+    res.status(400).json({ error: 'No file uploaded' });
+    return;
+  }
+
+  // Hardened parse — identical posture to bulkUploadStudents: bound rows at
+  // read time, only the first sheet, scrub prototype-polluting header keys.
+  const MAX_UPLOAD_ROWS = 5000;
+  let workbook: XLSX.WorkBook;
+  try {
+    workbook = XLSX.read(req.file.buffer, { type: 'buffer', cellDates: true, sheetRows: MAX_UPLOAD_ROWS + 1 });
+  } catch {
+    res.status(400).json({ error: 'Could not parse the file. Make sure it is a valid .xlsx or .xls file.' });
+    return;
+  }
+
+  const firstSheetName = workbook.SheetNames[0];
+  if (!firstSheetName || !workbook.Sheets[firstSheetName]) {
+    res.status(400).json({ error: 'The file has no readable sheet.' });
+    return;
+  }
+
+  const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+  const rawRows: Record<string, unknown>[] = XLSX.utils.sheet_to_json(
+    workbook.Sheets[firstSheetName], { raw: false, dateNF: 'yyyy-mm-dd', defval: '' });
+  const rows: Record<string, unknown>[] = rawRows.map(r => {
+    const clean: Record<string, unknown> = Object.create(null);
+    for (const k of Object.keys(r)) { if (!FORBIDDEN_KEYS.has(k)) clean[k] = r[k]; }
+    return clean;
+  });
+
+  if (rows.length === 0) { res.status(400).json({ error: 'The file has no data rows.' }); return; }
+  if (rows.length > MAX_UPLOAD_ROWS) {
+    res.status(400).json({ error: `Too many rows. Split the upload into files of at most ${MAX_UPLOAD_ROWS} employees.` });
+    return;
+  }
+
+  // Column header → canonical camelCase field. Headers are matched lower-cased
+  // and single-spaced, so "National ID" / "national id" both resolve.
+  const COMMON_MAP: Record<string, string> = {
+    'full name': 'fullName', 'name': 'fullName',
+    'phone number': 'phoneNumber', 'phone': 'phoneNumber', 'primary phone number': 'phoneNumber',
+    'emergency contact': 'emergencyContact',
+    'username': 'username',
+    'password': 'password',
+    'address': 'address',
+    'hire date': 'hireDate', 'date of hire': 'hireDate',
+    'national id': 'nationalId', 'national id number': 'nationalId',
+    'date of birth': 'dateOfBirth', 'dob': 'dateOfBirth',
+    'marital status': 'maritalStatus',
+    'gender': 'gender',
+    'employment type': 'employmentType',
+    'qualifications': 'qualifications',
+    'notes': 'notes',
+  };
+  const TEACHER_MAP: Record<string, string> = {
+    'class': 'className', 'classes': 'className', 'grade': 'className', 'grade/class': 'className',
+  };
+  const DRIVER_MAP: Record<string, string> = {
+    'license number': 'licenseNumber', 'license': 'licenseNumber',
+    'licence number': 'licenseNumber', 'licence': 'licenseNumber',
+    'bus number': 'busNumber', 'bus': 'busNumber',
+    'age': 'age',
+    'vehicle type': 'vehicleType', 'vehicle': 'vehicleType',
+  };
+  const COLUMN_MAP: Record<string, string> = { ...COMMON_MAP, ...(role === 'teacher' ? TEACHER_MAP : DRIVER_MAP) };
+
+  // Forgiving normalisers — like the student importer, an unparseable enum or
+  // date becomes null rather than failing the row (the DB CHECKs would reject
+  // a typo'd enum, so we sanitise before insert).
+  const parseDate = (raw: string): string | null => {
+    if (!raw || !raw.trim()) return null;
+    let s = raw.trim();
+    const ddmm = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(s);
+    if (ddmm) s = `${ddmm[3]}-${ddmm[2].padStart(2, '0')}-${ddmm[1].padStart(2, '0')}`;
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? null : d.toISOString().split('T')[0];
+  };
+  const normMarital = (v: string): string | null => {
+    const x = v.trim().toLowerCase();
+    return ['single', 'married', 'divorced', 'widowed'].includes(x) ? x : null;
+  };
+  const normGender = (v: string): string | null => {
+    const x = v.trim().toLowerCase();
+    if (x === 'male' || x === 'm') return 'male';
+    if (x === 'female' || x === 'f') return 'female';
+    return null;
+  };
+  const normEmployment = (v: string): string | null => {
+    const x = v.trim().toLowerCase().replace(/[\s-]+/g, '_');
+    return ['full_time', 'part_time', 'contract'].includes(x) ? x : null;
+  };
+  const normVehicle = (v: string): 'bus' | 'taxi' => (v.trim().toLowerCase() === 'taxi' ? 'taxi' : 'bus');
+  const stripGradePrefix = (g: string) => g.trim().toLowerCase().replace(/^grade\s+/, '');
+  const formatClassName = (g: string): string => {
+    const t = g.trim();
+    if (/^\d+$/.test(t)) return `Grade ${t}`;
+    if (/^grade\s+\d+$/i.test(t)) return `Grade ${t.replace(/^grade\s+/i, '')}`;
+    return t;
+  };
+
+  // =========================================================
+  // PASS 0 — fetch existing data in one parallel round-trip
+  // =========================================================
+  const [
+    { data: schoolData },
+    { data: existingUsers },
+    { data: existingClasses },
+    { data: existingBuses },
+  ] = await Promise.all([
+    supabase.from('schools').select('abbreviation').eq('id', schoolId).single(),
+    supabase.from('users').select('username').eq('school_id', schoolId),
+    role === 'teacher'
+      ? supabase.from('classes').select('id, name').eq('school_id', schoolId)
+      : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+    role === 'driver'
+      ? supabase.from('buses').select('id, bus_number').eq('school_id', schoolId)
+      : Promise.resolve({ data: [] as { id: string; bus_number: string }[] }),
+  ]);
+
+  const schoolAbbrev = (schoolData?.abbreviation || '').toLowerCase();
+  // username is UNIQUE per school across ALL roles, so seed the taken-set with
+  // every existing username (not just this role's) to avoid cross-role clashes.
+  const takenUsernames = new Set((existingUsers || []).map((u: any) => (u.username as string).toLowerCase()));
+
+  const classExactMap = new Map<string, string>(); // name.toLowerCase() → id
+  const classNormMap = new Map<string, string>();   // stripped form     → id
+  for (const c of (existingClasses || [])) {
+    classExactMap.set(c.name.toLowerCase(), c.id);
+    classNormMap.set(stripGradePrefix(c.name), c.id);
+  }
+  const busMap = new Map<string, string>(); // bus_number → id
+  for (const b of (existingBuses || [])) busMap.set(String(b.bus_number), b.id);
+
+  const rounds = parseInt(process.env.BCRYPT_ROUNDS || '10');
+  const defaultPassword = defaultPasswordFor(role);
+  const defaultHash = await bcrypt.hash(defaultPassword, rounds);
+
+  // Build a unique username: prefix the school abbrev (unless already present),
+  // then suffix -2/-3/… on collision against the school-wide taken set.
+  const makeUsername = (rawNameOrUser: string): string => {
+    const base0 = schoolAbbrev && !rawNameOrUser.startsWith(`${schoolAbbrev}_`)
+      ? `${schoolAbbrev}_${rawNameOrUser}` : rawNameOrUser;
+    const base = base0.toLowerCase();
+    if (!takenUsernames.has(base)) { takenUsernames.add(base); return base; }
+    let n = 2;
+    while (takenUsernames.has(`${base}${n}`)) n++;
+    takenUsernames.add(`${base}${n}`);
+    return `${base}${n}`;
+  };
+
+  // =========================================================
+  // PASS 1 — parse all rows in memory, zero DB calls
+  // =========================================================
+  interface ParsedEmp {
+    fullName: string; firstName: string; lastName: string;
+    username: string; password: string; usedDefault: boolean; passwordHash: string;
+    phoneNumber: string | null; emergencyContact: string | null;
+    hr: Record<string, unknown>;
+    classNameRaw: string | null;                       // teacher
+    licenseNumber: string | null; busNumberRaw: string | null; age: number | null; vehicleType: 'bus' | 'taxi'; // driver
+  }
+  const parsed: ParsedEmp[] = [];
+  const newClassesNeeded = new Set<string>();
+  const newBusesNeeded = new Set<string>();
+  const errors: string[] = [];
+  const skipped: string[] = [];
+  const customHashJobs: { idx: number; password: string }[] = [];
+
+  for (let i = 0; i < rows.length; i++) {
+    const rowNum = i + 2; // +1 header, +1 to 1-base
+    const mapped: Record<string, string> = {};
+    for (const [key, val] of Object.entries(rows[i])) {
+      const norm = key.trim().toLowerCase().replace(/\s+/g, ' ');
+      const field = COLUMN_MAP[norm];
+      if (field) mapped[field] = String(val).trim();
+    }
+
+    const fullName = (mapped.fullName || '').trim();
+    if (!fullName) { errors.push(`Row ${rowNum}: missing "Full Name" — skipped`); continue; }
+
+    const nameParts = fullName.split(/\s+/);
+    const firstName = nameParts[0] || fullName;
+    const lastName = nameParts.slice(1).join(' ') || '';
+
+    // username — typed value, else dotted full name; abbrev-prefixed + deduped.
+    const rawUser = mapped.username ? mapped.username.toLowerCase() : fullName.toLowerCase().replace(/\s+/g, '.');
+    const username = makeUsername(rawUser);
+
+    const customPw = mapped.password && mapped.password.length > 0 ? mapped.password : null;
+    const usedDefault = !customPw;
+    const password = customPw || defaultPassword;
+
+    // Flat HR columns via the shared single-create mapping. Enums/dates are
+    // normalised first so a typo lands as null instead of tripping a DB CHECK.
+    const hr = hrColumns({
+      address: mapped.address || null,
+      hireDate: parseDate(mapped.hireDate || ''),
+      nationalId: mapped.nationalId || null,
+      dateOfBirth: parseDate(mapped.dateOfBirth || ''),
+      maritalStatus: mapped.maritalStatus ? normMarital(mapped.maritalStatus) : null,
+      gender: mapped.gender ? normGender(mapped.gender) : null,
+      employmentType: mapped.employmentType ? normEmployment(mapped.employmentType) : null,
+      qualifications: mapped.qualifications || null,
+      notes: mapped.notes || null,
+    });
+
+    const emp: ParsedEmp = {
+      fullName, firstName, lastName, username, password, usedDefault, passwordHash: defaultHash,
+      phoneNumber: mapped.phoneNumber || null,
+      emergencyContact: mapped.emergencyContact || null,
+      hr,
+      classNameRaw: null, licenseNumber: null, busNumberRaw: null, age: null, vehicleType: 'bus',
+    };
+    if (!usedDefault) customHashJobs.push({ idx: parsed.length, password });
+
+    if (role === 'teacher') {
+      const cls = mapped.className || '';
+      if (cls) {
+        emp.classNameRaw = cls;
+        if (!classExactMap.has(cls.toLowerCase()) && !classNormMap.has(stripGradePrefix(cls))) {
+          newClassesNeeded.add(formatClassName(cls));
+        }
+      }
+    } else {
+      emp.licenseNumber = mapped.licenseNumber || null;
+      emp.vehicleType = mapped.vehicleType ? normVehicle(mapped.vehicleType) : 'bus';
+      const ageNum = parseInt(mapped.age || '', 10);
+      emp.age = Number.isFinite(ageNum) && ageNum >= 0 && ageNum <= 120 ? ageNum : null;
+      const bus = mapped.busNumber || '';
+      if (bus) {
+        emp.busNumberRaw = bus;
+        if (!busMap.has(bus)) newBusesNeeded.add(bus);
+      }
+    }
+
+    parsed.push(emp);
+  }
+
+  if (parsed.length === 0) {
+    res.json({ created: 0, skipped: skipped.length, total: rows.length, autoCreatedClasses: [], autoCreatedBuses: [], credentials: [], errors });
+    return;
+  }
+
+  // Hash any per-row custom passwords in parallel; default-password rows reuse
+  // the single pre-computed defaultHash (same approach as the parent importer).
+  if (customHashJobs.length > 0) {
+    const hashes = await Promise.all(customHashJobs.map(j => bcrypt.hash(j.password, rounds)));
+    customHashJobs.forEach((j, k) => { parsed[j.idx].passwordHash = hashes[k]; });
+  }
+
+  // =========================================================
+  // PASS 2 — batch create missing classes (teacher) / buses (driver)
+  // =========================================================
+  const autoCreatedClasses: string[] = [];
+  if (role === 'teacher' && newClassesNeeded.size > 0) {
+    const { data: nc, error: ncErr } = await supabase.from('classes')
+      .insert(Array.from(newClassesNeeded).map(name => ({ school_id: schoolId, name, grade_level: name })))
+      .select('id, name');
+    if (ncErr) { errors.push(`Failed to create classes: ${ncErr.message}`); }
+    else for (const c of (nc || [])) {
+      classExactMap.set(c.name.toLowerCase(), c.id);
+      classNormMap.set(stripGradePrefix(c.name), c.id);
+      autoCreatedClasses.push(c.name);
+    }
+  }
+
+  const autoCreatedBuses: string[] = [];
+  if (role === 'driver' && newBusesNeeded.size > 0) {
+    const { data: nb, error: nbErr } = await supabase.from('buses')
+      .insert(Array.from(newBusesNeeded).map(bus_number => ({ school_id: schoolId, bus_number })))
+      .select('id, bus_number');
+    if (nbErr) { errors.push(`Failed to create buses: ${nbErr.message}`); }
+    else for (const b of (nb || [])) {
+      busMap.set(String(b.bus_number), b.id);
+      autoCreatedBuses.push(String(b.bus_number));
+    }
+  }
+
+  // =========================================================
+  // PASS 3 — batch insert the user accounts
+  // =========================================================
+  const { data: newUsers, error: usersErr } = await supabase.from('users')
+    .insert(parsed.map(e => ({
+      school_id: schoolId,
+      first_name: e.firstName,
+      last_name: e.lastName,
+      username: e.username,
+      password_hash: e.passwordHash,
+      role,
+      must_change_password: e.usedDefault,
+    })))
+    .select('id');
+
+  if (usersErr || !newUsers || newUsers.length !== parsed.length) {
+    res.status(usersErr ? safeDbErrorStatus(usersErr) : 500)
+      .json({ error: `Failed to create user accounts: ${usersErr?.message || 'row count mismatch'}` });
+    return;
+  }
+
+  // =========================================================
+  // PASS 4 — batch insert the role records (RETURNING preserves input order)
+  // =========================================================
+  let created = 0;
+  if (role === 'teacher') {
+    const { data: newTeachers, error: tErr } = await supabase.from('teachers')
+      .insert(parsed.map((e, idx) => ({
+        school_id: schoolId,
+        user_id: newUsers[idx].id,
+        full_name: e.fullName,
+        phone_number: e.phoneNumber,
+        emergency_contact: e.emergencyContact,
+        subject: null, // populated later from the curriculum (class ↔ subject ↔ teacher)
+        ...e.hr,
+      })))
+      .select('id');
+    if (tErr || !newTeachers) { res.status(safeDbErrorStatus(tErr)).json({ error: safeDbErrorMessage(tErr) }); return; }
+    created = newTeachers.length;
+
+    // teacher_classes for rows that named a resolvable class
+    const tcRows: { teacher_id: string; class_id: string }[] = [];
+    parsed.forEach((e, idx) => {
+      if (!e.classNameRaw) return;
+      const cid = classExactMap.get(e.classNameRaw.toLowerCase())
+        ?? classNormMap.get(stripGradePrefix(e.classNameRaw)) ?? null;
+      if (cid) tcRows.push({ teacher_id: newTeachers[idx].id, class_id: cid });
+    });
+    if (tcRows.length > 0) await supabase.from('teacher_classes').insert(tcRows);
+  } else {
+    const { data: newDrivers, error: dErr } = await supabase.from('drivers')
+      .insert(parsed.map((e, idx) => ({
+        school_id: schoolId,
+        user_id: newUsers[idx].id,
+        full_name: e.fullName,
+        phone_number: e.phoneNumber,
+        emergency_contact: e.emergencyContact,
+        license_number: e.licenseNumber,
+        bus_id: e.busNumberRaw ? (busMap.get(e.busNumberRaw) ?? null) : null,
+        age: e.age,
+        vehicle_type: e.vehicleType,
+        ...e.hr,
+      })))
+      .select('id');
+    if (dErr || !newDrivers) { res.status(safeDbErrorStatus(dErr)).json({ error: safeDbErrorMessage(dErr) }); return; }
+    created = newDrivers.length;
+  }
+
+  // Admin-trusted phone propagation (migration 050) — parallel, self-logging.
+  await Promise.all(parsed.map((e, idx) => propagateAdminSetPhone(newUsers[idx].id, e.phoneNumber)));
+
+  // Hand back the credentials so the admin can print/distribute the temp
+  // passwords (every must_change_password account needs them once).
+  const credentials = parsed.map(e => ({ fullName: e.fullName, role, username: e.username, password: e.password }));
+
+  res.json({
+    created, skipped: skipped.length, total: rows.length,
+    autoCreatedClasses, autoCreatedBuses, credentials, errors,
+  });
+}
+
 // ---- ARCHIVE STUDENTS ----
 
 // Build the frozen snapshot payload for a student: classes attended per
