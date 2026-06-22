@@ -34,7 +34,7 @@ export default function DriversManagement() {
   const [search, setSearch] = useState('');
   const [classFilter, setClassFilter] = useState('');
 
-  const addForm = useForm<{ fullName: string; phoneNumber: string; emergencyContact: string; licenseNumber: string; busNumber: string; age: string; username: string; password: string; vehicleType: string } & EmployeeHRFormFields>();
+  const addForm = useForm<{ fullName: string; phoneNumber: string; emergencyContact: string; email: string; licenseNumber: string; busNumber: string; age: string; username: string; password: string; vehicleType: string } & EmployeeHRFormFields>();
   const editForm = useForm<{ fullName: string; phoneNumber: string; emergencyContact: string; licenseNumber: string; busNumber: string; age: string; remove: boolean; vehicleType: string } & EmployeeHRFormFields>();
 
   const watchedAddName = addForm.watch('fullName');
@@ -122,6 +122,7 @@ export default function DriversManagement() {
         fullName: data.fullName,
         phoneNumber: data.phoneNumber,
         emergencyContact: data.emergencyContact,
+        email: data.email || undefined,
         licenseNumber: data.licenseNumber,
         busNumber: data.busNumber,
         age: data.age || undefined,
@@ -309,6 +310,10 @@ export default function DriversManagement() {
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">{t('admin.drivers_mgmt.emergency_contact')}</label>
                 <Input placeholder={t('admin.drivers_mgmt.emergency_contact')} {...addForm.register('emergencyContact')} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">{t('admin.drivers_mgmt.email', 'Email')}</label>
+                <Input type="email" placeholder={t('admin.drivers_mgmt.email', 'Email')} {...addForm.register('email')} />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">{t('admin.drivers_mgmt.license_number')}</label>

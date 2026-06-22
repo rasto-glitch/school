@@ -950,6 +950,7 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
     'full name': 'fullName', 'name': 'fullName',
     'phone number': 'phoneNumber', 'phone': 'phoneNumber', 'primary phone number': 'phoneNumber',
     'emergency contact': 'emergencyContact',
+    'email': 'email', 'email address': 'email',
     'username': 'username',
     'password': 'password',
     'address': 'address',
@@ -1000,6 +1001,11 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
     return ['full_time', 'part_time', 'contract'].includes(x) ? x : null;
   };
   const normVehicle = (v: string): 'bus' | 'taxi' => (v.trim().toLowerCase() === 'taxi' ? 'taxi' : 'bus');
+  // Contact email — store only if it looks like an address, else null (forgiving).
+  const normEmail = (v: string): string | null => {
+    const x = v.trim().toLowerCase();
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x) ? x : null;
+  };
   const stripGradePrefix = (g: string) => g.trim().toLowerCase().replace(/^grade\s+/, '');
   const formatClassName = (g: string): string => {
     const t = g.trim();
@@ -1064,7 +1070,7 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
   interface ParsedEmp {
     fullName: string; firstName: string; lastName: string;
     username: string; password: string; usedDefault: boolean; passwordHash: string;
-    phoneNumber: string | null; emergencyContact: string | null;
+    phoneNumber: string | null; emergencyContact: string | null; email: string | null;
     hr: Record<string, unknown>;
     classNameRaw: string | null;                       // teacher
     licenseNumber: string | null; busNumberRaw: string | null; age: number | null; vehicleType: 'bus' | 'taxi'; // driver
@@ -1121,6 +1127,7 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
       fullName, firstName, lastName, username, password, usedDefault, passwordHash: defaultHash,
       phoneNumber: mapped.phoneNumber || null,
       emergencyContact: mapped.emergencyContact || null,
+      email: mapped.email ? normEmail(mapped.email) : null,
       hr,
       classNameRaw: null, licenseNumber: null, busNumberRaw: null, age: null, vehicleType: 'bus',
     };
@@ -1200,6 +1207,7 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
       username: e.username,
       password_hash: e.passwordHash,
       role,
+      email: e.email,
       must_change_password: e.usedDefault,
     })))
     .select('id');
@@ -1289,7 +1297,7 @@ export async function employeeBulkTemplate(req: AuthRequest, res: Response): Pro
   }
   const role: 'teacher' | 'driver' = roleParam;
 
-  const commonBefore = ['Full Name', 'Phone Number', 'Emergency Contact'];
+  const commonBefore = ['Full Name', 'Phone Number', 'Emergency Contact', 'Email'];
   const roleCols = role === 'teacher'
     ? ['Class']
     : ['License Number', 'Bus Number', 'Age', 'Vehicle Type'];
@@ -2586,7 +2594,7 @@ export async function getTeachers(req: AuthRequest, res: Response): Promise<void
 
 export async function createTeacher(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
-  const { fullName, phoneNumber, emergencyContact, classIds, classId, username, password, previousArchiveId } = req.body;
+  const { fullName, phoneNumber, emergencyContact, email, classIds, classId, username, password, previousArchiveId } = req.body;
 
   const { data: schoolData } = await supabase.from('schools').select('abbreviation').eq('id', schoolId).single();
   const abbrev = (schoolData?.abbreviation || '').toLowerCase();
@@ -2611,6 +2619,7 @@ export async function createTeacher(req: AuthRequest, res: Response): Promise<vo
     username: finalUsername,
     password_hash: passwordHash,
     role: 'teacher',
+    email: email?.trim() || null,
     must_change_password: usedDefault,
   }).select('id, school_id, username, email, phone, role, first_name, last_name, profile_picture, is_active, created_at, password_changed_at').single();
 
@@ -2728,7 +2737,7 @@ export async function getDrivers(req: AuthRequest, res: Response): Promise<void>
 
 export async function createDriver(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
-  const { fullName, phoneNumber, emergencyContact, licenseNumber, busNumber, age, username, password, studentIds, vehicleType, previousArchiveId } = req.body;
+  const { fullName, phoneNumber, emergencyContact, email, licenseNumber, busNumber, age, username, password, studentIds, vehicleType, previousArchiveId } = req.body;
 
   const { data: schoolData } = await supabase.from('schools').select('abbreviation').eq('id', schoolId).single();
   const abbrev = (schoolData?.abbreviation || '').toLowerCase();
@@ -2751,6 +2760,7 @@ export async function createDriver(req: AuthRequest, res: Response): Promise<voi
     username: finalUsername,
     password_hash: passwordHash,
     role: 'driver',
+    email: email?.trim() || null,
     must_change_password: usedDefault,
   }).select('id, school_id, username, email, phone, role, first_name, last_name, profile_picture, is_active, created_at, password_changed_at').single();
 

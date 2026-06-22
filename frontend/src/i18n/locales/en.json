@@ -1344,6 +1344,7 @@
     },
     "drivers_mgmt": {
       "title": "Drivers Management",
+      "email": "Email",
       "search_ph": "Search by name, bus number, or phone...",
       "all_classes": "All Classes",
       "bus_n": "Bus {{number}}",
@@ -1978,6 +1979,7 @@
       "full_name": "Full Name",
       "primary_phone": "Primary Phone Number",
       "emergency_contact": "Emergency Contact",
+      "email": "Email",
       "username_optional": "Username (optional)",
       "password": "Password",
       "password_default": "Default: Teacher@123",

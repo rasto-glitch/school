@@ -64,6 +64,7 @@ export const createTeacherSchema = z.object({
   fullName: nonEmptyStr(200),
   phoneNumber: contactStr(40),
   emergencyContact: contactStr(120),
+  email: contactEmail,
   classIds: z.array(uuid).optional(),
   classId: optionalId,
   // username/password optional — the controller derives a username from
@@ -86,6 +87,7 @@ export const createDriverSchema = z.object({
   fullName: nonEmptyStr(200),
   phoneNumber: contactStr(40),
   emergencyContact: contactStr(120),
+  email: contactEmail,
   licenseNumber: contactStr(80),
   busNumber: contactStr(40),
   // Coerce: HTML number inputs deliver strings through the form layer.

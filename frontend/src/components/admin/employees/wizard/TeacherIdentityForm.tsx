@@ -24,6 +24,7 @@ type FormFields = {
   fullName: string;
   phoneNumber: string;
   emergencyContact: string;
+  email: string;
   username: string;
   password: string;
 } & EmployeeHRFormFields;
@@ -69,6 +70,7 @@ export default function TeacherIdentityForm({ onCreated }: Props) {
         fullName: data.fullName,
         phoneNumber: data.phoneNumber,
         emergencyContact: data.emergencyContact,
+        email: data.email || undefined,
         classIds,
         username: data.username || undefined,
         password: data.password || undefined,
@@ -106,6 +108,10 @@ export default function TeacherIdentityForm({ onCreated }: Props) {
         <div>
           <label className="block text-xs font-medium text-gray-500 mb-1">{t('admin.teacher_emp.emergency_contact')}</label>
           <Input placeholder={t('admin.teacher_emp.emergency_contact')} {...form.register('emergencyContact')} />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">{t('admin.teacher_emp.email', 'Email')}</label>
+          <Input type="email" placeholder={t('admin.teacher_emp.email', 'Email')} {...form.register('email')} />
         </div>
         <div>
           <label className="block text-xs font-medium text-gray-500 mb-1">{t('admin.teacher_emp.username_optional')}</label>
