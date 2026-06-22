@@ -1304,6 +1304,10 @@
     "bulk_emp": {
       "teachers": "teachers",
       "drivers": "drivers",
+      "supervisors": "supervisors",
+      "reception": "reception staff",
+      "accountants": "accountants",
+      "staff": "staff",
       "title": "Bulk upload {{role}}",
       "subtitle": "Upload a spreadsheet to create many accounts at once. Download the template, fill one row per person, then upload it.",
       "download_template": "Download template",

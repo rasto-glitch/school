@@ -338,6 +338,9 @@ export const teacherApi = {
 };
 
 // ---- ADMIN ----
+// Roles that support bulk upload (admin excluded — created individually).
+export type BulkEmployeeRole = 'teacher' | 'driver' | 'supervisor' | 'reception' | 'accountant' | 'staff';
+
 export const adminApi = {
   getStudents: (params?: Record<string, string>) => api.get('/admin/students', { params }),
   // Bulk lookup: pages through /admin/students (using the returned `total`)
@@ -373,7 +376,7 @@ export const adminApi = {
     fd.append('file', file);
     return api.post('/admin/students/bulk-upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
   },
-  bulkUploadEmployees: (role: 'teacher' | 'driver', file: File) => {
+  bulkUploadEmployees: (role: BulkEmployeeRole, file: File) => {
     const fd = new FormData();
     fd.append('file', file);
     return api.post('/admin/employees/bulk-upload', fd, {
@@ -381,7 +384,7 @@ export const adminApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
   },
-  employeeBulkTemplate: (role: 'teacher' | 'driver') =>
+  employeeBulkTemplate: (role: BulkEmployeeRole) =>
     api.get('/admin/employees/bulk-template.xlsx', { params: { role }, responseType: 'blob' }),
   getStudentBrief: (id: string) => api.get(`/admin/students/${id}/brief`),
   // Per-year academic progression (migration 030)

@@ -900,12 +900,27 @@ export async function bulkUploadStudents(req: AuthRequest, res: Response): Promi
 export async function bulkUploadEmployees(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
 
+  const ALLOWED_ROLES = ['teacher', 'driver', 'supervisor', 'reception', 'accountant', 'staff'] as const;
+  type BulkRole = typeof ALLOWED_ROLES[number];
   const roleParam = String(req.query.role || '').toLowerCase();
-  if (roleParam !== 'teacher' && roleParam !== 'driver') {
-    res.status(400).json({ error: 'Query param "role" must be "teacher" or "driver".' });
+  if (!ALLOWED_ROLES.includes(roleParam as BulkRole)) {
+    res.status(400).json({
+      error: roleParam === 'admin'
+        ? "Admin accounts can't be bulk-uploaded — create them individually with a password."
+        : 'Query param "role" must be one of: teacher, driver, supervisor, reception, accountant, staff.',
+    });
     return;
   }
-  const role: 'teacher' | 'driver' = roleParam;
+  const role = roleParam as BulkRole;
+
+  // Accountant + staff live behind the accounting (tuition_fees) module.
+  if (role === 'accountant' || role === 'staff') {
+    const { data: sf } = await supabase.from('schools').select('features').eq('id', schoolId).single();
+    if ((sf?.features as Record<string, boolean> | null)?.tuition_fees !== true) {
+      res.status(403).json({ error: 'The accounting module is not enabled for this school.' });
+      return;
+    }
+  }
 
   if (!req.file) {
     res.status(400).json({ error: 'No file uploaded' });
@@ -944,10 +959,22 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
     return;
   }
 
+  // Staff are payroll records (no login) — wholly separate insert path.
+  if (role === 'staff') { await runStaffBulk(res, schoolId, rows); return; }
+
+  // Below here: login-account roles only. teacher/driver carry a profile table
+  // and a single Full Name; supervisor/reception/accountant are users-only with
+  // First/Last Name and their HR columns stored on the users row.
+  const loginRole = role; // 'teacher' | 'driver' | 'supervisor' | 'reception' | 'accountant'
+  const isProfileRole = loginRole === 'teacher' || loginRole === 'driver';
+  const isAccountRole = !isProfileRole;
+
   // Column header → canonical camelCase field. Headers are matched lower-cased
   // and single-spaced, so "National ID" / "national id" both resolve.
+  const NAME_MAP: Record<string, string> = isProfileRole
+    ? { 'full name': 'fullName', 'name': 'fullName' }
+    : { 'first name': 'firstName', 'last name': 'lastName', 'full name': 'fullName', 'name': 'fullName' };
   const COMMON_MAP: Record<string, string> = {
-    'full name': 'fullName', 'name': 'fullName',
     'phone number': 'phoneNumber', 'phone': 'phoneNumber', 'primary phone number': 'phoneNumber',
     'emergency contact': 'emergencyContact',
     'email': 'email', 'email address': 'email',
@@ -974,7 +1001,8 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
     'age': 'age',
     'vehicle type': 'vehicleType', 'vehicle': 'vehicleType',
   };
-  const COLUMN_MAP: Record<string, string> = { ...COMMON_MAP, ...(role === 'teacher' ? TEACHER_MAP : DRIVER_MAP) };
+  const roleSpecificMap = loginRole === 'teacher' ? TEACHER_MAP : loginRole === 'driver' ? DRIVER_MAP : {};
+  const COLUMN_MAP: Record<string, string> = { ...NAME_MAP, ...COMMON_MAP, ...roleSpecificMap };
 
   // Forgiving normalisers — like the student importer, an unparseable enum or
   // date becomes null rather than failing the row (the DB CHECKs would reject
@@ -1100,18 +1128,29 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
       if (field) mapped[field] = String(val).trim();
     }
 
-    const fullName = (mapped.fullName || '').trim();
-    if (!fullName) { errors.push(`Row ${rowNum}: missing "Full Name" — skipped`); continue; }
-
-    const nameParts = fullName.split(/\s+/);
-    const firstName = nameParts[0] || fullName;
-    const lastName = nameParts.slice(1).join(' ') || '';
-
-    // username — typed value, else name.father (first two name parts only);
-    // abbrev-prefixed + deduped.
-    const rawUser = mapped.username
-      ? mapped.username.toLowerCase()
-      : nameParts.slice(0, 2).join('.').toLowerCase();
+    // Name + username differ by role group:
+    //  · profile roles (teacher/driver): one "Full Name", username = name.father
+    //  · account roles (supervisor/reception/accountant): "First Name"+"Last Name"
+    //    (falling back to splitting a Full Name), username = first.last
+    let firstName: string, lastName: string, fullName: string, rawUser: string;
+    if (isAccountRole) {
+      firstName = (mapped.firstName || '').trim();
+      lastName = (mapped.lastName || '').trim();
+      if (!firstName && !lastName && mapped.fullName) {
+        const p = mapped.fullName.trim().split(/\s+/);
+        firstName = p[0] || ''; lastName = p.slice(1).join(' ');
+      }
+      if (!firstName) { errors.push(`Row ${rowNum}: missing "First Name" — skipped`); continue; }
+      fullName = `${firstName} ${lastName}`.trim();
+      rawUser = mapped.username ? mapped.username.toLowerCase() : `${firstName}.${lastName}`.toLowerCase();
+    } else {
+      fullName = (mapped.fullName || '').trim();
+      if (!fullName) { errors.push(`Row ${rowNum}: missing "Full Name" — skipped`); continue; }
+      const nameParts = fullName.split(/\s+/);
+      firstName = nameParts[0] || fullName;
+      lastName = nameParts.slice(1).join(' ') || '';
+      rawUser = mapped.username ? mapped.username.toLowerCase() : nameParts.slice(0, 2).join('.').toLowerCase();
+    }
     const username = makeUsername(rawUser);
 
     const customPw = mapped.password && mapped.password.length > 0 ? mapped.password : null;
@@ -1120,6 +1159,8 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
 
     // Flat HR columns via the shared single-create mapping. Enums/dates are
     // normalised first so a typo lands as null instead of tripping a DB CHECK.
+    // Account roles store HR (incl. emergency_contact) on the users row, like
+    // createAccount; profile roles store it on the teachers/drivers row.
     const hr = hrColumns({
       address: mapped.address || null,
       hireDate: parseDate(mapped.hireDate || ''),
@@ -1130,7 +1171,8 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
       employmentType: mapped.employmentType ? normEmployment(mapped.employmentType) : null,
       qualifications: mapped.qualifications || null,
       notes: mapped.notes || null,
-    });
+      emergencyContact: mapped.emergencyContact || null,
+    }, isAccountRole ? { includeEmergency: true } : {});
 
     const emp: ParsedEmp = {
       fullName, firstName, lastName, username, password, usedDefault, passwordHash: defaultHash,
@@ -1249,6 +1291,8 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
       password_hash: e.passwordHash,
       role,
       email: e.email,
+      // Account roles have no profile table — their phone + HR live on users.
+      ...(isAccountRole ? { phone: e.phoneNumber, ...e.hr } : {}),
       must_change_password: e.usedDefault,
     })))
     .select('id');
@@ -1323,7 +1367,7 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
     if (subjectsNeedClass > 0) {
       errors.push(`${subjectsNeedClass} teacher(s) had subjects but no class — the subjects were created but not assigned (subjects are assigned per class; add them in Curriculum).`);
     }
-  } else {
+  } else if (role === 'driver') {
     const { data: newDrivers, error: dErr } = await supabase.from('drivers')
       .insert(parsed.map((e, idx) => ({
         school_id: schoolId,
@@ -1341,6 +1385,11 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
     if (dErr || !newDrivers) { res.status(safeDbErrorStatus(dErr)).json({ error: safeDbErrorMessage(dErr) }); return; }
     created = newDrivers.length;
     roleRecordIds = newDrivers.map((r: { id: string }) => r.id);
+  } else {
+    // Account roles (supervisor / reception / accountant): users-only, HR was
+    // written on the users row above, no profile table to populate.
+    created = newUsers.length;
+    roleRecordIds = newUsers.map((u: { id: string }) => u.id);
   }
 
   // Admin-trusted phone propagation (migration 050) — parallel, self-logging.
@@ -1359,30 +1408,146 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
   });
 }
 
+// Staff bulk path — payroll records on staff_members, NOT login accounts (no
+// users row, no username/password). Salary + currency are required per row;
+// invalid rows are reported in `errors` and skipped. Caller has already
+// verified the accounting feature gate and parsed `rows`.
+async function runStaffBulk(res: Response, schoolId: string, rows: Record<string, unknown>[]): Promise<void> {
+  const STAFF_MAP: Record<string, string> = {
+    'full name': 'fullName', 'name': 'fullName',
+    'position': 'position', 'role': 'position', 'title': 'position',
+    'salary amount': 'salaryAmount', 'salary': 'salaryAmount',
+    'currency': 'currency',
+    'next payment date': 'nextPaymentDate', 'payment date': 'nextPaymentDate',
+    'is active': 'isActive', 'active': 'isActive',
+    'insurance percentage': 'insurancePercentage', 'insurance %': 'insurancePercentage', 'insurance': 'insurancePercentage',
+    'emergency contact': 'emergencyContact',
+    'address': 'address',
+    'hire date': 'hireDate', 'date of hire': 'hireDate',
+    'national id': 'nationalId', 'national id number': 'nationalId',
+    'date of birth': 'dateOfBirth', 'dob': 'dateOfBirth',
+    'marital status': 'maritalStatus',
+    'gender': 'gender',
+    'employment type': 'employmentType',
+    'qualifications': 'qualifications',
+    'notes': 'notes',
+  };
+  const parseDate = (raw: string): string | null => {
+    if (!raw || !raw.trim()) return null;
+    let s = raw.trim();
+    const ddmm = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(s);
+    if (ddmm) s = `${ddmm[3]}-${ddmm[2].padStart(2, '0')}-${ddmm[1].padStart(2, '0')}`;
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? null : d.toISOString().split('T')[0];
+  };
+  const normMarital = (v: string) => { const x = v.trim().toLowerCase(); return ['single', 'married', 'divorced', 'widowed'].includes(x) ? x : null; };
+  const normGender = (v: string) => { const x = v.trim().toLowerCase(); if (x === 'male' || x === 'm') return 'male'; if (x === 'female' || x === 'f') return 'female'; return null; };
+  const normEmployment = (v: string) => { const x = v.trim().toLowerCase().replace(/[\s-]+/g, '_'); return ['full_time', 'part_time', 'contract'].includes(x) ? x : null; };
+  const isFalsey = (v: string) => ['false', 'no', '0', 'inactive', 'n'].includes(v.trim().toLowerCase());
+
+  const errors: string[] = [];
+  const inserts: Record<string, unknown>[] = [];
+  for (let i = 0; i < rows.length; i++) {
+    const rowNum = i + 2;
+    const mapped: Record<string, string> = {};
+    for (const [key, val] of Object.entries(rows[i])) {
+      const field = STAFF_MAP[key.trim().toLowerCase().replace(/\s+/g, ' ')];
+      if (field) mapped[field] = String(val).trim();
+    }
+
+    const fullName = (mapped.fullName || '').trim();
+    if (!fullName) { errors.push(`Row ${rowNum}: missing "Full Name" — skipped`); continue; }
+
+    const salaryAmount = parseFloat(mapped.salaryAmount || '');
+    if (!Number.isFinite(salaryAmount) || salaryAmount < 0) {
+      errors.push(`Row ${rowNum}: "${fullName}" — a valid Salary Amount is required — skipped`); continue;
+    }
+    const currency = (mapped.currency || '').trim().toUpperCase().slice(0, 8);
+    if (!currency) { errors.push(`Row ${rowNum}: "${fullName}" — Currency is required — skipped`); continue; }
+
+    const insurPct = parseFloat(mapped.insurancePercentage || '');
+    const insurance = Number.isFinite(insurPct) && insurPct >= 0 && insurPct <= 100 ? insurPct : null;
+
+    inserts.push({
+      school_id: schoolId,
+      user_id: null,
+      full_name: fullName,
+      position: mapped.position || null,
+      salary_amount: salaryAmount,
+      currency,
+      next_payment_date: parseDate(mapped.nextPaymentDate || ''),
+      is_active: mapped.isActive ? !isFalsey(mapped.isActive) : true,
+      insurance_percentage: insurance,
+      previous_archive_id: null,
+      ...hrColumns({
+        address: mapped.address || null,
+        hireDate: parseDate(mapped.hireDate || ''),
+        nationalId: mapped.nationalId || null,
+        dateOfBirth: parseDate(mapped.dateOfBirth || ''),
+        maritalStatus: mapped.maritalStatus ? normMarital(mapped.maritalStatus) : null,
+        gender: mapped.gender ? normGender(mapped.gender) : null,
+        employmentType: mapped.employmentType ? normEmployment(mapped.employmentType) : null,
+        qualifications: mapped.qualifications || null,
+        notes: mapped.notes || null,
+        emergencyContact: mapped.emergencyContact || null,
+      }, { includeEmergency: true }),
+    });
+  }
+
+  let created = 0;
+  if (inserts.length > 0) {
+    const { data, error } = await supabase.from('staff_members').insert(inserts).select('id');
+    if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+    created = (data || []).length;
+  }
+
+  res.json({
+    created, skipped: 0, total: rows.length,
+    autoCreatedClasses: [], autoCreatedBuses: [], autoCreatedSubjects: [], credentials: [], errors,
+  });
+}
+
 // Streams a ready-to-fill .xlsx template (just the header row) for the bulk
 // employee upload. Column order matches the headers bulkUploadEmployees' maps
-// understand; role chosen via ?role=teacher|driver.
+// understand; role chosen via ?role=teacher|driver|supervisor|reception|accountant|staff.
 export async function employeeBulkTemplate(req: AuthRequest, res: Response): Promise<void> {
-  const roleParam = String(req.query.role || '').toLowerCase();
-  if (roleParam !== 'teacher' && roleParam !== 'driver') {
-    res.status(400).json({ error: 'Query param "role" must be "teacher" or "driver".' });
+  const ALLOWED = ['teacher', 'driver', 'supervisor', 'reception', 'accountant', 'staff'];
+  const role = String(req.query.role || '').toLowerCase();
+  if (!ALLOWED.includes(role)) {
+    res.status(400).json({ error: 'Query param "role" must be one of: teacher, driver, supervisor, reception, accountant, staff.' });
     return;
   }
-  const role: 'teacher' | 'driver' = roleParam;
 
-  const commonBefore = ['Full Name', 'Phone Number', 'Emergency Contact', 'Email'];
-  const roleCols = role === 'teacher'
-    ? ['Classes', 'Subjects']
-    : ['License Number', 'Bus Number', 'Age', 'Vehicle Type'];
-  const commonAfter = [
-    'Username', 'Password', 'Address', 'Hire Date', 'National ID', 'Date of Birth',
+  // Shared HR tail used by every role.
+  const hrTail = [
+    'Address', 'Hire Date', 'National ID', 'Date of Birth',
     'Marital Status', 'Gender', 'Employment Type', 'Qualifications', 'Notes',
   ];
-  const headers = [...commonBefore, ...roleCols, ...commonAfter];
+
+  let headers: string[];
+  let sheetName: string;
+  if (role === 'staff') {
+    // Payroll record — no login columns.
+    headers = ['Full Name', 'Position', 'Salary Amount', 'Currency', 'Next Payment Date',
+      'Insurance Percentage', 'Is Active', 'Emergency Contact', ...hrTail];
+    sheetName = 'Staff';
+  } else if (role === 'teacher' || role === 'driver') {
+    const roleCols = role === 'teacher'
+      ? ['Classes', 'Subjects']
+      : ['License Number', 'Bus Number', 'Age', 'Vehicle Type'];
+    headers = ['Full Name', 'Phone Number', 'Emergency Contact', 'Email', ...roleCols,
+      'Username', 'Password', ...hrTail];
+    sheetName = role === 'teacher' ? 'Teachers' : 'Drivers';
+  } else {
+    // Account roles: supervisor / reception / accountant — First/Last name.
+    headers = ['First Name', 'Last Name', 'Phone Number', 'Emergency Contact', 'Email',
+      'Username', 'Password', ...hrTail];
+    sheetName = role.charAt(0).toUpperCase() + role.slice(1);
+  }
 
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.aoa_to_sheet([headers]);
-  XLSX.utils.book_append_sheet(wb, ws, role === 'teacher' ? 'Teachers' : 'Drivers');
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
   const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
 
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');

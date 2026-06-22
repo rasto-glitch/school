@@ -105,8 +105,11 @@ export default function EmployeesManagement() {
           ))}
         </div>
 
-        {/* Body — switch on (top, sub). */}
-        {top === 'add' && sub === 'teacher' && <EmployeeBulkUpload role="teacher" />}
+        {/* Body — switch on (top, sub). Bulk upload is offered for every role
+            on this page except admin (admins are created individually). */}
+        {top === 'add' && sub !== 'admin' && (
+          <EmployeeBulkUpload role={sub as 'teacher' | 'supervisor' | 'reception' | 'accountant' | 'staff'} />
+        )}
         {top === 'add' && <NewEmployeeWizard role={sub as EmployeeRole} />}
         {top === 'active' && <ActiveEmployeeList role={sub as EmployeeRole} />}
         {top === 'archived' && <ArchivedEmployeeList role={sub as EmployeeRole} />}

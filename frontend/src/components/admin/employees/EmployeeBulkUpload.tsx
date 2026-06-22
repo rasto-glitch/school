@@ -12,12 +12,12 @@ import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'react-toastify';
 import { Download, Upload, FileSpreadsheet, KeyRound } from 'lucide-react';
-import { adminApi } from '../../../services/api';
+import { adminApi, type BulkEmployeeRole } from '../../../services/api';
 import Card from '../../common/Card';
 import Button from '../../common/Button';
 import EmployeePhotoMatcher from './EmployeePhotoMatcher';
 
-type Role = 'teacher' | 'driver';
+type Role = BulkEmployeeRole;
 
 interface Credential { id: string; fullName: string; role: string; username: string; password: string; }
 interface UploadResult {
@@ -58,9 +58,15 @@ export default function EmployeeBulkUpload({ role, onDone }: { role: Role; onDon
   const [result, setResult] = useState<UploadResult | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const roleLabel = role === 'teacher'
-    ? t('admin.bulk_emp.teachers', 'teachers')
-    : t('admin.bulk_emp.drivers', 'drivers');
+  const ROLE_LABELS: Record<Role, string> = {
+    teacher: t('admin.bulk_emp.teachers', 'teachers'),
+    driver: t('admin.bulk_emp.drivers', 'drivers'),
+    supervisor: t('admin.bulk_emp.supervisors', 'supervisors'),
+    reception: t('admin.bulk_emp.reception', 'reception staff'),
+    accountant: t('admin.bulk_emp.accountants', 'accountants'),
+    staff: t('admin.bulk_emp.staff', 'staff'),
+  };
+  const roleLabel = ROLE_LABELS[role];
 
   const downloadTemplate = async () => {
     setTemplateLoading(true);
@@ -92,7 +98,7 @@ export default function EmployeeBulkUpload({ role, onDone }: { role: Role; onDon
       const data = res.data as UploadResult;
       setResult(data);
       if (data.created > 0) {
-        toast.success(t('admin.bulk_emp.created_toast', { count: data.created, defaultValue: '{{count}} account(s) created.' }));
+        toast.success(t('admin.bulk_emp.created_toast', { count: data.created, defaultValue: '{{count}} created.' }));
         onDone?.();
       } else {
         toast.info(t('admin.bulk_emp.none_created', 'No accounts were created — check the errors below.'));
