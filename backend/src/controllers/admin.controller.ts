@@ -1079,7 +1079,7 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
     username: string; password: string; usedDefault: boolean; passwordHash: string;
     phoneNumber: string | null; emergencyContact: string | null; email: string | null;
     hr: Record<string, unknown>;
-    classNameRaw: string | null; subjectNames: string[];  // teacher
+    classNames: string[]; subjectNames: string[];  // teacher
     licenseNumber: string | null; busNumberRaw: string | null; age: number | null; vehicleType: 'bus' | 'taxi'; // driver
   }
   const parsed: ParsedEmp[] = [];
@@ -1138,16 +1138,24 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
       emergencyContact: mapped.emergencyContact || null,
       email: mapped.email ? normEmail(mapped.email) : null,
       hr,
-      classNameRaw: null, subjectNames: [], licenseNumber: null, busNumberRaw: null, age: null, vehicleType: 'bus',
+      classNames: [], subjectNames: [], licenseNumber: null, busNumberRaw: null, age: null, vehicleType: 'bus',
     };
     if (!usedDefault) customHashJobs.push({ idx: parsed.length, password });
 
     if (role === 'teacher') {
-      const cls = mapped.className || '';
-      if (cls) {
-        emp.classNameRaw = cls;
-        if (!classExactMap.has(cls.toLowerCase()) && !classNormMap.has(stripGradePrefix(cls))) {
-          newClassesNeeded.add(formatClassName(cls));
+      // Classes — comma/semicolon-separated (a teacher can teach several),
+      // deduped case-insensitively; unknown ones queued for creation.
+      const clsRaw = mapped.className || '';
+      if (clsRaw) {
+        const seen = new Set<string>();
+        for (const nm of clsRaw.split(/[,;]/).map(s => s.trim()).filter(Boolean)) {
+          const lc = nm.toLowerCase();
+          if (seen.has(lc)) continue;
+          seen.add(lc);
+          emp.classNames.push(nm);
+          if (!classExactMap.has(lc) && !classNormMap.has(stripGradePrefix(nm))) {
+            newClassesNeeded.add(formatClassName(nm));
+          }
         }
       }
       // Subjects — comma/semicolon-separated, deduped case-insensitively.
@@ -1285,18 +1293,24 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
     let subjectsNeedClass = 0;
     parsed.forEach((e, idx) => {
       const tid = newTeachers[idx].id;
-      const cid = e.classNameRaw
-        ? (classExactMap.get(e.classNameRaw.toLowerCase()) ?? classNormMap.get(stripGradePrefix(e.classNameRaw)) ?? null)
-        : null;
-      if (cid) tcRows.push({ teacher_id: tid, class_id: cid });
+      // Resolve every named class to an id (deduped).
+      const cids: string[] = [];
+      for (const nm of e.classNames) {
+        const cid = classExactMap.get(nm.toLowerCase()) ?? classNormMap.get(stripGradePrefix(nm)) ?? null;
+        if (cid && !cids.includes(cid)) cids.push(cid);
+      }
+      for (const cid of cids) tcRows.push({ teacher_id: tid, class_id: cid });
       if (e.subjectNames.length === 0) return;
-      if (!cid) { subjectsNeedClass++; return; }
-      for (const nm of e.subjectNames) {
-        const sid = subjectMap.get(nm.toLowerCase());
-        if (!sid) continue;
-        cstRows.push({ school_id: schoolId, class_id: cid, subject_id: sid, teacher_id: tid });
-        affectedTeacherIds.add(tid);
-        affectedSubjectIds.add(sid);
+      if (cids.length === 0) { subjectsNeedClass++; return; }
+      // Curriculum triple per (class × subject) the teacher row named.
+      for (const cid of cids) {
+        for (const nm of e.subjectNames) {
+          const sid = subjectMap.get(nm.toLowerCase());
+          if (!sid) continue;
+          cstRows.push({ school_id: schoolId, class_id: cid, subject_id: sid, teacher_id: tid });
+          affectedTeacherIds.add(tid);
+          affectedSubjectIds.add(sid);
+        }
       }
     });
     if (tcRows.length > 0) await supabase.from('teacher_classes').insert(tcRows);
@@ -1358,7 +1372,7 @@ export async function employeeBulkTemplate(req: AuthRequest, res: Response): Pro
 
   const commonBefore = ['Full Name', 'Phone Number', 'Emergency Contact', 'Email'];
   const roleCols = role === 'teacher'
-    ? ['Class', 'Subjects']
+    ? ['Classes', 'Subjects']
     : ['License Number', 'Bus Number', 'Age', 'Vehicle Type'];
   const commonAfter = [
     'Username', 'Password', 'Address', 'Hire Date', 'National ID', 'Date of Birth',
