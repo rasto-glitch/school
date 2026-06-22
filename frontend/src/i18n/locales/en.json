@@ -1082,6 +1082,8 @@
     "accounts": {
       "title": "Accounts Management",
       "subtitle": "Create and manage all user accounts",
+      "full_name": "Full Name",
+      "full_name_ph": "Full name",
       "reset_requests": "Password Reset Requests",
       "set_password": "Set Password",
       "create_account": "Create Account",
@@ -1916,6 +1918,7 @@
       "edit_title": "Edit {{role}}",
       "update_title": "Update {{role}}",
       "select_role": "Select {{role}}",
+      "full_name": "Full Name",
       "first_name": "First Name",
       "last_name": "Last Name",
       "phone": "Phone Number",

@@ -26,8 +26,11 @@ export const userIdParam = z.object({ userId: uuid });
 export const idParam = z.object({ id: uuid });
 
 export const createAccountSchema = z.object({
-  firstName: nonEmptyStr(120),
-  lastName: nonEmptyStr(120),
+  // Account roles now use a single Full Name (split into first/last on save).
+  // firstName/lastName kept optional for backward compatibility.
+  fullName: nonEmptyStr(240).optional(),
+  firstName: nonEmptyStr(120).optional(),
+  lastName: nonEmptyStr(120).optional(),
   email: contactEmail,
   phone: contactStr(40),
   username,
@@ -38,6 +41,7 @@ export const createAccountSchema = z.object({
 });
 
 export const updateAccountSchema = z.object({
+  fullName: nonEmptyStr(240).optional(),
   firstName: nonEmptyStr(120).optional(),
   lastName: nonEmptyStr(120).optional(),
   email: contactEmail,

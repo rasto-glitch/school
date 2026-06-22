@@ -22,8 +22,7 @@ import type { CreatedEmployee } from './TeacherIdentityForm';
 export type AccountRole = 'supervisor' | 'accountant' | 'reception' | 'admin';
 
 type FormFields = {
-  firstName: string;
-  lastName: string;
+  fullName: string;
   phone: string;
   email: string;
   emergencyContact: string;
@@ -54,8 +53,7 @@ export default function AccountIdentityForm({ role, onCreated }: Props) {
     try {
       const res = await adminApi.createAccount({
         ...hrPayload(data),
-        firstName: data.firstName,
-        lastName: data.lastName,
+        fullName: data.fullName,
         email: data.email || undefined,
         phone: data.phone || undefined,
         emergencyContact: data.emergencyContact || undefined,
@@ -65,7 +63,7 @@ export default function AccountIdentityForm({ role, onCreated }: Props) {
       });
       const created: CreatedEmployee = {
         id: res.data?.id,
-        fullName: `${data.firstName} ${data.lastName}`.trim(),
+        fullName: data.fullName.trim(),
         username: data.username,
       };
       toast.success(t('admin.wizard.identity_saved', 'Employee created. Add optional details below.'));
@@ -83,15 +81,9 @@ export default function AccountIdentityForm({ role, onCreated }: Props) {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
         <div>
           <label className="block text-xs font-medium text-gray-500 mb-1">
-            {t('admin.acct_emp.first_name')} <span className="text-rose-600">*</span>
+            {t('admin.acct_emp.full_name', 'Full Name')} <span className="text-rose-600">*</span>
           </label>
-          <Input placeholder={t('admin.acct_emp.first_name')} {...form.register('firstName', { required: true })} />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">
-            {t('admin.acct_emp.last_name')} <span className="text-rose-600">*</span>
-          </label>
-          <Input placeholder={t('admin.acct_emp.last_name')} {...form.register('lastName', { required: true })} />
+          <Input placeholder={t('admin.acct_emp.full_name', 'Full Name')} {...form.register('fullName', { required: true })} />
         </div>
         <div>
           <label className="block text-xs font-medium text-gray-500 mb-1">{t('admin.acct_emp.phone')}</label>

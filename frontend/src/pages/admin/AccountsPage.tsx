@@ -31,7 +31,7 @@ export default function AccountsPage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const { register, handleSubmit, reset } = useForm<{
-    firstName: string; lastName: string; email: string; phone: string;
+    fullName: string; email: string; phone: string;
     username: string; password: string; role: string;
   }>();
 
@@ -87,7 +87,7 @@ export default function AccountsPage() {
   // Edit account modal
   const [editUser, setEditUser] = useState<any | null>(null);
   const [editForm, setEditForm] = useState({
-    firstName: '', lastName: '', email: '', phone: '', username: '', isActive: true,
+    fullName: '', email: '', phone: '', username: '', isActive: true,
   });
   const [saving, setSaving] = useState(false);
 
@@ -144,7 +144,7 @@ export default function AccountsPage() {
     setLoading(true);
     try {
       await adminApi.createAccount(data);
-      toast.success(t('admin.accounts.account_created', { name: `${data.firstName} ${data.lastName}` }));
+      toast.success(t('admin.accounts.account_created', { name: data.fullName }));
       reset();
       loadAccounts();
       loadParents();
@@ -216,8 +216,7 @@ export default function AccountsPage() {
   const openEditModal = (acc: any) => {
     setEditUser(acc);
     setEditForm({
-      firstName: acc.firstName ?? '',
-      lastName: acc.lastName ?? '',
+      fullName: acc.fullName ?? `${acc.firstName ?? ''} ${acc.lastName ?? ''}`.trim(),
       email: acc.email ?? '',
       phone: acc.phone ?? '',
       username: acc.username ?? '',
@@ -316,10 +315,7 @@ export default function AccountsPage() {
               placeholder={t('admin.accounts.select_role')}
               {...register('role', { required: true })}
             />
-            <div className="grid grid-cols-2 gap-3">
-              <Input label={t('admin.accounts.first_name')} placeholder={t('admin.accounts.first_name_ph')} {...register('firstName', { required: true })} />
-              <Input label={t('admin.accounts.last_name')} placeholder={t('admin.accounts.last_name_ph')} {...register('lastName', { required: true })} />
-            </div>
+            <Input label={t('admin.accounts.full_name', 'Full Name')} placeholder={t('admin.accounts.full_name_ph', 'Full name')} {...register('fullName', { required: true })} />
             <Input label={t('admin.accounts.email')} type="email" placeholder="email@example.com" {...register('email')} />
             <Input label={t('admin.accounts.phone')} placeholder={t('admin.accounts.phone_ph')} {...register('phone')} />
             <Input label={t('admin.accounts.username')} placeholder={t('admin.accounts.username_ph')} {...register('username', { required: true })} />
@@ -607,25 +603,14 @@ export default function AccountsPage() {
           title={t('admin.accounts.edit_modal_title', { name: displayName(editUser) })}
         >
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin.accounts.first_name')}</label>
-                <input
-                  type="text"
-                  value={editForm.firstName}
-                  onChange={e => setEditForm(f => ({ ...f, firstName: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin.accounts.last_name')}</label>
-                <input
-                  type="text"
-                  value={editForm.lastName}
-                  onChange={e => setEditForm(f => ({ ...f, lastName: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                />
-              </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin.accounts.full_name', 'Full Name')}</label>
+              <input
+                type="text"
+                value={editForm.fullName}
+                onChange={e => setEditForm(f => ({ ...f, fullName: e.target.value }))}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">{t('admin.accounts.username')}</label>

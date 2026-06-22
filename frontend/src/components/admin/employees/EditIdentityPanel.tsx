@@ -42,17 +42,11 @@ type TeacherStaffFields = {
 } & EmployeeHRFormFields;
 
 type AccountFields = {
-  firstName: string;
-  lastName: string;
+  fullName: string;
   phone: string;
   email: string;
   emergencyContact: string;
 } & EmployeeHRFormFields;
-
-function splitName(fullName: string): { firstName: string; lastName: string } {
-  const parts = (fullName || '').trim().split(/\s+/);
-  return { firstName: parts[0] || '', lastName: parts.slice(1).join(' ') };
-}
 
 function hrDefaults(p: EmployeeProfile): EmployeeHRFormFields {
   return {
@@ -244,12 +238,10 @@ function TeacherStaffEditForm({ profile, onSaved, onCancel }: Props) {
 function AccountEditForm({ profile, onSaved, onCancel }: Props) {
   const { t } = useTranslation();
   const [submitting, setSubmitting] = useState(false);
-  const { firstName, lastName } = splitName(profile.fullName);
 
   const form = useForm<AccountFields>({
     defaultValues: {
-      firstName,
-      lastName,
+      fullName: profile.fullName ?? '',
       phone: profile.contact.phoneNumber ?? '',
       email: profile.contact.email ?? '',
       emergencyContact: profile.contact.emergencyContact ?? '',
@@ -262,8 +254,7 @@ function AccountEditForm({ profile, onSaved, onCancel }: Props) {
     try {
       await adminApi.updateAccount(profile.ownerId, {
         ...hrPayload(data),
-        firstName: data.firstName,
-        lastName: data.lastName,
+        fullName: data.fullName,
         phone: data.phone || null,
         email: data.email || null,
         emergencyContact: data.emergencyContact || null,
@@ -288,15 +279,9 @@ function AccountEditForm({ profile, onSaved, onCancel }: Props) {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">
-              {t('admin.acct_emp.first_name')} <span className="text-rose-600">*</span>
+              {t('admin.acct_emp.full_name', 'Full Name')} <span className="text-rose-600">*</span>
             </label>
-            <Input placeholder={t('admin.acct_emp.first_name')} {...form.register('firstName', { required: true })} />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">
-              {t('admin.acct_emp.last_name')} <span className="text-rose-600">*</span>
-            </label>
-            <Input placeholder={t('admin.acct_emp.last_name')} {...form.register('lastName', { required: true })} />
+            <Input placeholder={t('admin.acct_emp.full_name', 'Full Name')} {...form.register('fullName', { required: true })} />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">{t('admin.acct_emp.phone')}</label>

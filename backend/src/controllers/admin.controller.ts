@@ -971,9 +971,8 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
 
   // Column header → canonical camelCase field. Headers are matched lower-cased
   // and single-spaced, so "National ID" / "national id" both resolve.
-  const NAME_MAP: Record<string, string> = isProfileRole
-    ? { 'full name': 'fullName', 'name': 'fullName' }
-    : { 'first name': 'firstName', 'last name': 'lastName', 'full name': 'fullName', 'name': 'fullName' };
+  // Every login role uses a single Full Name (split into first/last on insert).
+  const NAME_MAP: Record<string, string> = { 'full name': 'fullName', 'name': 'fullName' };
   const COMMON_MAP: Record<string, string> = {
     'phone number': 'phoneNumber', 'phone': 'phoneNumber', 'primary phone number': 'phoneNumber',
     'emergency contact': 'emergencyContact',
@@ -1128,29 +1127,16 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
       if (field) mapped[field] = String(val).trim();
     }
 
-    // Name + username differ by role group:
-    //  · profile roles (teacher/driver): one "Full Name", username = name.father
-    //  · account roles (supervisor/reception/accountant): "First Name"+"Last Name"
-    //    (falling back to splitting a Full Name), username = first.last
-    let firstName: string, lastName: string, fullName: string, rawUser: string;
-    if (isAccountRole) {
-      firstName = (mapped.firstName || '').trim();
-      lastName = (mapped.lastName || '').trim();
-      if (!firstName && !lastName && mapped.fullName) {
-        const p = mapped.fullName.trim().split(/\s+/);
-        firstName = p[0] || ''; lastName = p.slice(1).join(' ');
-      }
-      if (!firstName) { errors.push(`Row ${rowNum}: missing "First Name" — skipped`); continue; }
-      fullName = `${firstName} ${lastName}`.trim();
-      rawUser = mapped.username ? mapped.username.toLowerCase() : `${firstName}.${lastName}`.toLowerCase();
-    } else {
-      fullName = (mapped.fullName || '').trim();
-      if (!fullName) { errors.push(`Row ${rowNum}: missing "Full Name" — skipped`); continue; }
-      const nameParts = fullName.split(/\s+/);
-      firstName = nameParts[0] || fullName;
-      lastName = nameParts.slice(1).join(' ') || '';
-      rawUser = mapped.username ? mapped.username.toLowerCase() : nameParts.slice(0, 2).join('.').toLowerCase();
-    }
+    // Every login role: one Full Name, split into first/last for the users row;
+    // username = typed value, else name.father (first two name parts).
+    const fullName = (mapped.fullName || '').trim();
+    if (!fullName) { errors.push(`Row ${rowNum}: missing "Full Name" — skipped`); continue; }
+    const nameParts = fullName.split(/\s+/);
+    const firstName = nameParts[0] || fullName;
+    const lastName = nameParts.slice(1).join(' ') || '';
+    const rawUser = mapped.username
+      ? mapped.username.toLowerCase()
+      : nameParts.slice(0, 2).join('.').toLowerCase();
     const username = makeUsername(rawUser);
 
     const customPw = mapped.password && mapped.password.length > 0 ? mapped.password : null;
@@ -1539,8 +1525,8 @@ export async function employeeBulkTemplate(req: AuthRequest, res: Response): Pro
       'Username', 'Password', ...hrTail];
     sheetName = role === 'teacher' ? 'Teachers' : 'Drivers';
   } else {
-    // Account roles: supervisor / reception / accountant — First/Last name.
-    headers = ['First Name', 'Last Name', 'Phone Number', 'Emergency Contact', 'Email',
+    // Account roles: supervisor / reception / accountant — single Full Name.
+    headers = ['Full Name', 'Phone Number', 'Emergency Contact', 'Email',
       'Username', 'Password', ...hrTail];
     sheetName = role.charAt(0).toUpperCase() + role.slice(1);
   }
@@ -3115,7 +3101,16 @@ export async function updateDriver(req: AuthRequest, res: Response): Promise<voi
 // ---- ACCOUNTS ----
 export async function createAccount(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
-  const { firstName, lastName, email, phone, username, password, role } = req.body;
+  const { fullName, firstName, lastName, email, phone, username, password, role } = req.body;
+
+  // Account roles use a single Full Name; split into first/last for the users
+  // row (legacy first_name/last_name columns). Older clients may still send
+  // firstName/lastName — fall back to those.
+  const rawName = (fullName ?? `${firstName ?? ''} ${lastName ?? ''}`).trim();
+  if (!rawName) { res.status(400).json({ error: 'Name is required.' }); return; }
+  const nameParts = rawName.split(/\s+/);
+  const first = nameParts[0] || rawName;
+  const last = nameParts.slice(1).join(' ');
 
   const { data: schoolData } = await supabase.from('schools').select('abbreviation, features').eq('id', schoolId).single();
 
@@ -3152,8 +3147,8 @@ export async function createAccount(req: AuthRequest, res: Response): Promise<vo
 
   const { data: newUser, error } = await supabase.from('users').insert({
     school_id: schoolId,
-    first_name: firstName,
-    last_name: lastName,
+    first_name: first,
+    last_name: last,
     email: email || null,
     phone: phone || null,
     username: finalUsername,
@@ -3176,17 +3171,17 @@ export async function createAccount(req: AuthRequest, res: Response): Promise<vo
   if (role === 'parent') {
     await supabase.from('parents').insert({
       school_id: schoolId, user_id: newUser.id,
-      full_name: `${firstName} ${lastName}`, phone_number: phone, email,
+      full_name: rawName, phone_number: phone, email,
     });
   } else if (role === 'teacher') {
     await supabase.from('teachers').insert({
       school_id: schoolId, user_id: newUser.id,
-      full_name: `${firstName} ${lastName}`, phone_number: phone,
+      full_name: rawName, phone_number: phone,
     });
   } else if (role === 'driver') {
     await supabase.from('drivers').insert({
       school_id: schoolId, user_id: newUser.id,
-      full_name: `${firstName} ${lastName}`, phone_number: phone,
+      full_name: rawName, phone_number: phone,
     });
   }
 
@@ -3201,8 +3196,9 @@ export async function createAccount(req: AuthRequest, res: Response): Promise<vo
     id: newUser.id,
     username,
     role,
-    firstName,
-    lastName,
+    fullName: rawName,
+    firstName: first,
+    lastName: last,
     ...(usedDefault ? { tempPassword: finalPassword } : {}),
   });
 }
@@ -4736,7 +4732,7 @@ export async function getAccounts(req: AuthRequest, res: Response): Promise<void
 export async function updateAccount(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
   const { userId } = req.params;
-  const { firstName, lastName, email, phone, username, isActive } = req.body;
+  const { fullName, firstName, lastName, email, phone, username, isActive } = req.body;
 
   if (username) {
     const { data: existing } = await supabase
@@ -4744,9 +4740,21 @@ export async function updateAccount(req: AuthRequest, res: Response): Promise<vo
     if (existing) { res.status(409).json({ error: `Username "${username}" is already taken.` }); return; }
   }
 
+  // A single Full Name splits into first/last; older clients may still send
+  // firstName/lastName directly.
+  let newFirst: string | undefined, newLast: string | undefined;
+  if (fullName !== undefined) {
+    const np = String(fullName).trim().split(/\s+/);
+    newFirst = np[0] || '';
+    newLast = np.slice(1).join(' ');
+  } else {
+    if (firstName !== undefined) newFirst = firstName;
+    if (lastName !== undefined) newLast = lastName;
+  }
+
   const updateFields: Record<string, unknown> = { ...hrColumns(req.body, { includeEmergency: true }) };
-  if (firstName !== undefined) updateFields.first_name = firstName;
-  if (lastName !== undefined) updateFields.last_name = lastName;
+  if (newFirst !== undefined) updateFields.first_name = newFirst;
+  if (newLast !== undefined) updateFields.last_name = newLast;
   if (email !== undefined) updateFields.email = email || null;
   if (phone !== undefined) updateFields.phone = phone || null;
   if (username !== undefined) updateFields.username = username;
@@ -4766,13 +4774,13 @@ export async function updateAccount(req: AuthRequest, res: Response): Promise<vo
   }
 
   // Sync full_name in the role-specific profile table
-  if (firstName !== undefined || lastName !== undefined) {
-    const fn = (firstName ?? user.first_name ?? '').trim();
-    const ln = (lastName ?? user.last_name ?? '').trim();
-    const fullName = `${fn} ${ln}`.trim();
-    if (user.role === 'teacher') await supabase.from('teachers').update({ full_name: fullName }).eq('user_id', userId).eq('school_id', schoolId);
-    else if (user.role === 'driver') await supabase.from('drivers').update({ full_name: fullName }).eq('user_id', userId).eq('school_id', schoolId);
-    else if (user.role === 'parent') await supabase.from('parents').update({ full_name: fullName }).eq('user_id', userId).eq('school_id', schoolId);
+  if (newFirst !== undefined || newLast !== undefined) {
+    const fn = (newFirst ?? user.first_name ?? '').trim();
+    const ln = (newLast ?? user.last_name ?? '').trim();
+    const profileName = `${fn} ${ln}`.trim();
+    if (user.role === 'teacher') await supabase.from('teachers').update({ full_name: profileName }).eq('user_id', userId).eq('school_id', schoolId);
+    else if (user.role === 'driver') await supabase.from('drivers').update({ full_name: profileName }).eq('user_id', userId).eq('school_id', schoolId);
+    else if (user.role === 'parent') await supabase.from('parents').update({ full_name: profileName }).eq('user_id', userId).eq('school_id', schoolId);
   }
 
   // Admin-trusted phone propagation (migration 050). This is the
