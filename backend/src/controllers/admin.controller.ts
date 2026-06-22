@@ -1092,8 +1092,11 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
     const firstName = nameParts[0] || fullName;
     const lastName = nameParts.slice(1).join(' ') || '';
 
-    // username — typed value, else dotted full name; abbrev-prefixed + deduped.
-    const rawUser = mapped.username ? mapped.username.toLowerCase() : fullName.toLowerCase().replace(/\s+/g, '.');
+    // username — typed value, else name.father (first two name parts only);
+    // abbrev-prefixed + deduped.
+    const rawUser = mapped.username
+      ? mapped.username.toLowerCase()
+      : nameParts.slice(0, 2).join('.').toLowerCase();
     const username = makeUsername(rawUser);
 
     const customPw = mapped.password && mapped.password.length > 0 ? mapped.password : null;
@@ -2579,7 +2582,9 @@ export async function createTeacher(req: AuthRequest, res: Response): Promise<vo
 
   const { data: schoolData } = await supabase.from('schools').select('abbreviation').eq('id', schoolId).single();
   const abbrev = (schoolData?.abbreviation || '').toLowerCase();
-  const rawUsername = username || fullName.toLowerCase().replace(/\s+/g, '.');
+  // Auto-derived username is name.father (first two name parts only), e.g.
+  // "Ali Hassan Ahmed" → ali.hassan; the abbrev prefix is added below.
+  const rawUsername = username || fullName.trim().split(/\s+/).slice(0, 2).join('.').toLowerCase();
   const finalUsername = abbrev && !rawUsername.startsWith(`${abbrev}_`) ? `${abbrev}_${rawUsername}` : rawUsername;
 
   const rounds = parseInt(process.env.BCRYPT_ROUNDS || '10');
@@ -2719,7 +2724,9 @@ export async function createDriver(req: AuthRequest, res: Response): Promise<voi
 
   const { data: schoolData } = await supabase.from('schools').select('abbreviation').eq('id', schoolId).single();
   const abbrev = (schoolData?.abbreviation || '').toLowerCase();
-  const rawUsername = username || fullName.toLowerCase().replace(/\s+/g, '.');
+  // Auto-derived username is name.father (first two name parts only), e.g.
+  // "Ali Hassan Ahmed" → ali.hassan; the abbrev prefix is added below.
+  const rawUsername = username || fullName.trim().split(/\s+/).slice(0, 2).join('.').toLowerCase();
   const finalUsername = abbrev && !rawUsername.startsWith(`${abbrev}_`) ? `${abbrev}_${rawUsername}` : rawUsername;
 
   const rounds = parseInt(process.env.BCRYPT_ROUNDS || '10');
