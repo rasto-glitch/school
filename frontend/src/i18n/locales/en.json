@@ -1324,7 +1324,23 @@
       "errors_title": "{{count}} row(s) had issues",
       "col_full_name": "Full Name",
       "col_username": "Username",
-      "col_temp_password": "Temporary Password"
+      "col_temp_password": "Temporary Password",
+      "photos": {
+        "title": "Add teacher photos",
+        "subtitle": "Optional. Drop all the photos at once — each is matched to a teacher by its file name (their name or username). Fix any leftovers below, then upload.",
+        "matched_of": "{{matched}} of {{total}} matched",
+        "select_all": "Select all photos",
+        "add": "Add photo",
+        "change": "Change",
+        "clear": "Remove",
+        "unmatched": "{{count}} photo(s) didn't match — assign them",
+        "assign_to": "Assign to…",
+        "upload_n": "Upload {{count}} photo(s)",
+        "uploaded": "{{count}} photo(s) uploaded.",
+        "uploaded_partial": "{{ok}} uploaded, {{failed}} failed.",
+        "none_selected": "No photos selected.",
+        "finished": "Done."
+      }
     },
     "drivers_mgmt": {
       "title": "Drivers Management",

@@ -15,10 +15,11 @@ import { Download, Upload, FileSpreadsheet, KeyRound } from 'lucide-react';
 import { adminApi } from '../../../services/api';
 import Card from '../../common/Card';
 import Button from '../../common/Button';
+import EmployeePhotoMatcher from './EmployeePhotoMatcher';
 
 type Role = 'teacher' | 'driver';
 
-interface Credential { fullName: string; role: string; username: string; password: string; }
+interface Credential { id: string; fullName: string; role: string; username: string; password: string; }
 interface UploadResult {
   created: number;
   skipped: number;
@@ -97,14 +98,16 @@ export default function EmployeeBulkUpload({ role, onDone }: { role: Role; onDon
       }
       setFile(null);
       if (inputRef.current) inputRef.current.value = '';
-    } catch (err: any) {
-      toast.error(err.response?.data?.error || t('admin.bulk_emp.failed', 'Bulk upload failed.'));
+    } catch (err) {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
+      toast.error(msg || t('admin.bulk_emp.failed', 'Bulk upload failed.'));
     } finally {
       setLoading(false);
     }
   };
 
   return (
+    <div className="space-y-5">
     <Card>
       <div className="flex items-start gap-3 mb-4">
         <div className="w-9 h-9 bg-primary-100 rounded-lg flex items-center justify-center flex-shrink-0">
@@ -196,5 +199,14 @@ export default function EmployeeBulkUpload({ role, onDone }: { role: Role; onDon
         </div>
       )}
     </Card>
+
+    {/* Teachers only (for now): match a folder of photos to the new accounts. */}
+    {role === 'teacher' && result && result.credentials.length > 0 && (
+      <EmployeePhotoMatcher
+        role="teacher"
+        targets={result.credentials.map(c => ({ id: c.id, fullName: c.fullName, username: c.username }))}
+      />
+    )}
+    </div>
   );
 }

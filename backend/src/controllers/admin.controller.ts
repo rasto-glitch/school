@@ -1214,6 +1214,9 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
   // PASS 4 — batch insert the role records (RETURNING preserves input order)
   // =========================================================
   let created = 0;
+  // Role-record ids (teachers.id / drivers.id) aligned to `parsed`, so the
+  // response can hand the frontend an id per row for the photo-matcher step.
+  let roleRecordIds: string[] = [];
   if (role === 'teacher') {
     const { data: newTeachers, error: tErr } = await supabase.from('teachers')
       .insert(parsed.map((e, idx) => ({
@@ -1228,6 +1231,7 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
       .select('id');
     if (tErr || !newTeachers) { res.status(safeDbErrorStatus(tErr)).json({ error: safeDbErrorMessage(tErr) }); return; }
     created = newTeachers.length;
+    roleRecordIds = newTeachers.map((r: { id: string }) => r.id);
 
     // teacher_classes for rows that named a resolvable class
     const tcRows: { teacher_id: string; class_id: string }[] = [];
@@ -1255,14 +1259,18 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
       .select('id');
     if (dErr || !newDrivers) { res.status(safeDbErrorStatus(dErr)).json({ error: safeDbErrorMessage(dErr) }); return; }
     created = newDrivers.length;
+    roleRecordIds = newDrivers.map((r: { id: string }) => r.id);
   }
 
   // Admin-trusted phone propagation (migration 050) — parallel, self-logging.
   await Promise.all(parsed.map((e, idx) => propagateAdminSetPhone(newUsers[idx].id, e.phoneNumber)));
 
   // Hand back the credentials so the admin can print/distribute the temp
-  // passwords (every must_change_password account needs them once).
-  const credentials = parsed.map(e => ({ fullName: e.fullName, role, username: e.username, password: e.password }));
+  // passwords (every must_change_password account needs them once). `id` is the
+  // role-record id (teachers.id) the photo-matcher step attaches photos to.
+  const credentials = parsed.map((e, idx) => ({
+    id: roleRecordIds[idx], fullName: e.fullName, role, username: e.username, password: e.password,
+  }));
 
   res.json({
     created, skipped: skipped.length, total: rows.length,
