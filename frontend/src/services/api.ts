@@ -381,6 +381,8 @@ export const adminApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
   },
+  employeeBulkTemplate: (role: 'teacher' | 'driver') =>
+    api.get('/admin/employees/bulk-template.xlsx', { params: { role }, responseType: 'blob' }),
   getStudentBrief: (id: string) => api.get(`/admin/students/${id}/brief`),
   // Per-year academic progression (migration 030)
   getStudentEnrollments: (id: string) => api.get(`/admin/students/${id}/enrollments`),

@@ -29,27 +29,11 @@ interface UploadResult {
   errors: string[];
 }
 
-// Column headers the backend's COLUMN_MAP understands. Role-specific columns
-// sit right after the shared identity fields.
-const COMMON_BEFORE = ['Full Name', 'Phone Number', 'Emergency Contact'];
-const COMMON_AFTER = [
-  'Username', 'Password', 'Address', 'Hire Date', 'National ID', 'Date of Birth',
-  'Marital Status', 'Gender', 'Employment Type', 'Qualifications', 'Notes',
-];
-const ROLE_COLS: Record<Role, string[]> = {
-  teacher: ['Class'],
-  driver: ['License Number', 'Bus Number', 'Age', 'Vehicle Type'],
-};
-
-const templateColumns = (role: Role) => [...COMMON_BEFORE, ...ROLE_COLS[role], ...COMMON_AFTER];
-
-// Minimal RFC-4180 CSV cell quoting.
+// Minimal RFC-4180 CSV cell quoting (used only for the credentials sheet).
 const csvCell = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
 const toCsv = (rows: string[][]) => rows.map(r => r.map(csvCell).join(',')).join('\r\n');
 
-const downloadBlob = (content: string, filename: string) => {
-  // Prepend a UTF-8 BOM so Excel reads Arabic/Kurdish names correctly.
-  const blob = new Blob(['﻿' + content], { type: 'text/csv;charset=utf-8;' });
+const saveBlob = (blob: Blob, filename: string) => {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -60,10 +44,15 @@ const downloadBlob = (content: string, filename: string) => {
   URL.revokeObjectURL(url);
 };
 
+// Prepend a UTF-8 BOM so Excel reads Arabic/Kurdish names in CSV correctly.
+const saveCsv = (content: string, filename: string) =>
+  saveBlob(new Blob(['﻿' + content], { type: 'text/csv;charset=utf-8;' }), filename);
+
 export default function EmployeeBulkUpload({ role, onDone }: { role: Role; onDone?: () => void }) {
   const { t } = useTranslation();
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
+  const [templateLoading, setTemplateLoading] = useState(false);
   const [result, setResult] = useState<UploadResult | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -71,9 +60,16 @@ export default function EmployeeBulkUpload({ role, onDone }: { role: Role; onDon
     ? t('admin.bulk_emp.teachers', 'teachers')
     : t('admin.bulk_emp.drivers', 'drivers');
 
-  const downloadTemplate = () => {
-    const cols = templateColumns(role);
-    downloadBlob(toCsv([cols]), `${role}-bulk-template.csv`);
+  const downloadTemplate = async () => {
+    setTemplateLoading(true);
+    try {
+      const res = await adminApi.employeeBulkTemplate(role);
+      saveBlob(res.data as Blob, `${role}-bulk-template.xlsx`);
+    } catch {
+      toast.error(t('admin.bulk_emp.template_failed', 'Could not download the template.'));
+    } finally {
+      setTemplateLoading(false);
+    }
   };
 
   const downloadCredentials = () => {
@@ -82,7 +78,7 @@ export default function EmployeeBulkUpload({ role, onDone }: { role: Role; onDon
       [t('admin.bulk_emp.col_full_name', 'Full Name'), t('admin.bulk_emp.col_username', 'Username'), t('admin.bulk_emp.col_temp_password', 'Temporary Password')],
       ...result.credentials.map(c => [c.fullName, c.username, c.password]),
     ];
-    downloadBlob(toCsv(rows), `${role}-credentials.csv`);
+    saveCsv(toCsv(rows), `${role}-credentials.csv`);
   };
 
   const onUpload = async () => {
@@ -125,7 +121,7 @@ export default function EmployeeBulkUpload({ role, onDone }: { role: Role; onDon
       </div>
 
       <div className="flex flex-wrap gap-2 mb-3">
-        <Button type="button" variant="outline" onClick={downloadTemplate}>
+        <Button type="button" variant="outline" loading={templateLoading} onClick={downloadTemplate}>
           <Download className="w-4 h-4 mr-1.5" />
           {t('admin.bulk_emp.download_template', 'Download template')}
         </Button>

@@ -1267,6 +1267,37 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
   });
 }
 
+// Streams a ready-to-fill .xlsx template (just the header row) for the bulk
+// employee upload. Column order matches the headers bulkUploadEmployees' maps
+// understand; role chosen via ?role=teacher|driver.
+export async function employeeBulkTemplate(req: AuthRequest, res: Response): Promise<void> {
+  const roleParam = String(req.query.role || '').toLowerCase();
+  if (roleParam !== 'teacher' && roleParam !== 'driver') {
+    res.status(400).json({ error: 'Query param "role" must be "teacher" or "driver".' });
+    return;
+  }
+  const role: 'teacher' | 'driver' = roleParam;
+
+  const commonBefore = ['Full Name', 'Phone Number', 'Emergency Contact'];
+  const roleCols = role === 'teacher'
+    ? ['Class']
+    : ['License Number', 'Bus Number', 'Age', 'Vehicle Type'];
+  const commonAfter = [
+    'Username', 'Password', 'Address', 'Hire Date', 'National ID', 'Date of Birth',
+    'Marital Status', 'Gender', 'Employment Type', 'Qualifications', 'Notes',
+  ];
+  const headers = [...commonBefore, ...roleCols, ...commonAfter];
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([headers]);
+  XLSX.utils.book_append_sheet(wb, ws, role === 'teacher' ? 'Teachers' : 'Drivers');
+  const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="${role}-bulk-template.xlsx"`);
+  res.send(buf);
+}
+
 // ---- ARCHIVE STUDENTS ----
 
 // Build the frozen snapshot payload for a student: classes attended per

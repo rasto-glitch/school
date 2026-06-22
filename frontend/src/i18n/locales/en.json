@@ -1307,6 +1307,7 @@
       "title": "Bulk upload {{role}}",
       "subtitle": "Upload a spreadsheet to create many accounts at once. Download the template, fill one row per person, then upload it.",
       "download_template": "Download template",
+      "template_failed": "Could not download the template.",
       "upload": "Upload",
       "select_first": "Choose a file first.",
       "created_toast": "{{count}} account(s) created.",

@@ -383,6 +383,7 @@ export function createRouter(io: SocketServer) {
   // Bulk-create teachers or drivers from an .xlsx upload (role chosen via
   // ?role=teacher|driver). Mirrors the students bulk-upload: memoryStorage,
   // 10 MB cap, in-memory parse, auto-create of missing classes/buses.
+  router.get('/admin/employees/bulk-template.xlsx', authenticate, authorize('admin'), (req, res) => admin.employeeBulkTemplate(req as AuthRequest, res));
   router.post('/admin/employees/bulk-upload', authenticate, authorize('admin'), upload.single('file'), (req, res) => admin.bulkUploadEmployees(req as AuthRequest, res));
 
   router.get('/admin/drivers', authenticate, authorize('admin'), (req, res) => admin.getDrivers(req as AuthRequest, res));
