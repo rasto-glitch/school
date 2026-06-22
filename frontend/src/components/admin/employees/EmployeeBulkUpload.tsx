@@ -26,6 +26,7 @@ interface UploadResult {
   total: number;
   autoCreatedClasses: string[];
   autoCreatedBuses: string[];
+  autoCreatedSubjects: string[];
   credentials: Credential[];
   errors: string[];
 }
@@ -167,6 +168,11 @@ export default function EmployeeBulkUpload({ role, onDone }: { role: Role; onDon
             {result.autoCreatedBuses.length > 0 && (
               <span className="text-xs font-semibold bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full">
                 {t('admin.bulk_emp.stat_buses', { count: result.autoCreatedBuses.length, defaultValue: '{{count}} bus(es) created' })}
+              </span>
+            )}
+            {result.autoCreatedSubjects.length > 0 && (
+              <span className="text-xs font-semibold bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full">
+                {t('admin.bulk_emp.stat_subjects', { count: result.autoCreatedSubjects.length, defaultValue: '{{count}} subject(s) created' })}
               </span>
             )}
           </div>

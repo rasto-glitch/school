@@ -965,6 +965,7 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
   };
   const TEACHER_MAP: Record<string, string> = {
     'class': 'className', 'classes': 'className', 'grade': 'className', 'grade/class': 'className',
+    'subject': 'subjects', 'subjects': 'subjects',
   };
   const DRIVER_MAP: Record<string, string> = {
     'license number': 'licenseNumber', 'license': 'licenseNumber',
@@ -1022,6 +1023,7 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
     { data: existingUsers },
     { data: existingClasses },
     { data: existingBuses },
+    { data: existingSubjects },
   ] = await Promise.all([
     supabase.from('schools').select('abbreviation').eq('id', schoolId).single(),
     supabase.from('users').select('username').eq('school_id', schoolId),
@@ -1031,6 +1033,9 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
     role === 'driver'
       ? supabase.from('buses').select('id, bus_number').eq('school_id', schoolId)
       : Promise.resolve({ data: [] as { id: string; bus_number: string }[] }),
+    role === 'teacher'
+      ? supabase.from('subjects').select('id, name').eq('school_id', schoolId)
+      : Promise.resolve({ data: [] as { id: string; name: string }[] }),
   ]);
 
   const schoolAbbrev = (schoolData?.abbreviation || '').toLowerCase();
@@ -1046,6 +1051,8 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
   }
   const busMap = new Map<string, string>(); // bus_number → id
   for (const b of (existingBuses || [])) busMap.set(String(b.bus_number), b.id);
+  const subjectMap = new Map<string, string>(); // name.toLowerCase() → id
+  for (const s of (existingSubjects || [])) subjectMap.set(s.name.toLowerCase(), s.id);
 
   const rounds = parseInt(process.env.BCRYPT_ROUNDS || '10');
   const defaultPassword = defaultPasswordFor(role);
@@ -1072,12 +1079,14 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
     username: string; password: string; usedDefault: boolean; passwordHash: string;
     phoneNumber: string | null; emergencyContact: string | null; email: string | null;
     hr: Record<string, unknown>;
-    classNameRaw: string | null;                       // teacher
+    classNameRaw: string | null; subjectNames: string[];  // teacher
     licenseNumber: string | null; busNumberRaw: string | null; age: number | null; vehicleType: 'bus' | 'taxi'; // driver
   }
   const parsed: ParsedEmp[] = [];
   const newClassesNeeded = new Set<string>();
   const newBusesNeeded = new Set<string>();
+  // lower-cased name → canonical casing, so "Math" + "math" don't double-insert.
+  const newSubjectsNeeded = new Map<string, string>();
   const errors: string[] = [];
   const skipped: string[] = [];
   const customHashJobs: { idx: number; password: string }[] = [];
@@ -1129,7 +1138,7 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
       emergencyContact: mapped.emergencyContact || null,
       email: mapped.email ? normEmail(mapped.email) : null,
       hr,
-      classNameRaw: null, licenseNumber: null, busNumberRaw: null, age: null, vehicleType: 'bus',
+      classNameRaw: null, subjectNames: [], licenseNumber: null, busNumberRaw: null, age: null, vehicleType: 'bus',
     };
     if (!usedDefault) customHashJobs.push({ idx: parsed.length, password });
 
@@ -1139,6 +1148,18 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
         emp.classNameRaw = cls;
         if (!classExactMap.has(cls.toLowerCase()) && !classNormMap.has(stripGradePrefix(cls))) {
           newClassesNeeded.add(formatClassName(cls));
+        }
+      }
+      // Subjects — comma/semicolon-separated, deduped case-insensitively.
+      const subjRaw = mapped.subjects || '';
+      if (subjRaw) {
+        const seen = new Set<string>();
+        for (const nm of subjRaw.split(/[,;]/).map(s => s.trim()).filter(Boolean)) {
+          const lc = nm.toLowerCase();
+          if (seen.has(lc)) continue;
+          seen.add(lc);
+          emp.subjectNames.push(nm);
+          if (!subjectMap.has(lc) && !newSubjectsNeeded.has(lc)) newSubjectsNeeded.set(lc, nm);
         }
       }
     } else {
@@ -1157,7 +1178,7 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
   }
 
   if (parsed.length === 0) {
-    res.json({ created: 0, skipped: skipped.length, total: rows.length, autoCreatedClasses: [], autoCreatedBuses: [], credentials: [], errors });
+    res.json({ created: 0, skipped: skipped.length, total: rows.length, autoCreatedClasses: [], autoCreatedBuses: [], autoCreatedSubjects: [], credentials: [], errors });
     return;
   }
 
@@ -1193,6 +1214,18 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
     else for (const b of (nb || [])) {
       busMap.set(String(b.bus_number), b.id);
       autoCreatedBuses.push(String(b.bus_number));
+    }
+  }
+
+  const autoCreatedSubjects: string[] = [];
+  if (role === 'teacher' && newSubjectsNeeded.size > 0) {
+    const { data: ns, error: nsErr } = await supabase.from('subjects')
+      .insert(Array.from(newSubjectsNeeded.values()).map(name => ({ school_id: schoolId, name, teacher_id: null })))
+      .select('id, name');
+    if (nsErr) { errors.push(`Failed to create subjects: ${nsErr.message}`); }
+    else for (const s of (ns || [])) {
+      subjectMap.set(s.name.toLowerCase(), s.id);
+      autoCreatedSubjects.push(s.name);
     }
   }
 
@@ -1241,15 +1274,41 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
     created = newTeachers.length;
     roleRecordIds = newTeachers.map((r: { id: string }) => r.id);
 
-    // teacher_classes for rows that named a resolvable class
+    // teacher_classes + curriculum (class ↔ subject ↔ teacher) for rows that
+    // named a resolvable class. Subjects are class-scoped, so a teacher's
+    // subjects attach to the class in their row; subjects on a class-less row
+    // are still created above but can't be assigned (we note that once).
     const tcRows: { teacher_id: string; class_id: string }[] = [];
+    const cstRows: { school_id: string; class_id: string; subject_id: string; teacher_id: string }[] = [];
+    const affectedTeacherIds = new Set<string>();
+    const affectedSubjectIds = new Set<string>();
+    let subjectsNeedClass = 0;
     parsed.forEach((e, idx) => {
-      if (!e.classNameRaw) return;
-      const cid = classExactMap.get(e.classNameRaw.toLowerCase())
-        ?? classNormMap.get(stripGradePrefix(e.classNameRaw)) ?? null;
-      if (cid) tcRows.push({ teacher_id: newTeachers[idx].id, class_id: cid });
+      const tid = newTeachers[idx].id;
+      const cid = e.classNameRaw
+        ? (classExactMap.get(e.classNameRaw.toLowerCase()) ?? classNormMap.get(stripGradePrefix(e.classNameRaw)) ?? null)
+        : null;
+      if (cid) tcRows.push({ teacher_id: tid, class_id: cid });
+      if (e.subjectNames.length === 0) return;
+      if (!cid) { subjectsNeedClass++; return; }
+      for (const nm of e.subjectNames) {
+        const sid = subjectMap.get(nm.toLowerCase());
+        if (!sid) continue;
+        cstRows.push({ school_id: schoolId, class_id: cid, subject_id: sid, teacher_id: tid });
+        affectedTeacherIds.add(tid);
+        affectedSubjectIds.add(sid);
+      }
     });
     if (tcRows.length > 0) await supabase.from('teacher_classes').insert(tcRows);
+    if (cstRows.length > 0) {
+      await supabase.from('class_subject_teachers')
+        .upsert(cstRows, { onConflict: 'class_id,subject_id,teacher_id', ignoreDuplicates: true });
+      // Rebuild the subject_teachers + teachers.subject + subjects.teacher_id caches.
+      await recomputeCaches(schoolId, { teacherIds: [...affectedTeacherIds], subjectIds: [...affectedSubjectIds] });
+    }
+    if (subjectsNeedClass > 0) {
+      errors.push(`${subjectsNeedClass} teacher(s) had subjects but no class — the subjects were created but not assigned (subjects are assigned per class; add them in Curriculum).`);
+    }
   } else {
     const { data: newDrivers, error: dErr } = await supabase.from('drivers')
       .insert(parsed.map((e, idx) => ({
@@ -1282,7 +1341,7 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
 
   res.json({
     created, skipped: skipped.length, total: rows.length,
-    autoCreatedClasses, autoCreatedBuses, credentials, errors,
+    autoCreatedClasses, autoCreatedBuses, autoCreatedSubjects, credentials, errors,
   });
 }
 
@@ -1299,7 +1358,7 @@ export async function employeeBulkTemplate(req: AuthRequest, res: Response): Pro
 
   const commonBefore = ['Full Name', 'Phone Number', 'Emergency Contact', 'Email'];
   const roleCols = role === 'teacher'
-    ? ['Class']
+    ? ['Class', 'Subjects']
     : ['License Number', 'Bus Number', 'Age', 'Vehicle Type'];
   const commonAfter = [
     'Username', 'Password', 'Address', 'Hire Date', 'National ID', 'Date of Birth',

@@ -1318,6 +1318,7 @@
       "stat_skipped": "{{count}} skipped",
       "stat_classes": "{{count}} class(es) created",
       "stat_buses": "{{count}} bus(es) created",
+      "stat_subjects": "{{count}} subject(s) created",
       "creds_ready": "Login credentials are ready.",
       "creds_hint": "Download and hand these out. Each person must change their password on first login.",
       "download_creds": "Download credentials",
