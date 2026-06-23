@@ -1055,6 +1055,18 @@
     "no_teachers_found": "No teachers found",
     "weekly_schedule": "Weekly Schedule",
     "schedule_settings": "Schedule Settings",
+    "schedule_upload": {
+      "title": "Upload schedule",
+      "subtitle": "One sheet per day, rows are classes, columns are periods. Fill each cell with a subject — the right teacher is matched from the curriculum.",
+      "download_template": "Download template",
+      "template_failed": "Could not download the template.",
+      "placed_toast": "{{count}} period(s) scheduled.",
+      "none_placed": "Nothing was scheduled — check the notes below.",
+      "failed": "Schedule upload failed.",
+      "placed_stat": "{{count}} placed",
+      "days_stat": "Days: {{days}}",
+      "notes_title": "{{count}} note(s)"
+    },
     "classes_per_day": "Classes per day",
     "classes_per_day_hint": "How many class periods are in one school day.",
     "school_days": "School days",

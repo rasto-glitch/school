@@ -5287,6 +5287,136 @@ export async function setScheduleCell(req: AuthRequest, res: Response): Promise<
   res.json({ success: true, assignment: toCC(data) });
 }
 
+const capDay = (d: string) => d.charAt(0).toUpperCase() + d.slice(1);
+
+// Downloadable .xlsx schedule template: one sheet per schedule day, rows = the
+// school's classes, columns = P1..Pn (from config). The admin fills each cell
+// with a SUBJECT; upload then resolves the teacher via the curriculum.
+export async function scheduleTemplate(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const config = await readScheduleConfig(schoolId);
+  const { data: classes } = await supabase
+    .from('classes').select('name').eq('school_id', schoolId).order('name');
+
+  const header = ['Class', ...Array.from({ length: config.periodsPerDay }, (_, i) => `P${i + 1}`)];
+  const orderedDays = [...config.scheduleDays].sort((a, b) => VALID_DAYS.indexOf(a) - VALID_DAYS.indexOf(b));
+
+  const wb = XLSX.utils.book_new();
+  for (const day of (orderedDays.length ? orderedDays : ['sunday'])) {
+    const rows: string[][] = [header, ...(classes || []).map(c => [c.name])];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), capDay(day));
+  }
+  const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', 'attachment; filename="schedule-template.xlsx"');
+  res.send(buf);
+}
+
+// Bulk-build the schedule from an uploaded grid. Each sheet is a day; rows are
+// classes, columns are periods, cells are subjects. The teacher for each cell
+// is resolved from the curriculum (class + subject → teacher). Each day that
+// gets at least one placement is fully replaced; unresolved/ambiguous/
+// double-booked cells are reported, never guessed.
+export async function uploadSchedule(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  if (!req.file) { res.status(400).json({ error: 'No file uploaded' }); return; }
+
+  let workbook: XLSX.WorkBook;
+  try {
+    workbook = XLSX.read(req.file.buffer, { type: 'buffer', sheetRows: 500 });
+  } catch {
+    res.status(400).json({ error: 'Could not parse the file. Make sure it is a valid .xlsx or .xls file.' });
+    return;
+  }
+
+  const config = await readScheduleConfig(schoolId);
+  const [{ data: classes }, { data: subjects }, { data: curr }] = await Promise.all([
+    supabase.from('classes').select('id, name').eq('school_id', schoolId),
+    supabase.from('subjects').select('id, name').eq('school_id', schoolId),
+    supabase.from('class_subject_teachers').select('class_id, subject_id, teacher_id, teachers(full_name)').eq('school_id', schoolId),
+  ]);
+
+  const classByName = new Map<string, string>();
+  for (const c of (classes || [])) classByName.set(c.name.trim().toLowerCase(), c.id);
+  const subjectByName = new Map<string, string>();
+  for (const s of (subjects || [])) subjectByName.set(s.name.trim().toLowerCase(), s.id);
+  const currMap = new Map<string, { id: string; name: string }[]>(); // `${classId}|${subjectId}` → teachers
+  for (const r of (curr || []) as { class_id: string; subject_id: string; teacher_id: string; teachers?: { full_name?: string } }[]) {
+    const key = `${r.class_id}|${r.subject_id}`;
+    const arr = currMap.get(key) || [];
+    arr.push({ id: r.teacher_id, name: r.teachers?.full_name || '' });
+    currMap.set(key, arr);
+  }
+
+  const warnings: string[] = [];
+  const unknownClasses = new Set<string>();
+  const resolved: { teacher_id: string; class_id: string; day_of_week: number; period_index: number }[] = [];
+  const usedTeacher = new Map<string, Set<string>>(); // `${day}|${period}` → teacherIds (in-file double-book guard)
+
+  for (const sheetName of workbook.SheetNames) {
+    const dayIdx = VALID_DAYS.indexOf(sheetName.trim().toLowerCase());
+    if (dayIdx === -1) { warnings.push(`Sheet "${sheetName}" isn't a day name — skipped.`); continue; }
+    const day = VALID_DAYS[dayIdx];
+    const aoa = XLSX.utils.sheet_to_json<unknown[]>(workbook.Sheets[sheetName], { header: 1, raw: false, defval: '' });
+
+    for (let r = 1; r < aoa.length; r++) { // row 0 is the header
+      const row = aoa[r] || [];
+      const className = String(row[0] ?? '').trim();
+      if (!className) continue;
+      const classId = classByName.get(className.toLowerCase());
+      if (!classId) { unknownClasses.add(className); continue; }
+
+      for (let period = 1; period <= config.periodsPerDay; period++) {
+        const subjectRaw = String(row[period] ?? '').trim();
+        if (!subjectRaw) continue; // free period
+
+        const subjectId = subjectByName.get(subjectRaw.toLowerCase());
+        if (!subjectId) {
+          warnings.push(`${className} · ${capDay(day)} · P${period}: subject "${subjectRaw}" not found — skipped.`);
+          continue;
+        }
+        const teachersForCell = currMap.get(`${classId}|${subjectId}`) || [];
+        if (teachersForCell.length === 0) {
+          warnings.push(`${className} · ${capDay(day)} · P${period}: no teacher teaches ${subjectRaw} to ${className} (add it in Curriculum) — skipped.`);
+          continue;
+        }
+        if (teachersForCell.length > 1) {
+          warnings.push(`${className} · ${capDay(day)} · P${period}: ${teachersForCell.length} teachers teach ${subjectRaw} to ${className} — skipped (resolve in Curriculum).`);
+          continue;
+        }
+        const teacher = teachersForCell[0];
+        const slotKey = `${dayIdx}|${period}`;
+        const used = usedTeacher.get(slotKey) || new Set<string>();
+        if (used.has(teacher.id)) {
+          warnings.push(`${teacher.name || 'A teacher'} is double-booked on ${capDay(day)} P${period} — kept the first, skipped ${className}/${subjectRaw}.`);
+          continue;
+        }
+        used.add(teacher.id);
+        usedTeacher.set(slotKey, used);
+        resolved.push({ teacher_id: teacher.id, class_id: classId, day_of_week: dayIdx, period_index: period });
+      }
+    }
+  }
+  for (const c of unknownClasses) warnings.push(`Class "${c}" not found — its row was skipped.`);
+
+  // Replace only the days that actually got a placement (so an accidentally
+  // blank sheet can't wipe an existing day's schedule).
+  const daysToReplace = [...new Set(resolved.map(a => a.day_of_week))];
+  if (daysToReplace.length > 0) {
+    await supabase.from('schedule_assignments').delete().eq('school_id', schoolId).in('day_of_week', daysToReplace);
+    const { error } = await supabase.from('schedule_assignments')
+      .insert(resolved.map(a => ({ school_id: schoolId, ...a })));
+    if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+  }
+
+  res.json({
+    placed: resolved.length,
+    days: daysToReplace.sort((a, b) => a - b).map(d => capDay(VALID_DAYS[d])),
+    warnings,
+  });
+}
+
 // Teacher: own grid only.
 export async function getTeacherSchedule(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId, userId } = req.user!;

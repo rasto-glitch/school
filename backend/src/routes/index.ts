@@ -503,6 +503,8 @@ export function createRouter(io: SocketServer) {
   router.get('/admin/schedule', authenticate, authorize('admin'), (req, res) => admin.getAdminSchedule(req as AuthRequest, res));
   router.put('/admin/schedule/config', authenticate, authorize('admin'), validate({ body: vp.updateScheduleConfigSchema }), (req, res) => admin.updateScheduleConfig(req as AuthRequest, res));
   router.put('/admin/schedule/cell', authenticate, authorize('admin'), validate({ body: vp.setScheduleCellSchema }), (req, res) => admin.setScheduleCell(req as AuthRequest, res));
+  router.get('/admin/schedule/template.xlsx', authenticate, authorize('admin'), (req, res) => admin.scheduleTemplate(req as AuthRequest, res));
+  router.post('/admin/schedule/upload', authenticate, authorize('admin'), upload.single('file'), (req, res) => admin.uploadSchedule(req as AuthRequest, res));
 
   router.get('/admin/announcements', authenticate, authorize('admin', 'teacher', 'parent', 'supervisor'), validate({ query: vq.listQuery }), (req, res) => admin.getAnnouncements(req as AuthRequest, res));
   router.get('/link-preview', authenticate, (req, res) => admin.getLinkPreview(req as AuthRequest, res));

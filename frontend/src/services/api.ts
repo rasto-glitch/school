@@ -371,6 +371,12 @@ export const adminApi = {
     api.put('/admin/schedule/config', data),
   setScheduleCell: (data: { teacherId: string; dayOfWeek: number; periodIndex: number; classId: string | null }) =>
     api.put('/admin/schedule/cell', data),
+  scheduleTemplate: () => api.get('/admin/schedule/template.xlsx', { responseType: 'blob' }),
+  uploadSchedule: (file: File) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return api.post('/admin/schedule/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
   bulkUploadStudents: (file: File) => {
     const fd = new FormData();
     fd.append('file', file);
