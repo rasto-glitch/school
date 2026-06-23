@@ -3393,6 +3393,8 @@
       "paid_from": "Paid from",
       "paid_from_hint": "Cash leaves this account's running balance when the payment is recorded.",
       "no_accounts_warning": "No payment accounts yet — create one before paying salaries.",
+      "fx_missing": "No exchange rate from {{from}} to {{to}}. Set one on the FX Rates page, or pay from a {{from}} drawer.",
+      "fx_preview": "≈ {{amount}} will leave this drawer (rate {{rate}}).",
       "tax_included": "Tax included (optional)",
       "tax_label": "Tax label",
       "ph_tax_label": "Income tax, etc.",

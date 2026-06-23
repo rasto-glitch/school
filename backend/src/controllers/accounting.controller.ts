@@ -168,7 +168,7 @@ export async function listPaymentAccounts(req: AuthRequest, res: Response): Prom
 
   const [fp, ssp, ex] = await Promise.all([
     supabase.from('fee_payments').select('payment_account_id, amount, is_refund').in('payment_account_id', accountIds).is('voided_at', null),
-    supabase.from('staff_salary_payments').select('payment_account_id, amount').in('payment_account_id', accountIds).is('voided_at', null),
+    supabase.from('staff_salary_payments').select('payment_account_id, paid_amount, amount').in('payment_account_id', accountIds).is('voided_at', null),
     supabase.from('expenses').select('payment_account_id, amount').in('payment_account_id', accountIds).is('voided_at', null),
   ]);
 
@@ -179,7 +179,10 @@ export async function listPaymentAccounts(req: AuthRequest, res: Response): Prom
   }
   const outflowByAcct = new Map<string, number>();
   for (const r of (ssp.data ?? []) as any[]) {
-    outflowByAcct.set(r.payment_account_id, (outflowByAcct.get(r.payment_account_id) ?? 0) + Number(r.amount));
+    // paid_amount is the cash that actually left the drawer (in the drawer's
+    // currency); fall back to amount for any pre-migration row.
+    const out = r.paid_amount != null ? Number(r.paid_amount) : Number(r.amount);
+    outflowByAcct.set(r.payment_account_id, (outflowByAcct.get(r.payment_account_id) ?? 0) + out);
   }
   for (const r of (ex.data ?? []) as any[]) {
     outflowByAcct.set(r.payment_account_id, (outflowByAcct.get(r.payment_account_id) ?? 0) + Number(r.amount));

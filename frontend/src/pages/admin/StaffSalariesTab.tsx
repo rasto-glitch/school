@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { Virtuoso } from 'react-virtuoso';
-import { staffApi, accountingApi, drainPages, type PaymentAccount } from '../../services/api';
+import { staffApi, accountingApi, drainPages, type PaymentAccount, type FxRate } from '../../services/api';
 import { fmtMoney } from '../../utils/money';
 import { toast } from 'react-toastify';
 import Button from '../../components/common/Button';
@@ -158,6 +158,8 @@ export default function StaffSalariesTab() {
   const [savingPayment, setSavingPayment] = useState(false);
   // Active payment accounts (cash drawers / bank tills) for the salary modal's "paid from" picker.
   const [accounts, setAccounts] = useState<PaymentAccount[]>([]);
+  // FX rates for cross-currency salary preview (salary currency → drawer currency).
+  const [fxRates, setFxRates] = useState<FxRate[]>([]);
 
   const [historyTarget, setHistoryTarget] = useState<StaffMember | null>(null);
   const [history, setHistory] = useState<StaffSalaryPayment[] | null>(null);
@@ -207,6 +209,7 @@ export default function StaffSalariesTab() {
     loadSetup().catch(() => {});
     // Only show active accounts in the payment "paid from" picker so retired tills don't clutter it.
     accountingApi.listPaymentAccounts().then(r => setAccounts(r.data.filter(a => a.isActive))).catch(() => {});
+    accountingApi.listFxRates().then(r => setFxRates(r.data)).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -974,6 +977,29 @@ export default function StaffSalariesTab() {
                 ) : (
                   <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2">{t('accounting.staff.no_accounts_warning')}</p>
                 )}
+                {/* Cross-currency preview: salary currency ≠ drawer currency. */}
+                {(() => {
+                  const acct = accounts.find(a => a.id === paymentForm.paymentAccountId);
+                  const drawerCcy = (acct?.currency || '').toUpperCase();
+                  const salaryCcy = paymentForm.currency.toUpperCase();
+                  if (!drawerCcy || !salaryCcy || drawerCcy === salaryCcy) return null;
+                  const rate = fxRates
+                    .filter(r => r.fromCurrency.toUpperCase() === salaryCcy && r.toCurrency.toUpperCase() === drawerCcy && r.effectiveFrom <= paymentForm.paidOn)
+                    .sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom))[0]?.rate;
+                  if (!rate) {
+                    return (
+                      <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-2 mt-2">
+                        {t('accounting.staff.fx_missing', { from: salaryCcy, to: drawerCcy, defaultValue: 'No exchange rate from {{from}} to {{to}}. Set one on the FX Rates page, or pay from a {{from}} drawer.' })}
+                      </p>
+                    );
+                  }
+                  const conv = Math.round(grossN * rate * 100) / 100;
+                  return (
+                    <p className="text-xs text-blue-800 bg-blue-50 border border-blue-200 rounded-lg p-2 mt-2">
+                      {t('accounting.staff.fx_preview', { amount: fmtMoney(conv, drawerCcy), rate, defaultValue: '≈ {{amount}} will leave this drawer (rate {{rate}}).' })}
+                    </p>
+                  );
+                })()}
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <Input
