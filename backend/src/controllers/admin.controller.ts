@@ -1041,6 +1041,28 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
     if (/^grade\s+\d+$/i.test(t)) return `Grade ${t.replace(/^grade\s+/i, '')}`;
     return t;
   };
+  // Split a list on commas/semicolons, but NOT inside parentheses — so
+  // "Math (Grade 12, Grade 11), Physics (Grade 4)" splits into two subjects.
+  const splitTopLevel = (s: string): string[] => {
+    const out: string[] = [];
+    let cur = '', depth = 0;
+    for (const ch of s) {
+      if (ch === '(') { depth++; cur += ch; }
+      else if (ch === ')') { depth = Math.max(0, depth - 1); cur += ch; }
+      else if ((ch === ',' || ch === ';') && depth === 0) { if (cur.trim()) out.push(cur.trim()); cur = ''; }
+      else cur += ch;
+    }
+    if (cur.trim()) out.push(cur.trim());
+    return out;
+  };
+  // "Math (Grade 12, Grade 11)" → { name:'Math', classNames:['Grade 12','Grade 11'] }
+  // "Math" → { name:'Math', classNames:null } (null = fall back to the row's Classes column)
+  const parseSubjectToken = (token: string): { name: string; classNames: string[] | null } => {
+    const m = /^(.*?)\s*\(([^)]*)\)\s*$/.exec(token);
+    if (!m) return { name: token.trim(), classNames: null };
+    const classNames = m[2].split(/[,;]/).map(c => c.trim()).filter(Boolean);
+    return { name: m[1].trim(), classNames: classNames.length ? classNames : null };
+  };
 
   // =========================================================
   // PASS 0 — fetch existing data in one parallel round-trip
@@ -1121,7 +1143,7 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
     username: string; password: string; usedDefault: boolean; passwordHash: string;
     phoneNumber: string | null; emergencyContact: string | null; email: string | null;
     hr: Record<string, unknown>;
-    classNames: string[]; subjectNames: string[];  // teacher
+    classNames: string[]; subjects: { name: string; classNames: string[] | null }[];  // teacher
     licenseNumber: string | null; busNumberRaw: string | null; age: number | null; vehicleType: 'bus' | 'taxi'; // driver
   }
   const parsed: ParsedEmp[] = [];
@@ -1188,7 +1210,7 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
       emergencyContact: mapped.emergencyContact || null,
       email: mapped.email ? normEmail(mapped.email) : null,
       hr,
-      classNames: [], subjectNames: [], licenseNumber: null, busNumberRaw: null, age: null, vehicleType: 'bus',
+      classNames: [], subjects: [], licenseNumber: null, busNumberRaw: null, age: null, vehicleType: 'bus',
     };
     if (!usedDefault) customHashJobs.push({ idx: parsed.length, password });
 
@@ -1208,16 +1230,23 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
           }
         }
       }
-      // Subjects — comma/semicolon-separated, deduped case-insensitively.
+      // Subjects — each token is "Subject" or "Subject (Class[, Class])". A
+      // parenthesised class binds that subject to that class only; without it
+      // the subject falls back to the row's Classes column (cross-product).
       const subjRaw = mapped.subjects || '';
       if (subjRaw) {
-        const seen = new Set<string>();
-        for (const nm of subjRaw.split(/[,;]/).map(s => s.trim()).filter(Boolean)) {
-          const lc = nm.toLowerCase();
-          if (seen.has(lc)) continue;
-          seen.add(lc);
-          emp.subjectNames.push(nm);
-          if (!subjectMap.has(lc) && !newSubjectsNeeded.has(lc)) newSubjectsNeeded.set(lc, nm);
+        for (const token of splitTopLevel(subjRaw)) {
+          const { name, classNames } = parseSubjectToken(token);
+          if (!name) continue;
+          const lc = name.toLowerCase();
+          if (!subjectMap.has(lc) && !newSubjectsNeeded.has(lc)) newSubjectsNeeded.set(lc, name);
+          emp.subjects.push({ name, classNames });
+          // Auto-create any class named inside the parentheses too.
+          for (const cn of (classNames || [])) {
+            if (!classExactMap.has(cn.toLowerCase()) && !classNormMap.has(stripGradePrefix(cn))) {
+              newClassesNeeded.add(formatClassName(cn));
+            }
+          }
         }
       }
     } else {
@@ -1334,36 +1363,45 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
     created = newTeachers.length;
     roleRecordIds = newTeachers.map((r: { id: string }) => r.id);
 
-    // teacher_classes + curriculum (class ↔ subject ↔ teacher) for rows that
-    // named a resolvable class. Subjects are class-scoped, so a teacher's
-    // subjects attach to the class in their row; subjects on a class-less row
-    // are still created above but can't be assigned (we note that once).
+    // teacher_classes + curriculum (class ↔ subject ↔ teacher). A subject bound
+    // to a class via "Subject (Class)" attaches to that class only; an unbound
+    // subject falls back to the row's Classes column (cross-product). The
+    // teacher is enrolled in every class they teach (column + bound).
     const tcRows: { teacher_id: string; class_id: string }[] = [];
     const cstRows: { school_id: string; class_id: string; subject_id: string; teacher_id: string }[] = [];
     const affectedTeacherIds = new Set<string>();
     const affectedSubjectIds = new Set<string>();
     let subjectsNeedClass = 0;
+    const resolveClass = (nm: string): string | null =>
+      classExactMap.get(nm.toLowerCase()) ?? classNormMap.get(stripGradePrefix(nm)) ?? null;
     parsed.forEach((e, idx) => {
       const tid = newTeachers[idx].id;
-      // Resolve every named class to an id (deduped).
-      const cids: string[] = [];
+      // Fallback classes = the Classes column (also the teacher's membership).
+      const columnCids: string[] = [];
       for (const nm of e.classNames) {
-        const cid = classExactMap.get(nm.toLowerCase()) ?? classNormMap.get(stripGradePrefix(nm)) ?? null;
-        if (cid && !cids.includes(cid)) cids.push(cid);
+        const cid = resolveClass(nm);
+        if (cid && !columnCids.includes(cid)) columnCids.push(cid);
       }
-      for (const cid of cids) tcRows.push({ teacher_id: tid, class_id: cid });
-      if (e.subjectNames.length === 0) return;
-      if (cids.length === 0) { subjectsNeedClass++; return; }
-      // Curriculum triple per (class × subject) the teacher row named.
-      for (const cid of cids) {
-        for (const nm of e.subjectNames) {
-          const sid = subjectMap.get(nm.toLowerCase());
-          if (!sid) continue;
+      // Build curriculum triples; collect every class the teacher actually teaches.
+      const teacherCids = new Set<string>(columnCids);
+      let rowNeedsClass = false;
+      for (const subj of e.subjects) {
+        const sid = subjectMap.get(subj.name.toLowerCase());
+        if (!sid) continue;
+        // Bound subject → its own class(es); unbound → the Classes column.
+        const targetCids = subj.classNames
+          ? subj.classNames.map(resolveClass).filter((c): c is string => !!c)
+          : columnCids;
+        if (targetCids.length === 0) { rowNeedsClass = true; continue; }
+        for (const cid of targetCids) {
+          teacherCids.add(cid);
           cstRows.push({ school_id: schoolId, class_id: cid, subject_id: sid, teacher_id: tid });
           affectedTeacherIds.add(tid);
           affectedSubjectIds.add(sid);
         }
       }
+      for (const cid of teacherCids) tcRows.push({ teacher_id: tid, class_id: cid });
+      if (rowNeedsClass) subjectsNeedClass++;
     });
     if (tcRows.length > 0) await supabase.from('teacher_classes').insert(tcRows);
     if (cstRows.length > 0) {

@@ -1349,6 +1349,7 @@
       "none_created": "No accounts were created — check the errors below.",
       "failed": "Bulk upload failed.",
       "pii_hint": "National ID and Date of Birth are stored on the employee record. Keep the spreadsheet secure and delete your copy once accounts are created.",
+      "subjects_hint": "Subjects: a subject applies to every listed class by default. To tie a subject to a specific class, put the class in parentheses — e.g. \"Math (Grade 12), Physics (Grade 4)\".",
       "stat_created": "{{count}} created",
       "stat_skipped": "{{count}} skipped (already exist)",
       "stat_classes": "{{count}} class(es) created",

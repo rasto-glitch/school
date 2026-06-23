@@ -151,6 +151,11 @@ export default function EmployeeBulkUpload({ role, onDone }: { role: Role; onDon
         </Button>
       </div>
 
+      {role === 'teacher' && (
+        <p className="text-xs text-gray-500 mt-2">
+          {t('admin.bulk_emp.subjects_hint', 'Subjects: a subject applies to every listed class by default. To tie a subject to a specific class, put the class in parentheses — e.g. "Math (Grade 12), Physics (Grade 4)".')}
+        </p>
+      )}
       <p className="text-xs text-gray-400 mt-2">
         {t('admin.bulk_emp.pii_hint', 'National ID and Date of Birth are stored on the employee record. Keep the spreadsheet secure and delete your copy once accounts are created.')}
       </p>
