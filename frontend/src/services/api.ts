@@ -459,6 +459,15 @@ export const adminApi = {
   updateGrade: (id: string, data: { marks?: { name: string; value: number | string }[]; adminNote?: string | null }) =>
     api.put(`/admin/grades/${id}`, data),
   releaseGrades: (ids: string[]) => api.post('/admin/grades/release', { ids }),
+  gradesTemplate: (year: string, term: string) =>
+    api.get('/admin/grades/template.xlsx', { params: { year, term }, responseType: 'blob' }),
+  exportGrades: (year: string, term: string) =>
+    api.get('/admin/grades/export.xlsx', { params: { year, term }, responseType: 'blob' }),
+  uploadGrades: (file: File) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return api.post('/admin/grades/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
   getGraduatedStudents: (search?: string) => api.get('/admin/students/graduated', { params: search ? { search } : {} }),
   archiveStudent: (id: string, data: { reason: string; departureDate: string }) => api.post(`/admin/students/${id}/archive`, data),
   getArchivedStudents: (params?: { search?: string; reason?: string }) =>

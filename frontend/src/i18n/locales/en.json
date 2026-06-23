@@ -1053,6 +1053,23 @@
     "add_edit_teachers": "+ Add / Edit Teachers",
     "search_name_subject": "Search by name or subject...",
     "no_teachers_found": "No teachers found",
+    "grade_io": {
+      "title": "Import / export grades",
+      "subtitle": "One sheet per class — rows are students, columns are subjects. Imported grades are released to parents immediately.",
+      "year": "Academic Year",
+      "term": "Term",
+      "select_term": "Select term",
+      "pick_year_term": "Choose an academic year and a term first.",
+      "download_template": "Download template",
+      "template_failed": "Could not download the template.",
+      "export": "Export grades",
+      "export_failed": "No grades to export for that year and term.",
+      "placed_toast": "{{count}} grade(s) imported.",
+      "none_placed": "No grades were imported — check the notes below.",
+      "upload_failed": "Grade upload failed.",
+      "placed_stat": "{{count}} imported",
+      "notes_title": "{{count}} note(s)"
+    },
     "weekly_schedule": "Weekly Schedule",
     "schedule_settings": "Schedule Settings",
     "schedule_upload": {

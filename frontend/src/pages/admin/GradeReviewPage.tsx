@@ -9,6 +9,7 @@ import Button from '../../components/common/Button';
 import Select from '../../components/common/Select';
 import EmptyState from '../../components/common/EmptyState';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
+import GradeImportExport from '../../components/admin/GradeImportExport';
 import type { GradeReviewOverview, GradeReviewClass, GradeReviewStudent, GradeReviewPending } from '../../types';
 import { format, parseISO } from 'date-fns';
 
@@ -196,6 +197,9 @@ export default function GradeReviewPage() {
         <EmptyState title={t('common.error')} icon={<Check className="w-8 h-8 text-gray-400" />} />
       ) : (
         <div className="space-y-4">
+          {/* Bulk import / export (report-card grid) */}
+          <GradeImportExport terms={overview.terms} onImported={() => fetchOverview(term)} />
+
           {/* Term selector + breadcrumb */}
           <div className="flex flex-wrap items-center justify-between gap-3">
             <nav className="flex items-center gap-1 text-sm text-gray-500 min-w-0">

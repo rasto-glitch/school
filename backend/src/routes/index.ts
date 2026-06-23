@@ -340,6 +340,9 @@ export function createRouter(io: SocketServer) {
   router.post('/admin/transfers/incoming/:id/reject', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => transfer.rejectIncomingTransfer(req as AuthRequest, res));
   router.get('/admin/grades/pending', authenticate, authorize('admin'), (req, res) => admin.listPendingGrades(req as AuthRequest, res));
   router.get('/admin/grades/overview', authenticate, authorize('admin'), (req, res) => admin.getGradeReviewOverview(req as AuthRequest, res));
+  router.get('/admin/grades/template.xlsx', authenticate, authorize('admin'), (req, res) => admin.gradesTemplate(req as AuthRequest, res));
+  router.get('/admin/grades/export.xlsx', authenticate, authorize('admin'), (req, res) => admin.exportGrades(req as AuthRequest, res));
+  router.post('/admin/grades/upload', authenticate, authorize('admin'), upload.single('file'), (req, res) => admin.uploadGrades(req as AuthRequest, res));
   router.put('/admin/grades/:id', authenticate, authorize('admin'), validate({ params: vp.idParam, body: vp.updateGradeSchema }), (req, res) => admin.updateGrade(req as AuthRequest, res));
   router.post('/admin/grades/release', authenticate, authorize('admin'), validate({ body: vp.releaseGradesSchema }), (req, res) => admin.releaseGrades(req as AuthRequest, res));
   router.post('/admin/students/:id/archive', authenticate, authorize('admin'), validate({ params: vp.idParam, body: vp.archiveStudentSchema }), (req, res) => admin.archiveStudent(req as AuthRequest, res));

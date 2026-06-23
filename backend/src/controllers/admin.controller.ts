@@ -3961,6 +3961,245 @@ export async function getGradeReviewOverview(req: AuthRequest, res: Response): P
   res.json({ terms: termNames, selectedTerm, classes });
 }
 
+// ═══ Grades bulk import / export (report-card grid) ═══════════════════════
+// One sheet per class. Row 1 carries Academic Year + Term so the file is
+// self-describing (export fills it, import reads it back). Row 2 is the header
+// (Student + a column per subject); each cell is a single mark. Import resolves
+// the student by name within the sheet's class and upserts a RELEASED grade.
+
+const GRADE_MARK_NAME = 'Grade'; // component name for grid-imported single marks
+// Excel forbids : \ / ? * [ ] in sheet names and caps them at 31 chars.
+const sheetSafe = (name: string) => name.replace(/[:\\/?*[\]]/g, ' ').trim().slice(0, 31) || 'Sheet';
+const sumMarks = (marks: unknown): number => {
+  if (!Array.isArray(marks)) return 0;
+  let s = 0;
+  for (const m of marks) {
+    const v = Number((m as { value?: unknown })?.value);
+    if (Number.isFinite(v)) s += v;
+  }
+  return s;
+};
+
+export async function gradesTemplate(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const year = String(req.query.year || '').trim();
+  const term = String(req.query.term || '').trim();
+
+  const [{ data: classes }, { data: students }, { data: cst }] = await Promise.all([
+    supabase.from('classes').select('id, name').eq('school_id', schoolId).order('name'),
+    supabase.from('students').select('full_name, class_id').eq('school_id', schoolId).eq('is_graduated', false).order('full_name'),
+    supabase.from('class_subject_teachers').select('class_id, subjects(name)').eq('school_id', schoolId),
+  ]);
+
+  const subjectsByClass = new Map<string, string[]>();
+  for (const r of (cst || []) as { class_id: string; subjects?: { name?: string } }[]) {
+    const nm = r.subjects?.name; if (!nm) continue;
+    const arr = subjectsByClass.get(r.class_id) || [];
+    if (!arr.includes(nm)) arr.push(nm);
+    subjectsByClass.set(r.class_id, arr);
+  }
+  const studentsByClass = new Map<string, string[]>();
+  for (const s of (students || []) as { full_name: string; class_id: string | null }[]) {
+    if (!s.class_id) continue;
+    const arr = studentsByClass.get(s.class_id) || [];
+    arr.push(s.full_name);
+    studentsByClass.set(s.class_id, arr);
+  }
+
+  const wb = XLSX.utils.book_new();
+  for (const c of (classes || []) as { id: string; name: string }[]) {
+    const subjects = (subjectsByClass.get(c.id) || []).sort((a, b) => a.localeCompare(b));
+    const rows: (string | number)[][] = [
+      ['Academic Year', year, 'Term', term],
+      ['Student', ...subjects],
+      ...(studentsByClass.get(c.id) || []).map(name => [name]),
+    ];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), sheetSafe(c.name));
+  }
+  if (wb.SheetNames.length === 0) {
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Academic Year', year, 'Term', term], ['Student']]), 'Grades');
+  }
+  const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', 'attachment; filename="grades-template.xlsx"');
+  res.send(buf);
+}
+
+export async function uploadGrades(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId, userId } = req.user!;
+  if (!req.file) { res.status(400).json({ error: 'No file uploaded' }); return; }
+
+  let workbook: XLSX.WorkBook;
+  try {
+    workbook = XLSX.read(req.file.buffer, { type: 'buffer', sheetRows: 2000 });
+  } catch {
+    res.status(400).json({ error: 'Could not parse the file. Make sure it is a valid .xlsx or .xls file.' });
+    return;
+  }
+
+  const [{ data: classes }, { data: students }, { data: cst }] = await Promise.all([
+    supabase.from('classes').select('id, name').eq('school_id', schoolId),
+    supabase.from('students').select('id, full_name, class_id').eq('school_id', schoolId),
+    supabase.from('class_subject_teachers').select('class_id, teacher_id, subjects(name)').eq('school_id', schoolId),
+  ]);
+
+  const classByName = new Map<string, string>();
+  for (const c of (classes || []) as { id: string; name: string }[]) {
+    classByName.set(sheetSafe(c.name).toLowerCase(), c.id);
+    classByName.set(c.name.trim().toLowerCase(), c.id);
+  }
+  const studentsByClass = new Map<string, Map<string, string>>(); // classId → name.lower → id
+  for (const s of (students || []) as { id: string; full_name: string; class_id: string | null }[]) {
+    if (!s.class_id) continue;
+    const m = studentsByClass.get(s.class_id) || new Map<string, string>();
+    m.set((s.full_name || '').trim().toLowerCase(), s.id);
+    studentsByClass.set(s.class_id, m);
+  }
+  const teacherByClassSubject = new Map<string, string[]>(); // `${classId}|${subjectLower}` → teacherIds
+  for (const r of (cst || []) as { class_id: string; teacher_id: string; subjects?: { name?: string } }[]) {
+    const nm = r.subjects?.name; if (!nm) continue;
+    const k = `${r.class_id}|${nm.trim().toLowerCase()}`;
+    const arr = teacherByClassSubject.get(k) || [];
+    arr.push(r.teacher_id);
+    teacherByClassSubject.set(k, arr);
+  }
+
+  const warnings: string[] = [];
+  const now = new Date().toISOString();
+  // Dedup by the grade unique key so one batch can't conflict on itself.
+  const upserts = new Map<string, Record<string, unknown>>();
+
+  for (const sheetName of workbook.SheetNames) {
+    const aoa = XLSX.utils.sheet_to_json<unknown[]>(workbook.Sheets[sheetName], { header: 1, raw: false, defval: '' });
+    if (aoa.length === 0) continue;
+
+    // Header row = first row whose first cell is "Student"; metadata sits above.
+    let headerIdx = -1;
+    for (let i = 0; i < Math.min(aoa.length, 6); i++) {
+      if (String((aoa[i] as unknown[])[0] ?? '').trim().toLowerCase() === 'student') { headerIdx = i; break; }
+    }
+    if (headerIdx === -1) { warnings.push(`Sheet "${sheetName}": no "Student" header row — skipped.`); continue; }
+
+    let year = '', term = '';
+    for (let i = 0; i < headerIdx; i++) {
+      const row = aoa[i] as unknown[];
+      for (let j = 0; j < row.length - 1; j++) {
+        const label = String(row[j] ?? '').trim().toLowerCase();
+        if (!year && label.includes('year')) year = String(row[j + 1] ?? '').trim();
+        if (!term && label.includes('term')) term = String(row[j + 1] ?? '').trim();
+      }
+    }
+    if (!year || !term) { warnings.push(`Sheet "${sheetName}": missing Academic Year or Term — skipped.`); continue; }
+
+    const classId = classByName.get(sheetSafe(sheetName).toLowerCase()) ?? classByName.get(sheetName.trim().toLowerCase());
+    if (!classId) { warnings.push(`Sheet "${sheetName}": no class with this name — skipped.`); continue; }
+    const studentMap = studentsByClass.get(classId) || new Map<string, string>();
+
+    const header = aoa[headerIdx] as unknown[];
+    for (let r = headerIdx + 1; r < aoa.length; r++) {
+      const row = aoa[r] as unknown[];
+      const studentName = String(row[0] ?? '').trim();
+      if (!studentName) continue;
+      const studentId = studentMap.get(studentName.toLowerCase());
+      if (!studentId) { warnings.push(`${sheetName}: student "${studentName}" isn't in this class — skipped.`); continue; }
+
+      for (let col = 1; col < header.length; col++) {
+        const subject = String(header[col] ?? '').trim();
+        if (!subject) continue;
+        const cell = String(row[col] ?? '').trim();
+        if (!cell) continue; // blank = no grade
+        const val = Number(cell);
+        if (!Number.isFinite(val)) { warnings.push(`${sheetName} · ${studentName} · ${subject}: "${cell}" isn't a number — skipped.`); continue; }
+
+        const teachers = teacherByClassSubject.get(`${classId}|${subject.toLowerCase()}`) || [];
+        upserts.set(`${studentId}|${subject.toLowerCase()}|${term.toLowerCase()}|${year.toLowerCase()}`, {
+          school_id: schoolId, student_id: studentId, class_id: classId,
+          teacher_id: teachers.length === 1 ? teachers[0] : null,
+          subject, marks: [{ name: GRADE_MARK_NAME, value: val }],
+          grading_period: term, academic_year: year,
+          is_released: true, released_at: now, released_by: userId,
+        });
+      }
+    }
+  }
+
+  const rows = [...upserts.values()];
+  if (rows.length > 0) {
+    const { error } = await supabase.from('grades')
+      .upsert(rows, { onConflict: 'student_id,subject,grading_period,academic_year' });
+    if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+  }
+  res.json({ placed: rows.length, warnings });
+}
+
+export async function exportGrades(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const year = String(req.query.year || '').trim();
+  const term = String(req.query.term || '').trim();
+  if (!year || !term) { res.status(400).json({ error: 'year and term are required' }); return; }
+
+  const [{ data: classes }, { data: students }, { data: grades }] = await Promise.all([
+    supabase.from('classes').select('id, name').eq('school_id', schoolId).order('name'),
+    supabase.from('students').select('id, full_name, class_id').eq('school_id', schoolId).order('full_name'),
+    supabase.from('grades').select('student_id, subject, marks').eq('school_id', schoolId)
+      .eq('academic_year', year).eq('grading_period', term),
+  ]);
+
+  const subjectDisplay = new Map<string, string>(); // subjectLower → display
+  const studentSubjects = new Map<string, Map<string, number>>(); // studentId → subjectLower → total
+  for (const g of (grades || []) as { student_id: string; subject: string; marks: unknown }[]) {
+    const subj = String(g.subject || '').trim(); if (!subj) continue;
+    const sl = subj.toLowerCase();
+    subjectDisplay.set(sl, subj);
+    const m = studentSubjects.get(g.student_id) || new Map<string, number>();
+    m.set(sl, sumMarks(g.marks));
+    studentSubjects.set(g.student_id, m);
+  }
+  if (studentSubjects.size === 0) { res.status(404).json({ error: 'No grades found for that year and term.' }); return; }
+
+  const studentsById = new Map<string, { full_name: string; class_id: string | null }>();
+  for (const s of (students || []) as { id: string; full_name: string; class_id: string | null }[]) {
+    studentsById.set(s.id, { full_name: s.full_name, class_id: s.class_id });
+  }
+  const byClass = new Map<string, string[]>();
+  const unassigned: string[] = [];
+  for (const sid of studentSubjects.keys()) {
+    const s = studentsById.get(sid); if (!s) continue;
+    if (s.class_id) { const a = byClass.get(s.class_id) || []; a.push(sid); byClass.set(s.class_id, a); }
+    else unassigned.push(sid);
+  }
+
+  const wb = XLSX.utils.book_new();
+  const buildSheet = (name: string, sids: string[]) => {
+    const subjSet = new Set<string>();
+    for (const sid of sids) for (const sl of studentSubjects.get(sid)!.keys()) subjSet.add(sl);
+    const subjects = [...subjSet].sort((a, b) => a.localeCompare(b));
+    const ordered = sids.sort((a, b) => studentsById.get(a)!.full_name.localeCompare(studentsById.get(b)!.full_name));
+    const rows: (string | number)[][] = [
+      ['Academic Year', year, 'Term', term],
+      ['Student', ...subjects.map(sl => subjectDisplay.get(sl)!)],
+      ...ordered.map(sid => {
+        const sm = studentSubjects.get(sid)!;
+        return [studentsById.get(sid)!.full_name, ...subjects.map(sl => (sm.has(sl) ? sm.get(sl)! : ''))];
+      }),
+    ];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), sheetSafe(name));
+  };
+
+  for (const c of (classes || []) as { id: string; name: string }[]) {
+    const sids = byClass.get(c.id);
+    if (sids && sids.length) buildSheet(c.name, sids);
+  }
+  if (unassigned.length) buildSheet('Unassigned', unassigned);
+  if (wb.SheetNames.length === 0) { res.status(404).json({ error: 'No grades found for that year and term.' }); return; }
+
+  const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+  const safe = `${year}-${term}`.replace(/[^a-z0-9-]/gi, '_');
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="grades-${safe}.xlsx"`);
+  res.send(buf);
+}
+
 // ---- TEACHER DELETE ----
 export async function deleteTeacher(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
