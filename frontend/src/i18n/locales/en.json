@@ -2524,6 +2524,10 @@
   "accounting": {
     "title": "Accounting",
     "premium_subtitle": "Premium feature",
+    "fx_hint": {
+      "missing": "No exchange rate from {{from}} to {{to}}. Set one on the FX Rates page, or use a {{from}} drawer.",
+      "preview": "≈ {{amount}} will move through this drawer (rate {{rate}})."
+    },
     "premium_body": "The accounting module is part of the Premium plan.",
     "income": "Income",
     "expense": "Expense",

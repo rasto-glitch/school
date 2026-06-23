@@ -9,6 +9,7 @@ import { streamStaffSalaryPdf, buildStaffSalaryXlsx, type StaffSalaryExportData 
 import { logAudit } from '../utils/audit';
 import { postSalary, postInsurancePayout, reverseEntry, reinstateEntry } from '../utils/glPosting';
 import { assertPeriodOpen } from '../utils/period';
+import { resolveDrawerAmount } from '../utils/fx';
 import { hasArchiveFeature, normalizeArchiveReason, resolveEmployeeArchiveId, rewriteOwnershipToArchive } from '../utils/employeeArchive';
 import { hrColumns, hrSnapshot } from '../utils/employeeHr';
 import { parseCursorParams, buildPageWith, keysetAfter } from '../utils/pagination';
@@ -620,23 +621,6 @@ export async function listStaffPayments(req: AuthRequest, res: Response): Promis
   });
 }
 
-// Most recent configured rate (effective_from ≤ asOf) for from→to. Returns 1
-// when the currencies match, or null when no rate is configured.
-async function getFxRate(schoolId: string, from: string, to: string, asOf: string): Promise<number | null> {
-  if (from === to) return 1;
-  const { data } = await supabase
-    .from('fx_rates')
-    .select('rate')
-    .eq('school_id', schoolId)
-    .eq('from_currency', from)
-    .eq('to_currency', to)
-    .lte('effective_from', asOf)
-    .order('effective_from', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  return data ? Number((data as { rate: number }).rate) : null;
-}
-
 export async function recordStaffPayment(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId, userId } = req.user!;
   const guard = await ensurePremium(schoolId);
@@ -694,28 +678,10 @@ export async function recordStaffPayment(req: AuthRequest, res: Response): Promi
   // from a drawer in another (e.g. USD). Convert at the configured fx_rate so
   // the actual cash leaving the drawer is in the drawer's currency. amount /
   // currency stay as the salary entered; paid_* capture the real cash out.
-  let paidAmount = amount;
-  let paidIns = insAmt;
-  let paidCurrency = finalCurrency;
-  let exchangeRate = 1;
-  if (paymentAccountId) {
-    const { data: acct } = await supabase
-      .from('payment_accounts').select('currency').eq('id', paymentAccountId).eq('school_id', schoolId).maybeSingle();
-    const drawerCurrency = acct ? String((acct as { currency: string }).currency).toUpperCase() : null;
-    if (drawerCurrency && drawerCurrency !== finalCurrency) {
-      const rate = await getFxRate(schoolId, finalCurrency, drawerCurrency, paidOn);
-      if (rate === null) {
-        res.status(400).json({
-          error: `No exchange rate from ${finalCurrency} to ${drawerCurrency}. Set one on the FX Rates page (effective on or before ${paidOn}), or pay from a ${finalCurrency} drawer.`,
-        });
-        return;
-      }
-      exchangeRate = rate;
-      paidCurrency = drawerCurrency;
-      paidAmount = Math.round(amount * rate * 100) / 100;
-      paidIns = Math.round(insAmt * rate * 100) / 100;
-    }
-  }
+  const fx = await resolveDrawerAmount(schoolId, { amount, currency: finalCurrency, paymentAccountId, asOf: paidOn });
+  if (!fx.ok) { res.status(400).json({ error: fx.error }); return; }
+  const { paidAmount, paidCurrency, exchangeRate } = fx;
+  const paidIns = Math.round(insAmt * exchangeRate * 100) / 100;
 
   const { data, error } = await supabase.from('staff_salary_payments').insert({
     school_id: schoolId,

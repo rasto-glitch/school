@@ -6,6 +6,7 @@ import type { AuthRequest } from '../middleware/auth';
 import { toCC } from '../utils/transform';
 import { logAudit } from '../utils/audit';
 import { postExpense, reverseEntry, reinstateEntry } from '../utils/glPosting';
+import { resolveDrawerAmount } from '../utils/fx';
 import { assertPeriodOpen } from '../utils/period';
 import { parseCursorParams, buildPageWith, keysetAfter } from '../utils/pagination';
 
@@ -256,6 +257,10 @@ export async function recordTemplate(req: AuthRequest, res: Response): Promise<v
   const periodGuard = await assertPeriodOpen(schoolId, [dateUsed]);
   if (!periodGuard.ok) { res.status(periodGuard.status).json({ error: periodGuard.error }); return; }
 
+  // Cross-currency: convert into the drawer's currency for the cash out.
+  const fx = await resolveDrawerAmount(schoolId, { amount: amountUsed, currency: String(t.currency), paymentAccountId, asOf: dateUsed });
+  if (!fx.ok) { res.status(400).json({ error: fx.error }); return; }
+
   const { data: expense, error: insertErr } = await supabase.from('expenses').insert({
     school_id: schoolId,
     category_id: t.category_id,
@@ -263,6 +268,9 @@ export async function recordTemplate(req: AuthRequest, res: Response): Promise<v
     name: t.name,
     amount: amountUsed,
     currency: t.currency,
+    paid_amount: fx.paidAmount,
+    paid_currency: fx.paidCurrency,
+    exchange_rate: fx.exchangeRate,
     expense_date: dateUsed,
     vendor: t.vendor,
     payment_method: paymentMethod ?? null,
@@ -274,9 +282,9 @@ export async function recordTemplate(req: AuthRequest, res: Response): Promise<v
   }).select().single();
   if (insertErr) { res.status(safeDbErrorStatus(insertErr)).json({ error: safeDbErrorMessage(insertErr) }); return; }
   await logAudit({ req, entityType: 'expense', entityId: String(expense.id), action: 'create', after: expense, label: expense.name });
-  // GL: Dr Expense(category) / Cr Cash.
+  // GL: Dr Expense(category) / Cr Cash — cash in the drawer's currency (paid_*).
   await postExpense({
-    schoolId, expenseId: String(expense.id), amount: Number(expense.amount) || 0, currency: expense.currency,
+    schoolId, expenseId: String(expense.id), amount: fx.paidAmount, currency: fx.paidCurrency,
     categoryId: expense.category_id ?? null, paymentAccountId: expense.payment_account_id ?? null,
     entryDate: expense.expense_date, postedBy: req.user!.userId, memo: expense.name,
   });
@@ -382,12 +390,20 @@ export async function createExpense(req: AuthRequest, res: Response): Promise<vo
   const periodGuard = await assertPeriodOpen(schoolId, [expenseDate]);
   if (!periodGuard.ok) { res.status(periodGuard.status).json({ error: periodGuard.error }); return; }
 
+  // Cross-currency: convert into the drawer's currency for the cash out.
+  const expenseCurrency = currency?.trim() || (await getDefaultCurrency(schoolId));
+  const fx = await resolveDrawerAmount(schoolId, { amount, currency: expenseCurrency, paymentAccountId, asOf: expenseDate });
+  if (!fx.ok) { res.status(400).json({ error: fx.error }); return; }
+
   const { data, error } = await supabase.from('expenses').insert({
     school_id: schoolId,
     category_id: categoryId || null,
     name: name.trim(),
     amount,
-    currency: currency?.trim() || (await getDefaultCurrency(schoolId)),
+    currency: expenseCurrency,
+    paid_amount: fx.paidAmount,
+    paid_currency: fx.paidCurrency,
+    exchange_rate: fx.exchangeRate,
     expense_date: expenseDate,
     vendor: vendor?.trim() || null,
     payment_method: paymentMethod?.trim() || null,
@@ -399,9 +415,9 @@ export async function createExpense(req: AuthRequest, res: Response): Promise<vo
   }).select().single();
   if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   await logAudit({ req, entityType: 'expense', entityId: String(data.id), action: 'create', after: data, label: data.name });
-  // GL: Dr Expense(category) / Cr Cash.
+  // GL: Dr Expense(category) / Cr Cash — cash in the drawer's currency (paid_*).
   await postExpense({
-    schoolId, expenseId: String(data.id), amount: Number(data.amount) || 0, currency: data.currency,
+    schoolId, expenseId: String(data.id), amount: fx.paidAmount, currency: fx.paidCurrency,
     categoryId: data.category_id ?? null, paymentAccountId: data.payment_account_id ?? null,
     entryDate: data.expense_date, postedBy: req.user!.userId, memo: data.name,
   });
@@ -450,6 +466,21 @@ export async function updateExpense(req: AuthRequest, res: Response): Promise<vo
   const newDate = typeof expenseDate === 'string' ? expenseDate : undefined;
   const periodGuard = await assertPeriodOpen(schoolId, [oldDate, newDate]);
   if (!periodGuard.ok) { res.status(periodGuard.status).json({ error: periodGuard.error }); return; }
+
+  // Keep paid_* (the drawer-currency cash) in sync when amount / currency /
+  // account changes, since the drawer balance reads paid_amount.
+  if (amount !== undefined || currency !== undefined || paymentAccountId !== undefined) {
+    const b = before as any;
+    const effAmount = typeof amount === 'number' ? amount : Number(b.amount);
+    const effCurrency = (typeof currency === 'string' && currency.trim()) ? currency.trim() : b.currency;
+    const effAccount = paymentAccountId !== undefined ? paymentAccountId : b.payment_account_id;
+    const effDate = (typeof expenseDate === 'string' && expenseDate) ? expenseDate : b.expense_date;
+    const fx = await resolveDrawerAmount(schoolId, { amount: effAmount, currency: String(effCurrency), paymentAccountId: effAccount, asOf: effDate });
+    if (!fx.ok) { res.status(400).json({ error: fx.error }); return; }
+    updates.paid_amount = fx.paidAmount;
+    updates.paid_currency = fx.paidCurrency;
+    updates.exchange_rate = fx.exchangeRate;
+  }
 
   const { data: after, error } = await supabase.from('expenses').update(updates)
     .eq('id', id).eq('school_id', schoolId).select().single();

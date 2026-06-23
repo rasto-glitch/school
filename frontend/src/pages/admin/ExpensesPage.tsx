@@ -5,6 +5,7 @@ import { toast } from 'react-toastify';
 import { Plus, RotateCcw, Edit2, Trash2, Tag, Repeat, Receipt, Archive, Calendar, History as HistoryIcon } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { expensesApi, accountingApi, drainPages, type ExpenseCategory, type ExpenseTemplate, type ExpenseRow, type PaymentAccount } from '../../services/api';
+import FxConversionHint from '../../components/admin/FxConversionHint';
 import { fmtMoney as fmt } from '../../utils/money';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
@@ -391,6 +392,9 @@ function RecordTemplateForm({ template, onClose, onRecorded }: {
           value={paymentAccountId}
           onChange={e => setPaymentAccountId(e.target.value)}
         />
+        <div className="md:col-span-2">
+          <FxConversionHint amount={Number(amount) || template.amount} currency={template.currency} paymentAccountId={paymentAccountId} accounts={accounts} date={date} />
+        </div>
         <Input label={t('accounting.exp.f_tax')} type="number" step="0.01" min="0" value={taxAmount} onChange={e => setTaxAmount(e.target.value)} placeholder="0.00" />
         <Input label={t('accounting.exp.f_tax_label')} value={taxLabel} onChange={e => setTaxLabel(e.target.value)} placeholder={t('accounting.exp.ph_tax_label')} />
         <Input label={t('accounting.exp.f_notes')} value={notes} onChange={e => setNotes(e.target.value)} placeholder={t('accounting.exp.ph_optional')} />
@@ -667,6 +671,9 @@ function ExpenseForm({ expense, categories, onClose, onSaved }: {
           value={paymentAccountId}
           onChange={e => setPaymentAccountId(e.target.value)}
         />
+        <div className="md:col-span-2">
+          <FxConversionHint amount={Number(amount) || 0} currency={currency} paymentAccountId={paymentAccountId} accounts={accounts} date={expenseDate} />
+        </div>
         <Input label={t('accounting.exp.f_tax')} type="number" step="0.01" min="0" value={taxAmount} onChange={e => setTaxAmount(e.target.value)} placeholder="0.00" />
         <Input label={t('accounting.exp.f_tax_label')} value={taxLabel} onChange={e => setTaxLabel(e.target.value)} placeholder={t('accounting.exp.ph_tax_label')} />
         <Input label={t('accounting.exp.f_notes')} value={notes} onChange={e => setNotes(e.target.value)} placeholder={t('accounting.exp.ph_optional')} />

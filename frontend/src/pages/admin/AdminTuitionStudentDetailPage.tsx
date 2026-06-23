@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { feesApi, accountingApi, type PaymentAccount } from '../../services/api';
+import FxConversionHint from '../../components/admin/FxConversionHint';
 import { useAuthStore } from '../../store/authStore';
 import { toast } from 'react-toastify';
 import PageLayout from '../../components/layout/PageLayout';
@@ -660,6 +661,7 @@ export default function AdminTuitionStudentDetailPage() {
               ) : (
                 <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2">{t('accounting.detail.no_accounts_pay')}</p>
               )}
+              <FxConversionHint amount={totalPay} currency={activePlan.currency} paymentAccountId={payAccountId} accounts={accounts} date={payDate} />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <Input label={t('accounting.detail.tax_included')} type="number" step="0.01" value={payTaxAmount} onChange={e => setPayTaxAmount(e.target.value)} placeholder="0.00" />
@@ -705,6 +707,7 @@ export default function AdminTuitionStudentDetailPage() {
               ) : (
                 <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2">{t('accounting.detail.no_accounts_refund')}</p>
               )}
+              <FxConversionHint amount={Number(refundAmount) || 0} currency={refundOf.currency || activePlan.currency} paymentAccountId={refundAccountId} accounts={accounts} date={refundDate} />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('accounting.detail.notes_opt')}</label>

@@ -12,6 +12,7 @@ import { streamPaymentReceipt, streamYearSummary } from '../utils/receipts';
 import { streamArchivePaymentPdf, buildArchivePaymentXlsx, type ArchivePaymentExportData, type ArchivePlanEntry } from '../utils/paymentArchiveExport';
 import { logAudit } from '../utils/audit';
 import { postTuitionBilling, postTuitionPayment, postRefund, reverseEntry, reinstateEntry } from '../utils/glPosting';
+import { resolveDrawerAmount } from '../utils/fx';
 import { resolveCurrentAcademicYear } from '../utils/studentEnrollments';
 import { assertPeriodOpen } from '../utils/period';
 import { allocateReceiptNumber } from '../utils/receiptNumber';
@@ -1015,6 +1016,12 @@ export async function recordPayment(req: AuthRequest, res: Response): Promise<vo
     || cfgForCurrency.currency
     || 'USD';
 
+  // Cross-currency: the fee is denominated in resolvedCurrency; if the chosen
+  // drawer is in another currency, convert so the cash entering the drawer is
+  // in the drawer's currency. amount/currency stay the fee denomination.
+  const fx = await resolveDrawerAmount(schoolId, { amount, currency: resolvedCurrency, paymentAccountId, asOf: paidOn });
+  if (!fx.ok) { res.status(400).json({ error: fx.error }); return; }
+
   // Allocate the next sequential receipt number for the (school, year)
   const { receiptYear, receiptNumber } = await allocateReceiptNumber(schoolId, paidOn);
 
@@ -1028,6 +1035,9 @@ export async function recordPayment(req: AuthRequest, res: Response): Promise<vo
     notes: notes ?? null,
     unallocated_note: storedUnallocatedNote,
     currency: resolvedCurrency,
+    paid_amount: fx.paidAmount,
+    paid_currency: fx.paidCurrency,
+    exchange_rate: fx.exchangeRate,
     tax_amount: typeof taxAmount === 'number' ? taxAmount : 0,
     tax_label: taxLabel ?? null,
     payment_account_id: paymentAccountId ?? null,
@@ -1056,10 +1066,11 @@ export async function recordPayment(req: AuthRequest, res: Response): Promise<vo
   const studentName = (sf as { students?: { full_name?: string } }).students?.full_name;
   await logAudit({ req, entityType: 'fee_payment', entityId: data.id, action: 'create', after: { ...data, allocations }, label: studentName });
 
-  // GL: cash settles the receivable. Refunds are posted separately (Phase 2).
+  // GL: cash settles the receivable, posted in the drawer's currency (paid_*)
+  // so the cash account moves the real amount. Refunds are posted separately.
   await postTuitionPayment({
     schoolId, paymentId: data.id, studentId: (sf as { student_id?: string }).student_id ?? null,
-    amount, currency: resolvedCurrency, paymentAccountId: paymentAccountId ?? null,
+    amount: fx.paidAmount, currency: fx.paidCurrency, paymentAccountId: paymentAccountId ?? null,
     entryDate: paidOn, postedBy: userId,
   });
 
@@ -1172,6 +1183,11 @@ export async function refundPayment(req: AuthRequest, res: Response): Promise<vo
   const periodGuard = await assertPeriodOpen(schoolId, [refundedOn]);
   if (!periodGuard.ok) { res.status(periodGuard.status).json({ error: periodGuard.error }); return; }
 
+  const refundCurrency = (original as any).currency ?? 'USD';
+  // Convert the refund into the drawer's currency (cash leaving the drawer).
+  const fx = await resolveDrawerAmount(schoolId, { amount, currency: refundCurrency, paymentAccountId, asOf: refundedOn });
+  if (!fx.ok) { res.status(400).json({ error: fx.error }); return; }
+
   const { receiptYear, receiptNumber } = await allocateReceiptNumber(schoolId, refundedOn);
 
   const { data: refund, error } = await supabase.from('fee_payments').insert({
@@ -1182,7 +1198,10 @@ export async function refundPayment(req: AuthRequest, res: Response): Promise<vo
     method: method ?? null,
     reference: reference ?? null,
     notes: notes ?? null,
-    currency: (original as any).currency ?? 'USD',
+    currency: refundCurrency,
+    paid_amount: fx.paidAmount,
+    paid_currency: fx.paidCurrency,
+    exchange_rate: fx.exchangeRate,
     is_refund: true,
     refund_of_payment_id: id,
     payment_account_id: paymentAccountId ?? null,
@@ -1200,7 +1219,7 @@ export async function refundPayment(req: AuthRequest, res: Response): Promise<vo
   await postRefund({
     schoolId, refundId: refund.id,
     studentId: (original as any).student_fees?.student_id ?? null,
-    amount, currency: (original as any).currency ?? 'USD',
+    amount: fx.paidAmount, currency: fx.paidCurrency,
     paymentAccountId: paymentAccountId ?? null, entryDate: refundedOn, postedBy: userId,
   });
 
