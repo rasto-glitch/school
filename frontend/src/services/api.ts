@@ -4,8 +4,13 @@ import type { Paginated, Notification, Announcement, StaffSalaryPayment } from '
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
-  timeout: 15000,
+  timeout: 30000,
 });
+
+// Bulk uploads do a lot of server-side work and can run well past the default
+// timeout on big files — give them generous headroom so the client doesn't
+// abort a request the server is still completing.
+const UPLOAD_TIMEOUT = 120000;
 
 // Attach JWT token to every request
 api.interceptors.request.use((config) => {
@@ -375,12 +380,12 @@ export const adminApi = {
   uploadSchedule: (file: File) => {
     const fd = new FormData();
     fd.append('file', file);
-    return api.post('/admin/schedule/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+    return api.post('/admin/schedule/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: UPLOAD_TIMEOUT });
   },
   bulkUploadStudents: (file: File) => {
     const fd = new FormData();
     fd.append('file', file);
-    return api.post('/admin/students/bulk-upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+    return api.post('/admin/students/bulk-upload', fd, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: UPLOAD_TIMEOUT });
   },
   bulkUploadEmployees: (role: BulkEmployeeRole, file: File) => {
     const fd = new FormData();
@@ -388,6 +393,7 @@ export const adminApi = {
     return api.post('/admin/employees/bulk-upload', fd, {
       params: { role },
       headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: UPLOAD_TIMEOUT,
     });
   },
   employeeBulkTemplate: (role: BulkEmployeeRole) =>
@@ -466,7 +472,7 @@ export const adminApi = {
   uploadGrades: (file: File) => {
     const fd = new FormData();
     fd.append('file', file);
-    return api.post('/admin/grades/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+    return api.post('/admin/grades/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: UPLOAD_TIMEOUT });
   },
   getGraduatedStudents: (search?: string) => api.get('/admin/students/graduated', { params: search ? { search } : {} }),
   archiveStudent: (id: string, data: { reason: string; departureDate: string }) => api.post(`/admin/students/${id}/archive`, data),

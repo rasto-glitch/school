@@ -872,12 +872,18 @@ export async function bulkUploadStudents(req: AuthRequest, res: Response): Promi
     } else {
       created = (inserted || []).length;
       // Open per-year enrollment rows for each new student that landed in a
-      // class. Sequential rather than batched to keep helper semantics
-      // identical to single-create (logged failures don't fail the upload).
-      for (const s of inserted || []) {
-        await openEnrollmentForCurrentYear({
-          schoolId, studentId: String((s as any).id), classId: (s as any).class_id ?? null,
-        });
+      // class. Run in concurrent chunks (not one-at-a-time) so a large import
+      // finishes in seconds; each helper call keeps its own best-effort
+      // semantics (a logged failure only skips that one student, never the
+      // upload).
+      const ENROLL_CHUNK = 20;
+      const insertedRows = inserted || [];
+      for (let i = 0; i < insertedRows.length; i += ENROLL_CHUNK) {
+        await Promise.all(insertedRows.slice(i, i + ENROLL_CHUNK).map(s =>
+          openEnrollmentForCurrentYear({
+            schoolId, studentId: String((s as any).id), classId: (s as any).class_id ?? null,
+          }),
+        ));
       }
     }
   }
