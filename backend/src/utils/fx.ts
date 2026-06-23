@@ -8,9 +8,20 @@
 import { adminDb as supabase } from './db';
 
 // Most recent configured rate (effective_from ≤ asOf) for from→to. Returns 1
-// when the currencies match, or null when no rate is configured.
+// when the currencies match, or null when no rate is configured. If no direct
+// from→to rate exists, falls back to the inverse to→from rate and returns
+// 1/rate — so the accountant only has to configure the pair once, in the
+// natural direction (e.g. "1 USD = 1500 IQD"), and both directions work.
 export async function getFxRate(schoolId: string, from: string, to: string, asOf: string): Promise<number | null> {
   if (from === to) return 1;
+  const direct = await latestRate(schoolId, from, to, asOf);
+  if (direct !== null) return direct;
+  const inverse = await latestRate(schoolId, to, from, asOf);
+  if (inverse !== null && inverse !== 0) return 1 / inverse;
+  return null;
+}
+
+async function latestRate(schoolId: string, from: string, to: string, asOf: string): Promise<number | null> {
   const { data } = await supabase
     .from('fx_rates')
     .select('rate')

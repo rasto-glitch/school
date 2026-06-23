@@ -65,6 +65,17 @@ export default function FxRatesPage() {
           <Input label={t('accounting.fx.f_effective')} type="date" value={form.effectiveFrom} onChange={e => setForm({ ...form, effectiveFrom: e.target.value })} />
           <div className="flex items-end"><Button onClick={save} fullWidth loading={busy} icon={<Plus className="w-4 h-4" />}>{t('common.save')}</Button></div>
         </div>
+        {form.rate && parseFloat(form.rate) > 0 && form.fromCurrency !== form.toCurrency && (
+          <p className="text-sm text-blue-800 bg-blue-50 border border-blue-200 rounded-lg p-2.5 mt-3">
+            {t('accounting.fx.reading', {
+              from: form.fromCurrency,
+              to: form.toCurrency,
+              rate: parseFloat(form.rate).toLocaleString(undefined, { maximumFractionDigits: 4 }),
+              inverse: (1 / parseFloat(form.rate)).toLocaleString(undefined, { maximumFractionDigits: 6 }),
+              defaultValue: 'From {{from}} to {{to}}: 1 {{from}} = {{rate}} {{to}} (so 1 {{to}} = {{inverse}} {{from}}). You only need to add this one direction.',
+            })}
+          </p>
+        )}
       </Card>
 
       {rows.length === 0 ? (

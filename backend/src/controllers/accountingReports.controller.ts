@@ -1,6 +1,7 @@
 import { Response } from 'express';
 // Elevated controller (cross-table report aggregation) — see Phase 0 inventory.
 import { adminDb as supabase } from '../utils/db';
+import { getFxRate } from '../utils/fx';
 import type { AuthRequest } from '../middleware/auth';
 
 // Report endpoints that aggregate across fee_payments, staff_salary_payments,
@@ -27,18 +28,9 @@ async function getDefaultCurrency(schoolId: string): Promise<string> {
 async function convertAmount(schoolId: string, amount: number, from: string, to: string, asOf?: string): Promise<number | null> {
   if (from === to) return amount;
   const cutoff = asOf || new Date().toISOString().slice(0, 10);
-  const { data } = await supabase
-    .from('fx_rates')
-    .select('rate')
-    .eq('school_id', schoolId)
-    .eq('from_currency', from)
-    .eq('to_currency', to)
-    .lte('effective_from', cutoff)
-    .order('effective_from', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (!data) return null;
-  return Math.round(amount * Number(data.rate) * 100) / 100;
+  const rate = await getFxRate(schoolId, from, to, cutoff);
+  if (rate === null) return null;
+  return Math.round(amount * rate * 100) / 100;
 }
 
 // ── DASHBOARD SUMMARY ───────────────────────────────────────────────────

@@ -22,9 +22,13 @@ export default function FxConversionHint({ amount, currency, paymentAccountId, a
   const payCcy = (currency || '').toUpperCase();
   if (!drawerCcy || !payCcy || drawerCcy === payCcy) return null;
 
-  const rate = fxRates
-    .filter(r => r.fromCurrency.toUpperCase() === payCcy && r.toCurrency.toUpperCase() === drawerCcy && r.effectiveFrom <= date)
+  const latest = (from: string, to: string) => fxRates
+    .filter(r => r.fromCurrency.toUpperCase() === from && r.toCurrency.toUpperCase() === to && r.effectiveFrom <= date)
     .sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom))[0]?.rate;
+  // Match the backend: prefer a direct pay→drawer rate, else invert a drawer→pay rate.
+  const direct = latest(payCcy, drawerCcy);
+  const inverse = latest(drawerCcy, payCcy);
+  const rate = direct ?? (inverse ? 1 / inverse : undefined);
 
   if (!rate) {
     return (
