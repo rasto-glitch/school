@@ -1333,7 +1333,7 @@
       "failed": "Bulk upload failed.",
       "pii_hint": "National ID and Date of Birth are stored on the employee record. Keep the spreadsheet secure and delete your copy once accounts are created.",
       "stat_created": "{{count}} created",
-      "stat_skipped": "{{count}} skipped",
+      "stat_skipped": "{{count}} skipped (already exist)",
       "stat_classes": "{{count}} class(es) created",
       "stat_buses": "{{count}} bus(es) created",
       "stat_subjects": "{{count}} subject(s) created",

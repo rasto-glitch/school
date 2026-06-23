@@ -1051,6 +1051,7 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
     { data: existingClasses },
     { data: existingBuses },
     { data: existingSubjects },
+    { data: existingRoleRows },
   ] = await Promise.all([
     supabase.from('schools').select('abbreviation').eq('id', schoolId).single(),
     supabase.from('users').select('username').eq('school_id', schoolId),
@@ -1063,9 +1064,23 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
     role === 'teacher'
       ? supabase.from('subjects').select('id, name').eq('school_id', schoolId)
       : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+    // Existing employees OF THIS ROLE — to skip duplicates (don't re-create an
+    // employee + a second account when the same person is uploaded again).
+    loginRole === 'teacher'
+      ? supabase.from('teachers').select('full_name').eq('school_id', schoolId)
+      : loginRole === 'driver'
+        ? supabase.from('drivers').select('full_name').eq('school_id', schoolId)
+        : supabase.from('users').select('first_name, last_name').eq('school_id', schoolId).eq('role', loginRole),
   ]);
 
   const schoolAbbrev = (schoolData?.abbreviation || '').toLowerCase();
+  // Name set (lower-cased) of employees already in this role — pre-loads the
+  // dedup guard so a re-upload skips people who already exist.
+  const existingNames = new Set<string>();
+  for (const row of (existingRoleRows || []) as Record<string, string | null>[]) {
+    const nm = (row.full_name != null ? row.full_name : `${row.first_name ?? ''} ${row.last_name ?? ''}`).trim().toLowerCase();
+    if (nm) existingNames.add(nm);
+  }
   // username is UNIQUE per school across ALL roles, so seed the taken-set with
   // every existing username (not just this role's) to avoid cross-role clashes.
   const takenUsernames = new Set((existingUsers || []).map((u: any) => (u.username as string).toLowerCase()));
@@ -1131,6 +1146,13 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
     // username = typed value, else name.father (first two name parts).
     const fullName = (mapped.fullName || '').trim();
     if (!fullName) { errors.push(`Row ${rowNum}: missing "Full Name" — skipped`); continue; }
+
+    // Dedup: skip anyone already in this role (existing or earlier in the file)
+    // so a re-upload doesn't create a duplicate employee + a second account.
+    const nameKey = fullName.toLowerCase();
+    if (existingNames.has(nameKey)) { skipped.push(fullName); continue; }
+    existingNames.add(nameKey);
+
     const nameParts = fullName.split(/\s+/);
     const firstName = nameParts[0] || fullName;
     const lastName = nameParts.slice(1).join(' ') || '';
@@ -1431,8 +1453,19 @@ async function runStaffBulk(res: Response, schoolId: string, rows: Record<string
   const normEmployment = (v: string) => { const x = v.trim().toLowerCase().replace(/[\s-]+/g, '_'); return ['full_time', 'part_time', 'contract'].includes(x) ? x : null; };
   const isFalsey = (v: string) => ['false', 'no', '0', 'inactive', 'n'].includes(v.trim().toLowerCase());
 
+  // Existing staff names — skip duplicates so a re-upload doesn't create a
+  // second payroll record for the same person.
+  const { data: existingStaff } = await supabase
+    .from('staff_members').select('full_name').eq('school_id', schoolId);
+  const existingNames = new Set<string>();
+  for (const s of (existingStaff || [])) {
+    const nm = (s.full_name || '').trim().toLowerCase();
+    if (nm) existingNames.add(nm);
+  }
+
   const errors: string[] = [];
   const inserts: Record<string, unknown>[] = [];
+  let skipped = 0;
   for (let i = 0; i < rows.length; i++) {
     const rowNum = i + 2;
     const mapped: Record<string, string> = {};
@@ -1443,6 +1476,10 @@ async function runStaffBulk(res: Response, schoolId: string, rows: Record<string
 
     const fullName = (mapped.fullName || '').trim();
     if (!fullName) { errors.push(`Row ${rowNum}: missing "Full Name" — skipped`); continue; }
+
+    const nameKey = fullName.toLowerCase();
+    if (existingNames.has(nameKey)) { skipped++; continue; }
+    existingNames.add(nameKey);
 
     const salaryAmount = parseFloat(mapped.salaryAmount || '');
     if (!Number.isFinite(salaryAmount) || salaryAmount < 0) {
@@ -1488,7 +1525,7 @@ async function runStaffBulk(res: Response, schoolId: string, rows: Record<string
   }
 
   res.json({
-    created, skipped: 0, total: rows.length,
+    created, skipped, total: rows.length,
     autoCreatedClasses: [], autoCreatedBuses: [], autoCreatedSubjects: [], credentials: [], errors,
   });
 }

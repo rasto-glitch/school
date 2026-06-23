@@ -163,7 +163,7 @@ export default function EmployeeBulkUpload({ role, onDone }: { role: Role; onDon
             </span>
             {result.skipped > 0 && (
               <span className="text-xs font-semibold bg-gray-100 text-gray-600 px-2.5 py-1 rounded-full">
-                {t('admin.bulk_emp.stat_skipped', { count: result.skipped, defaultValue: '{{count}} skipped' })}
+                {t('admin.bulk_emp.stat_skipped', { count: result.skipped, defaultValue: '{{count}} skipped (already exist)' })}
               </span>
             )}
             {result.autoCreatedClasses.length > 0 && (
