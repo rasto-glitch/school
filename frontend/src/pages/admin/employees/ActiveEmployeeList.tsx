@@ -105,6 +105,41 @@ async function loadRows(role: EmployeeRole): Promise<Row[]> {
     }));
 }
 
+// Avatar painted as a CSS background-image (no <img> in the DOM, so it scrolls
+// on the compositor instead of forcing per-image layers + repaints). The image
+// is preloaded off-DOM: try the 56px thumbnail, fall back to the original URL
+// if the transform fails/isn't ready, and show initials until something loads.
+function Avatar({ url, name }: { url: string | null; name: string }) {
+  const initial = name?.[0]?.toUpperCase() || '?';
+  const [bg, setBg] = useState<string | null>(null);
+
+  useEffect(() => {
+    setBg(null);
+    if (!url) return;
+    let active = true;
+    const thumb = thumbnailUrl(url, 56) ?? url;
+    const tryLoad = (src: string, onFail?: () => void) => {
+      const img = new Image();
+      img.onload = () => { if (active) setBg(src); };
+      img.onerror = () => { if (active) onFail?.(); };
+      img.src = src;
+    };
+    // thumbnail first; on failure fall back to the full-res original.
+    tryLoad(thumb, thumb === url ? undefined : () => tryLoad(url));
+    return () => { active = false; };
+  }, [url]);
+
+  return (
+    <div
+      className="w-7 h-7 rounded-full bg-primary-100 bg-cover bg-center flex items-center justify-center text-primary-700 font-bold text-xs"
+      style={bg ? { backgroundImage: `url("${bg}")` } : undefined}
+      aria-hidden
+    >
+      {!bg && initial}
+    </div>
+  );
+}
+
 export default function ActiveEmployeeList({ role }: Props) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -140,19 +175,7 @@ export default function ActiveEmployeeList({ role }: Props) {
       key: 'avatar',
       label: '',
       headerClassName: 'w-12',
-      // Render the avatar as a CSS background-image rather than an <img>.
-      // Many <img> elements in a scroll container get promoted to their own
-      // layers and re-rasterize during scroll, which forces a full-viewport
-      // repaint every frame (janky). A background-image paints into the row's
-      // own layer and scrolls on the compositor. We still request a 56px
-      // Supabase thumbnail; the initials/bg show through if it fails to load.
-      render: r => r.photoUrl
-        ? <div
-            className="w-7 h-7 rounded-full bg-primary-100 bg-cover bg-center"
-            style={{ backgroundImage: `url("${thumbnailUrl(r.photoUrl, 56) ?? r.photoUrl}")` }}
-            aria-hidden
-          />
-        : <div className="w-7 h-7 rounded-full bg-primary-100 text-primary-700 font-bold text-xs flex items-center justify-center">{r.fullName[0]?.toUpperCase() || '?'}</div>,
+      render: r => <Avatar url={r.photoUrl} name={r.fullName} />,
     },
     {
       key: 'name',
@@ -211,15 +234,20 @@ export default function ActiveEmployeeList({ role }: Props) {
       {loading ? (
         <div className="flex justify-center py-10"><LoadingSpinner /></div>
       ) : (
-        <SortableTable<Row>
-          rows={filtered}
-          columns={columns}
-          rowKey={r => r.id}
-          onRowClick={goToProfile}
-          emptyMessage={t('admin.list.empty', 'No employees')}
-          emptyDescription={t('admin.list.empty_hint', 'Add one with the Add new button above.')}
-          defaultSort={{ key: 'hireDate', dir: 'desc' }}
-        />
+        // translateZ(0) promotes the table to its own compositor layer so the
+        // surrounding scroll moves it on the GPU instead of repainting the
+        // image-bearing rows every frame (avatar lists were janking on scroll).
+        <div style={{ transform: 'translateZ(0)' }}>
+          <SortableTable<Row>
+            rows={filtered}
+            columns={columns}
+            rowKey={r => r.id}
+            onRowClick={goToProfile}
+            emptyMessage={t('admin.list.empty', 'No employees')}
+            emptyDescription={t('admin.list.empty_hint', 'Add one with the Add new button above.')}
+            defaultSort={{ key: 'hireDate', dir: 'desc' }}
+          />
+        </div>
       )}
     </div>
   );
