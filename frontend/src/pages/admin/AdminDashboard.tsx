@@ -16,7 +16,7 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState({ students: 0, teachers: 0, drivers: 0 });
 
   useEffect(() => {
-    Promise.all([adminApi.getStudents(), adminApi.getTeachers(), adminApi.getDrivers()])
+    Promise.all([adminApi.getStudents(), adminApi.getTeachers('list'), adminApi.getDrivers()])
       .then(([s, t, d]) => setStats({
         students: s.data?.total || s.data?.students?.length || 0,
         teachers: t.data?.length || 0,

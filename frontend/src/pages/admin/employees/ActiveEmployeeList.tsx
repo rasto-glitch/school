@@ -59,7 +59,7 @@ interface RawRecord {
 
 async function loadRows(role: EmployeeRole): Promise<Row[]> {
   if (role === 'teacher') {
-    const r = await adminApi.getTeachers();
+    const r = await adminApi.getTeachers('list');
     return ((r.data || []) as RawRecord[]).map(rec => ({
       id: rec.id,
       role: 'teacher',

@@ -2872,6 +2872,10 @@ export async function deleteCurriculumRow(req: AuthRequest, res: Response): Prom
 // ---- TEACHERS ----
 export async function getTeachers(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
+  // `?view=list` returns the slim shape the employee list needs (no HR
+  // columns, no users join, no curriculum/subjects join) — a much smaller
+  // query + payload than the full record used by the curriculum pages.
+  const listView = req.query.view === 'list';
   // Only return teachers with active user accounts
   const { data: activeUsers } = await supabase
     .from('users')
@@ -2881,12 +2885,20 @@ export async function getTeachers(req: AuthRequest, res: Response): Promise<void
     .eq('is_active', true);
   const activeUserIds = (activeUsers || []).map(u => u.id);
 
+  const select = listView
+    ? 'id, full_name, phone_number, hire_date, official_photo, profile_picture, teacher_classes(class_id, classes(name))'
+    : '*, users(id, username, email, phone), teacher_classes(class_id, classes(name)), class_subject_teachers(class_id, subject_id, classes(name), subjects(id, name))';
+
   const { data, error } = await supabase
     .from('teachers')
-    .select('*, users(id, username, email, phone), teacher_classes(class_id, classes(name)), class_subject_teachers(class_id, subject_id, classes(name), subjects(id, name))')
+    .select(select)
     .eq('school_id', schoolId)
     .in('user_id', activeUserIds.length > 0 ? activeUserIds : ['00000000-0000-0000-0000-000000000000']);
   if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+
+  // List view needs no subject grouping — return the slim rows as-is.
+  if (listView) { res.json(toCC(data ?? [])); return; }
+
   const teachers = ((data ?? []) as any[]).map(t => {
     // group curriculum rows into subjects: [{ id, name, classes: [{ id, name }] }]
     const bySubject = new Map<string, { id: string; name: string; classes: { id: string; name: string }[] }>();
