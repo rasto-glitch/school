@@ -1417,6 +1417,7 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
     });
     if (tcRows.length > 0) await supabase.from('teacher_classes').insert(tcRows);
     if (cstRows.length > 0) {
+      // tenant-check-allow: every cstRows entry carries school_id (set above)
       await supabase.from('class_subject_teachers')
         .upsert(cstRows, { onConflict: 'class_id,subject_id,teacher_id', ignoreDuplicates: true });
       // Rebuild the subject_teachers + teachers.subject + subjects.teacher_id caches.
@@ -1569,6 +1570,7 @@ async function runStaffBulk(res: Response, schoolId: string, rows: Record<string
 
   let created = 0;
   if (inserts.length > 0) {
+    // tenant-check-allow: every inserts entry carries school_id (set above)
     const { data, error } = await supabase.from('staff_members').insert(inserts).select('id');
     if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
     created = (data || []).length;
@@ -4175,6 +4177,7 @@ export async function uploadGrades(req: AuthRequest, res: Response): Promise<voi
 
   const rows = [...upserts.values()];
   if (rows.length > 0) {
+    // tenant-check-allow: every grades row carries school_id (set above)
     const { error } = await supabase.from('grades')
       .upsert(rows, { onConflict: 'student_id,subject,grading_period,academic_year' });
     if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
