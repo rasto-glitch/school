@@ -13,6 +13,7 @@ import { toast } from 'react-toastify';
 import { Search, UserPlus } from 'lucide-react';
 import { adminApi } from '../../../services/api';
 import { useDebounce } from '../../../hooks/useDebounce';
+import { thumbnailUrl } from '../../../utils/storageImage';
 import Input from '../../../components/common/Input';
 import Button from '../../../components/common/Button';
 import LoadingSpinner from '../../../components/common/LoadingSpinner';
@@ -139,8 +140,24 @@ export default function ActiveEmployeeList({ role }: Props) {
       key: 'avatar',
       label: '',
       headerClassName: 'w-12',
+      // Request a 56px (2× for retina) Supabase thumbnail instead of the
+      // full-res upload, and lazy/async-decode so off-screen rows don't all
+      // download + decode at once. onError falls back to the original URL if
+      // image transforms aren't enabled (never worse than full-res).
       render: r => r.photoUrl
-        ? <img src={r.photoUrl} alt="" className="w-7 h-7 rounded-full object-cover" />
+        ? <img
+            src={thumbnailUrl(r.photoUrl, 56) ?? r.photoUrl}
+            alt=""
+            width={28}
+            height={28}
+            loading="lazy"
+            decoding="async"
+            className="w-7 h-7 rounded-full object-cover"
+            onError={e => {
+              const img = e.currentTarget;
+              if (!img.dataset.fb && r.photoUrl) { img.dataset.fb = '1'; img.src = r.photoUrl; }
+            }}
+          />
         : <div className="w-7 h-7 rounded-full bg-primary-100 text-primary-700 font-bold text-xs flex items-center justify-center">{r.fullName[0]?.toUpperCase() || '?'}</div>,
     },
     {
