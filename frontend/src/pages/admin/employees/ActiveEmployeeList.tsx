@@ -140,23 +140,17 @@ export default function ActiveEmployeeList({ role }: Props) {
       key: 'avatar',
       label: '',
       headerClassName: 'w-12',
-      // Request a 56px (2× for retina) Supabase thumbnail instead of the
-      // full-res upload, and lazy/async-decode so off-screen rows don't all
-      // download + decode at once. onError falls back to the original URL if
-      // image transforms aren't enabled (never worse than full-res).
+      // Render the avatar as a CSS background-image rather than an <img>.
+      // Many <img> elements in a scroll container get promoted to their own
+      // layers and re-rasterize during scroll, which forces a full-viewport
+      // repaint every frame (janky). A background-image paints into the row's
+      // own layer and scrolls on the compositor. We still request a 56px
+      // Supabase thumbnail; the initials/bg show through if it fails to load.
       render: r => r.photoUrl
-        ? <img
-            src={thumbnailUrl(r.photoUrl, 56) ?? r.photoUrl}
-            alt=""
-            width={28}
-            height={28}
-            loading="lazy"
-            decoding="async"
-            className="w-7 h-7 rounded-full object-cover"
-            onError={e => {
-              const img = e.currentTarget;
-              if (!img.dataset.fb && r.photoUrl) { img.dataset.fb = '1'; img.src = r.photoUrl; }
-            }}
+        ? <div
+            className="w-7 h-7 rounded-full bg-primary-100 bg-cover bg-center"
+            style={{ backgroundImage: `url("${thumbnailUrl(r.photoUrl, 56) ?? r.photoUrl}")` }}
+            aria-hidden
           />
         : <div className="w-7 h-7 rounded-full bg-primary-100 text-primary-700 font-bold text-xs flex items-center justify-center">{r.fullName[0]?.toUpperCase() || '?'}</div>,
     },
