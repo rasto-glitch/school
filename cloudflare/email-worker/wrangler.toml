@@ -17,6 +17,8 @@ compatibility_date = "2025-09-01"
 compatibility_flags = ["nodejs_compat"]
 
 [vars]
-# The backend endpoint that ingests parsed emails. Override per-environment
-# if needed; this default points at the Railway deployment.
-INBOUND_URL = "https://school-production-3ccc.up.railway.app/api/inbound/email"
+# The backend endpoint that ingests parsed emails. Points at the master
+# operator portal's API (api.elkurdi.co), where the mail product now lives.
+# (Previously the old Scholify backend at
+# school-production-3ccc.up.railway.app/api/inbound/email.)
+INBOUND_URL = "https://api.elkurdi.co/api/mail-inbound"
