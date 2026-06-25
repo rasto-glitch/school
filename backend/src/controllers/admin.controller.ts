@@ -1153,7 +1153,11 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
     licenseNumber: string | null; busNumberRaw: string | null; age: number | null; vehicleType: 'bus' | 'taxi'; // driver
   }
   const parsed: ParsedEmp[] = [];
-  const newClassesNeeded = new Set<string>();
+  // Keyed by the SAME normalized form used for existence checks (stripGradePrefix)
+  // so a section written two ways in one upload — "7A" vs "Grade 7A", or differing
+  // case — collapses to a single class instead of being created twice. Value is
+  // the display name to insert (first spelling wins).
+  const newClassesNeeded = new Map<string, string>();
   const newBusesNeeded = new Set<string>();
   // lower-cased name → canonical casing, so "Math" + "math" don't double-insert.
   const newSubjectsNeeded = new Map<string, string>();
@@ -1231,8 +1235,9 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
           if (seen.has(lc)) continue;
           seen.add(lc);
           emp.classNames.push(nm);
-          if (!classExactMap.has(lc) && !classNormMap.has(stripGradePrefix(nm))) {
-            newClassesNeeded.add(formatClassName(nm));
+          const norm = stripGradePrefix(nm);
+          if (!classExactMap.has(lc) && !classNormMap.has(norm) && !newClassesNeeded.has(norm)) {
+            newClassesNeeded.set(norm, formatClassName(nm));
           }
         }
       }
@@ -1249,8 +1254,9 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
           emp.subjects.push({ name, classNames });
           // Auto-create any class named inside the parentheses too.
           for (const cn of (classNames || [])) {
-            if (!classExactMap.has(cn.toLowerCase()) && !classNormMap.has(stripGradePrefix(cn))) {
-              newClassesNeeded.add(formatClassName(cn));
+            const cnNorm = stripGradePrefix(cn);
+            if (!classExactMap.has(cn.toLowerCase()) && !classNormMap.has(cnNorm) && !newClassesNeeded.has(cnNorm)) {
+              newClassesNeeded.set(cnNorm, formatClassName(cn));
             }
           }
         }
@@ -1288,7 +1294,7 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
   const autoCreatedClasses: string[] = [];
   if (role === 'teacher' && newClassesNeeded.size > 0) {
     const { data: nc, error: ncErr } = await supabase.from('classes')
-      .insert(Array.from(newClassesNeeded).map(name => ({ school_id: schoolId, name, grade_level: name })))
+      .insert(Array.from(newClassesNeeded.values()).map(name => ({ school_id: schoolId, name, grade_level: name })))
       .select('id, name');
     if (ncErr) { errors.push(`Failed to create classes: ${ncErr.message}`); }
     else for (const c of (nc || [])) {
