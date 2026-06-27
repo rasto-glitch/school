@@ -38,7 +38,7 @@ import * as employeeAcks from '../controllers/employeeAcknowledgements.controlle
 import * as employeeActions from '../controllers/employeeActions.controller';
 import * as employeeTermination from '../controllers/employeeTermination.controller';
 import * as meEmployee from '../controllers/meEmployee.controller';
-import { authenticate, authorize, authorizeCapability } from '../middleware/auth';
+import { authenticate, authorize, authorizeCapability, authorizeAnyCapability } from '../middleware/auth';
 import type { AuthRequest } from '../middleware/auth';
 import * as clearance from '../controllers/clearance.controller';
 import { validate } from '../middleware/validate';
@@ -243,7 +243,7 @@ export function createRouter(io: SocketServer) {
   router.post('/auth/mfa/confirm', authenticate, mfaSelfLimiter, validate({ body: v.mfaConfirmSchema }), (req, res) => confirmMfa(req as AuthRequest, res));
   router.post('/auth/mfa/disable-self', authenticate, mfaSelfLimiter, validate({ body: v.mfaDisableSelfSchema }), (req, res) => disableMfaSelf(req as AuthRequest, res));
   router.post('/auth/mfa/recovery-codes', authenticate, mfaSelfLimiter, validate({ body: v.mfaConfirmSchema }), (req, res) => regenerateRecoveryCodes(req as AuthRequest, res));
-  router.post('/admin/users/:userId/mfa-disable', authenticate, authorize('admin'), validate({ params: vu.userIdParam, body: v.mfaAdminDisableSchema }), (req, res) => adminDisableMfa(req as AuthRequest, res));
+  router.post('/admin/users/:userId/mfa-disable', authenticate, authorizeCapability('accounts.manage'), validate({ params: vu.userIdParam, body: v.mfaAdminDisableSchema }), (req, res) => adminDisableMfa(req as AuthRequest, res));
 
   // ---- Login factors (Phase 2): arm phone/email OTP as sign-in second
   // factors. All roles (locked decision) — no role gate. TOTP keeps using the
@@ -302,82 +302,82 @@ export function createRouter(io: SocketServer) {
   );
 
   // ---- ADMIN ----
-  router.get('/admin/students', authenticate, authorize('admin'), (req, res) => admin.getStudents(req as AuthRequest, res));
-  router.post('/admin/students', authenticate, authorize('admin'), validate({ body: vp.createStudentSchema }), (req, res) => admin.createStudent(req as AuthRequest, res));
-  router.post('/admin/students/assign', authenticate, authorize('admin'), validate({ body: vp.assignStudentSchema }), (req, res) => admin.assignStudent(req as AuthRequest, res));
-  router.post('/admin/students/bulk-upload', authenticate, authorize('admin'), upload.single('file'), (req, res) => admin.bulkUploadStudents(req as AuthRequest, res));
-  router.put('/admin/students/:id', authenticate, authorize('admin'), validate({ params: vp.idParam, body: vp.updateStudentSchema }), (req, res) => admin.updateStudent(req as AuthRequest, res));
-  router.delete('/admin/students/:id', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => admin.deleteStudent(req as AuthRequest, res));
-  router.get('/admin/students/graduated', authenticate, authorize('admin'), (req, res) => admin.getGraduatedStudents(req as AuthRequest, res));
-  router.get('/admin/students/:id/brief', authenticate, authorize('admin'), (req, res) => admin.getStudentBrief(req as AuthRequest, res));
-  router.get('/admin/students/:id/enrollments', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => admin.getStudentEnrollmentHistory(req as AuthRequest, res));
-  router.get('/admin/students/:id/attendance-history', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => admin.getStudentAttendanceHistory(req as AuthRequest, res));
-  router.get('/admin/students/:id/attendance-history/days', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => admin.getStudentAttendanceDays(req as AuthRequest, res));
-  router.post('/admin/students/:id/leave', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => admin.markStudentOnLeave(req as AuthRequest, res));
-  router.post('/admin/students/:id/return', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => admin.returnStudentFromLeave(req as AuthRequest, res));
-  router.get('/admin/classes/:id/promote-class/preview', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => admin.previewPromoteClass(req as AuthRequest, res));
-  router.post('/admin/classes/:id/promote-class', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => admin.commitPromoteClass(req as AuthRequest, res));
-  router.get('/admin/enrollments/backfill/preview', authenticate, authorize('admin'), (req, res) => admin.previewEnrollmentBackfill(req as AuthRequest, res));
-  router.post('/admin/enrollments/backfill', authenticate, authorize('admin'), (req, res) => admin.commitEnrollmentBackfill(req as AuthRequest, res));
+  router.get('/admin/students', authenticate, authorizeCapability('enrollment.read'), (req, res) => admin.getStudents(req as AuthRequest, res));
+  router.post('/admin/students', authenticate, authorizeCapability('students.manage'), validate({ body: vp.createStudentSchema }), (req, res) => admin.createStudent(req as AuthRequest, res));
+  router.post('/admin/students/assign', authenticate, authorizeCapability('students.manage'), validate({ body: vp.assignStudentSchema }), (req, res) => admin.assignStudent(req as AuthRequest, res));
+  router.post('/admin/students/bulk-upload', authenticate, authorizeCapability('students.manage'), upload.single('file'), (req, res) => admin.bulkUploadStudents(req as AuthRequest, res));
+  router.put('/admin/students/:id', authenticate, authorizeCapability('students.manage'), validate({ params: vp.idParam, body: vp.updateStudentSchema }), (req, res) => admin.updateStudent(req as AuthRequest, res));
+  router.delete('/admin/students/:id', authenticate, authorizeCapability('students.manage'), validate({ params: vp.idParam }), (req, res) => admin.deleteStudent(req as AuthRequest, res));
+  router.get('/admin/students/graduated', authenticate, authorizeCapability('enrollment.read'), (req, res) => admin.getGraduatedStudents(req as AuthRequest, res));
+  router.get('/admin/students/:id/brief', authenticate, authorizeCapability('enrollment.read'), (req, res) => admin.getStudentBrief(req as AuthRequest, res));
+  router.get('/admin/students/:id/enrollments', authenticate, authorizeCapability('enrollment.read'), validate({ params: vp.idParam }), (req, res) => admin.getStudentEnrollmentHistory(req as AuthRequest, res));
+  router.get('/admin/students/:id/attendance-history', authenticate, authorizeCapability('enrollment.read'), validate({ params: vp.idParam }), (req, res) => admin.getStudentAttendanceHistory(req as AuthRequest, res));
+  router.get('/admin/students/:id/attendance-history/days', authenticate, authorizeCapability('enrollment.read'), validate({ params: vp.idParam }), (req, res) => admin.getStudentAttendanceDays(req as AuthRequest, res));
+  router.post('/admin/students/:id/leave', authenticate, authorizeCapability('students.manage'), validate({ params: vp.idParam }), (req, res) => admin.markStudentOnLeave(req as AuthRequest, res));
+  router.post('/admin/students/:id/return', authenticate, authorizeCapability('students.manage'), validate({ params: vp.idParam }), (req, res) => admin.returnStudentFromLeave(req as AuthRequest, res));
+  router.get('/admin/classes/:id/promote-class/preview', authenticate, authorizeCapability('students.manage'), validate({ params: vp.idParam }), (req, res) => admin.previewPromoteClass(req as AuthRequest, res));
+  router.post('/admin/classes/:id/promote-class', authenticate, authorizeCapability('students.manage'), validate({ params: vp.idParam }), (req, res) => admin.commitPromoteClass(req as AuthRequest, res));
+  router.get('/admin/enrollments/backfill/preview', authenticate, authorizeCapability('students.manage'), (req, res) => admin.previewEnrollmentBackfill(req as AuthRequest, res));
+  router.post('/admin/enrollments/backfill', authenticate, authorizeCapability('students.manage'), (req, res) => admin.commitEnrollmentBackfill(req as AuthRequest, res));
 
   // ---- STUDENT TRANSFERS (migrations 032 + 034) ----
   // Outgoing (source-side).
-  router.get('/admin/transfers', authenticate, authorize('admin'), (req, res) => transfer.listTransfers(req as AuthRequest, res));
-  router.get('/admin/transfers/directory', authenticate, authorize('admin'), (req, res) => transfer.listTransferDestinations(req as AuthRequest, res));
-  router.post('/admin/transfers', authenticate, authorize('admin'), (req, res) => transfer.startTransfer(req as AuthRequest, res));
-  router.get('/admin/transfers/:id', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => transfer.getTransfer(req as AuthRequest, res));
-  router.get('/admin/transfers/:id/consent', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => transfer.getTransferConsentPreview(req as AuthRequest, res));
-  router.post('/admin/transfers/:id/consent', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => transfer.captureConsent(req as AuthRequest, res));
-  router.get('/admin/transfers/:id/bundle.json', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => transfer.downloadBundleJson(req as AuthRequest, res));
-  router.get('/admin/transfers/:id/bundle.pdf', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => transfer.downloadBundlePdf(req as AuthRequest, res));
-  router.post('/admin/transfers/:id/complete', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => transfer.completeTransfer(req as AuthRequest, res));
-  router.post('/admin/transfers/:id/cancel', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => transfer.cancelTransfer(req as AuthRequest, res));
-  router.post('/admin/transfers/:id/send-to-destination', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => transfer.sendToDestination(req as AuthRequest, res));
-  router.post('/admin/transfers/:id/recall', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => transfer.recallTransfer(req as AuthRequest, res));
+  router.get('/admin/transfers', authenticate, authorizeCapability('transfers.manage'), (req, res) => transfer.listTransfers(req as AuthRequest, res));
+  router.get('/admin/transfers/directory', authenticate, authorizeCapability('transfers.manage'), (req, res) => transfer.listTransferDestinations(req as AuthRequest, res));
+  router.post('/admin/transfers', authenticate, authorizeCapability('transfers.manage'), (req, res) => transfer.startTransfer(req as AuthRequest, res));
+  router.get('/admin/transfers/:id', authenticate, authorizeCapability('transfers.manage'), validate({ params: vp.idParam }), (req, res) => transfer.getTransfer(req as AuthRequest, res));
+  router.get('/admin/transfers/:id/consent', authenticate, authorizeCapability('transfers.manage'), validate({ params: vp.idParam }), (req, res) => transfer.getTransferConsentPreview(req as AuthRequest, res));
+  router.post('/admin/transfers/:id/consent', authenticate, authorizeCapability('transfers.manage'), validate({ params: vp.idParam }), (req, res) => transfer.captureConsent(req as AuthRequest, res));
+  router.get('/admin/transfers/:id/bundle.json', authenticate, authorizeCapability('transfers.manage'), validate({ params: vp.idParam }), (req, res) => transfer.downloadBundleJson(req as AuthRequest, res));
+  router.get('/admin/transfers/:id/bundle.pdf', authenticate, authorizeCapability('transfers.manage'), validate({ params: vp.idParam }), (req, res) => transfer.downloadBundlePdf(req as AuthRequest, res));
+  router.post('/admin/transfers/:id/complete', authenticate, authorizeCapability('transfers.manage'), validate({ params: vp.idParam }), (req, res) => transfer.completeTransfer(req as AuthRequest, res));
+  router.post('/admin/transfers/:id/cancel', authenticate, authorizeCapability('transfers.manage'), validate({ params: vp.idParam }), (req, res) => transfer.cancelTransfer(req as AuthRequest, res));
+  router.post('/admin/transfers/:id/send-to-destination', authenticate, authorizeCapability('transfers.manage'), validate({ params: vp.idParam }), (req, res) => transfer.sendToDestination(req as AuthRequest, res));
+  router.post('/admin/transfers/:id/recall', authenticate, authorizeCapability('transfers.manage'), validate({ params: vp.idParam }), (req, res) => transfer.recallTransfer(req as AuthRequest, res));
   // Incoming (destination-side — scoped by destination_school_id).
-  router.get('/admin/transfers/incoming/list', authenticate, authorize('admin'), (req, res) => transfer.listIncomingTransfers(req as AuthRequest, res));
-  router.get('/admin/transfers/incoming/:id', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => transfer.getIncomingTransfer(req as AuthRequest, res));
-  router.post('/admin/transfers/incoming/:id/accept', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => transfer.acceptIncomingTransfer(req as AuthRequest, res));
-  router.post('/admin/transfers/incoming/:id/reject', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => transfer.rejectIncomingTransfer(req as AuthRequest, res));
-  router.get('/admin/grades/pending', authenticate, authorize('admin'), (req, res) => admin.listPendingGrades(req as AuthRequest, res));
-  router.get('/admin/grades/overview', authenticate, authorize('admin'), (req, res) => admin.getGradeReviewOverview(req as AuthRequest, res));
-  router.get('/admin/grades/template.xlsx', authenticate, authorize('admin'), (req, res) => admin.gradesTemplate(req as AuthRequest, res));
-  router.get('/admin/grades/export.xlsx', authenticate, authorize('admin'), (req, res) => admin.exportGrades(req as AuthRequest, res));
-  router.post('/admin/grades/upload', authenticate, authorize('admin'), upload.single('file'), (req, res) => admin.uploadGrades(req as AuthRequest, res));
-  router.put('/admin/grades/:id', authenticate, authorize('admin'), validate({ params: vp.idParam, body: vp.updateGradeSchema }), (req, res) => admin.updateGrade(req as AuthRequest, res));
-  router.post('/admin/grades/release', authenticate, authorize('admin'), validate({ body: vp.releaseGradesSchema }), (req, res) => admin.releaseGrades(req as AuthRequest, res));
-  router.post('/admin/students/:id/archive', authenticate, authorize('admin'), validate({ params: vp.idParam, body: vp.archiveStudentSchema }), (req, res) => admin.archiveStudent(req as AuthRequest, res));
-  router.get('/admin/archived-students', authenticate, authorize('admin'), (req, res) => admin.getArchivedStudents(req as AuthRequest, res));
-  router.get('/admin/archived-students/search', authenticate, authorize('admin'), validate({ query: vq.listQuery }), (req, res) => admin.searchArchivedStudents(req as AuthRequest, res));
-  router.get('/admin/archived-students/:id/export.json', authenticate, authorize('admin'), (req, res) => admin.exportArchivedStudentRecord(req as AuthRequest, res));
-  router.get('/admin/archived-students/:id/export.pdf', authenticate, authorize('admin'), (req, res) => admin.exportArchivedStudentPdf(req as AuthRequest, res));
-  router.post('/admin/archived-students/:id/restore', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => admin.restoreArchivedStudent(req as AuthRequest, res));
-  router.get('/admin/archived-students/:id', authenticate, authorize('admin'), (req, res) => admin.getArchivedStudent(req as AuthRequest, res));
-  router.get('/admin/archive/export.pdf', authenticate, authorize('admin'), (req, res) => admin.exportArchivePdf(req as AuthRequest, res));
-  router.get('/admin/archive/export.xlsx', authenticate, authorize('admin'), (req, res) => admin.exportArchiveXlsx(req as AuthRequest, res));
+  router.get('/admin/transfers/incoming/list', authenticate, authorizeCapability('transfers.manage'), (req, res) => transfer.listIncomingTransfers(req as AuthRequest, res));
+  router.get('/admin/transfers/incoming/:id', authenticate, authorizeCapability('transfers.manage'), validate({ params: vp.idParam }), (req, res) => transfer.getIncomingTransfer(req as AuthRequest, res));
+  router.post('/admin/transfers/incoming/:id/accept', authenticate, authorizeCapability('transfers.manage'), validate({ params: vp.idParam }), (req, res) => transfer.acceptIncomingTransfer(req as AuthRequest, res));
+  router.post('/admin/transfers/incoming/:id/reject', authenticate, authorizeCapability('transfers.manage'), validate({ params: vp.idParam }), (req, res) => transfer.rejectIncomingTransfer(req as AuthRequest, res));
+  router.get('/admin/grades/pending', authenticate, authorizeCapability('academics.oversee'), (req, res) => admin.listPendingGrades(req as AuthRequest, res));
+  router.get('/admin/grades/overview', authenticate, authorizeCapability('academics.oversee'), (req, res) => admin.getGradeReviewOverview(req as AuthRequest, res));
+  router.get('/admin/grades/template.xlsx', authenticate, authorizeCapability('academics.oversee'), (req, res) => admin.gradesTemplate(req as AuthRequest, res));
+  router.get('/admin/grades/export.xlsx', authenticate, authorizeCapability('academics.oversee'), (req, res) => admin.exportGrades(req as AuthRequest, res));
+  router.post('/admin/grades/upload', authenticate, authorizeCapability('academics.oversee'), upload.single('file'), (req, res) => admin.uploadGrades(req as AuthRequest, res));
+  router.put('/admin/grades/:id', authenticate, authorizeCapability('academics.oversee'), validate({ params: vp.idParam, body: vp.updateGradeSchema }), (req, res) => admin.updateGrade(req as AuthRequest, res));
+  router.post('/admin/grades/release', authenticate, authorizeCapability('academics.oversee'), validate({ body: vp.releaseGradesSchema }), (req, res) => admin.releaseGrades(req as AuthRequest, res));
+  router.post('/admin/students/:id/archive', authenticate, authorizeCapability('students.manage'), validate({ params: vp.idParam, body: vp.archiveStudentSchema }), (req, res) => admin.archiveStudent(req as AuthRequest, res));
+  router.get('/admin/archived-students', authenticate, authorizeCapability('enrollment.read'), (req, res) => admin.getArchivedStudents(req as AuthRequest, res));
+  router.get('/admin/archived-students/search', authenticate, authorizeCapability('enrollment.read'), validate({ query: vq.listQuery }), (req, res) => admin.searchArchivedStudents(req as AuthRequest, res));
+  router.get('/admin/archived-students/:id/export.json', authenticate, authorizeCapability('enrollment.read'), (req, res) => admin.exportArchivedStudentRecord(req as AuthRequest, res));
+  router.get('/admin/archived-students/:id/export.pdf', authenticate, authorizeCapability('enrollment.read'), (req, res) => admin.exportArchivedStudentPdf(req as AuthRequest, res));
+  router.post('/admin/archived-students/:id/restore', authenticate, authorizeCapability('students.manage'), validate({ params: vp.idParam }), (req, res) => admin.restoreArchivedStudent(req as AuthRequest, res));
+  router.get('/admin/archived-students/:id', authenticate, authorizeCapability('enrollment.read'), (req, res) => admin.getArchivedStudent(req as AuthRequest, res));
+  router.get('/admin/archive/export.pdf', authenticate, authorizeCapability('audit.read'), (req, res) => admin.exportArchivePdf(req as AuthRequest, res));
+  router.get('/admin/archive/export.xlsx', authenticate, authorizeCapability('audit.read'), (req, res) => admin.exportArchiveXlsx(req as AuthRequest, res));
   router.get('/admin/archived-employees', authenticate, authorizeCapability('staff.manage'), (req, res) => admin.getArchivedEmployees(req as AuthRequest, res));
   router.get('/admin/archived-employees/search', authenticate, authorizeCapability('staff.manage'), validate({ query: vq.listQuery }), (req, res) => admin.searchArchivedEmployees(req as AuthRequest, res));
   router.get('/admin/employee-archive/export.pdf', authenticate, authorizeCapability('staff.manage'), (req, res) => admin.exportEmployeeArchivePdf(req as AuthRequest, res));
   router.get('/admin/employee-archive/export.xlsx', authenticate, authorizeCapability('staff.manage'), (req, res) => admin.exportEmployeeArchiveXlsx(req as AuthRequest, res));
-  router.get('/admin/archive/full-backup.json', authenticate, authorize('admin'), (req, res) => admin.exportFullArchiveBackup(req as AuthRequest, res));
-  router.get('/admin/integrity/verify', authenticate, authorize('admin'), (req, res) => admin.verifyArchiveIntegrity(req as AuthRequest, res));
+  router.get('/admin/archive/full-backup.json', authenticate, authorizeCapability('audit.read'), (req, res) => admin.exportFullArchiveBackup(req as AuthRequest, res));
+  router.get('/admin/integrity/verify', authenticate, authorizeCapability('audit.read'), (req, res) => admin.verifyArchiveIntegrity(req as AuthRequest, res));
   router.get('/admin/archived-employees/:id/export.json', authenticate, authorizeCapability('staff.manage'), (req, res) => admin.exportArchivedEmployeeRecord(req as AuthRequest, res));
   router.get('/admin/archived-employees/:id/export.pdf', authenticate, authorizeCapability('staff.manage'), (req, res) => admin.exportArchivedEmployeePdf(req as AuthRequest, res));
   router.get('/admin/archived-employees/:id/profile', authenticate, authorizeCapability('staff.manage'), (req, res) => archivedProfile.getArchivedEmployeeProfile(req as AuthRequest, res));
   router.post('/admin/archived-employees/:id/restore', authenticate, authorizeCapability('staff.manage'), validate({ params: vp.idParam }), (req, res) => admin.restoreArchivedEmployee(req as AuthRequest, res));
   router.get('/admin/archived-employees/:id', authenticate, authorizeCapability('staff.manage'), (req, res) => admin.getArchivedEmployee(req as AuthRequest, res));
 
-  router.get('/admin/parents', authenticate, authorize('admin'), (req, res) => admin.getParents(req as AuthRequest, res));
-  router.get('/admin/parents/:id/profile', authenticate, authorize('admin'), (req, res) => admin.getParentProfile(req as AuthRequest, res));
-  router.patch('/admin/parents/:id', authenticate, authorize('admin'), validate({ params: vu.idParam, body: vu.updateParentSchema }), (req, res) => admin.updateParent(req as AuthRequest, res));
-  router.delete('/admin/parents/:id', authenticate, authorize('admin'), validate({ params: vu.idParam }), (req, res) => admin.deleteParent(req as AuthRequest, res));
+  router.get('/admin/parents', authenticate, authorizeCapability('enrollment.read'), (req, res) => admin.getParents(req as AuthRequest, res));
+  router.get('/admin/parents/:id/profile', authenticate, authorizeCapability('enrollment.read'), (req, res) => admin.getParentProfile(req as AuthRequest, res));
+  router.patch('/admin/parents/:id', authenticate, authorizeCapability('students.manage'), validate({ params: vu.idParam, body: vu.updateParentSchema }), (req, res) => admin.updateParent(req as AuthRequest, res));
+  router.delete('/admin/parents/:id', authenticate, authorizeCapability('students.manage'), validate({ params: vu.idParam }), (req, res) => admin.deleteParent(req as AuthRequest, res));
 
   router.get('/admin/classes', authenticate, authorize('admin', 'teacher'), (req, res) => admin.getClasses(req as AuthRequest, res));
-  router.post('/admin/classes', authenticate, authorize('admin'), validate({ body: vp.createClassSchema }), (req, res) => admin.createClass(req as AuthRequest, res));
-  router.put('/admin/classes/:id', authenticate, authorize('admin'), validate({ params: vp.idParam, body: vp.updateClassSchema }), (req, res) => admin.updateClass(req as AuthRequest, res));
-  router.delete('/admin/classes/:id', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => admin.deleteClass(req as AuthRequest, res));
-  router.get('/admin/weekly-summaries', authenticate, authorize('admin'), validate({ query: vq.listQuery }), (req, res) => admin.getWeeklySummaries(req as AuthRequest, res));
-  router.get('/admin/weekly-summary-status', authenticate, authorize('admin'), (req, res) => admin.getWeeklySummaryStatus(req as AuthRequest, res));
+  router.post('/admin/classes', authenticate, authorizeCapability('students.manage'), validate({ body: vp.createClassSchema }), (req, res) => admin.createClass(req as AuthRequest, res));
+  router.put('/admin/classes/:id', authenticate, authorizeCapability('students.manage'), validate({ params: vp.idParam, body: vp.updateClassSchema }), (req, res) => admin.updateClass(req as AuthRequest, res));
+  router.delete('/admin/classes/:id', authenticate, authorizeCapability('students.manage'), validate({ params: vp.idParam }), (req, res) => admin.deleteClass(req as AuthRequest, res));
+  router.get('/admin/weekly-summaries', authenticate, authorizeCapability('academics.oversee'), validate({ query: vq.listQuery }), (req, res) => admin.getWeeklySummaries(req as AuthRequest, res));
+  router.get('/admin/weekly-summary-status', authenticate, authorizeCapability('academics.oversee'), (req, res) => admin.getWeeklySummaryStatus(req as AuthRequest, res));
 
   router.get('/admin/teachers', authenticate, authorizeCapability('staff.manage'), (req, res) => admin.getTeachers(req as AuthRequest, res));
   router.post('/admin/teachers', authenticate, authorizeCapability('staff.manage'), validate({ body: vu.createTeacherSchema }), (req, res) => admin.createTeacher(req as AuthRequest, res));
@@ -406,20 +406,26 @@ export function createRouter(io: SocketServer) {
   router.delete('/admin/staff/:id', authenticate, authorizeCapability('staff.manage'), validate({ params: va.idParam, body: va.reasonBody }), (req, res) => staff.deleteStaff(req as AuthRequest, res));
 
   router.get('/admin/subjects', authenticate, authorize('admin', 'teacher'), (req, res) => admin.getSubjects(req as AuthRequest, res));
-  router.post('/admin/subjects', authenticate, authorize('admin'), validate({ body: vp.createSubjectSchema }), (req, res) => admin.createSubject(req as AuthRequest, res));
-  router.put('/admin/subjects/:id', authenticate, authorize('admin'), validate({ params: vp.idParam, body: vp.updateSubjectSchema }), (req, res) => admin.updateSubject(req as AuthRequest, res));
-  router.delete('/admin/subjects/:id', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => admin.deleteSubject(req as AuthRequest, res));
+  router.post('/admin/subjects', authenticate, authorizeCapability('academics.oversee'), validate({ body: vp.createSubjectSchema }), (req, res) => admin.createSubject(req as AuthRequest, res));
+  router.put('/admin/subjects/:id', authenticate, authorizeCapability('academics.oversee'), validate({ params: vp.idParam, body: vp.updateSubjectSchema }), (req, res) => admin.updateSubject(req as AuthRequest, res));
+  router.delete('/admin/subjects/:id', authenticate, authorizeCapability('academics.oversee'), validate({ params: vp.idParam }), (req, res) => admin.deleteSubject(req as AuthRequest, res));
 
   // Curriculum: class ↔ subject ↔ teacher rows
-  router.get('/admin/curriculum', authenticate, authorize('admin'), (req, res) => admin.getCurriculum(req as AuthRequest, res));
-  router.post('/admin/curriculum', authenticate, authorize('admin'), validate({ body: vp.addCurriculumRowSchema }), (req, res) => admin.addCurriculumRow(req as AuthRequest, res));
-  router.delete('/admin/curriculum/:id', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => admin.deleteCurriculumRow(req as AuthRequest, res));
+  router.get('/admin/curriculum', authenticate, authorizeCapability('academics.oversee'), (req, res) => admin.getCurriculum(req as AuthRequest, res));
+  router.post('/admin/curriculum', authenticate, authorizeCapability('academics.oversee'), validate({ body: vp.addCurriculumRowSchema }), (req, res) => admin.addCurriculumRow(req as AuthRequest, res));
+  router.delete('/admin/curriculum/:id', authenticate, authorizeCapability('academics.oversee'), validate({ params: vp.idParam }), (req, res) => admin.deleteCurriculumRow(req as AuthRequest, res));
 
-  router.post('/admin/accounts', authenticate, authorize('admin'), validate({ body: vu.createAccountSchema }), (req, res) => admin.createAccount(req as AuthRequest, res));
-  router.get('/admin/accounts', authenticate, authorize('admin'), (req, res) => admin.getAccounts(req as AuthRequest, res));
-  router.put('/admin/accounts/:userId', authenticate, authorize('admin'), validate({ params: vu.userIdParam, body: vu.updateAccountSchema }), (req, res) => admin.updateAccount(req as AuthRequest, res));
-  router.delete('/admin/accounts/:userId', authenticate, authorize('admin'), validate({ params: vu.userIdParam }), (req, res) => admin.deleteAccount(req as AuthRequest, res));
-  router.get('/admin/accounts/credentials.pdf', authenticate, authorize('admin'), (req, res) => admin.exportCredentialsPdf(req as AuthRequest, res));
+  // Account create/read/update are shared by the Accounts page (IT), the
+  // employee wizard/profile (Operations onboards account-role staff), and
+  // parent management (username edits). Gate each on the union of those
+  // surfaces; the credential-bearing operations below stay accounts.manage.
+  router.post('/admin/accounts', authenticate, authorizeAnyCapability('accounts.manage', 'staff.manage'), validate({ body: vu.createAccountSchema }), (req, res) => admin.createAccount(req as AuthRequest, res));
+  router.get('/admin/accounts', authenticate, authorizeAnyCapability('accounts.manage', 'staff.manage'), (req, res) => admin.getAccounts(req as AuthRequest, res));
+  router.put('/admin/accounts/:userId', authenticate, authorizeAnyCapability('accounts.manage', 'staff.manage', 'students.manage'), validate({ params: vu.userIdParam, body: vu.updateAccountSchema }), (req, res) => admin.updateAccount(req as AuthRequest, res));
+  // Deleting an account = removing a login / terminating an account-role
+  // employee — IT or HR (consistent with termination = hr.manage), not plain Operations.
+  router.delete('/admin/accounts/:userId', authenticate, authorizeAnyCapability('accounts.manage', 'hr.manage'), validate({ params: vu.userIdParam }), (req, res) => admin.deleteAccount(req as AuthRequest, res));
+  router.get('/admin/accounts/credentials.pdf', authenticate, authorizeCapability('accounts.manage'), (req, res) => admin.exportCredentialsPdf(req as AuthRequest, res));
   // Professional (official) employee photo — admin-uploaded, kept on the
   // employee record; separate from the self-set app avatar.
   router.post('/admin/employees/:role/:id/photo', authenticate, authorizeCapability('staff.manage'), upload.single('photo'), validate({ params: vu.employeePhotoParams }), (req, res) => admin.uploadEmployeePhoto(req as AuthRequest, res));
@@ -496,29 +502,29 @@ export function createRouter(io: SocketServer) {
   router.delete('/me/emergency-contacts/:id', authenticate, validate({ params: vu.idParam }), (req, res) => meEmployee.deleteMyContact(req as AuthRequest, res));
   router.get( '/me/acknowledgements', authenticate, (req, res) => meEmployee.listMyAcknowledgements(req as AuthRequest, res));
   router.post('/me/acknowledgements', authenticate, (req, res) => meEmployee.createMyAcknowledgement(req as AuthRequest, res));
-  router.get('/admin/reset-requests', authenticate, authorize('admin'), (req, res) => admin.getResetRequests(req as AuthRequest, res));
-  router.post('/admin/users/:userId/reset-password', authenticate, authorize('admin'), validate({ params: vu.userIdParam, body: vu.resetUserPasswordSchema }), (req, res) => admin.resetUserPassword(req as AuthRequest, res));
-  router.get('/admin/users/inactive/search', authenticate, authorize('admin'), validate({ query: vq.listQuery }), (req, res) => admin.searchInactiveUsers(req as AuthRequest, res));
-  router.post('/admin/users/:userId/reactivate', authenticate, authorize('admin'), validate({ params: vu.userIdParam, body: vu.reactivateUserSchema }), (req, res) => admin.reactivateUser(req as AuthRequest, res));
+  router.get('/admin/reset-requests', authenticate, authorizeCapability('accounts.manage'), (req, res) => admin.getResetRequests(req as AuthRequest, res));
+  router.post('/admin/users/:userId/reset-password', authenticate, authorizeCapability('accounts.manage'), validate({ params: vu.userIdParam, body: vu.resetUserPasswordSchema }), (req, res) => admin.resetUserPassword(req as AuthRequest, res));
+  router.get('/admin/users/inactive/search', authenticate, authorizeCapability('accounts.manage'), validate({ query: vq.listQuery }), (req, res) => admin.searchInactiveUsers(req as AuthRequest, res));
+  router.post('/admin/users/:userId/reactivate', authenticate, authorizeCapability('accounts.manage'), validate({ params: vu.userIdParam, body: vu.reactivateUserSchema }), (req, res) => admin.reactivateUser(req as AuthRequest, res));
 
-  router.get('/admin/appointments/pending-count', authenticate, authorize('admin'), (req, res) => admin.getPendingAppointmentCount(req as AuthRequest, res));
-  router.get('/admin/appointments', authenticate, authorize('admin'), (req, res) => admin.getAppointments(req as AuthRequest, res));
-  router.put('/admin/appointments/:id', authenticate, authorize('admin'), validate({ params: vp.idParam, body: vp.respondToAppointmentSchema }), (req, res) => admin.respondToAppointment(req as AuthRequest, res));
+  router.get('/admin/appointments/pending-count', authenticate, authorizeCapability('students.manage'), (req, res) => admin.getPendingAppointmentCount(req as AuthRequest, res));
+  router.get('/admin/appointments', authenticate, authorizeCapability('students.manage'), (req, res) => admin.getAppointments(req as AuthRequest, res));
+  router.put('/admin/appointments/:id', authenticate, authorizeCapability('students.manage'), validate({ params: vp.idParam, body: vp.respondToAppointmentSchema }), (req, res) => admin.respondToAppointment(req as AuthRequest, res));
 
-  router.post('/admin/notifications', authenticate, authorize('admin'), validate({ body: vp.sendNotificationSchema }), (req, res) => admin.sendNotification(req as AuthRequest, res));
-  router.get('/admin/notifications/unread-count', authenticate, authorize('admin'), (req, res) => parent.getUnreadCount(req as AuthRequest, res));
-  router.patch('/admin/notifications/read-all', authenticate, authorize('admin'), (req, res) => parent.markAllNotificationsRead(req as AuthRequest, res));
-  router.get('/admin/schedule', authenticate, authorize('admin'), (req, res) => admin.getAdminSchedule(req as AuthRequest, res));
-  router.put('/admin/schedule/config', authenticate, authorize('admin'), validate({ body: vp.updateScheduleConfigSchema }), (req, res) => admin.updateScheduleConfig(req as AuthRequest, res));
-  router.put('/admin/schedule/cell', authenticate, authorize('admin'), validate({ body: vp.setScheduleCellSchema }), (req, res) => admin.setScheduleCell(req as AuthRequest, res));
-  router.get('/admin/schedule/template.xlsx', authenticate, authorize('admin'), (req, res) => admin.scheduleTemplate(req as AuthRequest, res));
-  router.post('/admin/schedule/upload', authenticate, authorize('admin'), upload.single('file'), (req, res) => admin.uploadSchedule(req as AuthRequest, res));
+  router.post('/admin/notifications', authenticate, authorizeCapability('announcements.moderate'), validate({ body: vp.sendNotificationSchema }), (req, res) => admin.sendNotification(req as AuthRequest, res));
+  router.get('/admin/notifications/unread-count', authenticate, authorizeCapability('announcements.moderate'), (req, res) => parent.getUnreadCount(req as AuthRequest, res));
+  router.patch('/admin/notifications/read-all', authenticate, authorizeCapability('announcements.moderate'), (req, res) => parent.markAllNotificationsRead(req as AuthRequest, res));
+  router.get('/admin/schedule', authenticate, authorizeCapability('academics.oversee'), (req, res) => admin.getAdminSchedule(req as AuthRequest, res));
+  router.put('/admin/schedule/config', authenticate, authorizeCapability('academics.oversee'), validate({ body: vp.updateScheduleConfigSchema }), (req, res) => admin.updateScheduleConfig(req as AuthRequest, res));
+  router.put('/admin/schedule/cell', authenticate, authorizeCapability('academics.oversee'), validate({ body: vp.setScheduleCellSchema }), (req, res) => admin.setScheduleCell(req as AuthRequest, res));
+  router.get('/admin/schedule/template.xlsx', authenticate, authorizeCapability('academics.oversee'), (req, res) => admin.scheduleTemplate(req as AuthRequest, res));
+  router.post('/admin/schedule/upload', authenticate, authorizeCapability('academics.oversee'), upload.single('file'), (req, res) => admin.uploadSchedule(req as AuthRequest, res));
 
   router.get('/admin/announcements', authenticate, authorize('admin', 'teacher', 'parent', 'supervisor'), validate({ query: vq.listQuery }), (req, res) => admin.getAnnouncements(req as AuthRequest, res));
   router.get('/link-preview', authenticate, (req, res) => admin.getLinkPreview(req as AuthRequest, res));
-  router.post('/admin/announcements', authenticate, authorize('admin'), upload.single('attachment'), validate({ body: vupl.createAnnouncementSchema }), (req, res) => admin.createAnnouncement(req as AuthRequest, res));
-  router.post('/admin/announcements/upload', authenticate, authorize('admin'), upload.single('file'), (req, res) => admin.uploadAnnouncementFile(req as AuthRequest, res));
-  router.delete('/admin/announcements/:id', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => admin.deleteAnnouncement(req as AuthRequest, res));
+  router.post('/admin/announcements', authenticate, authorizeCapability('announcements.moderate'), upload.single('attachment'), validate({ body: vupl.createAnnouncementSchema }), (req, res) => admin.createAnnouncement(req as AuthRequest, res));
+  router.post('/admin/announcements/upload', authenticate, authorizeCapability('announcements.moderate'), upload.single('file'), (req, res) => admin.uploadAnnouncementFile(req as AuthRequest, res));
+  router.delete('/admin/announcements/:id', authenticate, authorizeCapability('announcements.moderate'), validate({ params: vp.idParam }), (req, res) => admin.deleteAnnouncement(req as AuthRequest, res));
 
   // Announcement social (any logged-in role can read/like/comment)
   const announcementRoles = ['admin', 'teacher', 'parent', 'supervisor', 'reception'] as const;
@@ -529,29 +535,29 @@ export function createRouter(io: SocketServer) {
   router.delete('/announcements/comments/:commentId', authenticate, authorize(...announcementRoles), validate({ params: vp.commentIdParam }), (req, res) => admin.deleteAnnouncementComment(req as AuthRequest, res));
   router.post('/announcements/comments/:commentId/like', authenticate, authorize(...announcementRoles), validate({ params: vp.commentIdParam }), (req, res) => admin.toggleAnnouncementCommentLike(req as AuthRequest, res));
 
-  router.get('/admin/settings', authenticate, authorize('admin'), (req, res) => admin.getSettings(req as AuthRequest, res));
-  router.put('/admin/settings', authenticate, authorize('admin'), validate({ body: vp.updateSettingsSchema }), (req, res) => admin.updateSettings(req as AuthRequest, res));
-  router.patch('/admin/school-logo', authenticate, authorize('admin'), upload.single('logo'), (req, res) => admin.uploadSchoolLogo(req as AuthRequest, res));
-  router.post('/admin/year-transition', authenticate, authorize('admin'), validate({ body: vp.yearTransitionSchema }), (req, res) => admin.yearTransition(req as AuthRequest, res));
+  router.get('/admin/settings', authenticate, authorizeCapability('settings.manage'), (req, res) => admin.getSettings(req as AuthRequest, res));
+  router.put('/admin/settings', authenticate, authorizeCapability('settings.manage'), validate({ body: vp.updateSettingsSchema }), (req, res) => admin.updateSettings(req as AuthRequest, res));
+  router.patch('/admin/school-logo', authenticate, authorizeCapability('settings.manage'), upload.single('logo'), (req, res) => admin.uploadSchoolLogo(req as AuthRequest, res));
+  router.post('/admin/year-transition', authenticate, authorizeCapability('settings.manage'), validate({ body: vp.yearTransitionSchema }), (req, res) => admin.yearTransition(req as AuthRequest, res));
   router.get('/teacher/settings', authenticate, authorize('teacher'), (req, res) => admin.getSettings(req as AuthRequest, res));
 
-  router.get('/admin/mark-types', authenticate, authorize('admin'), (req, res) => admin.getMarkTypes(req as AuthRequest, res));
-  router.post('/admin/mark-types', authenticate, authorize('admin'), validate({ body: vp.createMarkTypeSchema }), (req, res) => admin.createMarkType(req as AuthRequest, res));
-  router.put('/admin/mark-types/:id', authenticate, authorize('admin'), validate({ params: vp.idParam, body: vp.updateMarkTypeSchema }), (req, res) => admin.updateMarkType(req as AuthRequest, res));
-  router.delete('/admin/mark-types/:id', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => admin.deleteMarkType(req as AuthRequest, res));
+  router.get('/admin/mark-types', authenticate, authorizeCapability('academics.oversee'), (req, res) => admin.getMarkTypes(req as AuthRequest, res));
+  router.post('/admin/mark-types', authenticate, authorizeCapability('academics.oversee'), validate({ body: vp.createMarkTypeSchema }), (req, res) => admin.createMarkType(req as AuthRequest, res));
+  router.put('/admin/mark-types/:id', authenticate, authorizeCapability('academics.oversee'), validate({ params: vp.idParam, body: vp.updateMarkTypeSchema }), (req, res) => admin.updateMarkType(req as AuthRequest, res));
+  router.delete('/admin/mark-types/:id', authenticate, authorizeCapability('academics.oversee'), validate({ params: vp.idParam }), (req, res) => admin.deleteMarkType(req as AuthRequest, res));
   router.get('/teacher/mark-types', authenticate, authorize('teacher'), (req, res) => admin.getMarkTypes(req as AuthRequest, res));
 
   // Grading config (GPA). Read is shared by every role; write is admin-only.
   router.get('/grade-config', authenticate, (req, res) => admin.getGradeConfig(req as AuthRequest, res));
-  router.put('/admin/grading-config', authenticate, authorize('admin'), validate({ body: vp.updateGradingConfigSchema }), (req, res) => admin.updateGradingConfig(req as AuthRequest, res));
+  router.put('/admin/grading-config', authenticate, authorizeCapability('academics.oversee'), validate({ body: vp.updateGradingConfigSchema }), (req, res) => admin.updateGradingConfig(req as AuthRequest, res));
 
-  router.get('/admin/terms', authenticate, authorize('admin'), (req, res) => admin.getTerms(req as AuthRequest, res));
-  router.post('/admin/terms', authenticate, authorize('admin'), validate({ body: vp.createTermSchema }), (req, res) => admin.createTerm(req as AuthRequest, res));
-  router.delete('/admin/terms/:id', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => admin.deleteTerm(req as AuthRequest, res));
+  router.get('/admin/terms', authenticate, authorizeCapability('academics.oversee'), (req, res) => admin.getTerms(req as AuthRequest, res));
+  router.post('/admin/terms', authenticate, authorizeCapability('academics.oversee'), validate({ body: vp.createTermSchema }), (req, res) => admin.createTerm(req as AuthRequest, res));
+  router.delete('/admin/terms/:id', authenticate, authorizeCapability('academics.oversee'), validate({ params: vp.idParam }), (req, res) => admin.deleteTerm(req as AuthRequest, res));
   router.get('/teacher/terms', authenticate, authorize('teacher'), (req, res) => admin.getTerms(req as AuthRequest, res));
 
   // Audit logs — admin only (financial + student-record change history)
-  router.get('/admin/audit-logs', authenticate, authorize('admin'), validate({ query: vq.listQuery }), (req, res) => admin.getAuditLogs(req as AuthRequest, res));
+  router.get('/admin/audit-logs', authenticate, authorizeCapability('audit.read'), validate({ query: vq.listQuery }), (req, res) => admin.getAuditLogs(req as AuthRequest, res));
 
   // ---- TEACHER ----
   router.get('/teacher/profile-data', authenticate, authorize('teacher'), (req, res) => teacher.getProfileData(req as AuthRequest, res));
@@ -834,8 +840,8 @@ export function createRouter(io: SocketServer) {
   router.post('/academic/comments/:commentId/like', authenticate, authorize(...academicRoles), validate({ params: vp.commentIdParam }), (req, res) => academic.toggleCommentLike(req as AuthRequest, res));
 
   router.get('/academic/ebooks', authenticate, authorize(...academicRoles), (req, res) => academic.getEbooks(req as AuthRequest, res));
-  router.post('/academic/ebooks', authenticate, authorize('admin'), upload.single('file'), validate({ body: vupl.uploadEbookSchema }), (req, res) => academic.uploadEbook(req as AuthRequest, res));
-  router.delete('/academic/ebooks/:id', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => academic.deleteEbook(req as AuthRequest, res));
+  router.post('/academic/ebooks', authenticate, authorizeCapability('academics.oversee'), upload.single('file'), validate({ body: vupl.uploadEbookSchema }), (req, res) => academic.uploadEbook(req as AuthRequest, res));
+  router.delete('/academic/ebooks/:id', authenticate, authorizeCapability('academics.oversee'), validate({ params: vp.idParam }), (req, res) => academic.deleteEbook(req as AuthRequest, res));
   router.get('/academic/ebook-progress', authenticate, authorize(...academicRoles), (req, res) => academic.getEbookProgress(req as AuthRequest, res));
   router.post('/academic/ebook-progress', authenticate, authorize(...academicRoles), validate({ body: vp.upsertEbookProgressSchema }), (req, res) => academic.upsertEbookProgress(req as AuthRequest, res));
 

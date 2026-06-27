@@ -293,6 +293,19 @@ const escapeHtml = (s: string): string =>
   );
 
 
+// Build the admin capability clearance block for a user row. Returns null for
+// non-admins (parents/teachers/etc. have no capabilities). The frontend uses
+// this to hide nav items the admin can't act on; the server still re-enforces
+// every route, so this is display-only.
+function adminClearance(u: { role: string; is_owner?: boolean; admin_capabilities?: string[] | null }):
+  { isOwner: boolean; capabilities: string[] } | null {
+  if (u.role !== 'admin') return null;
+  return {
+    isOwner: u.is_owner === true,
+    capabilities: Array.isArray(u.admin_capabilities) ? u.admin_capabilities : [],
+  };
+}
+
 export async function getSchools(_req: Request, res: Response): Promise<void> {
   const { data, error } = await supabase
     .from('schools')
@@ -455,6 +468,7 @@ export async function login(req: Request, res: Response): Promise<void> {
       mustChangePassword: !!user.must_change_password,
       phoneE164: (user as { phone_e164?: string | null }).phone_e164 || null,
       phoneVerifiedAt: (user as { phone_verified_at?: string | null }).phone_verified_at || null,
+      clearance: adminClearance(user as { role: string; is_owner?: boolean; admin_capabilities?: string[] }),
     },
     school: {
       id: school.id,
@@ -523,7 +537,7 @@ export async function verifyMfaLogin(req: Request, res: Response): Promise<void>
   // tenant-check-allow: payload.userId comes from the just-verified MFA ticket, minted in login() only after a school-scoped password match
   const { data: user } = await supabase
     .from('users')
-    .select('id, username, role, first_name, last_name, profile_picture, email, is_active, must_change_password, phone_e164, phone_verified_at')
+    .select('id, username, role, first_name, last_name, profile_picture, email, is_active, must_change_password, phone_e164, phone_verified_at, is_owner, admin_capabilities')
     .eq('id', payload.userId)
     .single();
   if (!user || !(user as { is_active: boolean }).is_active) {
@@ -560,7 +574,7 @@ export async function verifyMfaLogin(req: Request, res: Response): Promise<void>
   const signInIp = req.ip || null;
   const newSignIn = await isNewSignIn(payload.userId, signInUa, signInIp);
 
-  const u = user as { id: string; username: string; role: string; first_name: string; last_name: string; profile_picture: string | null; email: string | null; must_change_password?: boolean };
+  const u = user as { id: string; username: string; role: string; first_name: string; last_name: string; profile_picture: string | null; email: string | null; must_change_password?: boolean; is_owner?: boolean; admin_capabilities?: string[] };
   const s = school as { id: string; name: string; slug: string; logo_url: string | null; primary_color: string | null; secondary_color: string | null; features: Record<string, unknown> | null; features_version: number | null; timezone: string | null };
   const featuresVersion = s.features_version ?? 1;
   const { token, refreshToken } = await issueTokenPair(
@@ -593,6 +607,7 @@ export async function verifyMfaLogin(req: Request, res: Response): Promise<void>
       mustChangePassword: !!u.must_change_password,
       phoneE164: (u as { phone_e164?: string | null }).phone_e164 || null,
       phoneVerifiedAt: (u as { phone_verified_at?: string | null }).phone_verified_at || null,
+      clearance: adminClearance(u),
     },
     school: {
       id: s.id,
@@ -794,7 +809,7 @@ export async function getMe(req: AuthRequest, res: Response): Promise<void> {
   }
   const { data: user, error } = await supabase
     .from('users')
-    .select('id, username, role, first_name, last_name, profile_picture, email, must_change_password, phone_e164, phone_verified_at')
+    .select('id, username, role, first_name, last_name, profile_picture, email, must_change_password, phone_e164, phone_verified_at, is_owner, admin_capabilities')
     .eq('id', userId)
     .single();
   if (error || !user) {
@@ -812,6 +827,8 @@ export async function getMe(req: AuthRequest, res: Response): Promise<void> {
     must_change_password?: boolean;
     phone_e164?: string | null;
     phone_verified_at?: string | null;
+    is_owner?: boolean;
+    admin_capabilities?: string[];
   };
   res.json({
     id: u.id,
@@ -824,6 +841,7 @@ export async function getMe(req: AuthRequest, res: Response): Promise<void> {
     mustChangePassword: !!u.must_change_password,
     phoneE164: u.phone_e164 || null,
     phoneVerifiedAt: u.phone_verified_at || null,
+    clearance: adminClearance(u),
   });
 }
 

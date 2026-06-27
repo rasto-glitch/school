@@ -29,6 +29,9 @@ type LeafNode = {
   labelKey: string;
   labelFallback: string;
   feature?: string;
+  // Admin capability gate (Phase C). Shown when the admin is an Owner or holds
+  // ANY of these capabilities. Omitted ⇒ visible to every admin.
+  capabilities?: string[];
   // When the URL has none of the param keys set, the leaf flagged isDefault wins.
   isDefault?: boolean;
   end?: boolean;
@@ -40,6 +43,7 @@ type GroupNode = {
   labelKey: string;
   labelFallback: string;
   feature?: string;
+  capabilities?: string[];
   children: AdminNavNode[];
 };
 type AdminNavNode = LeafNode | GroupNode;
@@ -60,7 +64,7 @@ const adminNav: AdminNavNode[] = [
     labelKey: 'nav.students', labelFallback: 'Students',
     children: [
       { kind: 'leaf', path: '/admin/students', params: { tab: 'active' }, isDefault: true, icon: Users, labelKey: 'nav.students_active', labelFallback: 'Active Students' },
-      { kind: 'leaf', path: '/admin/students', params: { tab: 'new' }, icon: UserPlus, labelKey: 'nav.students_new', labelFallback: 'New Students' },
+      { kind: 'leaf', path: '/admin/students', params: { tab: 'new' }, icon: UserPlus, labelKey: 'nav.students_new', labelFallback: 'New Students', capabilities: ['students.manage'] },
       {
         kind: 'group', key: 'students.archived', icon: Archive,
         labelKey: 'nav.archived', labelFallback: 'Archived',
@@ -75,43 +79,50 @@ const adminNav: AdminNavNode[] = [
   {
     kind: 'group', key: 'classes', icon: BookOpen,
     labelKey: 'nav.classes', labelFallback: 'Classes',
+    capabilities: ['students.manage', 'academics.oversee'],
     children: [
       { kind: 'leaf', path: '/admin/classes', params: { tab: 'classes' }, isDefault: true, icon: BookOpen, labelKey: 'nav.classes', labelFallback: 'Classes' },
       { kind: 'leaf', path: '/admin/classes', params: { tab: 'subjects' }, icon: BookOpenCheck, labelKey: 'nav.subjects', labelFallback: 'Subjects' },
     ],
   },
-  { kind: 'leaf', path: '/admin/schedule', icon: Calendar, labelKey: 'nav.schedule', labelFallback: 'Schedule' },
-  { kind: 'leaf', path: '/admin/grade-review', icon: Star, labelKey: 'nav.grade_review', labelFallback: 'Grade Review', feature: 'grades' },
-  { kind: 'leaf', path: '/admin/announcements', icon: Megaphone, labelKey: 'nav.announcements', labelFallback: 'Announcements', feature: 'announcements' },
+  { kind: 'leaf', path: '/admin/schedule', icon: Calendar, labelKey: 'nav.schedule', labelFallback: 'Schedule', capabilities: ['academics.oversee'] },
+  { kind: 'leaf', path: '/admin/grade-review', icon: Star, labelKey: 'nav.grade_review', labelFallback: 'Grade Review', feature: 'grades', capabilities: ['academics.oversee'] },
+  { kind: 'leaf', path: '/admin/announcements', icon: Megaphone, labelKey: 'nav.announcements', labelFallback: 'Announcements', feature: 'announcements', capabilities: ['announcements.moderate'] },
   {
     kind: 'group', key: 'employees', icon: Users,
     labelKey: 'nav.employees', labelFallback: 'Employees',
+    capabilities: ['staff.manage'],
     children: [
       { kind: 'group', key: 'employees.add', icon: UserPlus, labelKey: 'nav.employees_add', labelFallback: 'Add New Employee', children: ROLE_LEAVES('add') },
       { kind: 'group', key: 'employees.active', icon: Users, labelKey: 'nav.employees_active', labelFallback: 'Active Employees', children: ROLE_LEAVES('active') },
       { kind: 'group', key: 'employees.archived', icon: Archive, labelKey: 'nav.employees_archived', labelFallback: 'Archived', children: ROLE_LEAVES('archived') },
     ],
   },
-  { kind: 'leaf', path: '/admin/drivers', icon: Bus, labelKey: 'nav.drivers', labelFallback: 'Drivers', feature: 'bus_tracking' },
+  { kind: 'leaf', path: '/admin/drivers', icon: Bus, labelKey: 'nav.drivers', labelFallback: 'Drivers', feature: 'bus_tracking', capabilities: ['staff.manage'] },
   {
     kind: 'group', key: 'hr', icon: ClipboardCheck,
     labelKey: 'nav.hr', labelFallback: 'HR',
+    capabilities: ['hr.manage'],
     children: [
       { kind: 'leaf', path: '/admin/school-policies', icon: ClipboardCheck, labelKey: 'nav.policies', labelFallback: 'Policies' },
       { kind: 'leaf', path: '/admin/clearance', icon: ShieldCheck, labelKey: 'nav.clearance', labelFallback: 'Admin Clearance' },
     ],
   },
-  { kind: 'leaf', path: '/admin/accounts', icon: UserCog, labelKey: 'nav.accounts', labelFallback: 'Accounts' },
-  { kind: 'leaf', path: '/admin/audit-log', icon: History, labelKey: 'nav.audit_log', labelFallback: 'Audit Log' },
-  { kind: 'leaf', path: '/admin/notifications', icon: Send, labelKey: 'nav.send_notifications', labelFallback: 'Send Notifications' },
-  { kind: 'leaf', path: '/admin/settings', icon: Settings, labelKey: 'nav.school_settings', labelFallback: 'School Settings' },
+  { kind: 'leaf', path: '/admin/accounts', icon: UserCog, labelKey: 'nav.accounts', labelFallback: 'Accounts', capabilities: ['accounts.manage'] },
+  { kind: 'leaf', path: '/admin/audit-log', icon: History, labelKey: 'nav.audit_log', labelFallback: 'Audit Log', capabilities: ['audit.read'] },
+  { kind: 'leaf', path: '/admin/notifications', icon: Send, labelKey: 'nav.send_notifications', labelFallback: 'Send Notifications', capabilities: ['announcements.moderate'] },
+  { kind: 'leaf', path: '/admin/settings', icon: Settings, labelKey: 'nav.school_settings', labelFallback: 'School Settings', capabilities: ['settings.manage'] },
 ];
 
-function filterAdminTree(node: AdminNavNode, isEnabled: (f?: string) => boolean): AdminNavNode | null {
-  if (node.kind === 'leaf') return isEnabled(node.feature) ? node : null;
-  if (!isEnabled(node.feature)) return null;
+function filterAdminTree(
+  node: AdminNavNode,
+  isEnabled: (f?: string) => boolean,
+  hasCap: (caps?: string[]) => boolean,
+): AdminNavNode | null {
+  if (node.kind === 'leaf') return isEnabled(node.feature) && hasCap(node.capabilities) ? node : null;
+  if (!isEnabled(node.feature) || !hasCap(node.capabilities)) return null;
   const kids = node.children
-    .map(c => filterAdminTree(c, isEnabled))
+    .map(c => filterAdminTree(c, isEnabled, hasCap))
     .filter((n): n is AdminNavNode => !!n);
   return kids.length ? { ...node, children: kids } : null;
 }
@@ -406,10 +417,23 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
   const isAdmin = user?.role === 'admin';
   const items = user && !isAdmin ? (navItems[user.role] ?? []).filter(item => isFeatureEnabled(item.feature)) : [];
 
-  // Admin: filter the tree by features, then compute which group keys are on the active leaf's path.
+  // Admin capability gate (Phase C). An Owner sees everything; otherwise a node
+  // is shown when the admin holds ANY of its capabilities. A node with no
+  // capabilities is universal. If clearance is missing (e.g. a session that
+  // predates the Phase C login change), fall back to showing everything —
+  // the server still enforces every route, so this only affects nav chrome.
+  const clearance = user?.clearance;
+  const hasCap = (caps?: string[]): boolean => {
+    if (!caps || caps.length === 0) return true;
+    if (!clearance) return true;
+    if (clearance.isOwner) return true;
+    return caps.some(c => clearance.capabilities.includes(c));
+  };
+
+  // Admin: filter the tree by features + capabilities, then compute which group keys are on the active leaf's path.
   const adminItems: AdminNavNode[] = isAdmin
     ? adminNav
-        .map(n => filterAdminTree(n, isFeatureEnabled))
+        .map(n => filterAdminTree(n, isFeatureEnabled, hasCap))
         .filter((n): n is AdminNavNode => !!n)
     : [];
   const adminSearchParams = new URLSearchParams(location.search);

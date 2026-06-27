@@ -185,9 +185,7 @@ export function clearanceHas(c: Clearance, cap: Capability): boolean {
 }
 
 // Route guard: require the admin role AND a specific capability. Attaches
-// req.clearance for the controller. Phase A only mounts this on the new
-// clearance endpoints; the rest of the admin surface stays on
-// authorize('admin') until Phase B/C migrate route groups onto capabilities.
+// req.clearance for the controller. An Owner passes every capability.
 export function authorizeCapability(cap: Capability) {
   return async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     if (!req.user || req.user.role !== 'admin') {
@@ -196,6 +194,26 @@ export function authorizeCapability(cap: Capability) {
     }
     const clearance = await loadClearance(req.user.userId);
     if (!clearanceHas(clearance, cap)) {
+      res.status(403).json({ error: 'Forbidden: insufficient permissions' });
+      return;
+    }
+    req.clearance = clearance;
+    next();
+  };
+}
+
+// Like authorizeCapability but passes if the admin holds ANY of the listed
+// capabilities (or is an Owner). Used for reads that legitimately serve more
+// than one role — e.g. the account roster is read both operationally
+// (staff.manage, employee list) and by IT (accounts.manage, Accounts page).
+export function authorizeAnyCapability(...caps: Capability[]) {
+  return async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    if (!req.user || req.user.role !== 'admin') {
+      res.status(403).json({ error: 'Forbidden: insufficient permissions' });
+      return;
+    }
+    const clearance = await loadClearance(req.user.userId);
+    if (!(clearance.isOwner || caps.some(c => clearance.capabilities.includes(c)))) {
       res.status(403).json({ error: 'Forbidden: insufficient permissions' });
       return;
     }

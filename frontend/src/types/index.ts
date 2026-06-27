@@ -28,6 +28,15 @@ export interface AuthUser {
   // phoneVerifiedAt is set after the OTP confirm endpoint succeeds.
   phoneE164?: string | null;
   phoneVerifiedAt?: string | null;
+  // Admin capability clearance (Phase A–C). null for non-admins. Owners hold
+  // every capability implicitly. Display-only — the server re-enforces every
+  // route; this just hides nav items the admin can't act on.
+  clearance?: AdminClearance | null;
+}
+
+export interface AdminClearance {
+  isOwner: boolean;
+  capabilities: string[];
 }
 
 export interface Student {
