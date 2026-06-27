@@ -1,22 +1,24 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import {
-  Search, GraduationCap, Users, Bus, ArrowRight, ArrowLeftRight,
-  Star, CalendarClock, KeyRound, FileWarning, Wallet, History, AlertCircle,
+  GraduationCap, Users, Bus, Star, CalendarClock, KeyRound,
+  FileWarning, ArrowLeftRight, Wallet, TrendingUp,
 } from 'lucide-react';
 import { adminApi } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
-import Input from '../../components/common/Input';
 
-// Admin dashboard "oversight cockpit" (Phase C2). Every region is gated on the
-// viewer's capability — an Owner sees everything; a scoped admin sees only the
-// widgets for areas they manage, and empty regions collapse. The server still
-// enforces every endpoint; we simply don't fetch what the admin can't read.
+// Admin dashboard "oversight cockpit" (Phase C2, refined C3). Every region is
+// gated on the viewer's capability and curated per clearance: an Owner sees
+// the finance KPIs + fee-collection + audit; an Operations admin sees the
+// student/staff KPIs and only the attention items they can act on; finance
+// regions collapse entirely without finance.read. Data is fetched only when
+// the capability is held, so a scoped admin never hits a 403.
 
 interface FinanceOverview {
+  defaultCurrency: string;
   monthByCurrency: { currency: string; income: number; expense: number; net: number }[];
   arByCurrency: { currency: string; balance: number }[];
   arStudentCount: number;
@@ -30,38 +32,55 @@ interface AuditLog {
   createdAt?: string;
 }
 
-const fmt = (n: number, ccy: string) =>
-  `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(n)} ${ccy}`;
+const SYMBOL: Record<string, string> = { USD: '$', EUR: '€', GBP: '£' };
+const money = (n: number, ccy: string) => {
+  const num = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(Math.round(n));
+  return SYMBOL[ccy] ? `${SYMBOL[ccy]}${num}` : `${num} ${ccy}`;
+};
+
+// Compact relative time: "5m" / "3h" / "2d".
+function ago(iso?: string): string {
+  if (!iso) return '';
+  const ms = Date.now() - new Date(iso).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return '';
+  const m = Math.floor(ms / 60000);
+  if (m < 60) return `${Math.max(1, m)}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h`;
+  return `${Math.floor(h / 24)}d`;
+}
 
 export default function AdminDashboard() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { user } = useAuthStore();
   const navigate = useNavigate();
-  const [search, setSearch] = useState('');
 
   // Owner sees all; missing clearance (legacy session) also falls back to all
   // since the server re-enforces every route anyway.
   const clearance = user?.clearance;
   const has = (cap: string) => !clearance || clearance.isOwner || clearance.capabilities.includes(cap);
 
-  const [kpis, setKpis] = useState({ students: 0, staff: 0, drivers: 0 });
+  const [students, setStudents] = useState({ total: 0, newThisMonth: 0 });
+  const [staff, setStaff] = useState({ teachers: 0, drivers: 0 });
   const [attn, setAttn] = useState({ grades: 0, appointments: 0, resets: 0, expiring: 0, transfers: 0 });
   const [finance, setFinance] = useState<FinanceOverview | null>(null);
   const [audit, setAudit] = useState<AuditLog[]>([]);
 
   useEffect(() => {
-    // Fetch only what the viewer is allowed to read; swallow per-widget errors
-    // so one failure never blanks the whole cockpit.
     const run = async () => {
       const safe = async <T,>(p: Promise<T>): Promise<T | null> => p.catch(() => null);
+      const firstOfMonth = (() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1).getTime(); })();
 
       if (has('enrollment.read')) {
         const s = await safe(adminApi.getStudents());
-        setKpis(k => ({ ...k, students: s?.data?.total || s?.data?.students?.length || 0 }));
+        const rows: { createdAt?: string }[] = s?.data?.students ?? [];
+        const total = s?.data?.total ?? rows.length;
+        const newThisMonth = rows.filter(r => r.createdAt && new Date(r.createdAt).getTime() >= firstOfMonth).length;
+        setStudents({ total, newThisMonth });
       }
       if (has('staff.manage')) {
         const [tch, drv] = await Promise.all([safe(adminApi.getTeachers('list')), safe(adminApi.getDrivers())]);
-        setKpis(k => ({ ...k, staff: tch?.data?.length || 0, drivers: drv?.data?.length || 0 }));
+        setStaff({ teachers: tch?.data?.length || 0, drivers: drv?.data?.length || 0 });
       }
       if (has('academics.oversee')) {
         const g = await safe(adminApi.getGradeReviewOverview());
@@ -89,7 +108,7 @@ export default function AdminDashboard() {
         if (f?.data) setFinance(f.data as FinanceOverview);
       }
       if (has('audit.read')) {
-        const a = await safe(adminApi.getAuditLogs({ limit: 6 }));
+        const a = await safe(adminApi.getAuditLogs({ limit: 5 }));
         setAudit((a?.data?.logs ?? []) as AuditLog[]);
       }
     };
@@ -97,182 +116,180 @@ export default function AdminDashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── KPI strip ──
-  const kpiCards = [
-    has('enrollment.read') && { to: '/admin/students', icon: GraduationCap, label: t('admin.students'), count: kpis.students, light: 'bg-blue-50 text-blue-600' },
-    has('staff.manage') && { to: '/admin/employees', icon: Users, label: t('admin.teachers'), count: kpis.staff, light: 'bg-green-50 text-green-600' },
-    has('staff.manage') && { to: '/admin/drivers', icon: Bus, label: t('admin.drivers'), count: kpis.drivers, light: 'bg-amber-50 text-amber-600' },
-  ].filter(Boolean) as { to: string; icon: React.ElementType; label: string; count: number; light: string }[];
+  // ── Finance figures (default currency) ──
+  const ccy = finance?.defaultCurrency ?? 'USD';
+  const collected = finance?.monthByCurrency.find(m => m.currency === ccy)?.income ?? finance?.monthByCurrency[0]?.income ?? 0;
+  const outstanding = finance?.arByCurrency.find(a => a.currency === ccy)?.balance ?? finance?.arByCurrency[0]?.balance ?? 0;
+  const pctCollected = collected + outstanding > 0 ? Math.round((collected / (collected + outstanding)) * 100) : 0;
+  const monthLabel = new Date().toLocaleDateString(i18n.language, { month: 'short' });
+  const showFinance = has('finance.read') && finance !== null;
 
-  // ── Needs your attention ──
-  const attnRows = [
-    has('academics.oversee') && attn.grades > 0 && { to: '/admin/grade-review', icon: Star, label: t('admin.cockpit.pending_grades', 'Grades awaiting release'), count: attn.grades },
-    has('students.manage') && attn.appointments > 0 && { to: '/admin/appointments', icon: CalendarClock, label: t('admin.cockpit.pending_appointments', 'Appointment requests'), count: attn.appointments },
-    has('accounts.manage') && attn.resets > 0 && { to: '/admin/accounts', icon: KeyRound, label: t('admin.cockpit.reset_requests', 'Password reset requests'), count: attn.resets },
-    has('hr.read') && attn.expiring > 0 && { to: '/admin/employees', icon: FileWarning, label: t('admin.cockpit.expiring_docs', 'Documents expiring soon'), count: attn.expiring },
-    has('transfers.manage') && attn.transfers > 0 && { to: '/admin/transfers', icon: ArrowLeftRight, label: t('admin.cockpit.incoming_transfers', 'Incoming transfers'), count: attn.transfers },
-  ].filter(Boolean) as { to: string; icon: React.ElementType; label: string; count: number }[];
+  // ── KPI strip (curated per clearance) ──
+  type Kpi = { key: string; label: string; value: string; sub: string; subTone: string; icon: React.ElementType; tint: string; to?: string };
+  const kpis: Kpi[] = [];
+  if (has('enrollment.read')) kpis.push({
+    key: 'students', label: t('admin.students'), value: String(students.total),
+    sub: students.newThisMonth > 0 ? t('admin.cockpit.new_this_month', { count: students.newThisMonth, defaultValue: '↑ +{{count}} this month' }) : t('admin.cockpit.enrolled', 'enrolled'),
+    subTone: students.newThisMonth > 0 ? 'text-green-600' : 'text-gray-400',
+    icon: GraduationCap, tint: 'bg-blue-50 text-blue-600', to: '/admin/students',
+  });
+  if (has('staff.manage')) kpis.push({
+    key: 'teachers', label: t('admin.teachers'), value: String(staff.teachers),
+    sub: t('admin.cockpit.drivers_count', { count: staff.drivers, defaultValue: '{{count}} drivers' }),
+    subTone: 'text-gray-400', icon: Users, tint: 'bg-green-50 text-green-600', to: '/admin/employees',
+  });
+  if (showFinance) {
+    kpis.push({
+      key: 'collected', label: `${t('admin.cockpit.collected', 'Collected')} · ${monthLabel}`, value: money(collected, ccy),
+      sub: t('admin.cockpit.pct_collected', { pct: pctCollected, defaultValue: '{{pct}}% collected' }),
+      subTone: 'text-green-600', icon: TrendingUp, tint: 'bg-emerald-50 text-emerald-600',
+    });
+    kpis.push({
+      key: 'outstanding', label: t('admin.cockpit.outstanding', 'Outstanding'), value: money(outstanding, ccy),
+      sub: finance!.arStudentCount > 0 ? t('admin.cockpit.n_overdue', { count: finance!.arStudentCount, defaultValue: '{{count}} overdue' }) : t('admin.cockpit.all_settled', 'all settled'),
+      subTone: finance!.arStudentCount > 0 ? 'text-amber-600' : 'text-gray-400', icon: Wallet, tint: 'bg-amber-50 text-amber-600',
+    });
+  } else if (has('staff.manage')) {
+    kpis.push({
+      key: 'drivers', label: t('admin.drivers'), value: String(staff.drivers),
+      sub: t('admin.cockpit.transport', 'transport'), subTone: 'text-gray-400',
+      icon: Bus, tint: 'bg-amber-50 text-amber-600', to: '/admin/drivers',
+    });
+  }
 
-  // ── Quick links (capability-filtered) ──
-  const quickLinks = [
-    has('students.manage') && { to: '/admin/students', label: t('admin.manage_students'), desc: t('admin.manage_students_desc') },
-    has('staff.manage') && { to: '/admin/employees', label: t('admin.manage_employees'), desc: t('admin.manage_employees_desc') },
-    has('staff.manage') && { to: '/admin/drivers', label: t('admin.manage_drivers'), desc: t('admin.manage_drivers_desc') },
-    has('accounts.manage') && { to: '/admin/accounts', label: t('admin.create_account'), desc: t('admin.create_account_desc') },
-    has('students.manage') && { to: '/admin/appointments', label: t('nav.appointments'), desc: t('admin.appointments_desc') },
-    has('academics.oversee') && { to: '/admin/classes', label: t('admin.classes'), desc: t('admin.classes_desc') },
-    has('announcements.moderate') && { to: '/admin/announcements', label: t('nav.announcements'), desc: t('admin.announcements_desc') },
-  ].filter(Boolean) as { to: string; label: string; desc: string }[];
+  // ── Needs your attention (real signals, capability-gated) ──
+  type Item = { key: string; title: string; sub: string; action: string; to: string; tint: string };
+  const items: Item[] = [];
+  if (has('academics.oversee') && attn.grades > 0) items.push({
+    key: 'grades', title: t('admin.cockpit.grades_title', { count: attn.grades, defaultValue: '{{count}} grades awaiting release' }),
+    sub: t('admin.cockpit.grades_sub', 'Term reports pending review'), action: t('admin.cockpit.act_review', 'Review'),
+    to: '/admin/grade-review', tint: 'bg-amber-100',
+  });
+  if (has('students.manage') && attn.appointments > 0) items.push({
+    key: 'appointments', title: t('admin.cockpit.appts_title', { count: attn.appointments, defaultValue: '{{count}} appointment requests' }),
+    sub: t('admin.cockpit.appts_sub', 'Parents awaiting a reply'), action: t('admin.cockpit.act_open', 'Open'),
+    to: '/admin/appointments', tint: 'bg-blue-100',
+  });
+  if (has('accounts.manage') && attn.resets > 0) items.push({
+    key: 'resets', title: t('admin.cockpit.resets_title', { count: attn.resets, defaultValue: '{{count}} account requests pending' }),
+    sub: t('admin.cockpit.resets_sub', 'Password reset queue'), action: t('admin.cockpit.act_review', 'Review'),
+    to: '/admin/accounts', tint: 'bg-violet-100',
+  });
+  if (has('hr.read') && attn.expiring > 0) items.push({
+    key: 'expiring', title: t('admin.cockpit.expiring_title', { count: attn.expiring, defaultValue: '{{count}} documents expiring soon' }),
+    sub: t('admin.cockpit.expiring_sub', 'Within the next 30 days'), action: t('admin.cockpit.act_view', 'View'),
+    to: '/admin/employees', tint: 'bg-rose-100',
+  });
+  if (has('transfers.manage') && attn.transfers > 0) items.push({
+    key: 'transfers', title: t('admin.cockpit.transfers_title', { count: attn.transfers, defaultValue: '{{count}} incoming transfers' }),
+    sub: t('admin.cockpit.transfers_sub', 'Awaiting your review'), action: t('admin.cockpit.act_review', 'Review'),
+    to: '/admin/transfers', tint: 'bg-blue-100',
+  });
 
-  const showFinance = has('finance.read') && finance && (finance.monthByCurrency.length > 0 || finance.arByCurrency.length > 0 || finance.arStudentCount > 0);
+  const dateLabel = new Date().toLocaleDateString(i18n.language, { weekday: 'short', day: 'numeric', month: 'short' });
+  const hasRightRail = showFinance || (has('audit.read') && audit.length > 0);
 
   return (
-    <PageLayout title={t('admin.dashboard_title')} subtitle={t('admin.welcome', { name: user?.firstName })}>
-      <div className="space-y-6">
-        {/* Search — press Enter to search students */}
-        {has('enrollment.read') && (
-          <form
-            className="max-w-md flex gap-2"
-            onSubmit={e => {
-              e.preventDefault();
-              if (search.trim()) navigate(`/admin/list/students?search=${encodeURIComponent(search.trim())}`);
-            }}
-          >
-            <div className="flex-1">
-              <Input
-                placeholder={t('admin.search_students_ph')}
-                icon={<Search className="w-4 h-4" />}
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-              />
-            </div>
-            {search.trim() && (
-              <button
-                type="submit"
-                className="flex items-center gap-1 px-4 py-2 bg-primary-600 text-white text-sm font-semibold rounded-xl hover:bg-primary-700 transition-colors whitespace-nowrap"
-              >
-                {t('common.search')} <ArrowRight className="w-4 h-4" />
-              </button>
-            )}
-          </form>
-        )}
-
+    <PageLayout title={t('admin.dashboard_title')} subtitle={`${t('admin.welcome', { name: user?.firstName })} · ${dateLabel}`}>
+      <div className="space-y-5">
         {/* KPI strip */}
-        {kpiCards.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {kpiCards.map(({ to, icon: Icon, label, count, light }) => (
-              <Link key={label} to={to}>
-                <Card hover>
-                  <div className="flex items-center gap-3">
-                    <div className={`p-3 rounded-xl ${light}`}><Icon className="w-6 h-6" /></div>
-                    <div>
-                      <p className="text-2xl font-bold text-gray-900">{count}</p>
-                      <p className="text-sm text-gray-500">{label}</p>
+        {kpis.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {kpis.map(k => {
+              const Inner = (
+                <Card hover={!!k.to} className="h-full">
+                  <div className="flex items-start justify-between">
+                    <div className="min-w-0">
+                      <p className="text-xs text-gray-500">{k.label}</p>
+                      <p className="text-2xl font-bold text-gray-900 mt-1">{k.value}</p>
+                      <p className={`text-xs mt-1 ${k.subTone}`}>{k.sub}</p>
                     </div>
+                    <div className={`p-2 rounded-lg ${k.tint}`}><k.icon className="w-5 h-5" /></div>
                   </div>
                 </Card>
-              </Link>
-            ))}
+              );
+              return k.to
+                ? <button key={k.key} onClick={() => navigate(k.to!)} className="text-start">{Inner}</button>
+                : <div key={k.key}>{Inner}</div>;
+            })}
           </div>
         )}
 
-        {/* Needs your attention */}
-        {attnRows.length > 0 && (
-          <div>
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2">
-              <AlertCircle className="w-4 h-4" /> {t('admin.cockpit.attention', 'Needs your attention')}
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {attnRows.map(({ to, icon: Icon, label, count }) => (
-                <Link key={label} to={to}>
-                  <Card hover>
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <Icon className="w-5 h-5 text-amber-600 flex-shrink-0" />
-                        <span className="text-sm text-gray-700 truncate">{label}</span>
+        <div className={`grid grid-cols-1 gap-4 ${hasRightRail ? 'lg:grid-cols-3' : ''}`}>
+          {/* Needs your attention */}
+          <div className={hasRightRail ? 'lg:col-span-2' : ''}>
+            <Card className="h-full">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="font-semibold text-gray-900">{t('admin.cockpit.attention', 'Needs your attention')}</h2>
+                <span className="text-xs text-gray-400">{t('admin.cockpit.n_items', { count: items.length, defaultValue: '{{count}} items' })}</span>
+              </div>
+              {items.length === 0 ? (
+                <p className="text-sm text-gray-400 py-6 text-center">{t('admin.cockpit.all_clear', 'Nothing needs your attention right now.')}</p>
+              ) : (
+                <ul className="divide-y divide-gray-100">
+                  {items.map(it => (
+                    <li key={it.key} className="flex items-center gap-3 py-3">
+                      <span className={`w-7 h-7 rounded-md flex-shrink-0 ${it.tint}`} aria-hidden />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-gray-900 truncate">{it.title}</p>
+                        <p className="text-xs text-gray-500 truncate">{it.sub}</p>
                       </div>
-                      <span className="text-lg font-bold text-gray-900">{count}</span>
-                    </div>
-                  </Card>
-                </Link>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Finance (Owner read-only) + Recent activity (audit.read) */}
-        {(showFinance || (has('audit.read') && audit.length > 0)) && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {showFinance && finance && (
-              <Card>
-                <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <Wallet className="w-5 h-5 text-primary-600" /> {t('admin.cockpit.finance', 'Finance (this month)')}
-                </h3>
-                <div className="space-y-2">
-                  {finance.monthByCurrency.map(m => (
-                    <div key={`net-${m.currency}`} className="flex items-center justify-between text-sm">
-                      <span className="text-gray-500">{t('admin.cockpit.net', 'Net')} ({m.currency})</span>
-                      <span className={`font-semibold ${m.net >= 0 ? 'text-green-700' : 'text-red-600'}`}>{fmt(m.net, m.currency)}</span>
-                    </div>
-                  ))}
-                  {finance.arByCurrency.map(a => (
-                    <div key={`ar-${a.currency}`} className="flex items-center justify-between text-sm">
-                      <span className="text-gray-500">{t('admin.cockpit.outstanding', 'Outstanding')} ({a.currency})</span>
-                      <span className="font-semibold text-gray-900">{fmt(a.balance, a.currency)}</span>
-                    </div>
-                  ))}
-                  {finance.arStudentCount > 0 && (
-                    <div className="flex items-center justify-between text-sm pt-1 border-t border-gray-100">
-                      <span className="text-gray-500">{t('admin.cockpit.overdue_students', 'Students with a balance')}</span>
-                      <span className="font-semibold text-gray-900">{finance.arStudentCount}</span>
-                    </div>
-                  )}
-                </div>
-                <p className="text-xs text-gray-400 mt-3">{t('admin.cockpit.finance_readonly', 'Read-only overview. Full accounting lives with the accountant.')}</p>
-              </Card>
-            )}
-
-            {has('audit.read') && audit.length > 0 && (
-              <Card>
-                <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <History className="w-5 h-5 text-gray-500" /> {t('admin.cockpit.recent_activity', 'Recent activity')}
-                </h3>
-                <ul className="space-y-2">
-                  {audit.map(l => (
-                    <li key={l.id} className="flex items-center justify-between gap-3 text-sm">
-                      <span className="text-gray-700 truncate">
-                        {l.label || `${l.action ?? ''} ${l.entityType ?? ''}`.trim() || t('admin.cockpit.activity', 'activity')}
-                      </span>
-                      <span className="text-xs text-gray-400 whitespace-nowrap">
-                        {l.actorUsername ?? ''}{l.createdAt ? ` · ${new Date(l.createdAt).toLocaleDateString()}` : ''}
-                      </span>
+                      <button
+                        onClick={() => navigate(it.to)}
+                        className="flex-shrink-0 text-xs font-medium px-3 py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50"
+                      >
+                        {it.action}
+                      </button>
                     </li>
                   ))}
                 </ul>
-                <Link to="/admin/audit-log" className="text-xs text-primary-600 hover:underline mt-3 inline-block">
-                  {t('admin.cockpit.view_audit', 'View audit log')} →
-                </Link>
-              </Card>
-            )}
+              )}
+            </Card>
           </div>
-        )}
 
-        {/* Quick links */}
-        {quickLinks.length > 0 && (
-          <div>
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">{t('admin.management')}</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {quickLinks.map(({ to, label, desc }) => (
-                <Link key={to} to={to}>
-                  <Card hover>
-                    <h3 className="font-semibold text-gray-900 mb-1">{label}</h3>
-                    <p className="text-sm text-gray-500">{desc}</p>
-                  </Card>
-                </Link>
-              ))}
+          {/* Right rail: fee collection + audit highlights */}
+          {hasRightRail && (
+            <div className="space-y-4">
+              {showFinance && (
+                <Card>
+                  <h3 className="font-semibold text-gray-900 mb-3">{t('admin.cockpit.fee_collection', 'Fee collection')}</h3>
+                  <div className="h-2.5 rounded-full bg-amber-400 overflow-hidden flex">
+                    <div className="h-full bg-emerald-500" style={{ width: `${pctCollected}%` }} />
+                  </div>
+                  <div className="mt-3 space-y-1.5 text-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="flex items-center gap-1.5 text-gray-600"><span className="w-2 h-2 rounded-full bg-emerald-500" />{t('admin.cockpit.collected', 'Collected')}</span>
+                      <span className="font-semibold text-gray-900">{money(collected, ccy)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="flex items-center gap-1.5 text-gray-600"><span className="w-2 h-2 rounded-full bg-amber-400" />{t('admin.cockpit.outstanding', 'Outstanding')}</span>
+                      <span className="font-semibold text-gray-900">{money(outstanding, ccy)}</span>
+                    </div>
+                  </div>
+                  {finance!.arStudentCount > 0 && (
+                    <p className="text-xs text-amber-600 mt-3">{t('admin.cockpit.overdue_note', { count: finance!.arStudentCount, defaultValue: '{{count}} accounts 30+ days overdue' })}</p>
+                  )}
+                </Card>
+              )}
+
+              {has('audit.read') && audit.length > 0 && (
+                <Card>
+                  <h3 className="font-semibold text-gray-900 mb-3">{t('admin.cockpit.audit_highlights', 'Audit highlights')}</h3>
+                  <ul className="space-y-2.5">
+                    {audit.map(l => (
+                      <li key={l.id} className="flex items-center justify-between gap-3 text-sm">
+                        <span className="text-gray-700 truncate">
+                          {l.label || `${l.action ?? ''} ${l.entityType ?? ''}`.trim() || t('admin.cockpit.activity', 'activity')}
+                        </span>
+                        <span className="text-xs text-gray-400 whitespace-nowrap">{ago(l.createdAt)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </Card>
+              )}
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </PageLayout>
   );
