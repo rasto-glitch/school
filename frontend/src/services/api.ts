@@ -683,6 +683,8 @@ export const adminApi = {
     page?: number;
     limit?: number;
   } = {}) => api.get('/admin/audit-logs', { params }),
+  // Owner read-only finance snapshot for the dashboard cockpit (finance.read).
+  getFinanceOverview: () => api.get('/admin/finance/overview'),
 };
 
 // ---- ACCOUNTING (premium tuition module) ----

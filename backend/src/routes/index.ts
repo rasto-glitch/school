@@ -559,6 +559,12 @@ export function createRouter(io: SocketServer) {
   // Audit logs — admin only (financial + student-record change history)
   router.get('/admin/audit-logs', authenticate, authorizeCapability('audit.read'), validate({ query: vq.listQuery }), (req, res) => admin.getAuditLogs(req as AuthRequest, res));
 
+  // Owner read-only finance snapshot for the dashboard cockpit (Phase C2).
+  // Reuses the accountant dashboard summary (keyed only by school) behind the
+  // Owner-only finance.read capability. The controller self-gates on the
+  // tuition_fees premium feature, so it returns a clean 4xx when off.
+  router.get('/admin/finance/overview', authenticate, authorizeCapability('finance.read'), validate({ query: vq.listQuery }), (req, res) => reports.getDashboardSummary(req as AuthRequest, res));
+
   // ---- TEACHER ----
   router.get('/teacher/profile-data', authenticate, authorize('teacher'), (req, res) => teacher.getProfileData(req as AuthRequest, res));
   router.get('/teacher/homework', authenticate, authorize('teacher'), (req, res) => teacher.getHomework(req as AuthRequest, res));
