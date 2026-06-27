@@ -13,6 +13,7 @@
 
 import crypto from 'crypto';
 import { adminDb } from './db';
+import { loadClearance, clearanceHas } from '../middleware/auth';
 
 // ── Storage ────────────────────────────────────────────────────────────────
 // Hard-coded private bucket. The operator creates it once in Supabase Studio
@@ -103,9 +104,9 @@ export function sha256Hex(buf: Buffer): string {
 // Schools can override label / sensitivity or add new categories via the
 // school_document_categories table. The backend merges the two when serving
 // the picker. Sensitivity drives access control:
-//   low    — any admin can view
-//   medium — any admin can view (default)
-//   high   — admin AND is_hr_officer required
+//   low    — any staff.manage admin can view
+//   medium — any staff.manage admin can view (default)
+//   high   — read needs hr.read; create/edit/void needs hr.manage
 //
 // requiresExpiry flags categories where an expiry date is realistically
 // always present (passports, work permits...). The UI marks the field
@@ -265,27 +266,46 @@ export async function resolveCategory(
   return { ...seed, override: false, active: true };
 }
 
-// ── Access control ─────────────────────────────────────────────────────────
-// Wave 1: admin role required for all reads/writes. Sensitivity 'high'
-// additionally requires is_hr_officer=true on the user row.
-//
-// authorize('admin') has already gated the route by role; this helper checks
-// the HR-officer flag when needed. It loads the flag from the DB (not the
-// JWT) so a fresh demotion takes effect on the next request without forcing
-// a re-login.
+// ── Access control (Phase B — capability-based) ─────────────────────────────
+// The route gate (authorizeCapability('staff.manage')) already established the
+// caller can manage staff. High-sensitivity PII / documents need an HR
+// capability on top:
+//   * READ  high (decrypt religion/SSN, download a high-sensitivity scan)
+//           → hr.read  (or hr.manage, or Owner — all hold read access)
+//   * WRITE high (upload / edit / void a high-sensitivity doc, write high PII,
+//           redact) → hr.manage (or Owner)
+// Clearance is loaded fresh from the DB each call (not the JWT), so a grant /
+// revoke in the clearance panel takes effect on the next request — same
+// philosophy as the old is_hr_officer flag this replaces.
 
-export async function isHrOfficer(userId: string): Promise<boolean> {
-  const { data } = await adminDb
-    .from('users').select('is_hr_officer').eq('id', userId).maybeSingle();
-  return data?.is_hr_officer === true;
+export async function canReadHrSensitive(userId: string): Promise<boolean> {
+  const c = await loadClearance(userId);
+  return clearanceHas(c, 'hr.read') || clearanceHas(c, 'hr.manage');
 }
 
+export async function canManageHr(userId: string): Promise<boolean> {
+  const c = await loadClearance(userId);
+  return clearanceHas(c, 'hr.manage');
+}
+
+// Read gate keyed by a row's sensitivity. Low/medium are visible to any
+// staff.manage admin; high needs hr.read.
 export async function canReadSensitivity(
   userId: string,
   sensitivity: Sensitivity,
 ): Promise<boolean> {
   if (sensitivity !== 'high') return true;
-  return isHrOfficer(userId);
+  return canReadHrSensitive(userId);
+}
+
+// Write gate keyed by a row's sensitivity. Mutating a high-sensitivity
+// document (upload / edit / void) needs hr.manage; low/medium is operational.
+export async function canWriteSensitivity(
+  userId: string,
+  sensitivity: Sensitivity,
+): Promise<boolean> {
+  if (sensitivity !== 'high') return true;
+  return canManageHr(userId);
 }
 
 // ── Owner existence check ──────────────────────────────────────────────────

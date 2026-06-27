@@ -22,7 +22,6 @@ import {
   canGrantCapability,
   canGrantOwner,
   normalizeCapabilities,
-  deriveHrOfficer,
   isPendingClearance,
   type Capability,
   type GranterContext,
@@ -42,7 +41,7 @@ export async function listClearance(req: AuthRequest, res: Response): Promise<vo
 
   const { data, error } = await supabase
     .from('users')
-    .select('id, username, first_name, last_name, is_active, is_owner, admin_capabilities, is_hr_officer')
+    .select('id, username, first_name, last_name, is_active, is_owner, admin_capabilities')
     .eq('school_id', schoolId).eq('role', 'admin')
     .order('first_name', { ascending: true });
   if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
@@ -54,7 +53,6 @@ export async function listClearance(req: AuthRequest, res: Response): Promise<vo
     isActive: r.is_active,
     isOwner: r.is_owner === true,
     capabilities: Array.isArray(r.admin_capabilities) ? r.admin_capabilities : [],
-    isHrOfficer: r.is_hr_officer === true, // legacy flag, shown until Phase B retires it
     pending: isPendingClearance(r),
   }));
 
@@ -151,16 +149,12 @@ export async function updateClearance(req: AuthRequest, res: Response): Promise<
     finalCaps = currentCaps; // owner→non-owner with no caps body shouldn't happen, but keep current
   }
 
-  // Persist. is_hr_officer is kept in sync with the hr.* capabilities so the
-  // legacy PII gate (utils/employeeDocs.ts) keeps working in Phase A — see
-  // deriveHrOfficer.
+  // Persist. The hr.read / hr.manage capabilities now drive the sensitive-PII
+  // gate directly (utils/employeeDocs.ts) — the legacy is_hr_officer column
+  // was dropped in Phase B (migration 059).
   const { error: updErr } = await supabase
     .from('users')
-    .update({
-      is_owner: finalIsOwner,
-      admin_capabilities: finalCaps,
-      is_hr_officer: deriveHrOfficer(finalIsOwner, finalCaps),
-    })
+    .update({ is_owner: finalIsOwner, admin_capabilities: finalCaps })
     .eq('id', targetId).eq('school_id', schoolId);
   if (updErr) { res.status(safeDbErrorStatus(updErr)).json({ error: safeDbErrorMessage(updErr) }); return; }
 

@@ -17,7 +17,7 @@ import { logAudit } from '../utils/audit';
 import { setupPdfFonts } from '../utils/pdfFont';
 import {
   ROLE_TO_OWNER_TYPE, type EmployeeRole, type OwnerType,
-  isHrOfficer,
+  canReadHrSensitive,
 } from '../utils/employeeDocs';
 import { decryptProfileRow } from '../utils/employeePiiCrypto';
 
@@ -365,7 +365,7 @@ export async function getProfile(req: AuthRequest, res: Response): Promise<void>
     const profile = await loadProfile(role, id, schoolId);
     if (!profile) { res.status(404).json({ error: 'Employee not found' }); return; }
 
-    const hrOfficer = await isHrOfficer(userId);
+    const hrOfficer = await canReadHrSensitive(userId);
     const { documents } = await loadDocuments(profile.ownerType, profile.ownerId, schoolId, hrOfficer);
 
     await logAudit({
@@ -397,7 +397,7 @@ export async function exportProfileJson(req: AuthRequest, res: Response): Promis
 
   const profile = await loadProfile(role, id, schoolId);
   if (!profile) { res.status(404).json({ error: 'Employee not found' }); return; }
-  const hrOfficer = await isHrOfficer(userId);
+  const hrOfficer = await canReadHrSensitive(userId);
   const { documents } = await loadDocuments(profile.ownerType, profile.ownerId, schoolId, hrOfficer);
   const wave2 = await loadWave2Bundle(profile.ownerType, profile.ownerId, schoolId, hrOfficer);
 
@@ -438,7 +438,7 @@ export async function exportProfilePdf(req: AuthRequest, res: Response): Promise
 
   const profile = await loadProfile(role, id, schoolId);
   if (!profile) { res.status(404).json({ error: 'Employee not found' }); return; }
-  const hrOfficer = await isHrOfficer(userId);
+  const hrOfficer = await canReadHrSensitive(userId);
   const { documents } = await loadDocuments(profile.ownerType, profile.ownerId, schoolId, hrOfficer);
   const wave2 = await loadWave2Bundle(profile.ownerType, profile.ownerId, schoolId, hrOfficer);
   const p = redactProfile(profile, hrOfficer);

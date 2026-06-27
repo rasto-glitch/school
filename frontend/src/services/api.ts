@@ -608,10 +608,7 @@ export const adminApi = {
   terminateEmployee: (role: string, id: string, data: { documentId: string; summary: string; occurredOn?: string; departureDate?: string }) =>
     api.post(`/admin/employees/${role}/${id}/terminate`, data),
 
-  listHrOfficers: () => api.get('/admin/hr-officers'),
-  promoteHrOfficer: (userId: string) => api.post(`/admin/users/${userId}/promote-hr-officer`),
-  demoteHrOfficer: (userId: string)  => api.post(`/admin/users/${userId}/demote-hr-officer`),
-  // Admin capability/clearance panel (Phase A).
+  // Admin capability/clearance panel (Phase A; HR-officer endpoints removed in Phase B).
   getClearanceAdmins: () => api.get('/admin/clearance/admins'),
   updateClearance: (userId: string, body: { isOwner?: boolean; capabilities?: string[] }) =>
     api.put(`/admin/clearance/admins/${userId}`, body),

@@ -122,17 +122,6 @@ export function isPendingClearance(row: {
   return !row.admin_capabilities || row.admin_capabilities.length === 0;
 }
 
-// Legacy bridge (Phase A only). The old users.is_hr_officer flag still gates
-// decrypted-PII / high-sensitivity-document reads (utils/employeeDocs.ts)
-// until Phase B swaps those onto capabilities. So every clearance write must
-// keep is_hr_officer in sync with the hr.* capabilities — an Owner or any
-// holder of hr.read/hr.manage IS an HR officer for the legacy gate. Without
-// this, dissolving the old HR-Officers screen would strand PII access.
-export function deriveHrOfficer(isOwner: boolean, capabilities: Capability[]): boolean {
-  if (isOwner) return true;
-  return capabilities.includes('hr.read') || capabilities.includes('hr.manage');
-}
-
 // Sanitize an arbitrary caps array down to known capabilities, deduped, with
 // the baseline always included. Used when persisting a grant.
 export function normalizeCapabilities(input: unknown): Capability[] {

@@ -16,7 +16,7 @@ import { safeDbErrorMessage, safeDbErrorStatus } from '../utils/dbErrors';
 import { logAudit } from '../utils/audit';
 import {
   ROLE_TO_OWNER_TYPE, type EmployeeRole, type OwnerType,
-  isHrOfficer, verifyOwnerExists,
+  canReadHrSensitive, canManageHr, verifyOwnerExists,
 } from '../utils/employeeDocs';
 import {
   encryptedProfilePatch, decryptProfileRow,
@@ -91,7 +91,7 @@ export async function getExtended(req: AuthRequest, res: Response): Promise<void
     .maybeSingle();
   if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
-  const hrOfficer = await isHrOfficer(userId);
+  const hrOfficer = await canReadHrSensitive(userId);
   const REDACTED = '[hr_officer_required]';
 
   if (!row) {
@@ -169,8 +169,8 @@ export async function upsertExtended(req: AuthRequest, res: Response): Promise<v
 
   const input = (req.body ?? {}) as ExtendedInput;
 
-  if (hasHighField(input) && !(await isHrOfficer(userId))) {
-    res.status(403).json({ error: 'HR officer required to set sensitive PII fields' });
+  if (hasHighField(input) && !(await canManageHr(userId))) {
+    res.status(403).json({ error: 'HR management access required to set sensitive PII fields' });
     return;
   }
 
@@ -238,8 +238,9 @@ export async function redactExtended(req: AuthRequest, res: Response): Promise<v
   const ownerId = String(req.params.id);
   const ownerType = ROLE_TO_OWNER_TYPE[role];
 
-  if (!(await isHrOfficer(userId))) {
-    res.status(403).json({ error: 'HR officer required' });
+  // Redacting PII is a sensitive write → hr.manage.
+  if (!(await canManageHr(userId))) {
+    res.status(403).json({ error: 'HR management access required' });
     return;
   }
 

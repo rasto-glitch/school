@@ -12,7 +12,7 @@ import { adminDb as supabase } from '../utils/db';
 import { safeExt } from '../utils/upload';
 import type { AuthRequest } from '../middleware/auth';
 import { loadClearance } from '../middleware/auth';
-import { CAPABILITIES, canGrantCapability, canGrantOwner, normalizeCapabilities, deriveHrOfficer } from '../constants/clearance';
+import { CAPABILITIES, canGrantCapability, canGrantOwner, normalizeCapabilities } from '../constants/clearance';
 import { toCC } from '../utils/transform';
 import { parseCursorParams, buildPage } from '../utils/pagination';
 import { notify, notifyMany } from '../utils/notify';
@@ -3211,7 +3211,7 @@ export async function createAccount(req: AuthRequest, res: Response): Promise<vo
   // can't grant is rejected. Omitted → the new admin starts pending (no
   // owner, no caps) and cannot log in until granted. Non-admin roles ignore
   // these fields entirely.
-  let clearanceColumns: { is_owner: boolean; admin_capabilities: string[]; is_hr_officer: boolean } | null = null;
+  let clearanceColumns: { is_owner: boolean; admin_capabilities: string[] } | null = null;
   if (role === 'admin') {
     const wantOwner = req.body.isOwner === true;
     const wantCaps = normalizeCapabilities(req.body.capabilities);
@@ -3229,10 +3229,10 @@ export async function createAccount(req: AuthRequest, res: Response): Promise<vo
         }
       }
       clearanceColumns = wantOwner
-        ? { is_owner: true, admin_capabilities: [...CAPABILITIES], is_hr_officer: true }
-        : { is_owner: false, admin_capabilities: wantCaps, is_hr_officer: deriveHrOfficer(false, wantCaps) };
+        ? { is_owner: true, admin_capabilities: [...CAPABILITIES] }
+        : { is_owner: false, admin_capabilities: wantCaps };
     } else {
-      clearanceColumns = { is_owner: false, admin_capabilities: [], is_hr_officer: false }; // pending
+      clearanceColumns = { is_owner: false, admin_capabilities: [] }; // pending
     }
   }
 
@@ -5340,115 +5340,6 @@ export async function uploadEmployeePhoto(req: AuthRequest, res: Response): Prom
   res.json({ officialPhoto });
 }
 
-// ---- HR OFFICER PROMOTE / DEMOTE (Wave 2) ----
-// Only admins can carry the HR-officer flag. Promoting elevates a colleague
-// to read decrypted PII + manage high-sensitivity documents. We notify
-// every OTHER admin of the school on promote/demote so the change is
-// transparent — flipping the flag silently would invite abuse.
-
-export async function promoteHrOfficer(req: AuthRequest, res: Response): Promise<void> {
-  const { schoolId, userId: actorId, username: actorName } = req.user!;
-  const targetId = String(req.params.userId);
-
-  if (targetId === actorId) {
-    res.status(400).json({ error: "You can't promote yourself — ask another admin." });
-    return;
-  }
-
-  const { data: target } = await supabase
-    .from('users')
-    .select('id, role, first_name, last_name, username, is_active, is_hr_officer')
-    .eq('id', targetId).eq('school_id', schoolId).maybeSingle();
-  if (!target) { res.status(404).json({ error: 'User not found' }); return; }
-  if (target.role !== 'admin') { res.status(400).json({ error: 'Only admins can be HR officers' }); return; }
-  if (target.is_active === false) { res.status(400).json({ error: 'User is inactive' }); return; }
-  if (target.is_hr_officer === true) {
-    res.json({ user: toCC(target), changed: false });
-    return;
-  }
-
-  const { error } = await supabase
-    .from('users').update({ is_hr_officer: true })
-    .eq('id', targetId).eq('school_id', schoolId);
-  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
-
-  await logAudit({
-    req, entityType: 'hr_officer', entityId: targetId,
-    action: 'create',
-    after: { _meta: { kind: 'hr_officer_promote', target_username: target.username } },
-    label: 'hr_officer_promote',
-  });
-
-  // Notify every other admin of the school.
-  const { data: peers } = await supabase
-    .from('users').select('id').eq('school_id', schoolId).eq('role', 'admin').eq('is_active', true);
-  const peerIds = (peers ?? []).map(p => p.id).filter(id => id !== actorId && id !== targetId);
-  const targetName = `${target.first_name ?? ''} ${target.last_name ?? ''}`.trim() || target.username;
-  await Promise.all(peerIds.map(pid => notify({
-    schoolId, userId: pid,
-    title: 'HR officer promoted',
-    message: `${actorName} promoted ${targetName} to HR officer.`,
-    type: 'hr_officer_promoted',
-    relatedId: targetId,
-  })));
-
-  res.json({ ok: true, userId: targetId, changed: true });
-}
-
-export async function demoteHrOfficer(req: AuthRequest, res: Response): Promise<void> {
-  const { schoolId, userId: actorId, username: actorName } = req.user!;
-  const targetId = String(req.params.userId);
-
-  const { data: target } = await supabase
-    .from('users')
-    .select('id, role, first_name, last_name, username, is_hr_officer')
-    .eq('id', targetId).eq('school_id', schoolId).maybeSingle();
-  if (!target) { res.status(404).json({ error: 'User not found' }); return; }
-  if (target.is_hr_officer !== true) {
-    res.json({ user: toCC(target), changed: false });
-    return;
-  }
-
-  const { error } = await supabase
-    .from('users').update({ is_hr_officer: false })
-    .eq('id', targetId).eq('school_id', schoolId);
-  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
-
-  await logAudit({
-    req, entityType: 'hr_officer', entityId: targetId,
-    action: 'delete',
-    before: { _meta: { kind: 'hr_officer_demote', target_username: target.username } },
-    label: 'hr_officer_demote',
-  });
-
-  const { data: peers } = await supabase
-    .from('users').select('id').eq('school_id', schoolId).eq('role', 'admin').eq('is_active', true);
-  const peerIds = (peers ?? []).map(p => p.id).filter(id => id !== actorId);
-  const targetName = `${target.first_name ?? ''} ${target.last_name ?? ''}`.trim() || target.username;
-  await Promise.all(peerIds.map(pid => notify({
-    schoolId, userId: pid,
-    title: 'HR officer revoked',
-    message: `${actorName} revoked HR officer access from ${targetName}.`,
-    type: 'hr_officer_demoted',
-    relatedId: targetId,
-  })));
-
-  res.json({ ok: true, userId: targetId, changed: true });
-}
-
-// Lightweight read for the admin user-management page: which admins are
-// HR officers right now? Returns minimal columns — the full users list
-// already has the rest.
-export async function listHrOfficers(req: AuthRequest, res: Response): Promise<void> {
-  const { schoolId } = req.user!;
-  const { data, error } = await supabase
-    .from('users')
-    .select('id, username, first_name, last_name, is_active')
-    .eq('school_id', schoolId).eq('role', 'admin').eq('is_hr_officer', true)
-    .order('first_name', { ascending: true });
-  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
-  res.json({ officers: toCC(data) });
-}
 
 export async function getParents(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;

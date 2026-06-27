@@ -13,7 +13,7 @@ import { Response } from 'express';
 import { adminDb as supabase } from '../utils/db';
 import type { AuthRequest } from '../middleware/auth';
 import { toCC } from '../utils/transform';
-import { isHrOfficer } from '../utils/employeeDocs';
+import { canReadHrSensitive } from '../utils/employeeDocs';
 import { hasArchiveFeature } from '../utils/employeeArchive';
 import { loadDocuments, loadWave2Bundle } from './employeeProfile.controller';
 import { logAudit } from '../utils/audit';
@@ -33,7 +33,7 @@ export async function getArchivedEmployeeProfile(req: AuthRequest, res: Response
   ]);
   if (!record) { res.status(404).json({ error: 'Archived record not found' }); return; }
 
-  const hrOfficer = await isHrOfficer(userId);
+  const hrOfficer = await canReadHrSensitive(userId);
 
   const [{ documents }, wave2] = await Promise.all([
     loadDocuments('archived_employees', id, schoolId, hrOfficer),

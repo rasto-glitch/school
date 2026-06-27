@@ -27,7 +27,6 @@ interface AdminRow {
   isActive: boolean;
   isOwner: boolean;
   capabilities: Capability[];
-  isHrOfficer: boolean;
   pending: boolean;
 }
 

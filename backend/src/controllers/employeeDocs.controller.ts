@@ -1,9 +1,10 @@
 // Employee documents — CRUD over employee_documents + signed-URL issuance.
 //
-// Wave 1 of the employee legal-compliance records system. Every read of a
-// 'high' sensitivity category is gated on users.is_hr_officer. Every
-// signed-URL issue is audited so a school can reconstruct who saw what
-// document and when (chain-of-custody for a labour tribunal).
+// Wave 1 of the employee legal-compliance records system. Reads of a 'high'
+// sensitivity category require the hr.read capability; mutating one requires
+// hr.manage (Phase B — see utils/employeeDocs.ts). Every signed-URL issue is
+// audited so a school can reconstruct who saw what document and when
+// (chain-of-custody for a labour tribunal).
 //
 // Why the service-role client: documents live in a private bucket that the
 // app touches with the service-role key. Tenant-scoping is enforced manually
@@ -24,7 +25,7 @@ import {
   ROLE_TO_OWNER_TYPE, type EmployeeRole, type OwnerType,
   sniffMime, sha256Hex, safeFilename,
   getCategoriesForSchool, resolveCategory,
-  isHrOfficer, canReadSensitivity, verifyOwnerExists,
+  canReadHrSensitive, canReadSensitivity, canWriteSensitivity, verifyOwnerExists,
   type ResolvedCategory,
 } from '../utils/employeeDocs';
 
@@ -100,7 +101,7 @@ export async function listForEmployee(req: AuthRequest, res: Response): Promise<
 
   if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
-  const hrOfficer = await isHrOfficer(userId);
+  const hrOfficer = await canReadHrSensitive(userId);
   const documents = (data ?? []).map(row => {
     if (row.sensitivity === 'high' && !hrOfficer) {
       // Redact: keep id + category + sensitivity + uploaded_at so the row
@@ -152,9 +153,9 @@ export async function uploadForEmployee(req: AuthRequest, res: Response): Promis
   if (!category) { res.status(400).json({ error: 'Unknown category' }); return; }
   if (!category.active) { res.status(400).json({ error: 'Category is disabled for this school' }); return; }
 
-  // High-sensitivity uploads also require HR officer.
-  if (category.sensitivity === 'high' && !(await canReadSensitivity(userId, 'high'))) {
-    res.status(403).json({ error: 'HR officer required for this category' });
+  // Uploading a high-sensitivity document is a sensitive write → hr.manage.
+  if (category.sensitivity === 'high' && !(await canWriteSensitivity(userId, 'high'))) {
+    res.status(403).json({ error: 'HR management access required for this category' });
     return;
   }
 
@@ -287,7 +288,7 @@ export async function issueSignedUrl(req: AuthRequest, res: Response): Promise<v
     return;
   }
   if (!(await canReadSensitivity(userId, doc.sensitivity as 'low' | 'medium' | 'high'))) {
-    res.status(403).json({ error: 'HR officer required for this document' });
+    res.status(403).json({ error: 'HR read access required for this document' });
     return;
   }
 
@@ -329,8 +330,9 @@ export async function updateDocument(req: AuthRequest, res: Response): Promise<v
     .maybeSingle();
   if (readErr) { res.status(safeDbErrorStatus(readErr)).json({ error: safeDbErrorMessage(readErr) }); return; }
   if (!before) { res.status(404).json({ error: 'Document not found' }); return; }
-  if (!(await canReadSensitivity(userId, before.sensitivity as 'low' | 'medium' | 'high'))) {
-    res.status(403).json({ error: 'HR officer required' });
+  // Editing a high-sensitivity document is a sensitive write → hr.manage.
+  if (!(await canWriteSensitivity(userId, before.sensitivity as 'low' | 'medium' | 'high'))) {
+    res.status(403).json({ error: 'HR management access required' });
     return;
   }
 
@@ -388,8 +390,9 @@ export async function voidDocument(req: AuthRequest, res: Response): Promise<voi
     .maybeSingle();
   if (readErr) { res.status(safeDbErrorStatus(readErr)).json({ error: safeDbErrorMessage(readErr) }); return; }
   if (!before) { res.status(404).json({ error: 'Document not found' }); return; }
-  if (!(await canReadSensitivity(userId, before.sensitivity as 'low' | 'medium' | 'high'))) {
-    res.status(403).json({ error: 'HR officer required' });
+  // Voiding a high-sensitivity document is a sensitive write → hr.manage.
+  if (!(await canWriteSensitivity(userId, before.sensitivity as 'low' | 'medium' | 'high'))) {
+    res.status(403).json({ error: 'HR management access required' });
     return;
   }
 
@@ -441,7 +444,7 @@ export async function listExpiring(req: AuthRequest, res: Response): Promise<voi
 
   // Resolve owner names in batches per owner_type. Bounded fan-out: at most
   // 4 queries regardless of how many docs match.
-  const hrOfficer = await isHrOfficer(userId);
+  const hrOfficer = await canReadHrSensitive(userId);
   const byType: Record<OwnerType, Set<string>> = {
     users: new Set(), teachers: new Set(), drivers: new Set(),
     staff_members: new Set(), archived_employees: new Set(),

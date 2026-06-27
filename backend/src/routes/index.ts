@@ -355,17 +355,17 @@ export function createRouter(io: SocketServer) {
   router.get('/admin/archived-students/:id', authenticate, authorize('admin'), (req, res) => admin.getArchivedStudent(req as AuthRequest, res));
   router.get('/admin/archive/export.pdf', authenticate, authorize('admin'), (req, res) => admin.exportArchivePdf(req as AuthRequest, res));
   router.get('/admin/archive/export.xlsx', authenticate, authorize('admin'), (req, res) => admin.exportArchiveXlsx(req as AuthRequest, res));
-  router.get('/admin/archived-employees', authenticate, authorize('admin'), (req, res) => admin.getArchivedEmployees(req as AuthRequest, res));
-  router.get('/admin/archived-employees/search', authenticate, authorize('admin'), validate({ query: vq.listQuery }), (req, res) => admin.searchArchivedEmployees(req as AuthRequest, res));
-  router.get('/admin/employee-archive/export.pdf', authenticate, authorize('admin'), (req, res) => admin.exportEmployeeArchivePdf(req as AuthRequest, res));
-  router.get('/admin/employee-archive/export.xlsx', authenticate, authorize('admin'), (req, res) => admin.exportEmployeeArchiveXlsx(req as AuthRequest, res));
+  router.get('/admin/archived-employees', authenticate, authorizeCapability('staff.manage'), (req, res) => admin.getArchivedEmployees(req as AuthRequest, res));
+  router.get('/admin/archived-employees/search', authenticate, authorizeCapability('staff.manage'), validate({ query: vq.listQuery }), (req, res) => admin.searchArchivedEmployees(req as AuthRequest, res));
+  router.get('/admin/employee-archive/export.pdf', authenticate, authorizeCapability('staff.manage'), (req, res) => admin.exportEmployeeArchivePdf(req as AuthRequest, res));
+  router.get('/admin/employee-archive/export.xlsx', authenticate, authorizeCapability('staff.manage'), (req, res) => admin.exportEmployeeArchiveXlsx(req as AuthRequest, res));
   router.get('/admin/archive/full-backup.json', authenticate, authorize('admin'), (req, res) => admin.exportFullArchiveBackup(req as AuthRequest, res));
   router.get('/admin/integrity/verify', authenticate, authorize('admin'), (req, res) => admin.verifyArchiveIntegrity(req as AuthRequest, res));
-  router.get('/admin/archived-employees/:id/export.json', authenticate, authorize('admin'), (req, res) => admin.exportArchivedEmployeeRecord(req as AuthRequest, res));
-  router.get('/admin/archived-employees/:id/export.pdf', authenticate, authorize('admin'), (req, res) => admin.exportArchivedEmployeePdf(req as AuthRequest, res));
-  router.get('/admin/archived-employees/:id/profile', authenticate, authorize('admin'), (req, res) => archivedProfile.getArchivedEmployeeProfile(req as AuthRequest, res));
-  router.post('/admin/archived-employees/:id/restore', authenticate, authorize('admin'), validate({ params: vp.idParam }), (req, res) => admin.restoreArchivedEmployee(req as AuthRequest, res));
-  router.get('/admin/archived-employees/:id', authenticate, authorize('admin'), (req, res) => admin.getArchivedEmployee(req as AuthRequest, res));
+  router.get('/admin/archived-employees/:id/export.json', authenticate, authorizeCapability('staff.manage'), (req, res) => admin.exportArchivedEmployeeRecord(req as AuthRequest, res));
+  router.get('/admin/archived-employees/:id/export.pdf', authenticate, authorizeCapability('staff.manage'), (req, res) => admin.exportArchivedEmployeePdf(req as AuthRequest, res));
+  router.get('/admin/archived-employees/:id/profile', authenticate, authorizeCapability('staff.manage'), (req, res) => archivedProfile.getArchivedEmployeeProfile(req as AuthRequest, res));
+  router.post('/admin/archived-employees/:id/restore', authenticate, authorizeCapability('staff.manage'), validate({ params: vp.idParam }), (req, res) => admin.restoreArchivedEmployee(req as AuthRequest, res));
+  router.get('/admin/archived-employees/:id', authenticate, authorizeCapability('staff.manage'), (req, res) => admin.getArchivedEmployee(req as AuthRequest, res));
 
   router.get('/admin/parents', authenticate, authorize('admin'), (req, res) => admin.getParents(req as AuthRequest, res));
   router.get('/admin/parents/:id/profile', authenticate, authorize('admin'), (req, res) => admin.getParentProfile(req as AuthRequest, res));
@@ -379,31 +379,31 @@ export function createRouter(io: SocketServer) {
   router.get('/admin/weekly-summaries', authenticate, authorize('admin'), validate({ query: vq.listQuery }), (req, res) => admin.getWeeklySummaries(req as AuthRequest, res));
   router.get('/admin/weekly-summary-status', authenticate, authorize('admin'), (req, res) => admin.getWeeklySummaryStatus(req as AuthRequest, res));
 
-  router.get('/admin/teachers', authenticate, authorize('admin'), (req, res) => admin.getTeachers(req as AuthRequest, res));
-  router.post('/admin/teachers', authenticate, authorize('admin'), validate({ body: vu.createTeacherSchema }), (req, res) => admin.createTeacher(req as AuthRequest, res));
-  router.put('/admin/teachers/:id', authenticate, authorize('admin'), validate({ params: vu.idParam, body: vu.updateTeacherSchema }), (req, res) => admin.updateTeacher(req as AuthRequest, res));
-  router.delete('/admin/teachers/:id', authenticate, authorize('admin'), validate({ params: vu.idParam }), (req, res) => admin.deleteTeacher(req as AuthRequest, res));
+  router.get('/admin/teachers', authenticate, authorizeCapability('staff.manage'), (req, res) => admin.getTeachers(req as AuthRequest, res));
+  router.post('/admin/teachers', authenticate, authorizeCapability('staff.manage'), validate({ body: vu.createTeacherSchema }), (req, res) => admin.createTeacher(req as AuthRequest, res));
+  router.put('/admin/teachers/:id', authenticate, authorizeCapability('staff.manage'), validate({ params: vu.idParam, body: vu.updateTeacherSchema }), (req, res) => admin.updateTeacher(req as AuthRequest, res));
+  router.delete('/admin/teachers/:id', authenticate, authorizeCapability('staff.manage'), validate({ params: vu.idParam }), (req, res) => admin.deleteTeacher(req as AuthRequest, res));
 
   // Bulk-create teachers or drivers from an .xlsx upload (role chosen via
   // ?role=teacher|driver). Mirrors the students bulk-upload: memoryStorage,
   // 10 MB cap, in-memory parse, auto-create of missing classes/buses.
-  router.get('/admin/employees/bulk-template.xlsx', authenticate, authorize('admin'), (req, res) => admin.employeeBulkTemplate(req as AuthRequest, res));
-  router.post('/admin/employees/bulk-upload', authenticate, authorize('admin'), upload.single('file'), (req, res) => admin.bulkUploadEmployees(req as AuthRequest, res));
+  router.get('/admin/employees/bulk-template.xlsx', authenticate, authorizeCapability('staff.manage'), (req, res) => admin.employeeBulkTemplate(req as AuthRequest, res));
+  router.post('/admin/employees/bulk-upload', authenticate, authorizeCapability('staff.manage'), upload.single('file'), (req, res) => admin.bulkUploadEmployees(req as AuthRequest, res));
 
-  router.get('/admin/drivers', authenticate, authorize('admin'), (req, res) => admin.getDrivers(req as AuthRequest, res));
-  router.post('/admin/drivers', authenticate, authorize('admin'), validate({ body: vu.createDriverSchema }), (req, res) => admin.createDriver(req as AuthRequest, res));
-  router.put('/admin/drivers/:id', authenticate, authorize('admin'), validate({ params: vu.idParam, body: vu.updateDriverSchema }), (req, res) => admin.updateDriver(req as AuthRequest, res));
-  router.delete('/admin/drivers/:id', authenticate, authorize('admin'), validate({ params: vu.idParam }), (req, res) => admin.deleteDriver(req as AuthRequest, res));
+  router.get('/admin/drivers', authenticate, authorizeCapability('staff.manage'), (req, res) => admin.getDrivers(req as AuthRequest, res));
+  router.post('/admin/drivers', authenticate, authorizeCapability('staff.manage'), validate({ body: vu.createDriverSchema }), (req, res) => admin.createDriver(req as AuthRequest, res));
+  router.put('/admin/drivers/:id', authenticate, authorizeCapability('staff.manage'), validate({ params: vu.idParam, body: vu.updateDriverSchema }), (req, res) => admin.updateDriver(req as AuthRequest, res));
+  router.delete('/admin/drivers/:id', authenticate, authorizeCapability('staff.manage'), validate({ params: vu.idParam }), (req, res) => admin.deleteDriver(req as AuthRequest, res));
 
   // Staff HR (Employees → Staff sub-tab). Admin owns staff identity +
   // archive; salary/insurance/payments stay accountant-only on the
   // /accounting/staff routes. Same controller, same staff_members table —
   // the controller's ensurePremium (tuition_fees) gate still applies, so
   // the UI hides this sub-tab when the accounting module is off.
-  router.get('/admin/staff', authenticate, authorize('admin'), (req, res) => staff.listStaff(req as AuthRequest, res));
-  router.post('/admin/staff', authenticate, authorize('admin'), validate({ body: va.createStaffSchema }), (req, res) => staff.createStaff(req as AuthRequest, res));
-  router.put('/admin/staff/:id', authenticate, authorize('admin'), validate({ params: va.idParam, body: va.updateStaffSchema }), (req, res) => staff.updateStaff(req as AuthRequest, res));
-  router.delete('/admin/staff/:id', authenticate, authorize('admin'), validate({ params: va.idParam, body: va.reasonBody }), (req, res) => staff.deleteStaff(req as AuthRequest, res));
+  router.get('/admin/staff', authenticate, authorizeCapability('staff.manage'), (req, res) => staff.listStaff(req as AuthRequest, res));
+  router.post('/admin/staff', authenticate, authorizeCapability('staff.manage'), validate({ body: va.createStaffSchema }), (req, res) => staff.createStaff(req as AuthRequest, res));
+  router.put('/admin/staff/:id', authenticate, authorizeCapability('staff.manage'), validate({ params: va.idParam, body: va.updateStaffSchema }), (req, res) => staff.updateStaff(req as AuthRequest, res));
+  router.delete('/admin/staff/:id', authenticate, authorizeCapability('staff.manage'), validate({ params: va.idParam, body: va.reasonBody }), (req, res) => staff.deleteStaff(req as AuthRequest, res));
 
   router.get('/admin/subjects', authenticate, authorize('admin', 'teacher'), (req, res) => admin.getSubjects(req as AuthRequest, res));
   router.post('/admin/subjects', authenticate, authorize('admin'), validate({ body: vp.createSubjectSchema }), (req, res) => admin.createSubject(req as AuthRequest, res));
@@ -422,7 +422,7 @@ export function createRouter(io: SocketServer) {
   router.get('/admin/accounts/credentials.pdf', authenticate, authorize('admin'), (req, res) => admin.exportCredentialsPdf(req as AuthRequest, res));
   // Professional (official) employee photo — admin-uploaded, kept on the
   // employee record; separate from the self-set app avatar.
-  router.post('/admin/employees/:role/:id/photo', authenticate, authorize('admin'), upload.single('photo'), validate({ params: vu.employeePhotoParams }), (req, res) => admin.uploadEmployeePhoto(req as AuthRequest, res));
+  router.post('/admin/employees/:role/:id/photo', authenticate, authorizeCapability('staff.manage'), upload.single('photo'), validate({ params: vu.employeePhotoParams }), (req, res) => admin.uploadEmployeePhoto(req as AuthRequest, res));
 
   // ── Employee profile (Wave 1: read + export) ────────────────────────────
   // GET /admin/employees/:role/:id              → full record (HR fields +
@@ -432,53 +432,51 @@ export function createRouter(io: SocketServer) {
   // GET /admin/employees/:role/:id/export.pdf   → printable HR file
   // Static export paths come BEFORE the catch-all :id endpoint so they
   // aren't shadowed.
-  router.get('/admin/employees/:role/:id/export.json', authenticate, authorize('admin'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeProfile.exportProfileJson(req as AuthRequest, res));
-  router.get('/admin/employees/:role/:id/export.pdf',  authenticate, authorize('admin'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeProfile.exportProfilePdf(req as AuthRequest, res));
-  router.get('/admin/employees/:role/:id',             authenticate, authorize('admin'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeProfile.getProfile(req as AuthRequest, res));
+  router.get('/admin/employees/:role/:id/export.json', authenticate, authorizeCapability('staff.manage'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeProfile.exportProfileJson(req as AuthRequest, res));
+  router.get('/admin/employees/:role/:id/export.pdf',  authenticate, authorizeCapability('staff.manage'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeProfile.exportProfilePdf(req as AuthRequest, res));
+  router.get('/admin/employees/:role/:id',             authenticate, authorizeCapability('staff.manage'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeProfile.getProfile(req as AuthRequest, res));
 
   // ── Employee documents (Wave 1) ─────────────────────────────────────────
   // Per-employee list + upload (multipart 'file'). Sensitivity gating +
   // magic-byte sniff + SHA-256 + private-bucket upload happen inside the
   // controller — see backend/src/utils/employeeDocs.ts.
-  router.get( '/admin/employees/:role/:id/documents', authenticate, authorize('admin'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeDocs.listForEmployee(req as AuthRequest, res));
-  router.post('/admin/employees/:role/:id/documents', authenticate, authorize('admin'), upload.single('file'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeDocs.uploadForEmployee(req as AuthRequest, res));
+  router.get( '/admin/employees/:role/:id/documents', authenticate, authorizeCapability('staff.manage'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeDocs.listForEmployee(req as AuthRequest, res));
+  router.post('/admin/employees/:role/:id/documents', authenticate, authorizeCapability('staff.manage'), upload.single('file'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeDocs.uploadForEmployee(req as AuthRequest, res));
 
   // Per-document (static paths before :id).
-  router.get('/admin/employee-document-categories', authenticate, authorize('admin'), (req, res) => employeeDocs.listCategories(req as AuthRequest, res));
-  router.get('/admin/employee-documents/expiring',  authenticate, authorize('admin'), (req, res) => employeeDocs.listExpiring(req as AuthRequest, res));
-  router.get(   '/admin/employee-documents/:id/signed-url', authenticate, authorize('admin'), validate({ params: vu.idParam }), (req, res) => employeeDocs.issueSignedUrl(req as AuthRequest, res));
-  router.patch( '/admin/employee-documents/:id', authenticate, authorize('admin'), validate({ params: vu.idParam, body: vu.updateDocumentSchema }), (req, res) => employeeDocs.updateDocument(req as AuthRequest, res));
-  router.delete('/admin/employee-documents/:id', authenticate, authorize('admin'), validate({ params: vu.idParam, body: vu.voidDocumentSchema   }), (req, res) => employeeDocs.voidDocument(req as AuthRequest, res));
+  router.get('/admin/employee-document-categories', authenticate, authorizeCapability('staff.manage'), (req, res) => employeeDocs.listCategories(req as AuthRequest, res));
+  router.get('/admin/employee-documents/expiring',  authenticate, authorizeCapability('staff.manage'), (req, res) => employeeDocs.listExpiring(req as AuthRequest, res));
+  router.get(   '/admin/employee-documents/:id/signed-url', authenticate, authorizeCapability('staff.manage'), validate({ params: vu.idParam }), (req, res) => employeeDocs.issueSignedUrl(req as AuthRequest, res));
+  router.patch( '/admin/employee-documents/:id', authenticate, authorizeCapability('staff.manage'), validate({ params: vu.idParam, body: vu.updateDocumentSchema }), (req, res) => employeeDocs.updateDocument(req as AuthRequest, res));
+  router.delete('/admin/employee-documents/:id', authenticate, authorizeCapability('staff.manage'), validate({ params: vu.idParam, body: vu.voidDocumentSchema   }), (req, res) => employeeDocs.voidDocument(req as AuthRequest, res));
 
   // ── Employee extended profile (Wave 2) ──────────────────────────────────
-  router.get(  '/admin/employees/:role/:id/extended', authenticate, authorize('admin'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeExtended.getExtended(req as AuthRequest, res));
-  router.put(  '/admin/employees/:role/:id/extended', authenticate, authorize('admin'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeExtended.upsertExtended(req as AuthRequest, res));
-  router.post( '/admin/employees/:role/:id/extended/redact', authenticate, authorize('admin'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeExtended.redactExtended(req as AuthRequest, res));
+  router.get(  '/admin/employees/:role/:id/extended', authenticate, authorizeCapability('staff.manage'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeExtended.getExtended(req as AuthRequest, res));
+  router.put(  '/admin/employees/:role/:id/extended', authenticate, authorizeCapability('staff.manage'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeExtended.upsertExtended(req as AuthRequest, res));
+  router.post( '/admin/employees/:role/:id/extended/redact', authenticate, authorizeCapability('staff.manage'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeExtended.redactExtended(req as AuthRequest, res));
 
   // ── Emergency contacts (Wave 2) ─────────────────────────────────────────
-  router.get(  '/admin/employees/:role/:id/emergency-contacts', authenticate, authorize('admin'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeEmergency.listForEmployee(req as AuthRequest, res));
-  router.post( '/admin/employees/:role/:id/emergency-contacts', authenticate, authorize('admin'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeEmergency.createForEmployee(req as AuthRequest, res));
-  router.patch( '/admin/emergency-contacts/:id', authenticate, authorize('admin'), validate({ params: vu.idParam }), (req, res) => employeeEmergency.update(req as AuthRequest, res));
-  router.delete('/admin/emergency-contacts/:id', authenticate, authorize('admin'), validate({ params: vu.idParam }), (req, res) => employeeEmergency.remove(req as AuthRequest, res));
+  router.get(  '/admin/employees/:role/:id/emergency-contacts', authenticate, authorizeCapability('staff.manage'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeEmergency.listForEmployee(req as AuthRequest, res));
+  router.post( '/admin/employees/:role/:id/emergency-contacts', authenticate, authorizeCapability('staff.manage'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeEmergency.createForEmployee(req as AuthRequest, res));
+  router.patch( '/admin/emergency-contacts/:id', authenticate, authorizeCapability('staff.manage'), validate({ params: vu.idParam }), (req, res) => employeeEmergency.update(req as AuthRequest, res));
+  router.delete('/admin/emergency-contacts/:id', authenticate, authorizeCapability('staff.manage'), validate({ params: vu.idParam }), (req, res) => employeeEmergency.remove(req as AuthRequest, res));
 
   // ── School acknowledgement policies + employee acks (Wave 2) ────────────
-  router.get( '/admin/school-policies', authenticate, authorize('admin'), (req, res) => schoolPolicies.listPolicies(req as AuthRequest, res));
-  router.post('/admin/school-policies', authenticate, authorize('admin'), (req, res) => schoolPolicies.createOrBumpPolicy(req as AuthRequest, res));
-  router.patch( '/admin/school-policies/:id', authenticate, authorize('admin'), validate({ params: vu.idParam }), (req, res) => schoolPolicies.updatePolicyMeta(req as AuthRequest, res));
-  router.delete('/admin/school-policies/:id', authenticate, authorize('admin'), validate({ params: vu.idParam }), (req, res) => schoolPolicies.deletePolicy(req as AuthRequest, res));
+  router.get( '/admin/school-policies', authenticate, authorizeCapability('staff.manage'), (req, res) => schoolPolicies.listPolicies(req as AuthRequest, res));
+  router.post('/admin/school-policies', authenticate, authorizeCapability('hr.manage'), (req, res) => schoolPolicies.createOrBumpPolicy(req as AuthRequest, res));
+  router.patch( '/admin/school-policies/:id', authenticate, authorizeCapability('hr.manage'), validate({ params: vu.idParam }), (req, res) => schoolPolicies.updatePolicyMeta(req as AuthRequest, res));
+  router.delete('/admin/school-policies/:id', authenticate, authorizeCapability('hr.manage'), validate({ params: vu.idParam }), (req, res) => schoolPolicies.deletePolicy(req as AuthRequest, res));
 
-  router.get( '/admin/employees/:role/:id/acknowledgements', authenticate, authorize('admin'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeAcks.listForEmployee(req as AuthRequest, res));
-  router.post('/admin/employees/:role/:id/acknowledgements', authenticate, authorize('admin'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeAcks.createForEmployee(req as AuthRequest, res));
+  router.get( '/admin/employees/:role/:id/acknowledgements', authenticate, authorizeCapability('staff.manage'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeAcks.listForEmployee(req as AuthRequest, res));
+  router.post('/admin/employees/:role/:id/acknowledgements', authenticate, authorizeCapability('staff.manage'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeAcks.createForEmployee(req as AuthRequest, res));
 
   // ── Employee actions log + termination workflow (Wave 2) ────────────────
-  router.get( '/admin/employees/:role/:id/actions', authenticate, authorize('admin'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeActions.listForEmployee(req as AuthRequest, res));
-  router.post('/admin/employees/:role/:id/actions', authenticate, authorize('admin'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeActions.createForEmployee(req as AuthRequest, res));
-  router.post('/admin/employees/:role/:id/terminate', authenticate, authorize('admin'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeTermination.terminate(req as AuthRequest, res));
+  router.get( '/admin/employees/:role/:id/actions', authenticate, authorizeCapability('staff.manage'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeActions.listForEmployee(req as AuthRequest, res));
+  router.post('/admin/employees/:role/:id/actions', authenticate, authorizeCapability('staff.manage'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeActions.createForEmployee(req as AuthRequest, res));
+  router.post('/admin/employees/:role/:id/terminate', authenticate, authorizeCapability('hr.manage'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeTermination.terminate(req as AuthRequest, res));
 
-  // ── HR officer sub-role toggle (Wave 2) ─────────────────────────────────
-  router.get( '/admin/hr-officers', authenticate, authorize('admin'), (req, res) => admin.listHrOfficers(req as AuthRequest, res));
-  router.post('/admin/users/:userId/promote-hr-officer', authenticate, authorize('admin'), validate({ params: vu.userIdParam }), (req, res) => admin.promoteHrOfficer(req as AuthRequest, res));
-  router.post('/admin/users/:userId/demote-hr-officer',  authenticate, authorize('admin'), validate({ params: vu.userIdParam }), (req, res) => admin.demoteHrOfficer(req as AuthRequest, res));
+  // HR-officer promote/demote routes removed in Phase B — hr.read / hr.manage
+  // are now capabilities granted through the clearance panel below.
 
   // ── Admin capability/clearance panel (Phase A) ──────────────────────────
   // Visible to Owners and any hr.manage holder (owners pass implicitly).
