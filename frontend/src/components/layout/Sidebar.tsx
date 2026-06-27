@@ -98,7 +98,7 @@ const adminNav: AdminNavNode[] = [
     labelKey: 'nav.hr', labelFallback: 'HR',
     children: [
       { kind: 'leaf', path: '/admin/school-policies', icon: ClipboardCheck, labelKey: 'nav.policies', labelFallback: 'Policies' },
-      { kind: 'leaf', path: '/admin/hr-officers', icon: ShieldCheck, labelKey: 'nav.hr_officers', labelFallback: 'HR Officers' },
+      { kind: 'leaf', path: '/admin/clearance', icon: ShieldCheck, labelKey: 'nav.clearance', labelFallback: 'Admin Clearance' },
     ],
   },
   { kind: 'leaf', path: '/admin/accounts', icon: UserCog, labelKey: 'nav.accounts', labelFallback: 'Accounts' },

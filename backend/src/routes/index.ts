@@ -38,8 +38,9 @@ import * as employeeAcks from '../controllers/employeeAcknowledgements.controlle
 import * as employeeActions from '../controllers/employeeActions.controller';
 import * as employeeTermination from '../controllers/employeeTermination.controller';
 import * as meEmployee from '../controllers/meEmployee.controller';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, authorizeCapability } from '../middleware/auth';
 import type { AuthRequest } from '../middleware/auth';
+import * as clearance from '../controllers/clearance.controller';
 import { validate } from '../middleware/validate';
 import * as v from '../validators/auth';
 import * as va from '../validators/accounting';
@@ -478,6 +479,12 @@ export function createRouter(io: SocketServer) {
   router.get( '/admin/hr-officers', authenticate, authorize('admin'), (req, res) => admin.listHrOfficers(req as AuthRequest, res));
   router.post('/admin/users/:userId/promote-hr-officer', authenticate, authorize('admin'), validate({ params: vu.userIdParam }), (req, res) => admin.promoteHrOfficer(req as AuthRequest, res));
   router.post('/admin/users/:userId/demote-hr-officer',  authenticate, authorize('admin'), validate({ params: vu.userIdParam }), (req, res) => admin.demoteHrOfficer(req as AuthRequest, res));
+
+  // ── Admin capability/clearance panel (Phase A) ──────────────────────────
+  // Visible to Owners and any hr.manage holder (owners pass implicitly).
+  // Grant SCOPE (Owner=all, HR=HR∪Operations) is enforced in the controller.
+  router.get('/admin/clearance/admins', authenticate, authorizeCapability('hr.manage'), (req, res) => clearance.listClearance(req as AuthRequest, res));
+  router.put('/admin/clearance/admins/:userId', authenticate, authorizeCapability('hr.manage'), validate({ params: vu.userIdParam, body: vu.updateClearanceSchema }), (req, res) => clearance.updateClearance(req as AuthRequest, res));
 
   // ── Self-service employee profile (Wave 2.5) ────────────────────────────
   // Employees (teacher / driver / supervisor / admin / reception /

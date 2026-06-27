@@ -2,8 +2,10 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from '../config/supabase';
-import { tenantDb } from '../utils/db';
+import { adminDb, tenantDb } from '../utils/db';
 import { logger } from '../utils/logger';
+import type { Capability } from '../constants/clearance';
+import { isCapability } from '../constants/clearance';
 
 export interface AuthPayload {
   userId: string;
@@ -13,6 +15,14 @@ export interface AuthPayload {
   featuresVersion?: number;
 }
 
+// Per-request admin clearance, loaded fresh from the DB (NOT from the JWT) so
+// a grant/revoke takes effect on the very next request without a re-login —
+// same philosophy as isHrOfficer. Attached by authorizeCapability().
+export interface Clearance {
+  isOwner: boolean;
+  capabilities: Capability[];
+}
+
 export interface AuthRequest extends Request {
   user?: AuthPayload;
   // RLS Phase 1: an authenticated-role, school-scoped Supabase client
@@ -20,6 +30,10 @@ export interface AuthRequest extends Request {
   // from the shared service-role `supabase` import to `req.db` in Phase 3;
   // until then this property is set but unused.
   db?: SupabaseClient;
+  // Admin capability clearance (Phase A). Populated by authorizeCapability()
+  // when a route gates on a capability; controllers can also load it on
+  // demand via loadClearance().
+  clearance?: Clearance;
 }
 
 // Endpoints a user with must_change_password=true may still reach — the
@@ -143,6 +157,49 @@ export function authorize(...roles: string[]) {
       res.status(403).json({ error: 'Forbidden: insufficient permissions' });
       return;
     }
+    next();
+  };
+}
+
+// ── Admin capability clearance (Phase A) ────────────────────────────────────
+// Loads an admin's clearance (is_owner + admin_capabilities) from the DB. An
+// Owner is treated as holding every capability implicitly, so capability
+// checks reduce to a single `isOwner || capabilities.includes(cap)`. Reads
+// fresh on each call (not cached, not from the JWT) so grants take effect
+// immediately — mirrors isHrOfficer().
+export async function loadClearance(userId: string): Promise<Clearance> {
+  const { data } = await adminDb
+    .from('users')
+    .select('is_owner, admin_capabilities')
+    .eq('id', userId)
+    .maybeSingle();
+  const isOwner = data?.is_owner === true;
+  const capabilities = Array.isArray(data?.admin_capabilities)
+    ? (data!.admin_capabilities as string[]).filter(isCapability)
+    : [];
+  return { isOwner, capabilities };
+}
+
+export function clearanceHas(c: Clearance, cap: Capability): boolean {
+  return c.isOwner || c.capabilities.includes(cap);
+}
+
+// Route guard: require the admin role AND a specific capability. Attaches
+// req.clearance for the controller. Phase A only mounts this on the new
+// clearance endpoints; the rest of the admin surface stays on
+// authorize('admin') until Phase B/C migrate route groups onto capabilities.
+export function authorizeCapability(cap: Capability) {
+  return async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    if (!req.user || req.user.role !== 'admin') {
+      res.status(403).json({ error: 'Forbidden: insufficient permissions' });
+      return;
+    }
+    const clearance = await loadClearance(req.user.userId);
+    if (!clearanceHas(clearance, cap)) {
+      res.status(403).json({ error: 'Forbidden: insufficient permissions' });
+      return;
+    }
+    req.clearance = clearance;
     next();
   };
 }

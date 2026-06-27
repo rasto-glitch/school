@@ -11,6 +11,8 @@ import * as XLSX from 'xlsx';
 import { adminDb as supabase } from '../utils/db';
 import { safeExt } from '../utils/upload';
 import type { AuthRequest } from '../middleware/auth';
+import { loadClearance } from '../middleware/auth';
+import { CAPABILITIES, canGrantCapability, canGrantOwner, normalizeCapabilities, deriveHrOfficer } from '../constants/clearance';
 import { toCC } from '../utils/transform';
 import { parseCursorParams, buildPage } from '../utils/pagination';
 import { notify, notifyMany } from '../utils/notify';
@@ -3201,8 +3203,38 @@ export async function updateDriver(req: AuthRequest, res: Response): Promise<voi
 
 // ---- ACCOUNTS ----
 export async function createAccount(req: AuthRequest, res: Response): Promise<void> {
-  const { schoolId } = req.user!;
+  const { schoolId, userId: actorId } = req.user!;
   const { fullName, firstName, lastName, email, phone, username, password, role } = req.body;
+
+  // Admin clearance at creation (Phase A). For role='admin' the creator may
+  // pass isOwner/capabilities scoped to their OWN grant scope; anything they
+  // can't grant is rejected. Omitted → the new admin starts pending (no
+  // owner, no caps) and cannot log in until granted. Non-admin roles ignore
+  // these fields entirely.
+  let clearanceColumns: { is_owner: boolean; admin_capabilities: string[]; is_hr_officer: boolean } | null = null;
+  if (role === 'admin') {
+    const wantOwner = req.body.isOwner === true;
+    const wantCaps = normalizeCapabilities(req.body.capabilities);
+    if (wantOwner || wantCaps.length > 0) {
+      const granter = await loadClearance(actorId);
+      if (wantOwner && !canGrantOwner(granter)) {
+        res.status(403).json({ error: 'Only an owner can create another owner.' });
+        return;
+      }
+      if (!wantOwner) {
+        const outOfScope = wantCaps.find(c => !canGrantCapability(granter, c));
+        if (outOfScope) {
+          res.status(403).json({ error: `You can't grant the "${outOfScope}" capability.` });
+          return;
+        }
+      }
+      clearanceColumns = wantOwner
+        ? { is_owner: true, admin_capabilities: [...CAPABILITIES], is_hr_officer: true }
+        : { is_owner: false, admin_capabilities: wantCaps, is_hr_officer: deriveHrOfficer(false, wantCaps) };
+    } else {
+      clearanceColumns = { is_owner: false, admin_capabilities: [], is_hr_officer: false }; // pending
+    }
+  }
 
   // Account roles use a single Full Name; split into first/last for the users
   // row (legacy first_name/last_name columns). Older clients may still send
@@ -3256,6 +3288,7 @@ export async function createAccount(req: AuthRequest, res: Response): Promise<vo
     password_hash: passwordHash,
     role,
     must_change_password: usedDefault,
+    ...(clearanceColumns ?? {}),
     ...hrColumns(req.body, { includeEmergency: true }),
   }).select('id, school_id, username, email, phone, role, first_name, last_name, profile_picture, is_active, created_at, password_changed_at').single();
 

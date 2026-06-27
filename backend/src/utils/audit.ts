@@ -55,7 +55,9 @@ export type AuditEntityType =
   | 'report'
   // HD-4 (migration 046) — chart-of-accounts CRUD + manual journal entries
   | 'chart_of_account'
-  | 'journal_entry';
+  | 'journal_entry'
+  // Phase A — admin capability/clearance grants (migration 058)
+  | 'admin_clearance';
 
 interface LogParams {
   req: AuthRequest;

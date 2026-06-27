@@ -25,6 +25,14 @@ const optionalId = z.union([uuid, z.literal('')]).nullable().optional();
 export const userIdParam = z.object({ userId: uuid });
 export const idParam = z.object({ id: uuid });
 
+// Admin capability/clearance (Phase A). Capability keys are validated against
+// the canonical list in constants/clearance.ts; the controller additionally
+// enforces grant SCOPE (which the validator can't know — it depends on the
+// granter). Loosely typed here as a bounded string array; unknown keys are
+// dropped server-side by normalizeCapabilities().
+const capabilityKey = z.string().trim().max(40);
+const capabilities = z.array(capabilityKey).max(20);
+
 export const createAccountSchema = z.object({
   // Account roles now use a single Full Name (split into first/last on save).
   // firstName/lastName kept optional for backward compatibility.
@@ -37,7 +45,19 @@ export const createAccountSchema = z.object({
   password,
   role,
   emergencyContact: contactStr(120),
+  // Admin-only clearance grant at creation (ignored for other roles). Scope
+  // is enforced in the controller against the granter's own clearance.
+  isOwner: z.boolean().optional(),
+  capabilities: capabilities.optional(),
   ...hrFields,
+});
+
+// Clearance panel: set a target admin's owner bit and/or capability set.
+export const updateClearanceSchema = z.object({
+  isOwner: z.boolean().optional(),
+  capabilities: capabilities.optional(),
+}).refine(b => b.isOwner !== undefined || b.capabilities !== undefined, {
+  message: 'Provide isOwner and/or capabilities.',
 });
 
 export const updateAccountSchema = z.object({

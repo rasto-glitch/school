@@ -17,6 +17,7 @@ import { sendMail } from '../utils/mailer';
 import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from '../utils/passwordPolicy';
 import { isDefaultPassword } from '../utils/defaultPasswords';
 import { logAudit } from '../utils/audit';
+import { isPendingClearance } from '../constants/clearance';
 import {
   getArmedLoginFactors, sendLoginOtp, verifyLoginSecondFactor,
   type LoginFactorMethod, type LoginVerifyFailure,
@@ -343,7 +344,7 @@ export async function login(req: Request, res: Response): Promise<void> {
   // Find user
   const { data: user, error: userErr } = await supabase
     .from('users')
-    .select('id, username, password_hash, role, first_name, last_name, profile_picture, email, is_active, must_change_password, phone_e164, phone_verified_at')
+    .select('id, username, password_hash, role, first_name, last_name, profile_picture, email, is_active, must_change_password, phone_e164, phone_verified_at, is_owner, admin_capabilities')
     .eq('school_id', school.id)
     .eq('username', username)
     .single();
@@ -356,6 +357,19 @@ export async function login(req: Request, res: Response): Promise<void> {
   const valid = await bcrypt.compare(password, user.password_hash);
   if (!valid) {
     res.status(401).json({ error: 'Invalid credentials' });
+    return;
+  }
+
+  // Clearance gate (Phase A): an admin who is not an Owner and holds zero
+  // capabilities is "pending clearance" — created but not yet granted access.
+  // Reject at login with a distinct, non-enumerable message (the caller has
+  // already proven the password, so this leaks nothing). Runs BEFORE any MFA
+  // ticket is issued so a blocked admin never advances into the MFA flow.
+  if (user.role === 'admin' && isPendingClearance(user as { is_owner?: boolean; admin_capabilities?: string[] })) {
+    res.status(403).json({
+      error: 'Your administrator account has no access granted yet. Please contact your school owner.',
+      code: 'CLEARANCE_PENDING',
+    });
     return;
   }
 

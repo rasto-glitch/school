@@ -48,7 +48,7 @@ import EmployeeProfilePage from './pages/admin/EmployeeProfilePage';
 import ArchivedEmployeeProfilePage from './pages/admin/ArchivedEmployeeProfilePage';
 import TransfersPage from './pages/admin/TransfersPage';
 import NewEmployeePage from './pages/admin/employees/NewEmployeePage';
-import HrOfficersPage from './pages/admin/HrOfficersPage';
+import ClearancePage from './pages/admin/ClearancePage';
 import SchoolPoliciesPage from './pages/admin/SchoolPoliciesPage';
 import MyEmployeeProfilePage from './pages/MyEmployeeProfilePage';
 import AdminSchedulePage from './pages/admin/SchedulePage';
@@ -246,7 +246,9 @@ export default function App() {
         <Route path="/admin/archived-employees/:id" element={<ProtectedRoute allowedRoles={['admin']}><ArchivedEmployeeProfilePage /></ProtectedRoute>} />
         <Route path="/admin/transfers" element={<ProtectedRoute allowedRoles={['admin']}><TransfersPage /></ProtectedRoute>} />
         <Route path="/admin/employees/:role/:id" element={<ProtectedRoute allowedRoles={['admin']}><EmployeeProfilePage /></ProtectedRoute>} />
-        <Route path="/admin/hr-officers" element={<ProtectedRoute allowedRoles={['admin']}><HrOfficersPage /></ProtectedRoute>} />
+        <Route path="/admin/clearance" element={<ProtectedRoute allowedRoles={['admin']}><ClearancePage /></ProtectedRoute>} />
+        {/* HR Officers dissolved into the clearance panel (Phase A) — keep old links working. */}
+        <Route path="/admin/hr-officers" element={<Navigate to="/admin/clearance" replace />} />
         <Route path="/admin/school-policies" element={<ProtectedRoute allowedRoles={['admin']}><SchoolPoliciesPage /></ProtectedRoute>} />
         <Route path="/me/profile" element={<ProtectedRoute allowedRoles={['teacher','driver','supervisor','admin','reception','accountant']}><MyEmployeeProfilePage /></ProtectedRoute>} />
         {/* Legacy path — keep bookmarks/links working */}
