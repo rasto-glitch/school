@@ -683,6 +683,7 @@
     "saved": "Saved",
     "grade_saved": "Grade saved successfully.",
     "save_grade_failed": "Could not save grade.",
+    "filing_closed": "Grade filing isn't open for {{term}} right now.",
     "need_student_period": "Select a student and enter a grading period.",
     "need_one_mark": "Add at least one mark.",
     "attendance_obs_ph": "Attendance observations...",

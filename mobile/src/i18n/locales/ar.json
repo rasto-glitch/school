@@ -683,6 +683,7 @@
     "saved": "تم الحفظ",
     "grade_saved": "تم حفظ الدرجة بنجاح.",
     "save_grade_failed": "تعذر حفظ الدرجة.",
+    "filing_closed": "إدخال الدرجات غير مفتوح لـ {{term}} حاليًا.",
     "need_student_period": "اختر طالباً وأدخل الفصل الدراسي.",
     "need_one_mark": "أضف درجة واحدة على الأقل.",
     "attendance_obs_ph": "ملاحظات الحضور...",

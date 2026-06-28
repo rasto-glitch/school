@@ -31,6 +31,7 @@ export default function TeacherGradingScreen({ subject, classes, subjects, teach
   const [selectedStudent, setSelectedStudent] = useState('');
   const [markTypes, setMarkTypes] = useState<MarkType[]>([]);
   const [terms, setTerms] = useState<TermItem[]>([]);
+  const [gradeWindows, setGradeWindows] = useState<{ term: string; opensOn: string; closesOn: string; isOpen: boolean }[]>([]);
   const [gradingPeriod, setGradingPeriod] = useState('');
   const [marks, setMarks] = useState<Mark[]>([{ name: '', value: '' }]);
   const [history, setHistory] = useState<GradeRecord[]>([]);
@@ -45,6 +46,7 @@ export default function TeacherGradingScreen({ subject, classes, subjects, teach
   useEffect(() => {
     teacherApi.getMarkTypes('grade').then(r => setMarkTypes(r.data || [])).catch(() => {});
     teacherApi.getTerms().then(r => setTerms(r.data || [])).catch(() => {});
+    teacherApi.getGradeWindows().then(r => setGradeWindows(r.data?.windows || [])).catch(() => {});
     teacherApi.getGradeConfig().then(r => setCfg(r.data)).catch(() => {});
     if (classes.length > 0) setSelectedClass(classes[0].id);
   }, [classes]);
@@ -71,6 +73,10 @@ export default function TeacherGradingScreen({ subject, classes, subjects, teach
 
   const total = marks.reduce((s, m) => s + (parseFloat(m.value) || 0), 0);
 
+  // Grade filing is gated by a per-term window (server-enforced in upsertGrade).
+  // Disable Save + warn when the selected term has no open window.
+  const filingClosed = !!gradingPeriod.trim() && !gradeWindows.some(w => w.term === gradingPeriod.trim() && w.isOpen);
+
   // Only show history for the current academic year. Past years are not deleted —
   // they remain in the DB and are still visible to admins, parents, and exports.
   const visibleHistory = academicYear ? history.filter(g => g.academicYear === academicYear) : history;
@@ -88,6 +94,7 @@ export default function TeacherGradingScreen({ subject, classes, subjects, teach
     if (!selectedStudent || !gradingPeriod.trim()) { Alert.alert(t('teacher.required'), t('teacher.need_student_period')); return; }
     const validMarks = marks.filter(m => m.name.trim() && m.value !== '');
     if (validMarks.length === 0) { Alert.alert(t('teacher.required'), t('teacher.need_one_mark')); return; }
+    if (filingClosed) { Alert.alert(t('teacher.required'), t('teacher.filing_closed', { term: gradingPeriod.trim() })); return; }
     setSaving(true);
     try {
       await teacherApi.upsertGrade({ studentId: selectedStudent, classId: selectedClass, subject: selectedSubject || subject, gradingPeriod: gradingPeriod.trim(), marks: validMarks.map(m => ({ name: m.name, value: parseFloat(m.value) })) });
@@ -95,8 +102,8 @@ export default function TeacherGradingScreen({ subject, classes, subjects, teach
       setMarks([{ name: '', value: '' }]);
       setGradingPeriod('');
       teacherApi.getGrades(selectedStudent).then(r => setHistory(r.data || [])).catch(() => {});
-    } catch {
-      Alert.alert(t('common.error'), t('teacher.save_grade_failed'));
+    } catch (e: any) {
+      Alert.alert(t('common.error'), e?.response?.data?.error || t('teacher.save_grade_failed'));
     } finally {
       setSaving(false);
     }
@@ -157,6 +164,10 @@ export default function TeacherGradingScreen({ subject, classes, subjects, teach
         <ChevronDown size={14} color={colors.textMuted} />
       </TouchableOpacity>
 
+      {filingClosed && (
+        <Text style={styles.filingClosedNote}>{t('teacher.filing_closed', { term: gradingPeriod.trim() })}</Text>
+      )}
+
       <Text style={styles.label}>{t('teacher.marks')}</Text>
       {marks.map((mark, i) => (
         <View key={i} style={styles.markRow}>
@@ -205,7 +216,7 @@ export default function TeacherGradingScreen({ subject, classes, subjects, teach
         {marks.length > 1 && <Text style={styles.totalText}>{t('grades.total')}: {total.toFixed(1)}</Text>}
       </View>
 
-      <TouchableOpacity style={[styles.saveBtn, (!selectedStudent) && { opacity: 0.4 }]} onPress={handleSave} disabled={saving || !selectedStudent}>
+      <TouchableOpacity style={[styles.saveBtn, (!selectedStudent || filingClosed) && { opacity: 0.4 }]} onPress={handleSave} disabled={saving || !selectedStudent || filingClosed}>
         {saving ? <ActivityIndicator color="#fff" size="small" /> : <><Send size={16} color="#fff" /><Text style={styles.saveBtnText}>{t('teacher.save_grade')}</Text></>}
       </TouchableOpacity>
 
@@ -309,6 +320,7 @@ const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').u
   input: { backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, fontSize: font.md, color: colors.text, borderWidth: 1, borderColor: colors.border, marginBottom: spacing.sm },
   dropdownBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   dropdownText: { fontSize: font.md, color: colors.text, flex: 1 },
+  filingClosedNote: { fontSize: font.sm, color: colors.warning, marginBottom: spacing.md, marginTop: -spacing.xs },
   markRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start' },
   removeBtn: { paddingTop: spacing.md, paddingHorizontal: 4 },
   marksFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },

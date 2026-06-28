@@ -25,13 +25,20 @@ export default function GradingPage() {
   const [terms, setTerms] = useState<Term[]>([]);
   const [academicYear, setAcademicYear] = useState<string | null>(null);
   const [gradeSummary, setGradeSummary] = useState<Grade[]>([]);
+  const [gradeWindows, setGradeWindows] = useState<{ term: string; opensOn: string; closesOn: string; isOpen: boolean }[]>([]);
 
   useEffect(() => {
     teacherApi.getClasses().then(r => setClasses(r.data || []));
     teacherApi.getMarkTypes('grade').then(r => setMarkTypes(r.data || []));
     teacherApi.getTerms().then(r => setTerms(r.data || []));
     teacherApi.getSettings().then(r => setAcademicYear(r.data?.currentAcademicYear || null));
+    teacherApi.getGradeWindows().then(r => setGradeWindows(r.data?.windows || [])).catch(() => {});
   }, []);
+
+  // Grade filing is gated by a per-term window (server-enforced in upsertGrade).
+  // When the selected term has no open window, show a banner + disable Save so
+  // the teacher isn't surprised by a rejection after filling in marks.
+  const filingClosed = !!gradingPeriod && !gradeWindows.some(w => w.term === gradingPeriod && w.isOpen);
 
   const subjectOptions = subjectsForClass(selectedClass);
 
@@ -75,6 +82,10 @@ export default function GradingPage() {
     e.preventDefault();
     if (!selectedStudent || !selectedSubject) {
       toast.error(t('teacher.select_student_subject'));
+      return;
+    }
+    if (filingClosed) {
+      toast.error(t('teacher.filing_closed', { term: gradingPeriod, defaultValue: "Grade filing isn't open for {{term}} right now." }));
       return;
     }
     setLoading(true);
@@ -158,6 +169,12 @@ export default function GradingPage() {
               />
             </div>
 
+            {filingClosed && (
+              <div className="rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-700">
+                {t('teacher.filing_closed', { term: gradingPeriod, defaultValue: "Grade filing isn't open for {{term}} right now." })}
+              </div>
+            )}
+
             {/* Dynamic marks */}
             <div>
               <div className="flex items-center justify-between mb-2">
@@ -232,7 +249,7 @@ export default function GradingPage() {
               )}
             </div>
 
-            <Button type="submit" loading={loading} fullWidth icon={<Star className="w-4 h-4" />}>
+            <Button type="submit" loading={loading} disabled={filingClosed} fullWidth icon={<Star className="w-4 h-4" />}>
               {t('teacher.save_grade')}
             </Button>
           </form>

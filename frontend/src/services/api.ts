@@ -327,6 +327,7 @@ export const teacherApi = {
   upsertGrade: (data: object) => api.post('/teacher/grades', data),
   getMarkTypes: (appliesTo?: 'report' | 'grade') => api.get('/teacher/mark-types', { params: appliesTo ? { for: appliesTo } : {} }),
   getTerms: () => api.get('/teacher/terms'),
+  getGradeWindows: () => api.get('/teacher/grade-windows'),
   getActivePeriod: () => api.get('/supervisor/weekly-period'),
   getWeeklySummary: (params?: Record<string, string>) => api.get('/teacher/weekly-summary', { params }),
   upsertWeeklySummary: (data: object) => api.post('/teacher/weekly-summary', data),
@@ -685,6 +686,19 @@ export const adminApi = {
   } = {}) => api.get('/admin/audit-logs', { params }),
   // Owner read-only finance snapshot for the dashboard cockpit (finance.read).
   getFinanceOverview: () => api.get('/admin/finance/overview'),
+  // ---- Dashboard "Needs your attention" signals + actions (migration 060) ----
+  getGradeGap: () => api.get('/admin/dashboard/grade-gap'),
+  remindGradeGap: () => api.post('/admin/dashboard/grade-gap/remind'),
+  getAttendanceGap: () => api.get('/admin/dashboard/attendance-gap'),
+  notifyAttendanceGap: () => api.post('/admin/dashboard/attendance-gap/notify'),
+  getAccountRequestSummary: () => api.get('/admin/dashboard/account-requests'),
+  getFailedLoginSummary: () => api.get('/admin/dashboard/failed-logins'),
+  getSecurityLoginAttempts: () => api.get('/admin/security/login-attempts'),
+  // Per-term grade filing windows (academics.oversee)
+  getGradeFilingWindows: () => api.get('/admin/grade-filing-windows'),
+  setGradeFilingWindow: (data: { term: string; opensOn: string; closesOn: string }) =>
+    api.put('/admin/grade-filing-windows', data),
+  deleteGradeFilingWindow: (id: string) => api.delete(`/admin/grade-filing-windows/${id}`),
 };
 
 // ---- ACCOUNTING (premium tuition module) ----

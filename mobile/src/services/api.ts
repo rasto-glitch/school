@@ -365,6 +365,7 @@ export const teacherApi = {
   upsertGrade: (data: object) => api.post('/teacher/grades', data),
   getMarkTypes: (appliesTo?: 'report' | 'grade') => api.get('/teacher/mark-types', { params: appliesTo ? { for: appliesTo } : {} }),
   getTerms: () => api.get('/teacher/terms'),
+  getGradeWindows: () => api.get('/teacher/grade-windows'),
   getStudentBrief: (id: string) => api.get(`/teacher/students/${id}/brief`),
   getActivePeriod: () => api.get('/supervisor/weekly-period'),
   getWeeklySummary: (params?: Record<string, string>) => api.get('/teacher/weekly-summary', { params }),
