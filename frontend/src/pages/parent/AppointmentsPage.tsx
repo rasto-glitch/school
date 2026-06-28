@@ -63,8 +63,8 @@ export default function AppointmentsPage() {
 
   return (
     <PageLayout title={t('appointments.title')} subtitle={t('appointments.subtitle')}>
-      <div className="space-y-6 max-w-2xl">
-        {/* Request form */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+        {/* Request form (left) */}
         <Card>
           <h2 className="font-semibold text-gray-900 mb-4">{t('appointments.new_request')}</h2>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -93,7 +93,8 @@ export default function AppointmentsPage() {
           </form>
         </Card>
 
-        {/* Previous appointments */}
+        {/* My Requests (right) */}
+        <div>
         {loading ? <CardListSkeleton count={2} /> : error ? (
           <ErrorMessage onRetry={() => setRetryKey(k => k + 1)} />
         ) : appointments.length === 0 ? (
@@ -134,6 +135,7 @@ export default function AppointmentsPage() {
             </div>
           </div>
         )}
+        </div>
       </div>
     </PageLayout>
   );

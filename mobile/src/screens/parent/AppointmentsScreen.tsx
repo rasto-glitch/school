@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from 'react';
 import {
   View, Text, ScrollView, StyleSheet,
   RefreshControl, TouchableOpacity, TextInput, Alert, Modal,
+  Keyboard, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { CardListSkeleton } from '../../components/Skeleton';
 import { useTranslation } from 'react-i18next';
@@ -18,7 +19,9 @@ interface Appointment {
   message?: string;
   requestedDate?: string;
   status: string;
-  adminNote?: string;
+  // Reception's reply: the message + the (possibly rescheduled) date it set.
+  responseMessage?: string;
+  scheduledDate?: string;
   createdAt: string;
 }
 
@@ -116,6 +119,9 @@ export default function AppointmentsScreen() {
                     {item.requestedDate && (
                       <Text style={styles.date}>{t('appointments.requested')}: {new Date(item.requestedDate).toLocaleDateString()}</Text>
                     )}
+                    {item.scheduledDate && (
+                      <Text style={styles.scheduled}>{t('appointments.scheduled')}: {new Date(item.scheduledDate + 'T00:00:00').toLocaleDateString()}</Text>
+                    )}
                   </View>
                   <View style={{ alignItems: 'flex-end', gap: 4 }}>
                     <View style={[styles.statusBadge, { backgroundColor: color + '20' }]}>
@@ -129,10 +135,13 @@ export default function AppointmentsScreen() {
                 {expanded && (
                   <View style={styles.expandedBody}>
                     {item.message && <Text style={styles.messageText}>{item.message}</Text>}
-                    {item.adminNote && (
+                    {(item.responseMessage || item.scheduledDate) && (
                       <View style={styles.noteBox}>
                         <Text style={styles.noteLabel}>{t('appointments.school_response')}</Text>
-                        <Text style={styles.noteText}>{item.adminNote}</Text>
+                        {item.responseMessage && <Text style={styles.noteText}>{item.responseMessage}</Text>}
+                        {item.scheduledDate && (
+                          <Text style={styles.scheduledNote}>{t('appointments.scheduled')}: {new Date(item.scheduledDate + 'T00:00:00').toLocaleDateString()}</Text>
+                        )}
                       </View>
                     )}
                     <Text style={styles.createdAt}>{new Date(item.createdAt).toLocaleDateString()}</Text>
@@ -149,7 +158,12 @@ export default function AppointmentsScreen() {
       </TouchableOpacity>
 
       <Modal visible={showModal} animationType="slide" presentationStyle="pageSheet">
-        <View style={[styles.modal, { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 24 }]}>
+        <KeyboardAvoidingView style={{ flex: 1, backgroundColor: colors.bg }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView
+          contentContainerStyle={[styles.modalScroll, { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 24 }]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>{t('appointments.new_request')}</Text>
             <TouchableOpacity onPress={() => setShowModal(false)}>
@@ -178,7 +192,7 @@ export default function AppointmentsScreen() {
           />
 
           <Text style={styles.fieldLabel}>{t('appointments.preferred_date')}</Text>
-          <TouchableOpacity style={styles.dateBtn} onPress={() => setShowCalendar(v => !v)} activeOpacity={0.7}>
+          <TouchableOpacity style={styles.dateBtn} onPress={() => { Keyboard.dismiss(); setShowCalendar(v => !v); }} activeOpacity={0.7}>
             <Calendar size={16} color={requestedDate ? colors.primary : colors.textMuted} />
             <Text style={[styles.dateBtnText, requestedDate ? { color: colors.primary, fontWeight: '600' } : { color: colors.textMuted }]}>
               {requestedDate
@@ -246,7 +260,8 @@ export default function AppointmentsScreen() {
           <TouchableOpacity style={styles.submitBtn} onPress={handleSubmit} disabled={submitting}>
             <Text style={styles.submitText}>{submitting ? t('common.loading') : t('appointments.submit')}</Text>
           </TouchableOpacity>
-        </View>
+        </ScrollView>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -261,6 +276,7 @@ const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').u
   cardTop: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
   reason: { fontSize: font.md, fontWeight: '700', color: colors.text },
   date: { fontSize: font.xs, color: colors.textMuted, marginTop: 2 },
+  scheduled: { fontSize: font.xs, color: colors.primary, fontWeight: '600', marginTop: 2 },
   statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: radius.full, paddingHorizontal: 8, paddingVertical: 4 },
   statusText: { fontSize: font.xs, fontWeight: '700' },
   expandedBody: { marginTop: spacing.sm, paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border },
@@ -268,6 +284,7 @@ const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').u
   noteBox: { backgroundColor: colors.bg, borderRadius: radius.sm, padding: spacing.sm, marginBottom: spacing.sm },
   noteLabel: { fontSize: font.xs, fontWeight: '700', color: colors.textMuted, marginBottom: 2 },
   noteText: { fontSize: font.sm, color: colors.text },
+  scheduledNote: { fontSize: font.sm, color: colors.primary, fontWeight: '600', marginTop: 4 },
   createdAt: { fontSize: font.xs, color: colors.textMuted },
   fab: {
     position: 'absolute', right: 20,
@@ -277,6 +294,7 @@ const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').u
     ...shadow.md,
   },
   modal: { flex: 1, backgroundColor: colors.bg, padding: spacing.lg },
+  modalScroll: { padding: spacing.lg },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.lg },
   modalTitle: { fontSize: font.xl, fontWeight: '700', color: colors.text },
   fieldLabel: { fontSize: font.sm, fontWeight: '600', color: colors.textSecondary, marginBottom: 6, marginTop: spacing.md },
