@@ -23,18 +23,23 @@ interface Appointment {
   responseMessage?: string;
   scheduledDate?: string;
   createdAt: string;
+  // Phase D — supervisor meeting invite.
+  inviteReason?: string;
+  invitedByName?: string;
 }
 
 const STATUS_COLOR: Record<string, string> = {
   pending: '#F59E0B',
   approved: '#10B981',
   rejected: '#EF4444',
+  invited: '#6366F1',
 };
 
 const STATUS_ICON: Record<string, any> = {
   pending: Clock,
   approved: CheckCircle,
   rejected: XCircle,
+  invited: Clock,
 };
 
 export default function AppointmentsScreen() {
@@ -52,6 +57,7 @@ export default function AppointmentsScreen() {
   const [calViewDate, setCalViewDate] = useState(() => { const d = new Date(); d.setDate(1); return d; });
   const [submitting, setSubmitting] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [completingId, setCompletingId] = useState<string | null>(null); // invite being completed
 
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
@@ -74,9 +80,11 @@ export default function AppointmentsScreen() {
     }
     setSubmitting(true);
     try {
-      await parentApi.createAppointment({ reason: reason.trim(), message: message.trim() || undefined, requestedDate: requestedDate || undefined });
+      const payload = { reason: reason.trim(), message: message.trim() || undefined, requestedDate: requestedDate || undefined };
+      if (completingId) await parentApi.completeInvite(completingId, payload);
+      else await parentApi.createAppointment(payload);
       setReason(''); setMessage(''); setRequestedDate(''); setShowCalendar(false);
-      setShowModal(false);
+      setShowModal(false); setCompletingId(null);
       load();
       Alert.alert('✓', t('appointments.toast_success'));
     } catch {
@@ -86,10 +94,24 @@ export default function AppointmentsScreen() {
     }
   };
 
+  const openNew = () => { setCompletingId(null); setReason(''); setMessage(''); setRequestedDate(''); setShowCalendar(false); setShowModal(true); };
+  const openComplete = (apt: Appointment) => { setCompletingId(apt.id); setReason(''); setMessage(''); setRequestedDate(''); setShowCalendar(false); setShowModal(true); };
+
+  const handleDecline = (apt: Appointment) => {
+    Alert.alert(t('appointments.decline'), t('appointments.decline_confirm'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('appointments.decline'), style: 'destructive', onPress: async () => {
+        try { await parentApi.declineInvite(apt.id); load(); }
+        catch { Alert.alert(t('common.error'), t('appointments.toast_error')); }
+      } },
+    ]);
+  };
+
   const statusLabel: Record<string, string> = {
     pending: t('appointments.status_pending'),
     approved: t('appointments.status_approved'),
     rejected: t('appointments.status_rejected'),
+    invited: t('appointments.status_invited'),
   };
 
   return (
@@ -111,6 +133,31 @@ export default function AppointmentsScreen() {
             const StatusIcon = STATUS_ICON[item.status] ?? Clock;
             const color = STATUS_COLOR[item.status] ?? colors.textMuted;
             const expanded = expandedId === item.id;
+            if (item.status === 'invited') {
+              return (
+                <View key={item.id} style={[styles.card, styles.inviteCard]}>
+                  <View style={styles.cardTop}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.reason}>{t('appointments.invite_title')}</Text>
+                      {item.invitedByName && <Text style={styles.date}>{t('appointments.invited_by', { name: item.invitedByName })}</Text>}
+                      {item.inviteReason && <Text style={styles.inviteReason}>{item.inviteReason}</Text>}
+                    </View>
+                    <View style={[styles.statusBadge, { backgroundColor: color + '20' }]}>
+                      <StatusIcon size={13} color={color} />
+                      <Text style={[styles.statusText, { color }]}>{statusLabel[item.status] ?? item.status}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.inviteActions}>
+                    <TouchableOpacity style={styles.inviteBtnPrimary} onPress={() => openComplete(item)}>
+                      <Text style={styles.inviteBtnPrimaryText}>{t('appointments.complete')}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.inviteBtnGhost} onPress={() => handleDecline(item)}>
+                      <Text style={styles.inviteBtnGhostText}>{t('appointments.decline')}</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              );
+            }
             return (
               <TouchableOpacity key={item.id} style={styles.card} onPress={() => toggle(item.id)} activeOpacity={0.8}>
                 <View style={styles.cardTop}>
@@ -153,7 +200,7 @@ export default function AppointmentsScreen() {
         )}
       </ScrollView>
 
-      <TouchableOpacity style={[styles.fab, { bottom: insets.bottom + 24 }]} onPress={() => setShowModal(true)}>
+      <TouchableOpacity style={[styles.fab, { bottom: insets.bottom + 24 }]} onPress={openNew}>
         <Plus size={24} color="#fff" />
       </TouchableOpacity>
 
@@ -165,7 +212,7 @@ export default function AppointmentsScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>{t('appointments.new_request')}</Text>
+            <Text style={styles.modalTitle}>{completingId ? t('appointments.complete_title') : t('appointments.new_request')}</Text>
             <TouchableOpacity onPress={() => setShowModal(false)}>
               <X size={22} color={colors.textMuted} />
             </TouchableOpacity>
@@ -273,6 +320,13 @@ const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').u
   emptyText: { fontSize: font.md, fontWeight: '600', color: colors.textMuted },
   emptySub: { fontSize: font.sm, color: colors.textMuted, textAlign: 'center', paddingHorizontal: 32 },
   card: { backgroundColor: colors.card, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm, ...shadow.sm },
+  inviteCard: { borderLeftWidth: 3, borderLeftColor: '#6366F1' },
+  inviteReason: { fontSize: font.sm, color: colors.text, marginTop: 4 },
+  inviteActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
+  inviteBtnPrimary: { flex: 1, backgroundColor: colors.primary, borderRadius: radius.md, paddingVertical: 10, alignItems: 'center' },
+  inviteBtnPrimaryText: { color: '#fff', fontSize: font.sm, fontWeight: '700' },
+  inviteBtnGhost: { flex: 1, backgroundColor: colors.bg, borderRadius: radius.md, paddingVertical: 10, alignItems: 'center', borderWidth: 1, borderColor: colors.border },
+  inviteBtnGhostText: { color: colors.textSecondary, fontSize: font.sm, fontWeight: '600' },
   cardTop: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
   reason: { fontSize: font.md, fontWeight: '700', color: colors.text },
   date: { fontSize: font.xs, color: colors.textMuted, marginTop: 2 },

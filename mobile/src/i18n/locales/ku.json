@@ -425,7 +425,14 @@
     "status_approved": "پەسەندکراو",
     "status_rejected": "ڕەتکراوەتەوە",
     "toast_success": "داوای وادە نێردرا!",
-    "toast_error": "ناردنی داواکاری سەرنەکەوت"
+    "toast_error": "ناردنی داواکاری سەرنەکەوت",
+    "status_invited": "بانگهێشت",
+    "invite_title": "بانگهێشتی کۆبوونەوە",
+    "invited_by": "بانگهێشتکراو لەلایەن {{name}}",
+    "complete": "کاتێک هەڵبژێرە",
+    "complete_title": "کاتی کۆبوونەوە هەڵبژێرە",
+    "decline": "ڕەتکردنەوە",
+    "decline_confirm": "ئەم بانگهێشتی کۆبوونەوەیە ڕەت بکرێتەوە؟"
   },
   "notifications": {
     "title": "ئاگادارکردنەوەکان",
@@ -853,6 +860,11 @@
     "n_students": "{{count}} خوێندکار",
     "pickup_set": "شوێنی وەرگرتن دیاریکراوە",
     "pickup_none": "هیچ شوێنی وەرگرتنێک نییە",
+    "invite_meeting": "بانگهێشت بۆ کۆبوونەوە",
+    "invite_reason_ph": "هۆکار (ئارەزوومەندانە)",
+    "invite_send": "ناردنی بانگهێشت",
+    "invite_sent": "بانگهێشت نێردرا",
+    "invite_failed": "نەتوانرا بانگهێشتەکە بنێردرێت",
     "n_excused": "{{count}} بە بیانوو",
     "n_recorded": "{{recorded}}/{{total}} تۆمارکراو",
     "override_attendance": "گۆڕینی ئامادەبوون",

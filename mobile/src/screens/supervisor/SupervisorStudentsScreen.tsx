@@ -1,12 +1,12 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   View, Text, ScrollView, StyleSheet,
-  TouchableOpacity, TextInput, Linking, RefreshControl,
+  TouchableOpacity, TextInput, Linking, RefreshControl, Modal, Alert,
 } from 'react-native';
 import { CardListSkeleton } from '../../components/Skeleton';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
-import { Search, Phone, MapPin, Home, Building2 } from 'lucide-react-native';
+import { Search, Phone, MapPin, Home, Building2, CalendarPlus } from 'lucide-react-native';
 import { supervisorApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
 import { spacing, radius, font, shadow } from '../../theme';
@@ -35,6 +35,24 @@ export default function SupervisorStudentsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
+  // Phase D — meeting invite.
+  const [inviteFor, setInviteFor] = useState<StudentItem | null>(null);
+  const [inviteReason, setInviteReason] = useState('');
+  const [inviteSending, setInviteSending] = useState(false);
+
+  const sendInvite = async () => {
+    if (!inviteFor) return;
+    setInviteSending(true);
+    try {
+      await supervisorApi.createInvite({ studentId: inviteFor.id, inviteReason: inviteReason.trim() || undefined });
+      Alert.alert('✓', t('supervisor.invite_sent'));
+      setInviteFor(null); setInviteReason('');
+    } catch (e: any) {
+      Alert.alert(t('common.error'), e?.response?.data?.error || t('supervisor.invite_failed'));
+    } finally {
+      setInviteSending(false);
+    }
+  };
 
   const load = useCallback(async () => {
     const r = await supervisorApi.getAllStudents();
@@ -73,6 +91,7 @@ export default function SupervisorStudentsScreen() {
   };
 
   return (
+    <>
     <ScrollView
       style={styles.container}
       contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.md }]}
@@ -156,6 +175,13 @@ export default function SupervisorStudentsScreen() {
                       {hasLocation ? t('supervisor.pickup_set') : t('supervisor.pickup_none')}
                     </Text>
                   </View>
+
+                  {parent?.fullName ? (
+                    <TouchableOpacity style={styles.inviteBtn} onPress={() => { setInviteFor(student); setInviteReason(''); }}>
+                      <CalendarPlus size={13} color={colors.primary} />
+                      <Text style={styles.inviteBtnText}>{t('supervisor.invite_meeting')}</Text>
+                    </TouchableOpacity>
+                  ) : null}
                 </View>
               );
             })}
@@ -163,6 +189,32 @@ export default function SupervisorStudentsScreen() {
         ))
       )}
     </ScrollView>
+
+    <Modal visible={!!inviteFor} animationType="slide" transparent onRequestClose={() => setInviteFor(null)}>
+      <View style={styles.modalOverlay}>
+        <View style={[styles.modalBox, { backgroundColor: colors.card }]}>
+          <Text style={styles.modalTitle}>{t('supervisor.invite_meeting')}</Text>
+          <Text style={styles.modalSub}>{inviteFor?.parents?.fullName || inviteFor?.fullName}</Text>
+          <TextInput
+            style={styles.modalInput}
+            placeholder={t('supervisor.invite_reason_ph')}
+            placeholderTextColor={colors.textMuted}
+            value={inviteReason}
+            onChangeText={setInviteReason}
+            multiline
+          />
+          <View style={styles.modalActions}>
+            <TouchableOpacity style={styles.modalCancel} onPress={() => setInviteFor(null)}>
+              <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.modalSend} onPress={sendInvite} disabled={inviteSending}>
+              <Text style={styles.modalSendText}>{inviteSending ? t('common.loading') : t('supervisor.invite_send')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+    </>
   );
 }
 
@@ -202,4 +254,16 @@ const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').u
     paddingHorizontal: 10, paddingVertical: 3,
   },
   callBtnText: { fontSize: 11, fontWeight: '700', color: colors.success },
+  inviteBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', backgroundColor: colors.primaryLight, borderRadius: radius.full, paddingHorizontal: 10, paddingVertical: 5, marginTop: 4 },
+  inviteBtnText: { fontSize: 11, fontWeight: '700', color: colors.primary },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+  modalBox: { borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, padding: spacing.lg, paddingBottom: 32, gap: spacing.sm },
+  modalTitle: { fontSize: font.lg, fontWeight: '800', color: colors.text },
+  modalSub: { fontSize: font.sm, color: colors.textMuted },
+  modalInput: { backgroundColor: colors.bg, borderRadius: radius.md, padding: spacing.md, minHeight: 90, textAlignVertical: 'top', fontSize: font.md, color: colors.text, borderWidth: 1, borderColor: colors.border },
+  modalActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
+  modalCancel: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: radius.md, backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border },
+  modalCancelText: { fontSize: font.md, fontWeight: '700', color: colors.textMuted },
+  modalSend: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: radius.md, backgroundColor: colors.primary },
+  modalSendText: { fontSize: font.md, fontWeight: '700', color: '#fff' },
 });

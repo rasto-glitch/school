@@ -425,7 +425,14 @@
     "status_approved": "مقبول",
     "status_rejected": "مرفوض",
     "toast_success": "تم إرسال طلب الموعد!",
-    "toast_error": "فشل إرسال الطلب"
+    "toast_error": "فشل إرسال الطلب",
+    "status_invited": "دعوة",
+    "invite_title": "دعوة لاجتماع",
+    "invited_by": "بدعوة من {{name}}",
+    "complete": "اختيار وقت",
+    "complete_title": "اختر وقت الاجتماع",
+    "decline": "رفض",
+    "decline_confirm": "رفض دعوة الاجتماع هذه؟"
   },
   "notifications": {
     "title": "الإشعارات",
@@ -853,6 +860,11 @@
     "n_students": "{{count}} طالب",
     "pickup_set": "تم تحديد موقع التسليم",
     "pickup_none": "لا يوجد موقع تسليم",
+    "invite_meeting": "دعوة لاجتماع",
+    "invite_reason_ph": "السبب (اختياري)",
+    "invite_send": "إرسال الدعوة",
+    "invite_sent": "تم إرسال الدعوة",
+    "invite_failed": "تعذّر إرسال الدعوة",
     "n_excused": "{{count}} بعذر",
     "n_recorded": "{{recorded}}/{{total}} مسجّل",
     "override_attendance": "تجاوز الحضور",

@@ -257,6 +257,9 @@ export const parentApi = {
   updatePickupLocation: (latitude: number, longitude: number, residenceType?: string, blockNumber?: string) => api.put('/parent/pickup-location', { latitude, longitude, residenceType, blockNumber }),
   getAppointments: () => api.get('/parent/appointments'),
   createAppointment: (data: { reason: string; message?: string; requestedDate?: string; studentIds?: string[] }) => api.post('/parent/appointments', data),
+  // Phase D — respond to a supervisor meeting invite.
+  completeInvite: (id: string, data: { reason?: string; message?: string; requestedDate?: string }) => api.post(`/parent/appointments/${id}/complete`, data),
+  declineInvite: (id: string) => api.post(`/parent/appointments/${id}/decline`),
   markAllRead: () => api.patch('/parent/notifications/read-all'),
   getUnreadCount: () => api.get('/parent/notifications/unread-count'),
   getContentUnreadCounts: () => api.get('/parent/notifications/content-counts'),
@@ -311,6 +314,8 @@ export const supervisorApi = {
   getAnnouncements: (cursor?: string | null) =>
     api.get<Paginated<Announcement>>('/supervisor/announcements', { params: cursor ? { cursor } : {} }),
   getAnnouncementById: (id: string) => api.get(`/supervisor/announcements/${id}`),
+  // Phase D — supervisor→parent meeting invite.
+  createInvite: (data: { studentId: string; inviteReason?: string }) => api.post('/supervisor/invites', data),
   getNotifications: (cursor?: string | null) =>
     api.get<Paginated<Notification>>('/supervisor/notifications', { params: cursor ? { cursor } : {} }),
   getUnreadCount: () => api.get('/supervisor/notifications/unread-count'),

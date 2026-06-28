@@ -425,7 +425,14 @@
     "status_approved": "Approved",
     "status_rejected": "Rejected",
     "toast_success": "Appointment request submitted!",
-    "toast_error": "Failed to submit appointment"
+    "toast_error": "Failed to submit appointment",
+    "status_invited": "Invitation",
+    "invite_title": "Meeting invitation",
+    "invited_by": "Invited by {{name}}",
+    "complete": "Choose a time",
+    "complete_title": "Choose a meeting time",
+    "decline": "Decline",
+    "decline_confirm": "Decline this meeting invitation?"
   },
   "notifications": {
     "title": "Notifications",
@@ -853,6 +860,11 @@
     "n_students": "{{count}} students",
     "pickup_set": "Pickup location set",
     "pickup_none": "No pickup location",
+    "invite_meeting": "Invite to meeting",
+    "invite_reason_ph": "Reason (optional)",
+    "invite_send": "Send invite",
+    "invite_sent": "Invite sent",
+    "invite_failed": "Could not send the invite",
     "n_excused": "{{count}} excused",
     "n_recorded": "{{recorded}}/{{total}} recorded",
     "override_attendance": "Override Attendance",
