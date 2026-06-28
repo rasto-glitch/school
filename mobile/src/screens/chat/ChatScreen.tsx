@@ -576,6 +576,14 @@ export default function ChatScreen() {
     items.push({ type: 'msg', msg: { id: '__typing__', senderId: otherUser?.id || '', content: '', type: 'text', isDeleted: false, createdAt: new Date().toISOString() }, showAvatar: true, key: '__typing__' });
   }
 
+  // FlatList virtualizes cells and won't re-render a row when only nested item
+  // content (an invite card's appointment status) changes. Encode the invite
+  // statuses + busy flag so extraData flips exactly when a card must update.
+  const inviteExtra = messages
+    .filter(m => m.type === 'invite')
+    .map(m => `${m.appointment?.id ?? m.id}:${m.appointment?.status ?? '?'}`)
+    .join('|') + `#${inviteBusy}`;
+
   const s = makeStyles(colors);
 
   return (
@@ -587,6 +595,7 @@ export default function ChatScreen() {
           <FlatList
             ref={flatRef}
             data={items}
+            extraData={inviteExtra}
             keyExtractor={item => item.key}
             contentContainerStyle={{ paddingVertical: 8 }}
             onEndReached={loadMore}
