@@ -396,6 +396,17 @@ export function createRouter(io: SocketServer) {
   router.delete('/admin/classes/:id', authenticate, authorizeCapability('students.manage'), validate({ params: vp.idParam }), (req, res) => admin.deleteClass(req as AuthRequest, res));
   router.get('/admin/weekly-summaries', authenticate, authorizeCapability('academics.oversee'), validate({ query: vq.listQuery }), (req, res) => admin.getWeeklySummaries(req as AuthRequest, res));
   router.get('/admin/weekly-summary-status', authenticate, authorizeCapability('academics.oversee'), (req, res) => admin.getWeeklySummaryStatus(req as AuthRequest, res));
+  // Phase D — weekly submission period open/close moved up from supervisor to
+  // admin (academics.oversee). Controllers still live in supervisor.controller.
+  router.get('/admin/weekly-period', authenticate, authorizeCapability('academics.oversee'), (req, res) => supervisor.getActivePeriod(req as AuthRequest, res));
+  router.post('/admin/weekly-period', authenticate, authorizeCapability('academics.oversee'), validate({ body: vp.openPeriodSchema }), (req, res) => supervisor.openPeriod(req as AuthRequest, res));
+  router.delete('/admin/weekly-period', authenticate, authorizeCapability('academics.oversee'), (req, res) => supervisor.closePeriod(req as AuthRequest, res));
+  // Phase D — homework/assignment moderation (read + delete) for admins. Teachers
+  // still own their own content; supervisors are read-only.
+  router.get('/admin/homework', authenticate, authorizeCapability('academics.oversee'), (req, res) => supervisor.getHomework(req as AuthRequest, res));
+  router.delete('/admin/homework/:id', authenticate, authorizeCapability('academics.oversee'), validate({ params: vp.idParam }), (req, res) => supervisor.deleteHomework(req as AuthRequest, res));
+  router.get('/admin/assignments', authenticate, authorizeCapability('academics.oversee'), (req, res) => supervisor.getAssignments(req as AuthRequest, res));
+  router.delete('/admin/assignments/:id', authenticate, authorizeCapability('academics.oversee'), validate({ params: vp.idParam }), (req, res) => supervisor.deleteAssignment(req as AuthRequest, res));
 
   router.get('/admin/teachers', authenticate, authorizeCapability('staff.manage'), (req, res) => admin.getTeachers(req as AuthRequest, res));
   router.post('/admin/teachers', authenticate, authorizeCapability('staff.manage'), validate({ body: vu.createTeacherSchema }), (req, res) => admin.createTeacher(req as AuthRequest, res));
@@ -807,16 +818,14 @@ export function createRouter(io: SocketServer) {
   router.post('/supervisor/attendance', authenticate, authorize('supervisor'), validate({ body: vp.createAttendanceRecordSchema }), (req, res) => supervisor.createAttendanceRecord(req as AuthRequest, res));
   router.patch('/supervisor/attendance/:id', authenticate, authorize('supervisor'), validate({ params: vp.idParam, body: vp.updateAttendanceRecordSchema }), (req, res) => supervisor.updateAttendanceRecord(req as AuthRequest, res));
   router.get('/supervisor/bus-rides', authenticate, authorize('supervisor', 'admin'), validate({ query: vq.listQuery }), (req, res) => supervisor.getBusRideRecords(req as AuthRequest, res));
+  // Phase D — supervisors KEEP read-only homework/assignment context (so they
+  // can answer parent questions), but lost delete (→ admin moderation) and all
+  // weekly-summary ops (→ admin academics.oversee).
   router.get('/supervisor/homework', authenticate, authorize('supervisor'), (req, res) => supervisor.getHomework(req as AuthRequest, res));
-  router.delete('/supervisor/homework/:id', authenticate, authorize('supervisor'), validate({ params: vp.idParam }), (req, res) => supervisor.deleteHomework(req as AuthRequest, res));
   router.get('/supervisor/assignments', authenticate, authorize('supervisor'), (req, res) => supervisor.getAssignments(req as AuthRequest, res));
-  router.delete('/supervisor/assignments/:id', authenticate, authorize('supervisor'), validate({ params: vp.idParam }), (req, res) => supervisor.deleteAssignment(req as AuthRequest, res));
-  router.get('/supervisor/weekly-summaries', authenticate, authorize('supervisor'), validate({ query: vq.listQuery }), (req, res) => admin.getWeeklySummaries(req as AuthRequest, res));
-  router.get('/supervisor/weekly-summary-status', authenticate, authorize('supervisor'), (req, res) => admin.getWeeklySummaryStatus(req as AuthRequest, res));
-  router.get('/supervisor/weekly-period', authenticate, authorize('supervisor', 'teacher', 'admin'), (req, res) => supervisor.getActivePeriod(req as AuthRequest, res));
-  router.post('/supervisor/weekly-period', authenticate, authorize('supervisor'), validate({ body: vp.openPeriodSchema }), (req, res) => supervisor.openPeriod(req as AuthRequest, res));
-  router.delete('/supervisor/weekly-period', authenticate, authorize('supervisor'), (req, res) => supervisor.closePeriod(req as AuthRequest, res));
-  router.get('/supervisor/subjects', authenticate, authorize('supervisor'), (req, res) => admin.getSubjects(req as AuthRequest, res));
+  // Weekly submission period: this GET stays only so TEACHERS can check whether
+  // the filing window is open. Supervisors no longer open/close it.
+  router.get('/supervisor/weekly-period', authenticate, authorize('teacher'), (req, res) => supervisor.getActivePeriod(req as AuthRequest, res));
   router.get('/supervisor/student-brief/:id', authenticate, authorize('supervisor'), (req, res) => admin.getStudentBrief(req as AuthRequest, res));
   router.get('/supervisor/homework/:id', authenticate, authorize('supervisor'), (req, res) => parent.getHomeworkById(req as AuthRequest, res));
   router.get('/supervisor/assignments/:id', authenticate, authorize('supervisor'), (req, res) => parent.getAssignmentById(req as AuthRequest, res));
