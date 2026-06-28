@@ -3,6 +3,7 @@ import { Response } from 'express';
 import type { AuthRequest } from '../middleware/auth';
 import { toCC } from '../utils/transform';
 import { logAudit } from '../utils/audit';
+import { notify } from '../utils/notify';
 import {
   isAttendanceLocked,
   refreshAttendanceTotalsForDate,
@@ -391,5 +392,57 @@ export async function updateAttendanceRecord(req: AuthRequest, res: Response): P
     );
   }
 
+  res.json(toCC(data));
+}
+
+// ---- MEETING INVITES (Phase D liaison flow) ----
+// Supervisor invites the parent of a student to a meeting. The parent completes
+// it into a real booking (status invited→pending), which reception then
+// confirms + assigns to an admin. Reception remains the only confirmer.
+export async function createInvite(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId, userId } = req.user!;
+  const { studentId, inviteReason } = req.body;
+
+  const { data: student } = await req.db!
+    .from('students')
+    .select('id, full_name, parent_id, parents(user_id, full_name)')
+    .eq('id', studentId).eq('school_id', schoolId).maybeSingle();
+  if (!student || !(student as { parent_id?: string }).parent_id) {
+    res.status(404).json({ error: 'Student has no linked parent to invite.' }); return;
+  }
+
+  const { data, error } = await req.db!.from('appointments').insert({
+    school_id: schoolId,
+    parent_id: (student as { parent_id: string }).parent_id,
+    invited_by: userId,
+    invite_reason: inviteReason || null,
+    student_ids: [studentId],
+    status: 'invited',
+  }).select().single();
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+
+  const parentRel = (student as { parents?: { user_id?: string } | { user_id?: string }[] }).parents;
+  const parentUserId = Array.isArray(parentRel) ? parentRel[0]?.user_id : parentRel?.user_id;
+  if (parentUserId) {
+    notify({
+      schoolId, userId: parentUserId,
+      title: 'Meeting invitation',
+      message: `You've been invited to a meeting about ${(student as { full_name: string }).full_name}${inviteReason ? `: ${inviteReason}` : ''}. Open Appointments to choose a time or decline.`,
+      type: 'appointment',
+      relatedId: data.id,
+    }).catch(() => {});
+  }
+  res.status(201).json(toCC(data));
+}
+
+// Invites this supervisor has sent (any status), newest first.
+export async function listMyInvites(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId, userId } = req.user!;
+  const { data, error } = await req.db!
+    .from('appointments')
+    .select('*, parents(full_name)')
+    .eq('school_id', schoolId).eq('invited_by', userId)
+    .order('created_at', { ascending: false });
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json(toCC(data));
 }

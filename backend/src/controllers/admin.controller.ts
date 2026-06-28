@@ -31,6 +31,7 @@ import { isUrlSafeToFetch } from '../utils/urlSafety';
 import { logger } from '../utils/logger';
 import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from '../utils/passwordPolicy';
 import { buildAttendanceHistory, loadAttendanceDaysForYear } from '../utils/attendanceHistory';
+import { getSchoolTimezone, todayInTimezone } from '../utils/attendance';
 import {
   openEnrollmentForCurrentYear,
   updateClassForCurrentYear,
@@ -3339,25 +3340,49 @@ export async function createAccount(req: AuthRequest, res: Response): Promise<vo
 
 // ---- APPOINTMENTS ----
 export async function getPendingAppointmentCount(req: AuthRequest, res: Response): Promise<void> {
-  const { schoolId } = req.user!;
+  const { schoolId, userId } = req.user!;
+  // Phase D — admins no longer triage the queue (reception does). The dashboard
+  // count is now "meetings reception assigned to me that are still upcoming".
+  const today = todayInTimezone(await getSchoolTimezone(schoolId));
   const { count, error } = await supabase
     .from('appointments')
     .select('*', { count: 'exact', head: true })
     .eq('school_id', schoolId)
-    .eq('status', 'pending');
+    .eq('assigned_admin_id', userId)
+    .eq('status', 'approved')
+    .gte('scheduled_date', today);
   if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json({ count: count ?? 0 });
 }
 
 export async function getAppointments(req: AuthRequest, res: Response): Promise<void> {
-  const { schoolId } = req.user!;
-  const { data, error } = await supabase
+  const { schoolId, userId } = req.user!;
+  // Phase D — read-only: an admin sees the meetings reception assigned to them;
+  // an Owner sees all for oversight ("curated per clearance").
+  const clearance = await loadClearance(userId);
+  let q = supabase
     .from('appointments')
     .select('*, parents(full_name, phone_number, user_id)')
-    .eq('school_id', schoolId)
-    .order('created_at', { ascending: false });
+    .eq('school_id', schoolId);
+  if (!clearance.isOwner) q = q.eq('assigned_admin_id', userId);
+  const { data, error } = await q.order('created_at', { ascending: false });
   if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
-  res.json(toCC(data));
+
+  const rows = (data as Record<string, any>[]) ?? [];
+  const userIds = [...new Set(rows.flatMap(r => [r.invited_by, r.assigned_admin_id]).filter(Boolean))] as string[];
+  const nameMap: Record<string, string> = {};
+  if (userIds.length > 0) {
+    const { data: users } = await supabase
+      .from('users').select('id, first_name, last_name')
+      .eq('school_id', schoolId).in('id', userIds);
+    (users ?? []).forEach((u: any) => { nameMap[u.id] = `${u.first_name} ${u.last_name}`.trim(); });
+  }
+  const enriched = rows.map(r => ({
+    ...r,
+    invited_by_name: r.invited_by ? (nameMap[r.invited_by] ?? null) : null,
+    assigned_admin_name: r.assigned_admin_id ? (nameMap[r.assigned_admin_id] ?? null) : null,
+  }));
+  res.json(toCC(enriched));
 }
 
 export async function respondToAppointment(req: AuthRequest, res: Response): Promise<void> {

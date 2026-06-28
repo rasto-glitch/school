@@ -90,6 +90,17 @@ export const createAppointmentSchema = z.object({
   requestedDate: z.string().max(40).optional(),
   studentIds: z.array(uuid).max(50).optional(),
 });
+// Phase D — supervisor invites the parent of a student to a meeting.
+export const createInviteSchema = z.object({
+  studentId: uuid,
+  inviteReason: optText(2000),
+});
+// Phase D — parent completes a supervisor invite into a real booking.
+export const completeInviteSchema = z.object({
+  reason: z.string().max(300).optional(),
+  message: z.string().max(4000).optional(),
+  requestedDate: z.string().max(40).optional(),
+});
 export const updatePickupLocationSchema = z.object({
   latitude: z.number().min(-90).max(90).optional(),
   longitude: z.number().min(-180).max(180).optional(),
@@ -120,6 +131,8 @@ export const respondToAppointmentSchema = z.object({
   responseMessage: z.string().max(4000).optional(),
   scheduledDate: z.string().max(40).nullable().optional(),
   status: nonEmptyStr(40),
+  // Phase D — reception assigns a specific admin when confirming a meeting.
+  assignedAdminId: uuid.nullable().optional(),
 });
 
 // ── Driver ──────────────────────────────────────────────────────────────

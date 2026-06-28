@@ -710,9 +710,15 @@ CREATE TABLE IF NOT EXISTS appointments (
   requested_date DATE,
   response_message TEXT,
   scheduled_date DATE,
-  status TEXT DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
+  -- Phase D (migration 061) — supervisor→parent invite + reception-assigned admin.
+  invited_by UUID REFERENCES users(id) ON DELETE SET NULL,        -- supervisor who invited (NULL for parent-initiated)
+  invite_reason TEXT,                                             -- supervisor's reason, distinct from the parent's
+  assigned_admin_id UUID REFERENCES users(id) ON DELETE SET NULL, -- admin reception assigns to take the meeting
+  status TEXT DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected','invited')),
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+CREATE INDEX IF NOT EXISTS idx_appointments_assigned_admin ON appointments(school_id, assigned_admin_id) WHERE assigned_admin_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_appointments_invited_by ON appointments(school_id, invited_by) WHERE invited_by IS NOT NULL;
 
 -- ============================================================
 -- WEEKLY SUMMARIES

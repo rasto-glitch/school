@@ -4,7 +4,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AuthRequest } from '../middleware/auth';
 import { toCC } from '../utils/transform';
 import { parseCursorParams, buildPage } from '../utils/pagination';
-import { emitToAdmins } from '../utils/notify';
+import { emitToAdmins, notify } from '../utils/notify';
 import { decorateAnnouncements } from './admin.controller';
 import { getLocksForStudents, isFeatureLocked } from '../utils/locks';
 import { hasArchiveFeature } from '../utils/employeeArchive';
@@ -510,4 +510,54 @@ export async function createAppointment(req: AuthRequest, res: Response): Promis
   emitToAdmins(schoolId, 'new_appointment', { appointmentId: data.id });
 
   res.status(201).json(toCC(data));
+}
+
+// Phase D — parent completes a supervisor invite into a real booking (the
+// parent supplies their reason + preferred date). invited → pending, landing
+// in reception's queue.
+export async function completeInvite(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId, userId } = req.user!;
+  const { id } = req.params;
+  const { reason, message, requestedDate } = req.body;
+
+  const { data: parent } = await req.db!.from('parents').select('id').eq('user_id', userId).eq('school_id', schoolId).single();
+  if (!parent) { res.status(404).json({ error: 'Parent not found' }); return; }
+
+  const { data, error } = await req.db!.from('appointments')
+    .update({ reason: reason || null, message: message || null, requested_date: requestedDate || null, status: 'pending' })
+    .eq('id', id).eq('school_id', schoolId).eq('parent_id', parent.id).eq('status', 'invited')
+    .select().maybeSingle();
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+  if (!data) { res.status(404).json({ error: 'Invite not found or already handled.' }); return; }
+
+  emitToAdmins(schoolId, 'new_appointment', { appointmentId: data.id });
+  res.json(toCC(data));
+}
+
+// Phase D — parent declines a supervisor invite. The supervisor is notified.
+export async function declineInvite(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId, userId } = req.user!;
+  const { id } = req.params;
+
+  const { data: parent } = await req.db!.from('parents').select('id, full_name').eq('user_id', userId).eq('school_id', schoolId).single();
+  if (!parent) { res.status(404).json({ error: 'Parent not found' }); return; }
+
+  const { data, error } = await req.db!.from('appointments')
+    .update({ status: 'rejected', response_message: 'Declined by parent.' })
+    .eq('id', id).eq('school_id', schoolId).eq('parent_id', parent.id).eq('status', 'invited')
+    .select().maybeSingle();
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+  if (!data) { res.status(404).json({ error: 'Invite not found or already handled.' }); return; }
+
+  const supervisorId = (data as { invited_by?: string }).invited_by;
+  if (supervisorId) {
+    notify({
+      schoolId, userId: supervisorId,
+      title: 'Meeting invite declined',
+      message: `${parent.full_name || 'A parent'} declined your meeting invitation.`,
+      type: 'appointment',
+      relatedId: String(id),
+    }).catch(() => {});
+  }
+  res.json(toCC(data));
 }

@@ -538,7 +538,9 @@ export function createRouter(io: SocketServer) {
 
   router.get('/admin/appointments/pending-count', authenticate, authorizeCapability('students.manage'), (req, res) => admin.getPendingAppointmentCount(req as AuthRequest, res));
   router.get('/admin/appointments', authenticate, authorizeCapability('students.manage'), (req, res) => admin.getAppointments(req as AuthRequest, res));
-  router.put('/admin/appointments/:id', authenticate, authorizeCapability('students.manage'), validate({ params: vp.idParam, body: vp.respondToAppointmentSchema }), (req, res) => admin.respondToAppointment(req as AuthRequest, res));
+  // Phase D — admins are read-only on appointments now; reception confirms +
+  // assigns the admin (PUT /reception/appointments/:id). The admin respond
+  // route is retired. GET /admin/appointments is scoped to "assigned to me".
 
   router.post('/admin/notifications', authenticate, authorizeCapability('announcements.moderate'), validate({ body: vp.sendNotificationSchema }), (req, res) => admin.sendNotification(req as AuthRequest, res));
   router.get('/admin/notifications/unread-count', authenticate, authorizeCapability('announcements.moderate'), (req, res) => parent.getUnreadCount(req as AuthRequest, res));
@@ -650,6 +652,9 @@ export function createRouter(io: SocketServer) {
   router.patch('/parent/notifications/:id/read', authenticate, authorize('parent'), validate({ params: vp.idParam }), (req, res) => parent.markNotificationRead(req as AuthRequest, res));
   router.get('/parent/appointments', authenticate, authorize('parent'), (req, res) => parent.getAppointments(req as AuthRequest, res));
   router.post('/parent/appointments', authenticate, authorize('parent'), validate({ body: vp.createAppointmentSchema }), (req, res) => parent.createAppointment(req as AuthRequest, res));
+  // Phase D — parent completes or declines a supervisor meeting invite.
+  router.post('/parent/appointments/:id/complete', authenticate, authorize('parent'), validate({ params: vp.idParam, body: vp.completeInviteSchema }), (req, res) => parent.completeInvite(req as AuthRequest, res));
+  router.post('/parent/appointments/:id/decline', authenticate, authorize('parent'), validate({ params: vp.idParam }), (req, res) => parent.declineInvite(req as AuthRequest, res));
   router.put('/parent/pickup-location', authenticate, authorize('parent'), validate({ body: vp.updatePickupLocationSchema }), (req, res) => parent.updatePickupLocation(req as AuthRequest, res));
   router.get('/parent/pickup-location', authenticate, authorize('parent'), (req, res) => parent.getPickupLocation(req as AuthRequest, res));
 
@@ -827,6 +832,9 @@ export function createRouter(io: SocketServer) {
   // the filing window is open. Supervisors no longer open/close it.
   router.get('/supervisor/weekly-period', authenticate, authorize('teacher'), (req, res) => supervisor.getActivePeriod(req as AuthRequest, res));
   router.get('/supervisor/student-brief/:id', authenticate, authorize('supervisor'), (req, res) => admin.getStudentBrief(req as AuthRequest, res));
+  // Phase D — supervisor↔parent meeting invites (liaison flow).
+  router.post('/supervisor/invites', authenticate, authorize('supervisor'), validate({ body: vp.createInviteSchema }), (req, res) => supervisor.createInvite(req as AuthRequest, res));
+  router.get('/supervisor/invites', authenticate, authorize('supervisor'), (req, res) => supervisor.listMyInvites(req as AuthRequest, res));
   router.get('/supervisor/homework/:id', authenticate, authorize('supervisor'), (req, res) => parent.getHomeworkById(req as AuthRequest, res));
   router.get('/supervisor/assignments/:id', authenticate, authorize('supervisor'), (req, res) => parent.getAssignmentById(req as AuthRequest, res));
   router.get('/supervisor/announcements', authenticate, authorize('supervisor'), validate({ query: vq.listQuery }), (req, res) => admin.getAnnouncements(req as AuthRequest, res));
@@ -839,6 +847,8 @@ export function createRouter(io: SocketServer) {
   // ---- RECEPTION ----
   router.get('/reception/appointments/pending-count', authenticate, authorize('reception'), (req, res) => reception.getPendingAppointmentCount(req as AuthRequest, res));
   router.get('/reception/appointments', authenticate, authorize('reception'), (req, res) => reception.getAppointments(req as AuthRequest, res));
+  // Phase D — admins reception can assign a meeting to (owner or students.manage).
+  router.get('/reception/assignable-admins', authenticate, authorize('reception'), (req, res) => reception.getAssignableAdmins(req as AuthRequest, res));
   router.put('/reception/appointments/:id', authenticate, authorize('reception'), validate({ params: vp.idParam, body: vp.respondToAppointmentSchema }), (req, res) => reception.respondToAppointment(req as AuthRequest, res));
 
   // ---- DRIVER ----
