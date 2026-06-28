@@ -507,6 +507,15 @@ export const adminApi = {
   deleteClass: (id: string) => api.delete(`/admin/classes/${id}`),
   getWeeklySummaries: (params?: Record<string, string>) => api.get('/admin/weekly-summaries', { params }),
   getWeeklySummaryStatus: (weekStartDate: string) => api.get('/admin/weekly-summary-status', { params: { weekStartDate } }),
+  // Phase D — weekly submission period (moved up from supervisor) + homework/
+  // assignment moderation, all academics.oversee.
+  getWeeklyPeriod: () => api.get('/admin/weekly-period'),
+  openWeeklyPeriod: (weekStartDate: string, weekEndDate: string) => api.post('/admin/weekly-period', { weekStartDate, weekEndDate }),
+  closeWeeklyPeriod: () => api.delete('/admin/weekly-period'),
+  getModerationHomework: () => api.get('/admin/homework'),
+  deleteModerationHomework: (id: string) => api.delete(`/admin/homework/${id}`),
+  getModerationAssignments: () => api.get('/admin/assignments'),
+  deleteModerationAssignment: (id: string) => api.delete(`/admin/assignments/${id}`),
   getTeachers: (view?: 'list') => api.get('/admin/teachers', view ? { params: { view } } : undefined),
   createTeacher: (data: object) => api.post('/admin/teachers', data),
   updateTeacher: (id: string, data: object) => api.put(`/admin/teachers/${id}`, data),

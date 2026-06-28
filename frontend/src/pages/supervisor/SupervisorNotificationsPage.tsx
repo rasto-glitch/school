@@ -51,9 +51,6 @@ export default function SupervisorNotificationsPage() {
       case 'report':
         navigate('/supervisor/student-reports');
         break;
-      case 'weekly_summary':
-        navigate('/supervisor/weekly-summary');
-        break;
       case 'attendance':
         navigate('/supervisor/attendance');
         break;

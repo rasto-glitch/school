@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Clock, CheckCircle, XCircle } from 'lucide-react';
+import { Clock, CheckCircle, XCircle, PlayCircle, StopCircle } from 'lucide-react';
+import { toast } from 'react-toastify';
 import { adminApi } from '../../services/api';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
 import Select from '../../components/common/Select';
 import Input from '../../components/common/Input';
+import Button from '../../components/common/Button';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import EmptyState from '../../components/common/EmptyState';
 import type { Class } from '../../types';
@@ -31,6 +33,13 @@ interface TeacherStatus {
   submitted: boolean;
 }
 
+interface Period {
+  id: string;
+  weekStartDate: string;
+  weekEndDate: string;
+  isOpen: boolean;
+}
+
 export default function AdminWeeklySummaryPage() {
   const { t } = useTranslation();
   const [summaries, setSummaries] = useState<Summary[]>([]);
@@ -42,13 +51,56 @@ export default function AdminWeeklySummaryPage() {
   const [loading, setLoading] = useState(true);
   const [statusList, setStatusList] = useState<TeacherStatus[]>([]);
 
+  // Submission period (Phase D — open/close moved up from supervisor).
+  const [period, setPeriod] = useState<Period | null | undefined>(undefined); // undefined = loading
+  const [openStart, setOpenStart] = useState('');
+  const [openEnd, setOpenEnd] = useState('');
+  const [openingPeriod, setOpeningPeriod] = useState(false);
+  const [closingPeriod, setClosingPeriod] = useState(false);
+
   useEffect(() => {
     adminApi.getClasses().then(r => setClasses(r.data || []));
     adminApi.getSubjects().then(r => {
       const subs: { name: string }[] = r.data || [];
       setSubjects(subs.map(s => s.name));
     });
+    adminApi.getWeeklyPeriod().then(r => setPeriod(r.data ?? null)).catch(() => setPeriod(null));
   }, []);
+
+  // When the active period loads, lock the week filter to it.
+  useEffect(() => {
+    if (period?.weekStartDate) setWeekFilter(period.weekStartDate);
+  }, [period]);
+
+  const handleOpenPeriod = async () => {
+    if (!openStart || !openEnd) { toast.error(t('admin.weekly.select_dates')); return; }
+    if (openEnd < openStart) { toast.error(t('admin.weekly.end_after_start')); return; }
+    setOpeningPeriod(true);
+    try {
+      const res = await adminApi.openWeeklyPeriod(openStart, openEnd);
+      setPeriod(res.data);
+      setOpenStart(''); setOpenEnd('');
+      toast.success(t('admin.weekly.period_opened'));
+    } catch {
+      toast.error(t('admin.weekly.open_period_failed'));
+    } finally {
+      setOpeningPeriod(false);
+    }
+  };
+
+  const handleClosePeriod = async () => {
+    if (!confirm(t('admin.weekly.close_confirm'))) return;
+    setClosingPeriod(true);
+    try {
+      await adminApi.closeWeeklyPeriod();
+      setPeriod(null);
+      toast.success(t('admin.weekly.period_closed'));
+    } catch {
+      toast.error(t('admin.weekly.close_period_failed'));
+    } finally {
+      setClosingPeriod(false);
+    }
+  };
 
   useEffect(() => {
     setLoading(true);
@@ -76,6 +128,52 @@ export default function AdminWeeklySummaryPage() {
   return (
     <PageLayout title={t('admin.weekly.title')} subtitle={t('admin.weekly.subtitle')}>
       <div className="space-y-4">
+        {/* Submission period — open/close (academics.oversee) */}
+        <Card className="p-5">
+          <h2 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
+            <Clock className="w-4 h-4" /> {t('admin.weekly.submission_period')}
+          </h2>
+          {period === undefined ? (
+            <div className="h-8 flex items-center"><div className="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>
+          ) : period ? (
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div>
+                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-green-700 bg-green-50 px-2.5 py-1 rounded-full mb-2">
+                  <span className="w-1.5 h-1.5 bg-green-500 rounded-full" /> {t('admin.weekly.open')}
+                </span>
+                <p className="text-sm text-gray-800 font-medium">
+                  {format(parseISO(period.weekStartDate), 'MMM d')} — {format(parseISO(period.weekEndDate), 'MMM d, yyyy')}
+                </p>
+                <p className="text-xs text-gray-400 mt-0.5">{t('admin.weekly.teachers_can_submit')}</p>
+              </div>
+              <button
+                onClick={handleClosePeriod}
+                disabled={closingPeriod}
+                className="flex items-center gap-1.5 text-sm font-semibold text-red-600 border border-red-200 hover:bg-red-50 px-3 py-2 rounded-xl transition-colors disabled:opacity-50"
+              >
+                <StopCircle className="w-4 h-4" /> {t('admin.weekly.close_period')}
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-sm text-gray-500">{t('admin.weekly.no_period_open')}</p>
+              <div className="flex flex-wrap items-end gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">{t('admin.weekly.week_start')}</label>
+                  <input type="date" value={openStart} onChange={e => setOpenStart(e.target.value)} className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">{t('admin.weekly.week_end')}</label>
+                  <input type="date" value={openEnd} onChange={e => setOpenEnd(e.target.value)} className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                </div>
+                <Button onClick={handleOpenPeriod} loading={openingPeriod} icon={<PlayCircle className="w-4 h-4" />}>
+                  {t('admin.weekly.open_period')}
+                </Button>
+              </div>
+            </div>
+          )}
+        </Card>
+
         {/* Filters */}
         <div className="flex flex-wrap gap-3">
           <div className="w-48">

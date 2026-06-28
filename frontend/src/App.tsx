@@ -67,6 +67,7 @@ import AdminStudentsListPage from './pages/admin/AdminStudentsListPage';
 import AdminTeachersListPage from './pages/admin/AdminTeachersListPage';
 import AdminDriversListPage from './pages/admin/AdminDriversListPage';
 import AdminWeeklySummaryPage from './pages/admin/AdminWeeklySummaryPage';
+import AdminContentModerationPage from './pages/admin/AdminContentModerationPage';
 import SettingsPage from './pages/admin/SettingsPage';
 import AdminTuitionPage from './pages/admin/AdminTuitionPage';
 import AdminTuitionStudentDetailPage from './pages/admin/AdminTuitionStudentDetailPage';
@@ -257,6 +258,7 @@ export default function App() {
         <Route path="/admin/drivers" element={<ProtectedRoute allowedRoles={['admin']}><DriversManagement /></ProtectedRoute>} />
         <Route path="/admin/student-brief" element={<ProtectedRoute allowedRoles={['admin']}><StudentBriefPage /></ProtectedRoute>} />
         <Route path="/admin/weekly-summary" element={<ProtectedRoute allowedRoles={['admin']}><AdminWeeklySummaryPage /></ProtectedRoute>} />
+        <Route path="/admin/content-moderation" element={<ProtectedRoute allowedRoles={['admin']}><AdminContentModerationPage /></ProtectedRoute>} />
         <Route path="/admin/appointments" element={<ProtectedRoute allowedRoles={['admin']}><AppointmentsPage /></ProtectedRoute>} />
         <Route path="/admin/notifications" element={<ProtectedRoute allowedRoles={['admin']}><AdminNotificationsPage /></ProtectedRoute>} />
         <Route path="/admin/announcements" element={<ProtectedRoute allowedRoles={['admin']}><AnnouncementsPage /></ProtectedRoute>} />

@@ -87,6 +87,8 @@ const adminNav: AdminNavNode[] = [
   },
   { kind: 'leaf', path: '/admin/schedule', icon: Calendar, labelKey: 'nav.schedule', labelFallback: 'Schedule', capabilities: ['academics.oversee'] },
   { kind: 'leaf', path: '/admin/grade-review', icon: Star, labelKey: 'nav.grade_review', labelFallback: 'Grade Review', feature: 'grades', capabilities: ['academics.oversee'] },
+  { kind: 'leaf', path: '/admin/weekly-summary', icon: Clock, labelKey: 'nav.weekly_summary', labelFallback: 'Weekly Summary', feature: 'weekly_summary', capabilities: ['academics.oversee'] },
+  { kind: 'leaf', path: '/admin/content-moderation', icon: BookOpen, labelKey: 'nav.content_moderation', labelFallback: 'Homework & Assignments', capabilities: ['academics.oversee'] },
   { kind: 'leaf', path: '/admin/announcements', icon: Megaphone, labelKey: 'nav.announcements', labelFallback: 'Announcements', feature: 'announcements', capabilities: ['announcements.moderate'] },
   {
     kind: 'group', key: 'employees', icon: Users,
