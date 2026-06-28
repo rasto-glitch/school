@@ -302,8 +302,8 @@ export default function AdminDashboard() {
   // 4. Appointment requests (students.manage).
   if (has('students.manage') && attn.appointments > 0) items.push({
     key: 'appointments', icon: CalendarDays, chip: 'bg-blue-50 text-blue-700',
-    title: t('admin.cockpit.appts_title', { count: attn.appointments, defaultValue: '{{count}} appointment requests' }),
-    sub: t('admin.cockpit.appts_sub', 'Parents awaiting a reply'),
+    title: t('admin.cockpit.appts_title', { count: attn.appointments, defaultValue: '{{count}} meetings assigned to you' }),
+    sub: t('admin.cockpit.appts_sub', 'Upcoming — assigned by reception'),
     action: { label: t('admin.cockpit.act_open', 'Open'), onClick: () => navigate('/admin/appointments') },
   });
 

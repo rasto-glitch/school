@@ -287,9 +287,16 @@ export interface Appointment {
   requestedDate?: string;
   responseMessage?: string;
   scheduledDate?: string;
-  status: 'pending' | 'approved' | 'rejected';
+  status: 'pending' | 'approved' | 'rejected' | 'invited';
   createdAt: string;
   parents?: { fullName: string; phoneNumber: string };
+  // Phase D — supervisor invite + reception-assigned admin.
+  invitedBy?: string | null;
+  inviteReason?: string | null;
+  invitedByName?: string | null;
+  assignedAdminId?: string | null;
+  assignedAdminName?: string | null;
+  studentIds?: string[];
 }
 
 export interface Attendance {

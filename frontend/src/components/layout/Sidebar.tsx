@@ -290,6 +290,7 @@ const navItems: Partial<Record<Role, NavItem[]>> = {
     { to: '/supervisor/homework', icon: BookOpen, label: 'Homework', feature: 'homework' },
     { to: '/supervisor/assignments', icon: ClipboardList, label: 'Assignments', feature: 'assignments' },
     { to: '/supervisor/student-reports', icon: FileText, label: 'Student Reports', feature: 'reports' },
+    { to: '/supervisor/invites', icon: UserPlus, label: 'Meeting Invites' },
     { to: '/chat', icon: MessageSquare, label: 'Chat', feature: 'chat' },
     { to: '/supervisor/notifications', icon: Bell, label: 'Notifications' },
   ],

@@ -9,6 +9,7 @@ import Card from '../../components/common/Card';
 import Input from '../../components/common/Input';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
+import Modal from '../../components/common/Modal';
 import EmptyState from '../../components/common/EmptyState';
 import ErrorMessage from '../../components/common/ErrorMessage';
 import { CardListSkeleton } from '../../components/common/Skeleton';
@@ -61,6 +62,42 @@ export default function AppointmentsPage() {
     }
   };
 
+  // ── Supervisor invite: complete (book) or decline ──
+  const [invite, setInvite] = useState<Appointment | null>(null); // invite being completed
+  const [icReason, setIcReason] = useState('');
+  const [icMessage, setIcMessage] = useState('');
+  const [icDate, setIcDate] = useState('');
+  const [icSubmitting, setIcSubmitting] = useState(false);
+
+  const openComplete = (apt: Appointment) => { setInvite(apt); setIcReason(''); setIcMessage(''); setIcDate(''); };
+
+  const submitComplete = async () => {
+    if (!invite) return;
+    if (!icReason.trim()) { toast.error(t('appointments.reason_required')); return; }
+    setIcSubmitting(true);
+    try {
+      await parentApi.completeInvite(invite.id, { reason: icReason.trim(), message: icMessage.trim() || undefined, requestedDate: icDate || undefined });
+      toast.success(t('appointments.toast_success'));
+      setInvite(null);
+      parentApi.getAppointments().then(r => setAppointments(r.data || []));
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || t('appointments.toast_error'));
+    } finally {
+      setIcSubmitting(false);
+    }
+  };
+
+  const handleDecline = async (apt: Appointment) => {
+    if (!confirm(t('appointments.decline_confirm'))) return;
+    try {
+      await parentApi.declineInvite(apt.id);
+      toast.success(t('appointments.declined'));
+      parentApi.getAppointments().then(r => setAppointments(r.data || []));
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || t('appointments.toast_error'));
+    }
+  };
+
   return (
     <PageLayout title={t('appointments.title')} subtitle={t('appointments.subtitle')}>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
@@ -103,7 +140,20 @@ export default function AppointmentsPage() {
           <div>
             <h2 className="font-semibold text-gray-900 mb-3">{t('appointments.my_requests')}</h2>
             <div className="space-y-3">
-              {appointments.map(apt => (
+              {appointments.map(apt => apt.status === 'invited' ? (
+                <Card key={apt.id} className="border-l-4 border-indigo-400">
+                  <div className="flex items-start justify-between mb-1">
+                    <p className="font-medium text-gray-900">{t('appointments.invite_title')}</p>
+                    <span className="text-xs font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full">{t('appointments.status_invited')}</span>
+                  </div>
+                  {apt.invitedByName && <p className="text-xs text-gray-500">{t('appointments.invited_by', { name: apt.invitedByName })}</p>}
+                  {apt.inviteReason && <p className="text-sm text-gray-700 mt-1">{apt.inviteReason}</p>}
+                  <div className="flex gap-2 mt-3">
+                    <Button size="sm" onClick={() => openComplete(apt)}>{t('appointments.complete')}</Button>
+                    <Button size="sm" variant="ghost" onClick={() => handleDecline(apt)}>{t('appointments.decline')}</Button>
+                  </div>
+                </Card>
+              ) : (
                 <Card key={apt.id}>
                   <div className="flex items-start justify-between mb-2">
                     <div>
@@ -137,6 +187,24 @@ export default function AppointmentsPage() {
         )}
         </div>
       </div>
+
+      <Modal isOpen={!!invite} onClose={() => setInvite(null)} title={t('appointments.complete_title')}>
+        <div className="space-y-3">
+          {invite?.inviteReason && (
+            <p className="text-sm text-gray-500">{t('appointments.invite_reason')}: {invite.inviteReason}</p>
+          )}
+          <Input label={t('appointments.reason')} value={icReason} onChange={e => setIcReason(e.target.value)} placeholder={t('appointments.reason_placeholder')} />
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('appointments.message')}</label>
+            <textarea className="input-field min-h-[80px] resize-none" value={icMessage} onChange={e => setIcMessage(e.target.value)} placeholder={t('appointments.message_placeholder')} />
+          </div>
+          <Input label={t('appointments.preferred_date')} type="date" value={icDate} onChange={e => setIcDate(e.target.value)} />
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="ghost" onClick={() => setInvite(null)}>{t('common.cancel')}</Button>
+            <Button onClick={submitComplete} loading={icSubmitting}>{t('appointments.submit')}</Button>
+          </div>
+        </div>
+      </Modal>
     </PageLayout>
   );
 }

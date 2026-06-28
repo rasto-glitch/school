@@ -394,7 +394,16 @@
     "status_approved": "مقبول",
     "status_rejected": "مرفوض",
     "toast_success": "تم إرسال طلب الموعد!",
-    "toast_error": "فشل إرسال الطلب"
+    "toast_error": "فشل إرسال الطلب",
+    "status_invited": "دعوة",
+    "invite_title": "دعوة لاجتماع",
+    "invited_by": "بدعوة من {{name}}",
+    "invite_reason": "السبب",
+    "complete": "اختيار وقت",
+    "complete_title": "اختر وقت الاجتماع",
+    "decline": "رفض",
+    "decline_confirm": "رفض دعوة الاجتماع هذه؟",
+    "declined": "تم رفض الدعوة"
   },
   "notifications": {
     "title": "الإشعارات",
@@ -871,6 +880,20 @@
     "save_summary_failed": "فشل حفظ الملخص"
   },
   "supervisor": {
+    "invites": {
+      "title": "دعوات الاجتماعات",
+      "subtitle": "ادعُ ولي أمر لاجتماع وتابع الردود",
+      "new_invite": "دعوة جديدة",
+      "none": "لم تُرسل أي دعوات بعد",
+      "student": "الطالب",
+      "pick_student": "اختر طالباً",
+      "no_students": "لا يوجد طلاب",
+      "reason": "السبب (اختياري)",
+      "reason_ph": "سبب رغبتك في الاجتماع...",
+      "send": "إرسال الدعوة",
+      "sent": "تم إرسال الدعوة",
+      "send_failed": "تعذّر إرسال الدعوة"
+    },
     "dashboard_title": "لوحة تحكم المشرف",
     "total_marked": "إجمالي المسجّل",
     "absent_late_today": "{{count}} طالب غائب أو متأخر اليوم",
@@ -1004,7 +1027,12 @@
     "response_label": "الرد:",
     "toast_approved": "تم قبول الموعد!",
     "toast_rejected": "تم رفض الموعد!",
-    "respond_failed": "فشل الرد"
+    "respond_failed": "فشل الرد",
+    "assign_admin": "الإسناد إلى مسؤول",
+    "choose_admin": "اختر مسؤولاً",
+    "invite_from": "بدعوة من {{name}}",
+    "parent_requested": "طلب ولي الأمر: {{date}}",
+    "assign_required": "اختر مسؤولاً قبل الموافقة"
   },
   "admin": {
     "dashboard_title": "لوحة تحكم المسؤول",
@@ -1051,8 +1079,8 @@
       "activity": "نشاط",
       "grades_title": "{{count}} درجات بانتظار النشر",
       "grades_sub": "تقارير الفصل بانتظار المراجعة",
-      "appts_title": "{{count}} طلبات مواعيد",
-      "appts_sub": "أولياء أمور بانتظار الرد",
+      "appts_title": "{{count}} اجتماعات مسندة إليك",
+      "appts_sub": "قادمة — أسندتها موظفة الاستقبال",
       "resets_title": "{{count}} طلبات حسابات معلّقة",
       "resets_sub": "قائمة إعادة تعيين كلمة المرور",
       "expiring_title": "{{count}} مستندات تنتهي قريبًا",
@@ -1600,6 +1628,13 @@
       "delete_confirm": "حذف \"{{title}}\"؟ سيؤدي ذلك إلى إزالته للأهل والطلاب.",
       "deleted": "تمت الإزالة",
       "delete_failed": "تعذّرت إزالة هذا العنصر"
+    },
+    "meetings": {
+      "subtitle": "الاجتماعات المسندة إليك",
+      "none": "لا توجد اجتماعات مسندة إليك بعد",
+      "invite_from": "بدعوة من {{name}}",
+      "assigned_to": "مُسند إلى {{name}}",
+      "a_supervisor": "مشرف"
     },
     "archive_mgmt": {
       "title": "الأرشيف",

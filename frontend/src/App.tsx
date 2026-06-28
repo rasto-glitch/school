@@ -102,6 +102,7 @@ import AttendanceOverviewPage from './pages/supervisor/AttendanceOverviewPage';
 import SupervisorHomeworkPage from './pages/supervisor/SupervisorHomeworkPage';
 import SupervisorAssignmentsPage from './pages/supervisor/SupervisorAssignmentsPage';
 import SupervisorStudentReportsPage from './pages/supervisor/SupervisorStudentReportsPage';
+import SupervisorInvitesPage from './pages/supervisor/SupervisorInvitesPage';
 import SupervisorNotificationsPage from './pages/supervisor/SupervisorNotificationsPage';
 
 // Parent Grades
@@ -276,6 +277,7 @@ export default function App() {
         <Route path="/supervisor/homework" element={<ProtectedRoute allowedRoles={['supervisor']}><SupervisorHomeworkPage /></ProtectedRoute>} />
         <Route path="/supervisor/assignments" element={<ProtectedRoute allowedRoles={['supervisor']}><SupervisorAssignmentsPage /></ProtectedRoute>} />
         <Route path="/supervisor/student-reports" element={<ProtectedRoute allowedRoles={['supervisor']}><SupervisorStudentReportsPage /></ProtectedRoute>} />
+        <Route path="/supervisor/invites" element={<ProtectedRoute allowedRoles={['supervisor']}><SupervisorInvitesPage /></ProtectedRoute>} />
         <Route path="/supervisor/notifications" element={<ProtectedRoute allowedRoles={['supervisor']}><SupervisorNotificationsPage /></ProtectedRoute>} />
         <Route path="/supervisor/profile" element={<ProtectedRoute allowedRoles={['supervisor']}><ProfilePage /></ProtectedRoute>} />
 

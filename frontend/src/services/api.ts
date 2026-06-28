@@ -258,6 +258,9 @@ export const supervisorApi = {
   getHomework: () => api.get('/supervisor/homework'),
   getAssignments: () => api.get('/supervisor/assignments'),
   getStudentBrief: (id: string) => api.get(`/supervisor/student-brief/${id}`),
+  // Phase D — supervisor→parent meeting invites.
+  createInvite: (data: { studentId: string; inviteReason?: string }) => api.post('/supervisor/invites', data),
+  getMyInvites: () => api.get('/supervisor/invites'),
   getAllStudents: (params?: Record<string, string>) => api.get('/supervisor/students', { params }),
   getNotifications: (cursor?: string | null) =>
     api.get<Paginated<Notification>>('/supervisor/notifications', { params: cursor ? { cursor } : {} }),
@@ -289,6 +292,10 @@ export const parentApi = {
   markRead: (id: string) => api.patch(`/parent/notifications/${id}/read`),
   createAppointment: (data: object) => api.post('/parent/appointments', data),
   getAppointments: () => api.get('/parent/appointments'),
+  // Phase D — respond to a supervisor meeting invite.
+  completeInvite: (id: string, data: { reason?: string; message?: string; requestedDate?: string }) =>
+    api.post(`/parent/appointments/${id}/complete`, data),
+  declineInvite: (id: string) => api.post(`/parent/appointments/${id}/decline`),
   getHomeworkById: (id: string) => api.get(`/parent/homework/${id}`),
   getAssignmentById: (id: string) => api.get(`/parent/assignments/${id}`),
   getAnnouncementById: (id: string) => api.get(`/parent/announcements/${id}`),
@@ -638,9 +645,10 @@ export const adminApi = {
     api.put(`/admin/staff/${id}`, data),
   archiveStaff: (id: string, body?: { reason?: string; departureDate?: string }) =>
     api.delete(`/admin/staff/${id}`, { data: body ?? {} }),
+  // Phase D — admins are read-only on appointments (reception confirms+assigns).
+  // pending-count = my upcoming assigned meetings; getAppointments = assigned to me.
   getPendingAppointmentCount: () => api.get('/admin/appointments/pending-count'),
   getAppointments: () => api.get('/admin/appointments'),
-  respondToAppointment: (id: string, data: object) => api.put(`/admin/appointments/${id}`, data),
   sendNotification: (data: object) => api.post('/admin/notifications', data),
   getUnreadNotificationCount: () => api.get('/admin/notifications/unread-count'),
   markAllNotificationsRead: () => api.patch('/admin/notifications/read-all'),
@@ -1267,6 +1275,8 @@ export const receptionApi = {
   getPendingAppointmentCount: () => api.get('/reception/appointments/pending-count'),
   getAppointments: () => api.get('/reception/appointments'),
   respondToAppointment: (id: string, data: object) => api.put(`/reception/appointments/${id}`, data),
+  // Phase D — admins reception can assign a meeting to.
+  getAssignableAdmins: () => api.get('/reception/assignable-admins'),
 };
 
 // ---- CHAT ----

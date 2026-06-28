@@ -394,7 +394,16 @@
     "status_approved": "Approved",
     "status_rejected": "Rejected",
     "toast_success": "Appointment request submitted!",
-    "toast_error": "Failed to submit appointment"
+    "toast_error": "Failed to submit appointment",
+    "status_invited": "Invitation",
+    "invite_title": "Meeting invitation",
+    "invited_by": "Invited by {{name}}",
+    "invite_reason": "Reason",
+    "complete": "Choose a time",
+    "complete_title": "Choose a meeting time",
+    "decline": "Decline",
+    "decline_confirm": "Decline this meeting invitation?",
+    "declined": "Invitation declined"
   },
   "notifications": {
     "title": "Notifications",
@@ -871,6 +880,20 @@
     "save_summary_failed": "Failed to save summary"
   },
   "supervisor": {
+    "invites": {
+      "title": "Meeting Invites",
+      "subtitle": "Invite a parent to a meeting and track responses",
+      "new_invite": "New invite",
+      "none": "No invites sent yet",
+      "student": "Student",
+      "pick_student": "Choose a student",
+      "no_students": "No students",
+      "reason": "Reason (optional)",
+      "reason_ph": "Why you'd like to meet...",
+      "send": "Send invite",
+      "sent": "Invite sent",
+      "send_failed": "Could not send the invite"
+    },
     "dashboard_title": "Supervisor Dashboard",
     "total_marked": "Total Marked",
     "absent_late_today": "{{count}} students absent or late today",
@@ -1004,7 +1027,12 @@
     "response_label": "Response:",
     "toast_approved": "Appointment approved!",
     "toast_rejected": "Appointment rejected!",
-    "respond_failed": "Failed to respond"
+    "respond_failed": "Failed to respond",
+    "assign_admin": "Assign to admin",
+    "choose_admin": "Choose an admin",
+    "invite_from": "Invited by {{name}}",
+    "parent_requested": "Parent requested: {{date}}",
+    "assign_required": "Choose an admin before approving"
   },
   "admin": {
     "dashboard_title": "Admin Dashboard",
@@ -1051,8 +1079,8 @@
       "activity": "activity",
       "grades_title": "{{count}} grades awaiting release",
       "grades_sub": "Term reports pending review",
-      "appts_title": "{{count}} appointment requests",
-      "appts_sub": "Parents awaiting a reply",
+      "appts_title": "{{count}} meetings assigned to you",
+      "appts_sub": "Upcoming — assigned by reception",
       "resets_title": "{{count}} account requests pending",
       "resets_sub": "Password reset queue",
       "expiring_title": "{{count}} documents expiring soon",
@@ -1679,6 +1707,13 @@
       "delete_confirm": "Delete \"{{title}}\"? This removes it for parents and students.",
       "deleted": "Removed",
       "delete_failed": "Could not remove that item"
+    },
+    "meetings": {
+      "subtitle": "Meetings assigned to you",
+      "none": "No meetings assigned to you yet",
+      "invite_from": "Invited by {{name}}",
+      "assigned_to": "Assigned to {{name}}",
+      "a_supervisor": "a supervisor"
     },
     "archive_mgmt": {
       "title": "Archive",
