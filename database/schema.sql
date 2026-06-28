@@ -615,9 +615,70 @@ CREATE TABLE IF NOT EXISTS notifications (
   title TEXT NOT NULL,
   message TEXT NOT NULL,
   is_read BOOLEAN DEFAULT FALSE,
-  notification_type TEXT DEFAULT 'general' CHECK (notification_type IN ('homework','assignment','announcement','bus','grade','grade_pending','general','system','report','appointment','post','payment_recorded','fees_reminder','salary_due_soon','salary_paid')),
+  notification_type TEXT DEFAULT 'general' CHECK (notification_type IN ('homework','assignment','announcement','bus','grade','grade_pending','general','system','report','appointment','post','payment_recorded','fees_reminder','salary_due_soon','salary_paid','attendance','security')),
   related_id UUID,
   created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ============================================================
+-- GRADE FILING WINDOWS (migration 060)
+-- ============================================================
+-- Per-term filing window. AUTHORITATIVE: when no window is open for a term,
+-- teachers cannot file grades for it (admins always override). term matches
+-- grades.grading_period (= terms.name); today (school-local) ∈ [opens_on,
+-- closes_on] ⇒ filing is open.
+CREATE TABLE IF NOT EXISTS grade_filing_windows (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  term TEXT NOT NULL,
+  opens_on DATE NOT NULL,
+  closes_on DATE NOT NULL,
+  created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(school_id, term),
+  CONSTRAINT grade_window_dates_ok CHECK (closes_on >= opens_on)
+);
+CREATE INDEX IF NOT EXISTS idx_grade_windows_school ON grade_filing_windows(school_id);
+
+-- ============================================================
+-- LOGIN ATTEMPTS (migration 060)
+-- ============================================================
+-- Best-effort record of every failed credential check, once the school is
+-- resolved. Powers the failed-login dashboard signal + the IT security page.
+-- NEVER blocks login. matched_user_id NULL = no such account; matched_role is
+-- frozen so the signal survives a later role change / account deletion.
+-- Auto-purged after ~90 days (utils/loginAttemptGc.ts).
+CREATE TABLE IF NOT EXISTS login_attempts (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  username TEXT NOT NULL,
+  matched_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  matched_role TEXT,
+  ip TEXT,
+  user_agent TEXT,
+  attempted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_login_attempts_school_time
+  ON login_attempts(school_id, attempted_at DESC);
+CREATE INDEX IF NOT EXISTS idx_login_attempts_user
+  ON login_attempts(matched_user_id, attempted_at DESC)
+  WHERE matched_user_id IS NOT NULL;
+
+-- ============================================================
+-- ATTENTION ACTION COOLDOWNS (migration 060)
+-- ============================================================
+-- Anti-spam for the dashboard Notify/Remind actions. One row per (school,
+-- kind); kind ∈ {'attendance','grade_remind'}. Upserted when the action fires;
+-- the server refuses to re-notify within the cooldown and the UI reads
+-- last_fired_at to disable + label the button ("Notified 8m ago").
+CREATE TABLE IF NOT EXISTS attention_action_cooldowns (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,
+  last_fired_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_fired_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  UNIQUE(school_id, kind)
 );
 
 -- ============================================================
@@ -1318,7 +1379,8 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
   -- The constraint is rewritten by migrations 015 / 028 / 029 / 037 / 038
-  -- / 039 / 040 / 041 / 046 — kept in sync here as the consolidated set.
+  -- / 039 / 040 / 041 / 046 / 058 / 060 — kept in sync here as the
+  -- consolidated set.
   entity_type TEXT NOT NULL CHECK (entity_type IN (
     'student','fee_plan','student_fee','fee_payment','staff_member','staff_salary_payment',
     'expense_category','expense_template','expense',
@@ -1333,7 +1395,11 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     'user_account','user_mfa','trusted_device','user_session',
     'report',
     -- HD-4 (migration 046) — accountant chart + manual journal entries
-    'chart_of_account','journal_entry'
+    'chart_of_account','journal_entry',
+    -- Migration 058 — admin capability/clearance grants
+    'admin_clearance',
+    -- Migration 060 — per-term grade filing window set/clear
+    'grade_filing_window'
   )),
   entity_id UUID NOT NULL,
   action TEXT NOT NULL CHECK (action IN ('create','update','delete')),

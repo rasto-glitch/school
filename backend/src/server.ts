@@ -10,6 +10,7 @@ import { createRouter } from './routes/index';
 import { setIo } from './utils/notify';
 import { startBackupVerifySchedule } from './utils/backupVerify';
 import { startTokenGcSchedule } from './utils/tokenGc';
+import { startLoginAttemptGcSchedule } from './utils/loginAttemptGc';
 import { logger } from './utils/logger';
 import { reportError } from './utils/alerting';
 import { supabase } from './config/supabase';
@@ -284,6 +285,7 @@ httpServer.listen(PORT, () => {
   console.log(`Environment: ${process.env.NODE_ENV}`);
   startBackupVerifySchedule();
   startTokenGcSchedule();
+  startLoginAttemptGcSchedule();
 });
 
 export { io };

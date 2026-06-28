@@ -41,6 +41,7 @@ import * as meEmployee from '../controllers/meEmployee.controller';
 import { authenticate, authorize, authorizeCapability, authorizeAnyCapability } from '../middleware/auth';
 import type { AuthRequest } from '../middleware/auth';
 import * as clearance from '../controllers/clearance.controller';
+import * as attention from '../controllers/attention.controller';
 import { validate } from '../middleware/validate';
 import * as v from '../validators/auth';
 import * as va from '../validators/accounting';
@@ -346,6 +347,23 @@ export function createRouter(io: SocketServer) {
   router.post('/admin/grades/upload', authenticate, authorizeCapability('academics.oversee'), upload.single('file'), (req, res) => admin.uploadGrades(req as AuthRequest, res));
   router.put('/admin/grades/:id', authenticate, authorizeCapability('academics.oversee'), validate({ params: vp.idParam, body: vp.updateGradeSchema }), (req, res) => admin.updateGrade(req as AuthRequest, res));
   router.post('/admin/grades/release', authenticate, authorizeCapability('academics.oversee'), validate({ body: vp.releaseGradesSchema }), (req, res) => admin.releaseGrades(req as AuthRequest, res));
+
+  // ── Dashboard "Needs your attention" signals + actions (migration 060) ──
+  // Per-term grade filing windows (academics.oversee).
+  router.get('/admin/grade-filing-windows', authenticate, authorizeCapability('academics.oversee'), (req, res) => attention.getGradeFilingWindows(req as AuthRequest, res));
+  router.put('/admin/grade-filing-windows', authenticate, authorizeCapability('academics.oversee'), (req, res) => attention.putGradeFilingWindow(req as AuthRequest, res));
+  router.delete('/admin/grade-filing-windows/:id', authenticate, authorizeCapability('academics.oversee'), validate({ params: vp.idParam }), (req, res) => attention.deleteGradeFilingWindow(req as AuthRequest, res));
+  // Grade-gap signal: teachers with incomplete grades in the open window.
+  router.get('/admin/dashboard/grade-gap', authenticate, authorizeCapability('academics.oversee'), (req, res) => attention.getGradeGap(req as AuthRequest, res));
+  router.post('/admin/dashboard/grade-gap/remind', authenticate, authorizeCapability('academics.oversee'), (req, res) => attention.remindGradeGap(req as AuthRequest, res));
+  // Attendance-gap signal: active classes with no attendance recorded today.
+  router.get('/admin/dashboard/attendance-gap', authenticate, authorizeCapability('academics.oversee'), (req, res) => attention.getAttendanceGap(req as AuthRequest, res));
+  router.post('/admin/dashboard/attendance-gap/notify', authenticate, authorizeCapability('academics.oversee'), (req, res) => attention.notifyAttendanceGap(req as AuthRequest, res));
+  // Account-request summary (pending password resets, broken down by role).
+  router.get('/admin/dashboard/account-requests', authenticate, authorizeCapability('accounts.manage'), (req, res) => attention.getAccountRequestSummary(req as AuthRequest, res));
+  // Failed-login security signal + IT security page (audit.read).
+  router.get('/admin/dashboard/failed-logins', authenticate, authorizeCapability('audit.read'), (req, res) => attention.getFailedLoginSummary(req as AuthRequest, res));
+  router.get('/admin/security/login-attempts', authenticate, authorizeCapability('audit.read'), (req, res) => attention.getSecurityLoginAttempts(req as AuthRequest, res));
   router.post('/admin/students/:id/archive', authenticate, authorizeCapability('students.manage'), validate({ params: vp.idParam, body: vp.archiveStudentSchema }), (req, res) => admin.archiveStudent(req as AuthRequest, res));
   router.get('/admin/archived-students', authenticate, authorizeCapability('enrollment.read'), (req, res) => admin.getArchivedStudents(req as AuthRequest, res));
   router.get('/admin/archived-students/search', authenticate, authorizeCapability('enrollment.read'), validate({ query: vq.listQuery }), (req, res) => admin.searchArchivedStudents(req as AuthRequest, res));
@@ -555,6 +573,7 @@ export function createRouter(io: SocketServer) {
   router.post('/admin/terms', authenticate, authorizeCapability('academics.oversee'), validate({ body: vp.createTermSchema }), (req, res) => admin.createTerm(req as AuthRequest, res));
   router.delete('/admin/terms/:id', authenticate, authorizeCapability('academics.oversee'), validate({ params: vp.idParam }), (req, res) => admin.deleteTerm(req as AuthRequest, res));
   router.get('/teacher/terms', authenticate, authorize('teacher'), (req, res) => admin.getTerms(req as AuthRequest, res));
+  router.get('/teacher/grade-windows', authenticate, authorize('teacher'), (req, res) => teacher.getGradeWindows(req as AuthRequest, res));
 
   // Audit logs — admin only (financial + student-record change history)
   router.get('/admin/audit-logs', authenticate, authorizeCapability('audit.read'), validate({ query: vq.listQuery }), (req, res) => admin.getAuditLogs(req as AuthRequest, res));

@@ -17,6 +17,7 @@ import { sendMail } from '../utils/mailer';
 import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from '../utils/passwordPolicy';
 import { isDefaultPassword } from '../utils/defaultPasswords';
 import { logAudit } from '../utils/audit';
+import { recordLoginAttempt } from '../utils/loginAttempts';
 import { isPendingClearance } from '../constants/clearance';
 import {
   getArmedLoginFactors, sendLoginOtp, verifyLoginSecondFactor,
@@ -363,12 +364,27 @@ export async function login(req: Request, res: Response): Promise<void> {
     .single();
 
   if (userErr || !user || !user.is_active) {
+    // Best-effort failed-login record (migration 060) — fire-and-forget so it
+    // never blocks or slows the response. matched_user_id is set when the
+    // account exists but is inactive, null when the username matched nothing.
+    void recordLoginAttempt({
+      schoolId: school.id, username,
+      matchedUserId: user?.id ?? null, matchedRole: user?.role ?? null,
+      ip: req.ip ?? null, userAgent: (req.headers['user-agent'] as string) ?? null,
+    });
     res.status(401).json({ error: 'Invalid credentials' });
     return;
   }
 
   const valid = await bcrypt.compare(password, user.password_hash);
   if (!valid) {
+    // Wrong password against a real, active account — the primary signal for
+    // the "failed logins on an admin account" dashboard alert.
+    void recordLoginAttempt({
+      schoolId: school.id, username,
+      matchedUserId: user.id, matchedRole: user.role,
+      ip: req.ip ?? null, userAgent: (req.headers['user-agent'] as string) ?? null,
+    });
     res.status(401).json({ error: 'Invalid credentials' });
     return;
   }

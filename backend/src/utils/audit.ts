@@ -57,7 +57,9 @@ export type AuditEntityType =
   | 'chart_of_account'
   | 'journal_entry'
   // Phase A — admin capability/clearance grants (migration 058)
-  | 'admin_clearance';
+  | 'admin_clearance'
+  // Per-term grade filing window set/clear (migration 060)
+  | 'grade_filing_window';
 
 interface LogParams {
   req: AuthRequest;

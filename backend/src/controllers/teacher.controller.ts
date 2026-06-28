@@ -9,9 +9,12 @@ import {
   isAttendanceLocked,
   shouldNotifyAttendanceChange,
   buildAttendanceNotificationCopy,
+  getSchoolTimezone,
+  todayInTimezone,
   type AttendanceWriteStatus,
 } from '../utils/attendance';
 import { resolveCurrentAcademicYear, loadEnrollmentHistory, rowsToSnapshot } from '../utils/studentEnrollments';
+import { getOpenWindowForTerm, listGradeWindows } from '../utils/gradeWindow';
 import { logAudit } from '../utils/audit';
 // Elevated client for STORAGE-only operations — see chat.controller.ts
 // for the rationale.
@@ -308,6 +311,20 @@ export async function upsertGrade(req: AuthRequest, res: Response): Promise<void
     res.status(403).json({ error: `You aren't assigned to teach ${subject} for this class.` }); return;
   }
 
+  // Filing window gate (migration 060): teachers may only file grades for a
+  // term while its grade-filing window is open today (school-local). This is
+  // AUTHORITATIVE and blocks both new grades and edits. Admins are unaffected
+  // — they write through the /admin/grades/* endpoints, which never check the
+  // window. If no window is open for this gradingPeriod, reject with a clear,
+  // machine-readable code the apps use to disable the grade-entry UI.
+  if (!(await getOpenWindowForTerm(schoolId, gradingPeriod))) {
+    res.status(403).json({
+      error: `Grade filing isn't open for ${gradingPeriod || 'this term'} right now.`,
+      code: 'GRADE_WINDOW_CLOSED',
+    });
+    return;
+  }
+
   // Grades are gated: a teacher write always lands UNRELEASED (pending admin
   // review). This also means editing an already-released grade reverts it to
   // pending. admin_note is intentionally NOT in the payload, so an admin's
@@ -345,6 +362,20 @@ export async function upsertGrade(req: AuthRequest, res: Response): Promise<void
   }
 
   res.json(toCC(data));
+}
+
+// Grade filing windows visible to the teacher: which terms are open for
+// filing today (school-local). The grade-entry UI reads this to show a
+// "filing not open" banner + disable the Save button before the server even
+// rejects (the server gate in upsertGrade remains the real enforcement).
+export async function getGradeWindows(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const today = todayInTimezone(await getSchoolTimezone(schoolId));
+  const windows = await listGradeWindows(schoolId);
+  res.json({
+    today,
+    windows: windows.map(w => ({ ...w, isOpen: w.opensOn <= today && today <= w.closesOn })),
+  });
 }
 
 export async function getGrades(req: AuthRequest, res: Response): Promise<void> {
