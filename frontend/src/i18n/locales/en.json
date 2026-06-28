@@ -1008,7 +1008,30 @@
     "delete_message_confirm": "Delete this message?",
     "photo_preview": "📷 Photo",
     "file_preview": "📎 {{name}}",
-    "file": "File"
+    "file": "File",
+    "invite": {
+      "title": "Meeting invitation",
+      "reason_label": "Reason",
+      "choose_time": "Choose a time",
+      "decline": "Decline",
+      "decline_confirm": "Decline this meeting invitation?",
+      "waiting": "Waiting for the parent to respond",
+      "status_pending": "Pending — reception will confirm the time",
+      "status_approved": "Approved",
+      "status_declined": "Declined",
+      "scheduled_for": "Scheduled for {{date}}",
+      "fill_title": "Choose a meeting time",
+      "your_reason": "Your reason (optional)",
+      "your_reason_ph": "Anything you'd like to discuss…",
+      "preferred_date": "Preferred date (optional)",
+      "submit": "Send request",
+      "cancel": "Cancel",
+      "send_title": "Invite to a meeting",
+      "send_desc": "Invite {{name}} to a meeting. They'll choose a time right here in the chat.",
+      "send_reason_ph": "Reason for the meeting (optional)",
+      "send": "Send invite",
+      "preview": "📅 Meeting invitation"
+    }
   },
   "reception": {
     "dashboard_title": "Reception Dashboard",

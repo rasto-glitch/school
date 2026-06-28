@@ -896,6 +896,7 @@ export function createRouter(io: SocketServer) {
   router.post('/chat/conversations', authenticate, authorize(...chatRoles), validate({ body: vp.getOrCreateConversationSchema }), (req, res) => chat.getOrCreateConversation(req as AuthRequest, res));
   router.get('/chat/conversations/:id/messages', authenticate, authorize(...chatRoles), validate({ params: vp.idParam, query: vq.listQuery }), (req, res) => chat.getMessages(req as AuthRequest, res));
   router.post('/chat/conversations/:id/messages', authenticate, authorize(...chatRoles), validate({ params: vp.idParam, body: vp.sendMessageSchema }), (req, res) => chat.sendMessage(req as AuthRequest, res));
+  router.post('/chat/conversations/:id/invite', authenticate, authorize('supervisor'), validate({ params: vp.idParam, body: vp.sendChatInviteSchema }), (req, res) => chat.sendInvite(req as AuthRequest, res));
   router.post('/chat/conversations/:id/read', authenticate, authorize(...chatRoles), validate({ params: vp.idParam }), (req, res) => chat.markRead(req as AuthRequest, res));
   router.patch('/chat/messages/:msgId', authenticate, authorize(...chatRoles), validate({ params: vp.msgIdParam, body: vp.editMessageSchema }), (req, res) => chat.editMessage(req as AuthRequest, res));
   router.delete('/chat/messages/:msgId', authenticate, authorize(...chatRoles), validate({ params: vp.msgIdParam }), (req, res) => chat.deleteMessage(req as AuthRequest, res));

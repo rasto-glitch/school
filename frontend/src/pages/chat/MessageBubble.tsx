@@ -3,14 +3,25 @@ import { useTranslation } from 'react-i18next';
 import { format, isToday, isYesterday } from 'date-fns';
 import { Pencil, Trash2, Check, X, Download, FileText } from 'lucide-react';
 
+export interface InviteAppointment {
+  id: string;
+  status: 'invited' | 'pending' | 'approved' | 'rejected';
+  inviteReason?: string;
+  reason?: string;
+  requestedDate?: string;
+  scheduledDate?: string;
+}
+
 export interface Message {
   id: string;
   senderId: string;
   content?: string;
-  type: 'text' | 'image' | 'file';
+  type: 'text' | 'image' | 'file' | 'invite';
   attachmentUrl?: string;
   attachmentName?: string;
   attachmentSize?: number;
+  relatedAppointmentId?: string;
+  appointment?: InviteAppointment | null;
   isDeleted: boolean;
   editedAt?: string;
   createdAt: string;

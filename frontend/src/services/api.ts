@@ -1288,6 +1288,8 @@ export const chatApi = {
     api.get(`/chat/conversations/${conversationId}/messages`, { params: before ? { before } : {} }),
   sendMessage: (conversationId: string, data: { content?: string; type?: string; attachmentUrl?: string; attachmentName?: string; attachmentSize?: number }) =>
     api.post(`/chat/conversations/${conversationId}/messages`, data),
+  sendInvite: (conversationId: string, reason?: string) =>
+    api.post(`/chat/conversations/${conversationId}/invite`, { reason }),
   editMessage: (msgId: string, content: string) => api.patch(`/chat/messages/${msgId}`, { content }),
   deleteMessage: (msgId: string) => api.delete(`/chat/messages/${msgId}`),
   markRead: (conversationId: string) => api.post(`/chat/conversations/${conversationId}/read`),

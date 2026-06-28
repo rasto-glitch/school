@@ -4,7 +4,7 @@ import { safeExt } from '../utils/upload';
 import { safeAttachmentMime } from '../utils/storageMime';
 import { toCC } from '../utils/transform';
 import type { AuthRequest } from '../middleware/auth';
-import { getIo, chatPush } from '../utils/notify';
+import { getIo, chatPush, notify } from '../utils/notify';
 import { isChatOpen, type ChatWindowState } from '../utils/chatWindow';
 import { safeDbErrorMessage, safeDbErrorStatus } from '../utils/dbErrors';
 // Elevated client for STORAGE-only operations. Authorization for uploads
@@ -352,7 +352,7 @@ export async function getMessages(req: AuthRequest, res: Response): Promise<void
 
   let query = req.db!
     .from('messages')
-    .select('id, sender_id, content, type, attachment_url, attachment_name, attachment_size, is_deleted, edited_at, created_at')
+    .select('id, sender_id, content, type, attachment_url, attachment_name, attachment_size, related_appointment_id, is_deleted, edited_at, created_at')
     .eq('conversation_id', id)
     // Composite ordering so messages sharing a created_at have a stable,
     // deterministic order (id tiebreak) — prevents the cursor skipping or
@@ -373,8 +373,33 @@ export async function getMessages(req: AuthRequest, res: Response): Promise<void
   }
 
   const { data: messages } = await query;
+  const rows = (messages || []).reverse();
 
-  res.json((messages || []).reverse().map(toCC));
+  // Chat invite cards (migration 062): attach each invite message's live
+  // appointment so the card renders the current status (invited / pending /
+  // approved+date / rejected) for both sides without a second client request.
+  const apptIds = [...new Set(
+    rows.filter((m: any) => m.type === 'invite' && m.related_appointment_id)
+        .map((m: any) => m.related_appointment_id),
+  )] as string[];
+  const apptMap: Record<string, any> = {};
+  if (apptIds.length > 0) {
+    const { data: appts } = await req.db!
+      .from('appointments')
+      .select('id, status, invite_reason, reason, requested_date, scheduled_date')
+      .eq('school_id', schoolId)
+      .in('id', apptIds);
+    (appts || []).forEach((a: any) => { apptMap[a.id] = a; });
+  }
+
+  res.json(rows.map((m: any) => {
+    const out = toCC(m) as Record<string, unknown>;
+    if (m.type === 'invite' && m.related_appointment_id) {
+      const a = apptMap[m.related_appointment_id];
+      out.appointment = a ? toCC(a) : null;
+    }
+    return out;
+  }));
 }
 
 // ── POST /chat/conversations/:id/messages ─────────────────────────────────
@@ -450,6 +475,99 @@ export async function sendMessage(req: AuthRequest, res: Response): Promise<void
     const senderName = `${sender.first_name} ${sender.last_name}`.trim();
     chatPush(recipientId, senderName, preview, id as string).catch(() => {});
   }
+
+  res.status(201).json(outMsg);
+}
+
+// ── POST /chat/conversations/:id/invite ────────────────────────────────────
+// Phase D (chat extension) — a supervisor invites the parent in this thread to
+// a meeting. Creates an appointment (status 'invited', invited_by=caller) and
+// posts a type='invite' chat message that carries related_appointment_id. The
+// parent fills it inline from the card → existing /parent/appointments flow.
+export async function sendInvite(req: AuthRequest, res: Response): Promise<void> {
+  const { userId, schoolId, role } = req.user!;
+  const { id } = req.params;
+  const { reason } = req.body;
+
+  if (role !== 'supervisor') { res.status(403).json({ error: 'Only supervisors can send meeting invites.' }); return; }
+
+  // Verify the caller is THIS conversation's supervisor.
+  const { data: conv } = await req.db!
+    .from('conversations').select('parent_id, staff_id, staff_role')
+    .eq('id', id).eq('school_id', schoolId).single();
+  if (!conv || conv.staff_id !== userId || conv.staff_role !== 'supervisor') {
+    res.status(403).json({ error: 'Forbidden' }); return;
+  }
+
+  // Chat schedule: respect the school's window (same gate as sending a message).
+  const win = await schoolChatWindow(req.db!, schoolId);
+  if (!win.open) {
+    res.status(423).json({ error: win.message || 'Chat is closed by the school.', chatClosed: true, opensDay: win.opensDay, opensTime: win.opensTime });
+    return;
+  }
+
+  // conversation.parent_id is a users.id; appointments.parent_id needs parents.id.
+  const { data: parent } = await req.db!
+    .from('parents').select('id, full_name').eq('user_id', conv.parent_id).eq('school_id', schoolId).maybeSingle();
+  if (!parent) { res.status(404).json({ error: 'This parent has no parent record to invite.' }); return; }
+
+  // 1. Create the appointment invite.
+  const { data: appt, error: apptErr } = await req.db!
+    .from('appointments')
+    .insert({
+      school_id: schoolId,
+      parent_id: parent.id,
+      invited_by: userId,
+      invite_reason: reason || null,
+      student_ids: [],
+      status: 'invited',
+    })
+    .select('id, status, invite_reason, reason, requested_date, scheduled_date')
+    .single();
+  if (apptErr || !appt) { res.status(500).json({ error: 'Could not create the invite.' }); return; }
+
+  // 2. Post the in-chat invite card message.
+  const { data: msg, error: msgErr } = await req.db!
+    .from('messages')
+    .insert({
+      conversation_id: id,
+      sender_id: userId,
+      content: reason || null,
+      type: 'invite',
+      related_appointment_id: appt.id,
+    })
+    .select('id, sender_id, content, type, attachment_url, attachment_name, attachment_size, related_appointment_id, is_deleted, edited_at, created_at')
+    .single();
+  if (msgErr || !msg) { res.status(500).json({ error: 'Could not post the invite.' }); return; }
+
+  // Update conversation preview.
+  const preview = '📅 Meeting invitation';
+  await req.db!.from('conversations').update({
+    last_message_at: msg.created_at,
+    last_message_preview: preview,
+    last_message_sender_id: userId,
+    last_message_type: 'invite',
+  }).eq('id', id);
+
+  const outMsg = toCC(msg) as Record<string, unknown>;
+  outMsg.appointment = toCC(appt);
+
+  // Emit to both participants (same path as sendMessage).
+  const eventPayload = { ...outMsg, conversationId: id };
+  emitToUser(schoolId, conv.parent_id, 'chat:message', eventPayload);
+  emitToUser(schoolId, userId, 'chat:message', eventPayload);
+
+  // In-app notification + push to the parent.
+  const { data: sender } = await req.db!.from('users').select('first_name, last_name').eq('id', userId).single();
+  const senderName = sender ? `${sender.first_name} ${sender.last_name}`.trim() : 'Your school';
+  notify({
+    schoolId, userId: conv.parent_id,
+    title: 'Meeting invitation',
+    message: `${senderName} invited you to a meeting${reason ? `: ${reason}` : ''}. Open the chat to choose a time or decline.`,
+    type: 'appointment',
+    relatedId: appt.id,
+  }).catch(() => {});
+  chatPush(conv.parent_id, senderName, preview, id as string).catch(() => {});
 
   res.status(201).json(outMsg);
 }

@@ -1303,10 +1303,13 @@ CREATE TABLE IF NOT EXISTS messages (
   conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
   sender_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   content TEXT,
-  type TEXT NOT NULL DEFAULT 'text' CHECK (type IN ('text', 'image', 'file')),
+  type TEXT NOT NULL DEFAULT 'text' CHECK (type IN ('text', 'image', 'file', 'invite')),
   attachment_url TEXT,
   attachment_name TEXT,
   attachment_size INTEGER,
+  -- Chat meeting invites (migration 062): the appointment this invite card
+  -- tracks. ON DELETE SET NULL so deleting the appointment leaves the card inert.
+  related_appointment_id UUID REFERENCES appointments(id) ON DELETE SET NULL,
   is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
   edited_at TIMESTAMPTZ,
   -- Audit snapshot: the content at the time of deletion. Never exposed by the
@@ -1320,7 +1323,9 @@ CREATE TABLE IF NOT EXISTS messages (
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS deleted_content TEXT;
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS deleted_attachment_url TEXT;
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS deleted_attachment_name TEXT;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS related_appointment_id UUID REFERENCES appointments(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_messages_related_appointment ON messages(related_appointment_id) WHERE related_appointment_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS conversation_reads (
   conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,

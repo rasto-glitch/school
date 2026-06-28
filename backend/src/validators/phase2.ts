@@ -317,3 +317,5 @@ export const sendMessageSchema = z.object({
   attachmentSize: z.number().int().nonnegative().nullable().optional(),
 });
 export const editMessageSchema = z.object({ content: nonEmptyStr(8000) });
+// Phase D (chat extension) — a supervisor invites the chat's parent to a meeting.
+export const sendChatInviteSchema = z.object({ reason: optText(2000) });

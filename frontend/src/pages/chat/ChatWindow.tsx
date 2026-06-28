@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { format, isToday, isYesterday, isSameDay } from 'date-fns';
-import { Loader2, MessageSquare } from 'lucide-react';
-import { chatApi } from '../../services/api';
+import { Loader2, MessageSquare, X } from 'lucide-react';
+import { chatApi, parentApi } from '../../services/api';
 import { useSocketStore } from '../../store/socketStore';
 import { useAuthStore } from '../../store/authStore';
 import MessageBubble, { type Message } from './MessageBubble';
 import MessageInput from './MessageInput';
+import InviteCard from './InviteCard';
 
 interface ConversationUser {
   id: string;
@@ -48,6 +49,15 @@ export default function ChatWindow({ conversationId, otherUser, onMessageSent }:
   const [hasMore, setHasMore] = useState(true);
   const [otherTyping, setOtherTyping] = useState(false);
   const [closedMsg, setClosedMsg] = useState<string | null>(null);
+  // Invite flow
+  const isParent = user?.role === 'parent';
+  const canInvite = user?.role === 'supervisor';
+  const [completing, setCompleting] = useState<Message | null>(null);
+  const [completeReason, setCompleteReason] = useState('');
+  const [completeDate, setCompleteDate] = useState('');
+  const [inviteBusy, setInviteBusy] = useState(false);
+  const [sendInviteOpen, setSendInviteOpen] = useState(false);
+  const [sendReason, setSendReason] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -213,6 +223,75 @@ export default function ChatWindow({ conversationId, otherUser, onMessageSent }:
     socket.emit('chat:typing', { conversationId, recipientId: otherUser.id, isTyping });
   };
 
+  // ── Meeting-invite cards ──────────────────────────────────────────────────
+  const patchAppointment = (apptId: string, patch: Partial<NonNullable<Message['appointment']>>) =>
+    setMessages(prev => prev.map(m =>
+      m.appointment?.id === apptId ? { ...m, appointment: { ...m.appointment, ...patch } as any } : m));
+
+  const submitComplete = async () => {
+    if (!completing?.appointment) return;
+    const apptId = completing.appointment.id;
+    setInviteBusy(true);
+    try {
+      await parentApi.completeInvite(apptId, {
+        reason: completeReason.trim() || undefined,
+        requestedDate: completeDate || undefined,
+      });
+      patchAppointment(apptId, { status: 'pending', reason: completeReason.trim() || undefined, requestedDate: completeDate || undefined });
+      setCompleting(null);
+      setCompleteReason('');
+      setCompleteDate('');
+    } catch {}
+    finally { setInviteBusy(false); }
+  };
+
+  const handleDecline = async (msg: Message) => {
+    if (!msg.appointment) return;
+    if (!confirm(t('chat.invite.decline_confirm'))) return;
+    const apptId = msg.appointment.id;
+    setInviteBusy(true);
+    try {
+      await parentApi.declineInvite(apptId);
+      patchAppointment(apptId, { status: 'rejected' });
+    } catch {}
+    finally { setInviteBusy(false); }
+  };
+
+  const handleSendInvite = async () => {
+    setInviteBusy(true);
+    try {
+      const res = await chatApi.sendInvite(conversationId, sendReason.trim() || undefined);
+      const sent: Message = res.data;
+      setMessages(prev => prev.find(m => m.id === sent.id) ? prev : [...prev, sent]);
+      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+      onMessageSent(t('chat.invite.preview'), 'invite');
+      setSendInviteOpen(false);
+      setSendReason('');
+      setClosedMsg(null);
+    } catch (e: any) {
+      if (e?.response?.status === 423) setClosedMsg(e.response.data?.error || t('chat.chat_closed'));
+    }
+    finally { setInviteBusy(false); }
+  };
+
+  // Refetch the latest page on tab focus so invite-card statuses stay fresh
+  // (the other side completing/declining doesn't push a socket event).
+  useEffect(() => {
+    const onFocus = () => {
+      chatApi.getMessages(conversationId).then(res => {
+        const fresh: Message[] = res.data;
+        const apptStatus: Record<string, NonNullable<Message['appointment']>> = {};
+        fresh.forEach(m => { if (m.appointment) apptStatus[m.appointment.id] = m.appointment; });
+        setMessages(prev => prev.map(m =>
+          m.appointment && apptStatus[m.appointment.id]
+            ? { ...m, appointment: apptStatus[m.appointment.id] }
+            : m));
+      }).catch(() => {});
+    };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [conversationId]);
+
   const initials = `${otherUser.firstName?.[0] || ''}${otherUser.lastName?.[0] || ''}`.toUpperCase();
 
   // Group messages for visual grouping (same sender within 5 min)
@@ -257,15 +336,26 @@ export default function ChatWindow({ conversationId, otherUser, onMessageSent }:
         {grouped.map(({ msg, showAvatar, showDate }) => (
           <div key={msg.id}>
             {showDate && <DateSeparator date={new Date(msg.createdAt)} />}
-            <MessageBubble
-              msg={msg}
-              isMine={msg.senderId === user?.id}
-              showAvatar={showAvatar}
-              avatarInitials={initials}
-              primaryColor={primaryColor}
-              onEdit={handleEdit}
-              onDelete={handleDelete}
-            />
+            {msg.type === 'invite' ? (
+              <InviteCard
+                msg={msg}
+                isParent={isParent}
+                primaryColor={primaryColor}
+                busy={inviteBusy}
+                onChooseTime={(m) => { setCompleteReason(''); setCompleteDate(''); setCompleting(m); }}
+                onDecline={handleDecline}
+              />
+            ) : (
+              <MessageBubble
+                msg={msg}
+                isMine={msg.senderId === user?.id}
+                showAvatar={showAvatar}
+                avatarInitials={initials}
+                primaryColor={primaryColor}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+              />
+            )}
           </div>
         ))}
 
@@ -299,7 +389,70 @@ export default function ChatWindow({ conversationId, otherUser, onMessageSent }:
         onSend={handleSend}
         onTyping={handleTyping}
         disabled={!!closedMsg}
+        onInvite={canInvite ? () => { setSendReason(''); setSendInviteOpen(true); } : undefined}
       />
+
+      {/* Parent: fill the invite inline (reason + preferred date) */}
+      {completing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => !inviteBusy && setCompleting(null)}>
+          <div className="w-full max-w-sm rounded-2xl bg-white shadow-xl p-5" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-base font-semibold text-gray-900">{t('chat.invite.fill_title')}</h3>
+              <button onClick={() => !inviteBusy && setCompleting(null)} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400"><X className="w-4 h-4" /></button>
+            </div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">{t('chat.invite.your_reason')}</label>
+            <textarea
+              value={completeReason}
+              onChange={e => setCompleteReason(e.target.value)}
+              rows={2}
+              maxLength={300}
+              placeholder={t('chat.invite.your_reason_ph')}
+              className="w-full resize-none rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 mb-3"
+            />
+            <label className="block text-xs font-medium text-gray-500 mb-1">{t('chat.invite.preferred_date')}</label>
+            <input
+              type="date"
+              value={completeDate}
+              onChange={e => setCompleteDate(e.target.value)}
+              className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 mb-4"
+            />
+            <div className="flex gap-2">
+              <button onClick={() => setCompleting(null)} disabled={inviteBusy} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-semibold hover:bg-gray-50 disabled:opacity-50">{t('chat.invite.cancel')}</button>
+              <button onClick={submitComplete} disabled={inviteBusy} className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-1.5" style={{ backgroundColor: primaryColor }}>
+                {inviteBusy && <Loader2 className="w-4 h-4 animate-spin" />}{t('chat.invite.submit')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Supervisor: compose an invite */}
+      {sendInviteOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => !inviteBusy && setSendInviteOpen(false)}>
+          <div className="w-full max-w-sm rounded-2xl bg-white shadow-xl p-5" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-base font-semibold text-gray-900">{t('chat.invite.send_title')}</h3>
+              <button onClick={() => !inviteBusy && setSendInviteOpen(false)} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400"><X className="w-4 h-4" /></button>
+            </div>
+            <p className="text-sm text-gray-500 mb-3">{t('chat.invite.send_desc', { name: otherUser.fullName })}</p>
+            <label className="block text-xs font-medium text-gray-500 mb-1">{t('chat.invite.reason_label')}</label>
+            <textarea
+              value={sendReason}
+              onChange={e => setSendReason(e.target.value)}
+              rows={3}
+              maxLength={2000}
+              placeholder={t('chat.invite.send_reason_ph')}
+              className="w-full resize-none rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 mb-4"
+            />
+            <div className="flex gap-2">
+              <button onClick={() => setSendInviteOpen(false)} disabled={inviteBusy} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm font-semibold hover:bg-gray-50 disabled:opacity-50">{t('chat.invite.cancel')}</button>
+              <button onClick={handleSendInvite} disabled={inviteBusy} className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-50 flex items-center justify-center gap-1.5" style={{ backgroundColor: primaryColor }}>
+                {inviteBusy && <Loader2 className="w-4 h-4 animate-spin" />}{t('chat.invite.send')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

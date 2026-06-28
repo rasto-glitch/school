@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Send, Paperclip, Image, X, Loader2 } from 'lucide-react';
+import { Send, Paperclip, Image, X, Loader2, CalendarPlus } from 'lucide-react';
 import { chatApi } from '../../services/api';
 
 interface Props {
@@ -8,9 +8,10 @@ interface Props {
   onSend: (msg: { content?: string; type: string; attachmentUrl?: string; attachmentName?: string; attachmentSize?: number }) => void;
   onTyping: (isTyping: boolean) => void;
   disabled?: boolean;
+  onInvite?: () => void;
 }
 
-export default function MessageInput({ onSend, onTyping, disabled }: Props) {
+export default function MessageInput({ onSend, onTyping, disabled, onInvite }: Props) {
   const { t } = useTranslation();
   const [text, setText] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -122,6 +123,16 @@ export default function MessageInput({ onSend, onTyping, disabled }: Props) {
           >
             <Paperclip className="w-4 h-4" />
           </button>
+          {onInvite && (
+            <button
+              onClick={onInvite}
+              disabled={disabled}
+              className="p-2 rounded-xl hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors disabled:opacity-40"
+              title={t('chat.invite.send_title')}
+            >
+              <CalendarPlus className="w-4 h-4" />
+            </button>
+          )}
         </div>
 
         {/* Text area */}
