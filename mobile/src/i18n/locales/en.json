@@ -842,7 +842,31 @@
     "send_image_failed": "Could not send image.",
     "send_file_failed": "Could not send file.",
     "chat_closed": "Chat is closed",
-    "type_message": "Type a message…"
+    "type_message": "Type a message…",
+    "invite": {
+      "title": "Meeting invitation",
+      "reason_label": "Reason",
+      "choose_time": "Choose a time",
+      "decline": "Decline",
+      "decline_confirm": "Decline this meeting invitation?",
+      "waiting": "Waiting for the parent to respond",
+      "status_pending": "Pending — reception will confirm the time",
+      "status_approved": "Approved",
+      "status_declined": "Declined",
+      "scheduled_for": "Scheduled for {{date}}",
+      "fill_title": "Choose a meeting time",
+      "your_reason": "Your reason (optional)",
+      "your_reason_ph": "Anything you'd like to discuss…",
+      "preferred_date": "Preferred date (optional)",
+      "date_ph": "e.g. 2026-07-02",
+      "submit": "Send request",
+      "cancel": "Cancel",
+      "send_title": "Invite to a meeting",
+      "send_desc": "Invite {{name}} to a meeting. They'll choose a time right here in the chat.",
+      "send_reason_ph": "Reason for the meeting (optional)",
+      "send": "Send invite",
+      "action_failed": "Something went wrong. Please try again."
+    }
   },
   "supervisor": {
     "weekly_summary": "Weekly Summary",

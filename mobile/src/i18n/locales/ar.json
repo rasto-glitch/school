@@ -842,7 +842,31 @@
     "send_image_failed": "تعذر إرسال الصورة.",
     "send_file_failed": "تعذر إرسال الملف.",
     "chat_closed": "الدردشة مغلقة",
-    "type_message": "اكتب رسالة…"
+    "type_message": "اكتب رسالة…",
+    "invite": {
+      "title": "دعوة لاجتماع",
+      "reason_label": "السبب",
+      "choose_time": "اختر وقتاً",
+      "decline": "رفض",
+      "decline_confirm": "رفض دعوة الاجتماع هذه؟",
+      "waiting": "بانتظار رد ولي الأمر",
+      "status_pending": "قيد الانتظار — سيؤكد الاستقبال الوقت",
+      "status_approved": "تمت الموافقة",
+      "status_declined": "مرفوض",
+      "scheduled_for": "مجدول في {{date}}",
+      "fill_title": "اختر وقت الاجتماع",
+      "your_reason": "سببك (اختياري)",
+      "your_reason_ph": "أي شيء تود مناقشته…",
+      "preferred_date": "التاريخ المفضل (اختياري)",
+      "date_ph": "مثال: 2026-07-02",
+      "submit": "إرسال الطلب",
+      "cancel": "إلغاء",
+      "send_title": "دعوة لاجتماع",
+      "send_desc": "ادعُ {{name}} إلى اجتماع. سيختار الوقت هنا في المحادثة.",
+      "send_reason_ph": "سبب الاجتماع (اختياري)",
+      "send": "إرسال الدعوة",
+      "action_failed": "حدث خطأ ما. يرجى المحاولة مرة أخرى."
+    }
   },
   "supervisor": {
     "weekly_summary": "الملخص الأسبوعي",

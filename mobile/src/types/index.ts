@@ -240,15 +240,26 @@ export interface Conversation {
   createdAt: string;
 }
 
+export interface InviteAppointment {
+  id: string;
+  status: 'invited' | 'pending' | 'approved' | 'rejected';
+  inviteReason?: string;
+  reason?: string;
+  requestedDate?: string;
+  scheduledDate?: string;
+}
+
 export interface ChatMessage {
   id: string;
   conversationId?: string;
   senderId: string;
   content?: string;
-  type: 'text' | 'image' | 'file';
+  type: 'text' | 'image' | 'file' | 'invite';
   attachmentUrl?: string;
   attachmentName?: string;
   attachmentSize?: number;
+  relatedAppointmentId?: string;
+  appointment?: InviteAppointment | null;
   isDeleted: boolean;
   editedAt?: string;
   createdAt: string;

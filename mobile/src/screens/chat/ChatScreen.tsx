@@ -2,11 +2,11 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet,
   KeyboardAvoidingView, Platform, ActivityIndicator, Alert, Image,
-  Pressable, Linking, Animated,
+  Pressable, Linking, Animated, Modal, Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Send, Paperclip, Check, X, FileText } from 'lucide-react-native';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { Send, Paperclip, Check, X, FileText, CalendarPlus, CalendarClock, Clock, CheckCircle2, XCircle } from 'lucide-react-native';
+import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import { useHeaderHeight } from '@react-navigation/elements';
 import { format, isToday, isYesterday, isSameDay } from 'date-fns';
 import { useTranslation } from 'react-i18next';
@@ -16,7 +16,7 @@ import i18n from '../../i18n';
 import { useColors } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
 import { useSocketStore } from '../../store/socketStore';
-import { chatApi } from '../../services/api';
+import { chatApi, parentApi } from '../../services/api';
 import { font } from '../../theme';
 import type { Conversation, ChatMessage } from '../../types';
 
@@ -148,6 +148,90 @@ function Bubble({ msg, isMine, showAvatar, initials, primaryColor, colors, onLon
   );
 }
 
+interface InviteCardProps {
+  msg: ChatMessage;
+  isParent: boolean;
+  primaryColor: string;
+  colors: any;
+  busy: boolean;
+  onChooseTime: (msg: ChatMessage) => void;
+  onDecline: (msg: ChatMessage) => void;
+}
+
+// In-chat meeting-invite card (Phase D chat extension): renders the live
+// appointment status; the invited parent fills it inline or declines.
+function InviteCard({ msg, isParent, primaryColor, colors, busy, onChooseTime, onDecline }: InviteCardProps) {
+  const appt = msg.appointment;
+  const status = appt?.status ?? 'invited';
+  const reason = appt?.inviteReason || msg.content;
+  const fmt = (iso?: string) => (iso ? format(new Date(iso), 'MMM d, yyyy') : '');
+
+  return (
+    <View style={{ paddingHorizontal: 16, marginVertical: 8, alignItems: 'center' }}>
+      <View style={{ width: '100%', maxWidth: 340, borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, overflow: 'hidden' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: primaryColor }}>
+          <CalendarClock size={16} color="#fff" />
+          <Text style={{ fontSize: 14, fontWeight: '700', color: '#fff' }}>{i18n.t('chat.invite.title')}</Text>
+        </View>
+        <View style={{ paddingHorizontal: 14, paddingVertical: 12, gap: 8 }}>
+          {!!reason && (
+            <Text style={{ fontSize: 13, color: colors.text }}>
+              <Text style={{ color: colors.textMuted }}>{i18n.t('chat.invite.reason_label')}: </Text>{reason}
+            </Text>
+          )}
+
+          {status === 'invited' && !isParent && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Clock size={15} color={colors.textMuted} />
+              <Text style={{ fontSize: 13, color: colors.textMuted }}>{i18n.t('chat.invite.waiting')}</Text>
+            </View>
+          )}
+          {status === 'pending' && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Clock size={15} color={colors.warning} />
+              <Text style={{ fontSize: 13, color: colors.warning }}>{i18n.t('chat.invite.status_pending')}</Text>
+            </View>
+          )}
+          {status === 'approved' && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <CheckCircle2 size={15} color={colors.success} />
+              <Text style={{ fontSize: 13, color: colors.success }}>
+                {appt?.scheduledDate ? i18n.t('chat.invite.scheduled_for', { date: fmt(appt.scheduledDate) }) : i18n.t('chat.invite.status_approved')}
+              </Text>
+            </View>
+          )}
+          {status === 'rejected' && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <XCircle size={15} color={colors.textMuted} />
+              <Text style={{ fontSize: 13, color: colors.textMuted }}>{i18n.t('chat.invite.status_declined')}</Text>
+            </View>
+          )}
+
+          {status === 'invited' && isParent && (
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 2 }}>
+              <TouchableOpacity
+                onPress={() => onChooseTime(msg)}
+                disabled={busy}
+                style={{ flex: 1, paddingVertical: 10, borderRadius: 12, backgroundColor: primaryColor, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6, opacity: busy ? 0.5 : 1 }}
+              >
+                <CalendarClock size={15} color="#fff" />
+                <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>{i18n.t('chat.invite.choose_time')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => onDecline(msg)}
+                disabled={busy}
+                style={{ paddingVertical: 10, paddingHorizontal: 16, borderRadius: 12, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', opacity: busy ? 0.5 : 1 }}
+              >
+                <Text style={{ color: colors.textMuted, fontSize: 13, fontWeight: '700' }}>{i18n.t('chat.invite.decline')}</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      </View>
+    </View>
+  );
+}
+
 function TypingDots({ color }: { color: string }) {
   const dots = useRef([new Animated.Value(0), new Animated.Value(0), new Animated.Value(0)]).current;
   useEffect(() => {
@@ -190,6 +274,15 @@ export default function ChatScreen() {
   const [editText, setEditText] = useState('');
   const [uploading, setUploading] = useState(false);
   const [closedMsg, setClosedMsg] = useState<string | null>(null);
+  // Meeting-invite flow
+  const isParent = user?.role === 'parent';
+  const canInvite = user?.role === 'supervisor';
+  const [completing, setCompleting] = useState<ChatMessage | null>(null);
+  const [completeReason, setCompleteReason] = useState('');
+  const [completeDate, setCompleteDate] = useState('');
+  const [inviteBusy, setInviteBusy] = useState(false);
+  const [sendInviteOpen, setSendInviteOpen] = useState(false);
+  const [sendReason, setSendReason] = useState('');
   const flatRef = useRef<FlatList>(null);
   const ownTypingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const otherTypingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -400,6 +493,73 @@ export default function ChatScreen() {
     setEditingMsg(null);
   };
 
+  // ── Meeting-invite cards ──────────────────────────────────────────────────
+  const patchAppointment = (apptId: string, patch: Partial<NonNullable<ChatMessage['appointment']>>) =>
+    setMessages(prev => prev.map(m =>
+      m.appointment?.id === apptId ? { ...m, appointment: { ...m.appointment, ...patch } as any } : m));
+
+  const submitComplete = async () => {
+    if (!completing?.appointment) return;
+    const apptId = completing.appointment.id;
+    setInviteBusy(true);
+    try {
+      await parentApi.completeInvite(apptId, {
+        reason: completeReason.trim() || undefined,
+        requestedDate: completeDate.trim() || undefined,
+      });
+      patchAppointment(apptId, { status: 'pending', reason: completeReason.trim() || undefined, requestedDate: completeDate.trim() || undefined });
+      setCompleting(null); setCompleteReason(''); setCompleteDate('');
+    } catch { Alert.alert(t('common.error'), t('chat.invite.action_failed')); }
+    finally { setInviteBusy(false); }
+  };
+
+  const handleDecline = (msg: ChatMessage) => {
+    if (!msg.appointment) return;
+    Alert.alert(t('chat.invite.title'), t('chat.invite.decline_confirm'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('chat.invite.decline'), style: 'destructive', onPress: async () => {
+        const apptId = msg.appointment!.id;
+        setInviteBusy(true);
+        try {
+          await parentApi.declineInvite(apptId);
+          patchAppointment(apptId, { status: 'rejected' });
+        } catch { Alert.alert(t('common.error'), t('chat.invite.action_failed')); }
+        finally { setInviteBusy(false); }
+      }},
+    ]);
+  };
+
+  const handleSendInvite = async () => {
+    setInviteBusy(true);
+    Keyboard.dismiss();
+    try {
+      const res = await chatApi.sendInvite(conversation.id, sendReason.trim() || undefined);
+      setMessages(prev => prev.find(m => m.id === res.data.id) ? prev : [...prev, res.data]);
+      setTimeout(() => flatRef.current?.scrollToEnd({ animated: true }), 100);
+      setSendInviteOpen(false); setSendReason(''); setClosedMsg(null);
+    } catch (e: any) {
+      if (e?.response?.status === 423) {
+        setSendInviteOpen(false);
+        setClosedMsg(e.response.data?.error || t('chat.closed_by_school'));
+      } else { Alert.alert(t('common.error'), t('chat.invite.action_failed')); }
+    }
+    finally { setInviteBusy(false); }
+  };
+
+  // Refresh invite-card statuses when the screen regains focus (the other
+  // side completing/declining doesn't push a socket event).
+  useFocusEffect(
+    useCallback(() => {
+      chatApi.getMessages(conversation.id).then(res => {
+        const fresh: ChatMessage[] = res.data;
+        const map: Record<string, NonNullable<ChatMessage['appointment']>> = {};
+        fresh.forEach(m => { if (m.appointment) map[m.appointment.id] = m.appointment; });
+        setMessages(prev => prev.map(m =>
+          m.appointment && map[m.appointment.id] ? { ...m, appointment: map[m.appointment.id] } : m));
+      }).catch(() => {});
+    }, [conversation.id])
+  );
+
   // Build grouped messages with date separators
   type Item = { type: 'separator'; date: Date; key: string } | { type: 'msg'; msg: ChatMessage; showAvatar: boolean; key: string };
   const items: Item[] = [];
@@ -449,6 +609,19 @@ export default function ChatScreen() {
                   </View>
                 );
               }
+              if (item.msg.type === 'invite') {
+                return (
+                  <InviteCard
+                    msg={item.msg}
+                    isParent={isParent}
+                    primaryColor={primaryColor}
+                    colors={colors}
+                    busy={inviteBusy}
+                    onChooseTime={(m) => { setCompleteReason(''); setCompleteDate(''); setCompleting(m); }}
+                    onDecline={handleDecline}
+                  />
+                );
+              }
               return (
                 <Bubble
                   msg={item.msg}
@@ -495,6 +668,15 @@ export default function ChatScreen() {
         {/* Input bar */}
         {!editingMsg && (
           <View style={[s.inputBar, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
+            {canInvite && (
+              <TouchableOpacity
+                onPress={() => { setSendReason(''); setSendInviteOpen(true); }}
+                disabled={!!closedMsg}
+                style={[s.attachBtn, { backgroundColor: colors.bg, borderColor: colors.border, opacity: closedMsg ? 0.4 : 1 }]}
+              >
+                <CalendarPlus size={18} color={colors.textMuted} />
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               onPress={handleAttach}
               disabled={uploading || !!closedMsg}
@@ -524,6 +706,74 @@ export default function ChatScreen() {
           </View>
         )}
       </KeyboardAvoidingView>
+
+      {/* Parent: fill the invite inline (reason + preferred date) */}
+      <Modal visible={!!completing} animationType="slide" transparent onRequestClose={() => setCompleting(null)}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <Pressable style={s.modalOverlay} onPress={() => { Keyboard.dismiss(); if (!inviteBusy) setCompleting(null); }}>
+            <Pressable style={[s.modalBox, { backgroundColor: colors.card }]} onPress={() => {}}>
+              <Text style={[s.modalTitle, { color: colors.text }]}>{t('chat.invite.fill_title')}</Text>
+              <Text style={[s.modalLabel, { color: colors.textMuted }]}>{t('chat.invite.your_reason')}</Text>
+              <TextInput
+                style={[s.modalInput, { color: colors.text, backgroundColor: colors.bg, borderColor: colors.border, height: 70, textAlignVertical: 'top' }]}
+                value={completeReason}
+                onChangeText={setCompleteReason}
+                placeholder={t('chat.invite.your_reason_ph')}
+                placeholderTextColor={colors.textMuted}
+                multiline
+                maxLength={300}
+              />
+              <Text style={[s.modalLabel, { color: colors.textMuted }]}>{t('chat.invite.preferred_date')}</Text>
+              <TextInput
+                style={[s.modalInput, { color: colors.text, backgroundColor: colors.bg, borderColor: colors.border }]}
+                value={completeDate}
+                onChangeText={setCompleteDate}
+                placeholder={t('chat.invite.date_ph')}
+                placeholderTextColor={colors.textMuted}
+              />
+              <View style={s.modalActions}>
+                <TouchableOpacity onPress={() => { Keyboard.dismiss(); setCompleting(null); }} disabled={inviteBusy} style={[s.modalBtn, { borderWidth: 1, borderColor: colors.border }]}>
+                  <Text style={{ color: colors.textMuted, fontWeight: '700', fontSize: 13 }}>{t('chat.invite.cancel')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={submitComplete} disabled={inviteBusy} style={[s.modalBtn, { backgroundColor: primaryColor, flexDirection: 'row', gap: 6 }]}>
+                  {inviteBusy && <ActivityIndicator size="small" color="#fff" />}
+                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>{t('chat.invite.submit')}</Text>
+                </TouchableOpacity>
+              </View>
+            </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Supervisor: compose an invite */}
+      <Modal visible={sendInviteOpen} animationType="slide" transparent onRequestClose={() => setSendInviteOpen(false)}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <Pressable style={s.modalOverlay} onPress={() => { Keyboard.dismiss(); if (!inviteBusy) setSendInviteOpen(false); }}>
+            <Pressable style={[s.modalBox, { backgroundColor: colors.card }]} onPress={() => {}}>
+              <Text style={[s.modalTitle, { color: colors.text }]}>{t('chat.invite.send_title')}</Text>
+              <Text style={[s.modalLabel, { color: colors.textMuted, marginTop: 0 }]}>{t('chat.invite.send_desc', { name: otherUser?.fullName || '' })}</Text>
+              <TextInput
+                style={[s.modalInput, { color: colors.text, backgroundColor: colors.bg, borderColor: colors.border, height: 90, textAlignVertical: 'top' }]}
+                value={sendReason}
+                onChangeText={setSendReason}
+                placeholder={t('chat.invite.send_reason_ph')}
+                placeholderTextColor={colors.textMuted}
+                multiline
+                maxLength={2000}
+              />
+              <View style={s.modalActions}>
+                <TouchableOpacity onPress={() => { Keyboard.dismiss(); setSendInviteOpen(false); }} disabled={inviteBusy} style={[s.modalBtn, { borderWidth: 1, borderColor: colors.border }]}>
+                  <Text style={{ color: colors.textMuted, fontWeight: '700', fontSize: 13 }}>{t('chat.invite.cancel')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={handleSendInvite} disabled={inviteBusy} style={[s.modalBtn, { backgroundColor: primaryColor, flexDirection: 'row', gap: 6 }]}>
+                  {inviteBusy && <ActivityIndicator size="small" color="#fff" />}
+                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>{t('chat.invite.send')}</Text>
+                </TouchableOpacity>
+              </View>
+            </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -538,4 +788,11 @@ const makeStyles = (_colors: any) => StyleSheet.create({
   editBar: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 10, borderTopWidth: 1 },
   editInput: { flex: 1, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8, fontSize: font.sm, borderWidth: 1, maxHeight: 80 },
   editAction: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
+  modalBox: { borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 32, gap: 4 },
+  modalTitle: { fontSize: 16, fontWeight: '700', marginBottom: 8 },
+  modalLabel: { fontSize: 12, fontWeight: '500', marginTop: 8, marginBottom: 4 },
+  modalInput: { borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, fontSize: font.sm, borderWidth: 1 },
+  modalActions: { flexDirection: 'row', gap: 10, marginTop: 16 },
+  modalBtn: { flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
 });
