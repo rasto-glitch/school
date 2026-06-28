@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   View, Text, ScrollView, StyleSheet,
   TouchableOpacity, TextInput, Linking, RefreshControl, Modal, Alert,
+  KeyboardAvoidingView, Platform, Pressable, Keyboard,
 } from 'react-native';
 import { CardListSkeleton } from '../../components/Skeleton';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -191,28 +192,32 @@ export default function SupervisorStudentsScreen() {
     </ScrollView>
 
     <Modal visible={!!inviteFor} animationType="slide" transparent onRequestClose={() => setInviteFor(null)}>
-      <View style={styles.modalOverlay}>
-        <View style={[styles.modalBox, { backgroundColor: colors.card }]}>
-          <Text style={styles.modalTitle}>{t('supervisor.invite_meeting')}</Text>
-          <Text style={styles.modalSub}>{inviteFor?.parents?.fullName || inviteFor?.fullName}</Text>
-          <TextInput
-            style={styles.modalInput}
-            placeholder={t('supervisor.invite_reason_ph')}
-            placeholderTextColor={colors.textMuted}
-            value={inviteReason}
-            onChangeText={setInviteReason}
-            multiline
-          />
-          <View style={styles.modalActions}>
-            <TouchableOpacity style={styles.modalCancel} onPress={() => setInviteFor(null)}>
-              <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.modalSend} onPress={sendInvite} disabled={inviteSending}>
-              <Text style={styles.modalSendText}>{inviteSending ? t('common.loading') : t('supervisor.invite_send')}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        {/* Tap the dimmed area to dismiss (keyboard + sheet); taps inside the
+            box are captured so they don't close it. */}
+        <Pressable style={styles.modalOverlay} onPress={() => { Keyboard.dismiss(); setInviteFor(null); }}>
+          <Pressable style={[styles.modalBox, { backgroundColor: colors.card }]} onPress={() => {}}>
+            <Text style={styles.modalTitle}>{t('supervisor.invite_meeting')}</Text>
+            <Text style={styles.modalSub}>{inviteFor?.parents?.fullName || inviteFor?.fullName}</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder={t('supervisor.invite_reason_ph')}
+              placeholderTextColor={colors.textMuted}
+              value={inviteReason}
+              onChangeText={setInviteReason}
+              multiline
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.modalCancel} onPress={() => { Keyboard.dismiss(); setInviteFor(null); }}>
+                <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalSend} onPress={sendInvite} disabled={inviteSending}>
+                <Text style={styles.modalSendText}>{inviteSending ? t('common.loading') : t('supervisor.invite_send')}</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </KeyboardAvoidingView>
     </Modal>
     </>
   );
