@@ -12,7 +12,7 @@ import {
   FileText, Star, Clock, X, ClipboardCheck, MessageSquare, Archive,
   CreditCard, Wallet, History, Receipt, BookOpenCheck,
   AlertCircle, FileBarChart, BarChart3, CalendarClock, ArrowLeftRight, Scale,
-  ShieldCheck, UserPlus, Send,
+  ShieldCheck, ShieldAlert, UserPlus, Send,
 } from 'lucide-react';
 import type { Dispatch, SetStateAction } from 'react';
 import type { Role } from '../../types';
@@ -110,6 +110,7 @@ const adminNav: AdminNavNode[] = [
   },
   { kind: 'leaf', path: '/admin/accounts', icon: UserCog, labelKey: 'nav.accounts', labelFallback: 'Accounts', capabilities: ['accounts.manage'] },
   { kind: 'leaf', path: '/admin/audit-log', icon: History, labelKey: 'nav.audit_log', labelFallback: 'Audit Log', capabilities: ['audit.read'] },
+  { kind: 'leaf', path: '/admin/security', icon: ShieldAlert, labelKey: 'nav.security', labelFallback: 'Security', capabilities: ['audit.read'] },
   { kind: 'leaf', path: '/admin/notifications', icon: Send, labelKey: 'nav.send_notifications', labelFallback: 'Send Notifications', capabilities: ['announcements.moderate'] },
   { kind: 'leaf', path: '/admin/settings', icon: Settings, labelKey: 'nav.school_settings', labelFallback: 'School Settings', capabilities: ['settings.manage'] },
 ];

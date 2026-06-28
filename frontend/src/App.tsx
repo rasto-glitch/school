@@ -56,6 +56,7 @@ import DriversManagement from './pages/admin/DriversManagement';
 import AppointmentsPage from './pages/admin/AppointmentsPage';
 import AccountsPage from './pages/admin/AccountsPage';
 import AuditLogPage from './pages/admin/AuditLogPage';
+import SecurityPage from './pages/admin/SecurityPage';
 import ClassesPage from './pages/admin/ClassesPage';
 import AdminNotificationsPage from './pages/admin/AdminNotificationsPage';
 import StudentBriefPage from './pages/admin/StudentBriefPage';
@@ -262,6 +263,7 @@ export default function App() {
         <Route path="/admin/announcements" element={<ProtectedRoute allowedRoles={['admin']}><AnnouncementsPage /></ProtectedRoute>} />
         <Route path="/admin/accounts" element={<ProtectedRoute allowedRoles={['admin']}><AccountsPage /></ProtectedRoute>} />
         <Route path="/admin/audit-log" element={<ProtectedRoute allowedRoles={['admin']}><AuditLogPage /></ProtectedRoute>} />
+        <Route path="/admin/security" element={<ProtectedRoute allowedRoles={['admin']}><SecurityPage /></ProtectedRoute>} />
         <Route path="/admin/settings" element={<ProtectedRoute allowedRoles={['admin']}><SettingsPage /></ProtectedRoute>} />
         <Route path="/admin/parents/:id" element={<ProtectedRoute allowedRoles={['admin']}><ParentProfilePage /></ProtectedRoute>} />
         <Route path="/admin/profile" element={<ProtectedRoute allowedRoles={['admin']}><ProfilePage /></ProtectedRoute>} />

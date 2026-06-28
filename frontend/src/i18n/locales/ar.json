@@ -47,6 +47,7 @@
     "login_otp_send_failed": "تعذّر إرسال الرمز. جرّب طريقة أخرى."
   },
   "nav": {
+    "security": "الأمان",
     "dashboard": "الرئيسية",
     "homework": "الواجبات",
     "assignments": "المهام",
@@ -1011,6 +1012,24 @@
     "drivers": "السائقون",
     "search_students_ph": "ابحث عن الطلاب بالاسم أو العنوان أو الهاتف… (اضغط Enter)",
     "management": "الإدارة",
+    "security": {
+      "title": "الأمان",
+      "subtitle": "محاولات تسجيل الدخول الفاشلة",
+      "last24h": "محاولات فاشلة (24س)",
+      "admin24h": "تستهدف المسؤولين (24س)",
+      "ips24h": "عناوين IP مختلفة (24س)",
+      "most_targeted": "أكثر الحسابات استهدافًا (24س)",
+      "recent": "أحدث المحاولات",
+      "col_time": "الوقت",
+      "col_account": "الحساب",
+      "col_role": "الدور",
+      "col_ip": "عنوان IP",
+      "col_device": "الجهاز",
+      "no_account": "لا يوجد حساب",
+      "from_ips": "{{count}} عناوين IP",
+      "empty_title": "لا توجد محاولات فاشلة",
+      "empty_sub": "لا شيء للمراجعة خلال آخر 90 يومًا."
+    },
     "cockpit": {
       "attention": "يحتاج إلى انتباهك",
       "n_items": "{{count}} عناصر",

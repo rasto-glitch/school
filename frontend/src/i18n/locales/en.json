@@ -47,6 +47,7 @@
     "login_otp_send_failed": "Could not send a code. Try another method."
   },
   "nav": {
+    "security": "Security",
     "dashboard": "Dashboard",
     "homework": "Homework",
     "assignments": "Assignments",
@@ -1011,6 +1012,24 @@
     "drivers": "Drivers",
     "search_students_ph": "Search students by name, address or phone… (press Enter)",
     "management": "Management",
+    "security": {
+      "title": "Security",
+      "subtitle": "Failed sign-in attempts",
+      "last24h": "Failed attempts (24h)",
+      "admin24h": "Admin-targeted (24h)",
+      "ips24h": "Distinct IPs (24h)",
+      "most_targeted": "Most targeted accounts (24h)",
+      "recent": "Recent attempts",
+      "col_time": "Time",
+      "col_account": "Account",
+      "col_role": "Role",
+      "col_ip": "IP address",
+      "col_device": "Device",
+      "no_account": "no such account",
+      "from_ips": "{{count}} IPs",
+      "empty_title": "No failed sign-ins",
+      "empty_sub": "Nothing to review in the last 90 days."
+    },
     "cockpit": {
       "attention": "Needs your attention",
       "n_items": "{{count}} items",
