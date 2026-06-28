@@ -1,21 +1,22 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, ActivityIndicator,
-  RefreshControl, TouchableOpacity, Alert,
+  View, Text, ScrollView, StyleSheet,
+  RefreshControl, TouchableOpacity,
 } from 'react-native';
 import { CardListSkeleton } from '../../components/Skeleton';
 import { useRoute, RouteProp, useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
-import { BookOpen, ClipboardList, Trash2, Clock, FileText } from 'lucide-react-native';
+import { BookOpen, ClipboardList, FileText } from 'lucide-react-native';
 import { supervisorApi } from '../../services/api';
 import { useColors, useIsDark } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
 import { spacing, radius, font, shadow } from '../../theme';
-import SupervisorWeeklySummaryScreen from './SupervisorWeeklySummaryScreen';
 import SupervisorStudentReportsScreen from './SupervisorStudentReportsScreen';
 
-type TabType = 'homework' | 'assignments' | 'weekly' | 'reports';
+// Phase D — supervisors view homework/assignments read-only (no delete); the
+// weekly-summary tab moved to admin (academics.oversee).
+type TabType = 'homework' | 'assignments' | 'reports';
 
 interface ContentItem {
   id: string;
@@ -43,18 +44,16 @@ export default function SupervisorContentScreen() {
   const ALL_TABS: { key: TabType; label: string; icon: typeof BookOpen; feature?: string }[] = [
     { key: 'homework',    label: t('nav.homework'),                icon: BookOpen },
     { key: 'assignments', label: t('nav.assignments'),             icon: ClipboardList },
-    { key: 'weekly',      label: t('supervisor.weekly_summary'),   icon: Clock,        feature: 'weekly_summary' },
     { key: 'reports',     label: t('supervisor.student_reports'),  icon: FileText },
   ];
   const TABS = ALL_TABS.filter(tab => !tab.feature || feat(tab.feature));
 
-  const validInitialTab = initialTab && feat(initialTab === 'weekly' ? 'weekly_summary' : initialTab) ? initialTab : undefined;
+  const validInitialTab = initialTab && TABS.find(tb => tb.key === initialTab) ? initialTab : undefined;
   const [tab, setTab] = useState<TabType>(validInitialTab ?? 'homework');
   const [homework, setHomework] = useState<ContentItem[]>([]);
   const [assignments, setAssignments] = useState<ContentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // Update tab when navigating from dashboard shortcuts (runs on every focus)
   useFocusEffect(
@@ -74,35 +73,6 @@ export default function SupervisorContentScreen() {
 
   useEffect(() => { load().finally(() => setLoading(false)); }, [load]);
   const onRefresh = () => { setRefreshing(true); load().finally(() => setRefreshing(false)); };
-
-  const handleDelete = (item: ContentItem) => {
-    const isHw = tab === 'homework';
-    Alert.alert(
-      isHw ? t('teacher.delete_homework') : t('teacher.delete_assignment'),
-      t('supervisor.confirm_delete', { title: item.title }),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('common.delete'), style: 'destructive', onPress: async () => {
-            setDeletingId(item.id);
-            try {
-              if (isHw) {
-                await supervisorApi.deleteHomework(item.id);
-                setHomework(prev => prev.filter(h => h.id !== item.id));
-              } else {
-                await supervisorApi.deleteAssignment(item.id);
-                setAssignments(prev => prev.filter(a => a.id !== item.id));
-              }
-            } catch {
-              Alert.alert(t('common.error'), t('supervisor.delete_item_failed'));
-            } finally {
-              setDeletingId(null);
-            }
-          },
-        },
-      ]
-    );
-  };
 
   const items = tab === 'homework' ? homework : assignments;
 
@@ -135,9 +105,7 @@ export default function SupervisorContentScreen() {
       </View>
 
       {/* Content area */}
-      {tab === 'weekly' ? (
-        <SupervisorWeeklySummaryScreen embedded />
-      ) : tab === 'reports' ? (
+      {tab === 'reports' ? (
         <SupervisorStudentReportsScreen embedded />
       ) : (
         <ScrollView
@@ -177,15 +145,6 @@ export default function SupervisorContentScreen() {
                       {[item.classes?.name, item.teachers?.fullName].filter(Boolean).join(' · ')}
                     </Text>
                   </View>
-                  <TouchableOpacity
-                    onPress={(e) => { e.stopPropagation(); handleDelete(item); }}
-                    style={styles.deleteBtn}
-                    disabled={deletingId === item.id}
-                  >
-                    {deletingId === item.id
-                      ? <ActivityIndicator size="small" color={colors.danger} />
-                      : <Trash2 size={16} color={colors.danger} />}
-                  </TouchableOpacity>
                 </View>
                 {item.description && (
                   <Text style={styles.itemDesc} numberOfLines={2}>{item.description}</Text>

@@ -253,16 +253,10 @@ export const supervisorApi = {
     api.get('/supervisor/attendance-summary', { params: date ? { date } : {} }),
   updateAttendanceRecord: (id: string, status: string, notes?: string) =>
     api.patch(`/supervisor/attendance/${id}`, { status, notes }),
+  // Phase D — supervisors view homework/assignments read-only (parent-liaison
+  // context). Delete + all weekly-summary ops moved to admin (academics.oversee).
   getHomework: () => api.get('/supervisor/homework'),
-  deleteHomework: (id: string) => api.delete(`/supervisor/homework/${id}`),
   getAssignments: () => api.get('/supervisor/assignments'),
-  deleteAssignment: (id: string) => api.delete(`/supervisor/assignments/${id}`),
-  getWeeklySummaries: (params?: Record<string, string>) => api.get('/supervisor/weekly-summaries', { params }),
-  getWeeklySummaryStatus: (weekStartDate: string) => api.get('/supervisor/weekly-summary-status', { params: { weekStartDate } }),
-  getActivePeriod: () => api.get('/supervisor/weekly-period'),
-  openPeriod: (weekStartDate: string, weekEndDate: string) => api.post('/supervisor/weekly-period', { weekStartDate, weekEndDate }),
-  closePeriod: () => api.delete('/supervisor/weekly-period'),
-  getSubjects: () => api.get('/supervisor/subjects'),
   getStudentBrief: (id: string) => api.get(`/supervisor/student-brief/${id}`),
   getAllStudents: (params?: Record<string, string>) => api.get('/supervisor/students', { params }),
   getNotifications: (cursor?: string | null) =>

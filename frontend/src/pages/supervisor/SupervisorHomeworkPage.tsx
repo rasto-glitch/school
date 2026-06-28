@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { BookOpen, Trash2, Calendar, User, GraduationCap } from 'lucide-react';
+import { BookOpen, Calendar, User, GraduationCap } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { supervisorApi } from '../../services/api';
 import PageLayout from '../../components/layout/PageLayout';
@@ -23,7 +23,6 @@ export default function SupervisorHomeworkPage() {
   const { t } = useTranslation();
   const [items, setItems] = useState<HomeworkItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     supervisorApi.getHomework()
@@ -31,20 +30,6 @@ export default function SupervisorHomeworkPage() {
       .catch(() => toast.error(t('supervisor.load_homework_failed')))
       .finally(() => setLoading(false));
   }, []);
-
-  const handleDelete = async (id: string, title: string) => {
-    if (!window.confirm(t('supervisor.delete_confirm', { title }))) return;
-    setDeletingId(id);
-    try {
-      await supervisorApi.deleteHomework(id);
-      setItems(prev => prev.filter(h => h.id !== id));
-      toast.success(t('supervisor.homework_deleted'));
-    } catch {
-      toast.error(t('supervisor.delete_homework_failed'));
-    } finally {
-      setDeletingId(null);
-    }
-  };
 
   return (
     <PageLayout title={t('nav.homework')} subtitle={t('supervisor.homework_subtitle')}>
@@ -57,16 +42,7 @@ export default function SupervisorHomeworkPage() {
               <BookOpen className="w-5 h-5 text-blue-600" />
             </div>
             <div className="flex-1 min-w-0">
-              <div className="flex items-start justify-between gap-2">
-                <h3 className="font-semibold text-gray-900 truncate">{item.title}</h3>
-                <button
-                  onClick={() => handleDelete(item.id, item.title)}
-                  disabled={deletingId === item.id}
-                  className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
+              <h3 className="font-semibold text-gray-900 truncate">{item.title}</h3>
               {item.description && <p className="text-sm text-gray-500 mt-0.5 line-clamp-2">{item.description}</p>}
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2">
                 {item.subject && (
