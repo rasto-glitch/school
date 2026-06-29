@@ -96,7 +96,10 @@ export default function ConversationList({ selected, onSelect, onNewConversation
         const existing = prev.find(c => c.id === data.conversationId);
         const isCurrentSelected = data.conversationId === selected;
         const isMine = data.senderId === user.id;
-        const preview = data.type === 'text' ? (data.content || '') : data.type === 'image' ? t('chat.photo_preview') : t('chat.file_preview', { name: data.attachmentName || t('chat.file') });
+        const preview = data.type === 'text' ? (data.content || '')
+          : data.type === 'image' ? t('chat.photo_preview')
+          : data.type === 'invite' ? t('chat.invite.preview')
+          : t('chat.file_preview', { name: data.attachmentName || t('chat.file') });
 
         if (existing) {
           return prev.map(c => c.id === data.conversationId

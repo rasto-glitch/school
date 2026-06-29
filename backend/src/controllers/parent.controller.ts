@@ -4,7 +4,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AuthRequest } from '../middleware/auth';
 import { toCC } from '../utils/transform';
 import { parseCursorParams, buildPage } from '../utils/pagination';
-import { emitToAdmins, notify } from '../utils/notify';
+import { emitToAdmins, emitToUser, notify } from '../utils/notify';
 import { decorateAnnouncements } from './admin.controller';
 import { getLocksForStudents, isFeatureLocked } from '../utils/locks';
 import { hasArchiveFeature } from '../utils/employeeArchive';
@@ -531,7 +531,22 @@ export async function completeInvite(req: AuthRequest, res: Response): Promise<v
   if (!data) { res.status(404).json({ error: 'Invite not found or already handled.' }); return; }
 
   emitToAdmins(schoolId, 'new_appointment', { appointmentId: data.id });
+  // Push the new status to both chat participants so the in-chat invite card
+  // updates live (the parent's own card + the inviting supervisor's).
+  emitInviteUpdate(schoolId, data, userId);
   res.json(toCC(data));
+}
+
+// Notify both chat participants (parent + inviting supervisor) that an invite
+// card's appointment changed, so ChatScreen/ChatWindow can patch it in place.
+function emitInviteUpdate(schoolId: string, appt: Record<string, unknown>, parentUserId: string): void {
+  const payload = {
+    appointmentId: appt.id,
+    appointment: toCC(appt),
+  };
+  emitToUser(schoolId, parentUserId, 'chat:invite_update', payload);
+  const supervisorId = (appt as { invited_by?: string }).invited_by;
+  if (supervisorId) emitToUser(schoolId, supervisorId, 'chat:invite_update', payload);
 }
 
 // Phase D — parent declines a supervisor invite. The supervisor is notified.
@@ -559,5 +574,6 @@ export async function declineInvite(req: AuthRequest, res: Response): Promise<vo
       relatedId: String(id),
     }).catch(() => {});
   }
+  emitInviteUpdate(schoolId, data, userId);
   res.json(toCC(data));
 }

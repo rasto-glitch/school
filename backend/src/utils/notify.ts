@@ -18,6 +18,11 @@ export function emitToAdmins(schoolId: string, event: string, data: unknown): vo
   if (_io) _io.to(`school:${schoolId}:admins`).emit(event, data);
 }
 
+/** Emit a realtime event to a single user's room (same room chat uses). */
+export function emitToUser(schoolId: string, userId: string, event: string, data: unknown): void {
+  if (_io) _io.to(`school:${schoolId}:user:${userId}`).emit(event, data);
+}
+
 interface NotifyPayload {
   schoolId: string;
   userId: string;

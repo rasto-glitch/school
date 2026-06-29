@@ -354,17 +354,27 @@ export default function ChatScreen() {
       if (otherTypingTimer.current) clearTimeout(otherTypingTimer.current);
       if (data.isTyping) otherTypingTimer.current = setTimeout(() => setOtherTyping(false), 3000);
     };
+    // An invite card's appointment changed (parent completed/declined, or
+    // reception responded) — patch the matching card in place.
+    const onInviteUpdate = (data: { appointmentId: string; appointment?: any }) => {
+      setMessages(prev => prev.map(m =>
+        m.type === 'invite' && ((m.appointment?.id ?? m.relatedAppointmentId) === data.appointmentId)
+          ? { ...m, appointment: { ...(m.appointment ?? {}), ...(data.appointment ?? {}) } }
+          : m));
+    };
 
     socket.on('chat:message', onMessage);
     socket.on('chat:edit', onEdit);
     socket.on('chat:delete', onDelete);
     socket.on('chat:typing', onTyping);
+    socket.on('chat:invite_update', onInviteUpdate);
 
     return () => {
       socket.off('chat:message', onMessage);
       socket.off('chat:edit', onEdit);
       socket.off('chat:delete', onDelete);
       socket.off('chat:typing', onTyping);
+      socket.off('chat:invite_update', onInviteUpdate);
     };
   }, [socket, conversation.id]);
 

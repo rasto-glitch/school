@@ -67,7 +67,10 @@ export default function ChatListScreen() {
   useEffect(() => {
     if (!socket || !user) return;
     const onMessage = (data: any) => {
-      const preview = data.type === 'text' ? (data.content || '') : data.type === 'image' ? `📷 ${t('chat.photo')}` : `📎 ${data.attachmentName || t('chat.file')}`;
+      const preview = data.type === 'text' ? (data.content || '')
+        : data.type === 'image' ? `📷 ${t('chat.photo')}`
+        : data.type === 'invite' ? `📅 ${t('chat.invite.title')}`
+        : `📎 ${data.attachmentName || t('chat.file')}`;
       setConvs(prev => {
         const existing = prev.find(c => c.id === data.conversationId);
         if (!existing) return prev;
