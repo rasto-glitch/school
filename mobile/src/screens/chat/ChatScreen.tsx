@@ -494,35 +494,40 @@ export default function ChatScreen() {
   };
 
   // ── Meeting-invite cards ──────────────────────────────────────────────────
-  const patchAppointment = (apptId: string, patch: Partial<NonNullable<ChatMessage['appointment']>>) =>
+  // The appointment id every invite message carries, even when the enriched
+  // `appointment` object failed to attach (relatedAppointmentId is always set).
+  const apptIdOf = (m?: ChatMessage | null) => m?.appointment?.id ?? m?.relatedAppointmentId;
+
+  // Patch by MESSAGE id (never misses), creating the appointment shell if the
+  // enriched object wasn't present, so the card flips immediately.
+  const patchMessageAppointment = (messageId: string, patch: Partial<NonNullable<ChatMessage['appointment']>>) =>
     setMessages(prev => prev.map(m =>
-      m.appointment?.id === apptId ? { ...m, appointment: { ...m.appointment, ...patch } as any } : m));
+      m.id === messageId ? { ...m, appointment: { ...(m.appointment ?? {}), ...patch } as any } : m));
 
   const submitComplete = async () => {
-    if (!completing?.appointment) return;
-    const apptId = completing.appointment.id;
+    const apptId = apptIdOf(completing);
+    if (!completing || !apptId) return;
+    const reason = completeReason.trim() || undefined;
+    const requestedDate = completeDate.trim() || undefined;
     setInviteBusy(true);
     try {
-      await parentApi.completeInvite(apptId, {
-        reason: completeReason.trim() || undefined,
-        requestedDate: completeDate.trim() || undefined,
-      });
-      patchAppointment(apptId, { status: 'pending', reason: completeReason.trim() || undefined, requestedDate: completeDate.trim() || undefined });
+      await parentApi.completeInvite(apptId, { reason, requestedDate });
+      patchMessageAppointment(completing.id, { id: apptId, status: 'pending', reason, requestedDate });
       setCompleting(null); setCompleteReason(''); setCompleteDate('');
     } catch { Alert.alert(t('common.error'), t('chat.invite.action_failed')); }
     finally { setInviteBusy(false); }
   };
 
   const handleDecline = (msg: ChatMessage) => {
-    if (!msg.appointment) return;
+    const apptId = apptIdOf(msg);
+    if (!apptId) return;
     Alert.alert(t('chat.invite.title'), t('chat.invite.decline_confirm'), [
       { text: t('common.cancel'), style: 'cancel' },
       { text: t('chat.invite.decline'), style: 'destructive', onPress: async () => {
-        const apptId = msg.appointment!.id;
         setInviteBusy(true);
         try {
           await parentApi.declineInvite(apptId);
-          patchAppointment(apptId, { status: 'rejected' });
+          patchMessageAppointment(msg.id, { id: apptId, status: 'rejected' });
         } catch { Alert.alert(t('common.error'), t('chat.invite.action_failed')); }
         finally { setInviteBusy(false); }
       }},
@@ -547,15 +552,15 @@ export default function ChatScreen() {
   };
 
   // Refresh invite-card statuses when the screen regains focus (the other
-  // side completing/declining doesn't push a socket event).
+  // side completing/declining doesn't push a socket event). Keyed by MESSAGE
+  // id so a card that loaded without (or with a stale) appointment is healed.
   useFocusEffect(
     useCallback(() => {
       chatApi.getMessages(conversation.id).then(res => {
-        const fresh: ChatMessage[] = res.data;
-        const map: Record<string, NonNullable<ChatMessage['appointment']>> = {};
-        fresh.forEach(m => { if (m.appointment) map[m.appointment.id] = m.appointment; });
+        const byId: Record<string, ChatMessage> = {};
+        (res.data as ChatMessage[]).forEach(m => { byId[m.id] = m; });
         setMessages(prev => prev.map(m =>
-          m.appointment && map[m.appointment.id] ? { ...m, appointment: map[m.appointment.id] } : m));
+          m.type === 'invite' && byId[m.id] ? { ...m, appointment: byId[m.id].appointment ?? m.appointment } : m));
       }).catch(() => {});
     }, [conversation.id])
   );
@@ -620,7 +625,11 @@ export default function ChatScreen() {
               }
               if (item.msg.type === 'invite') {
                 return (
+                  // Status in the key forces this cell's content to remount the
+                  // instant the appointment flips, sidestepping FlatList's
+                  // virtualized-cell stale-nested-content behaviour.
                   <InviteCard
+                    key={`${item.msg.id}:${item.msg.appointment?.status ?? 'invited'}`}
                     msg={item.msg}
                     isParent={isParent}
                     primaryColor={primaryColor}
