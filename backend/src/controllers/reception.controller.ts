@@ -2,7 +2,7 @@ import { safeDbErrorMessage, safeDbErrorStatus } from '../utils/dbErrors';
 import { Response } from 'express';
 import type { AuthRequest } from '../middleware/auth';
 import { toCC } from '../utils/transform';
-import { notify } from '../utils/notify';
+import { notify, emitToUser } from '../utils/notify';
 
 // Tenant queries go through `req.db` (the per-request, RLS-bound client
 // attached by authenticate). Until Phase 4 enables RLS on each table this
@@ -113,6 +113,25 @@ export async function respondToAppointment(req: AuthRequest, res: Response): Pro
       relatedId: String(id),
     }).catch(() => {});
   }
+
+  // Push the new status to both chat participants so a linked in-chat invite
+  // card flips live (invited → pending → approved/rejected). For appointments
+  // with no chat invite message, no card matches the id, so it's a harmless
+  // no-op on the clients.
+  const appt = data as { id: string; status?: string; scheduled_date?: string | null; requested_date?: string | null; reason?: string | null; invite_reason?: string | null; invited_by?: string | null };
+  const invitePayload = {
+    appointmentId: appt.id,
+    appointment: {
+      id: appt.id,
+      status: appt.status,
+      scheduledDate: appt.scheduled_date,
+      requestedDate: appt.requested_date,
+      reason: appt.reason,
+      inviteReason: appt.invite_reason,
+    },
+  };
+  if (parentUserId) emitToUser(schoolId, parentUserId, 'chat:invite_update', invitePayload);
+  if (appt.invited_by) emitToUser(schoolId, appt.invited_by, 'chat:invite_update', invitePayload);
 
   res.json(toCC(data));
 }
