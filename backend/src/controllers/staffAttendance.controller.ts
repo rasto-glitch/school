@@ -191,9 +191,25 @@ export async function scan(req: AuthRequest, res: Response): Promise<void> {
         check_in_method: 'qr', status: 'open', is_late: isLate,
       });
     if (insErr) {
-      // Unique(school,user,work_date) violation = a concurrent scan beat us.
+      // Unique(school,user,work_date) violation = a near-simultaneous scan from
+      // the SAME user already created today's row (double-fire). Re-read and
+      // return that row's state idempotently — a double-fire must never be
+      // silently turned into a check-OUT of the just-created check-in.
       if ((insErr as { code?: string }).code === '23505') {
-        res.status(409).json({ error: 'A check-in is already in progress. Please try again.', code: 'RETRY' });
+        const { data: raced } = await supabase
+          .from('staff_attendance')
+          .select('status, check_in_at, is_late')
+          .eq('school_id', schoolId).eq('user_id', userId).eq('work_date', workDate)
+          .maybeSingle();
+        if (raced && raced.status === 'open') {
+          res.json({
+            action: 'check_in', workDate, status: 'open',
+            isLate: !!raced.is_late, checkInAt: raced.check_in_at,
+            distanceMeters: Math.round(distanceMeters),
+          });
+          return;
+        }
+        res.status(409).json({ error: 'You have already checked out for today.', code: 'ALREADY_CLOSED' });
         return;
       }
       res.status(safeDbErrorStatus(insErr)).json({ error: safeDbErrorMessage(insErr) });
@@ -312,8 +328,12 @@ export async function updateConfig(req: AuthRequest, res: Response): Promise<voi
       return;
     }
     if (wasEnabled !== body.enabled) {
+      // Read-modify-write of the whole `features` JSONB. Safe in practice
+      // because this endpoint is the ONLY in-app writer of schools.features
+      // (everything else only reads it). Mutating it bumps features_version →
+      // forced re-login, which is intended when the tabs/screens change.
       features.staff_attendance = body.enabled;
-      patch.features = features; // mutating `features` bumps features_version → forced re-login (intended)
+      patch.features = features;
     }
   }
 

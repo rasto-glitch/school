@@ -80,6 +80,9 @@ export function verifyKioskToken(
   const key = getSecret();
   if (!key) return { ok: false, reason: 'unconfigured' };
 
+  // Buffer.from(_, 'base64url') does not throw in Node — it decodes whatever
+  // bytes it can. The real malformed-input guards are the split + regex below;
+  // this try/catch is belt-and-suspenders for exotic inputs / future engines.
   let decoded: string;
   try {
     decoded = Buffer.from(token, 'base64url').toString('utf8');
@@ -89,10 +92,15 @@ export function verifyKioskToken(
   const parts = decoded.split('.');
   if (parts.length !== 3) return { ok: false, reason: 'malformed' };
   const [schoolId, windowStr, mac] = parts;
-  const window = Number(windowStr);
-  if (!schoolId || !Number.isInteger(window) || !/^[0-9a-f]{64}$/.test(mac)) {
+  // windowStr must be CANONICAL decimal. Number() would silently accept hex
+  // ('0x10'), scientific ('1e3') and whitespace-padded forms — all of which
+  // re-serialize to the same window in sign() and would pass the HMAC check.
+  // Rejecting them keeps the token's string form 1:1 with its meaning, so a
+  // future raw-token replay cache can't be bypassed by re-encoding the window.
+  if (!schoolId || !/^\d{1,15}$/.test(windowStr) || !/^[0-9a-f]{64}$/.test(mac)) {
     return { ok: false, reason: 'malformed' };
   }
+  const window = parseInt(windowStr, 10);
 
   // Signature must match for the embedded (schoolId, window).
   const expectedMac = sign(schoolId, window, key);
