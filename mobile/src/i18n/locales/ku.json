@@ -367,7 +367,9 @@
     "year_gpa": "GPA ی ساڵ",
     "year_filter_all": "هەموو ساڵەکان",
     "report_card": "کارتی نمرە",
-    "report_card_failed": "نەتوانرا کارتی نمرە دابەزێنرێت."
+    "report_card_failed": "نەتوانرا کارتی نمرە دابەزێنرێت.",
+    "transcript": "پێڕستی نمرە",
+    "transcript_failed": "نەتوانرا پێڕستی نمرە دابەزێنرێت."
   },
   "reports": {
     "title": "ڕاپۆرتەکان",

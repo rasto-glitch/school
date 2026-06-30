@@ -290,6 +290,8 @@
     "cumulative_gpa": "ناوەندی گشتی (GPA)",
     "report_card": "کارتی نمرە",
     "report_card_failed": "نەتوانرا کارتی نمرە دابگیرێت.",
+    "transcript": "پێڕستی نمرە",
+    "transcript_failed": "نەتوانرا پێڕستی نمرە دابگیرێت.",
     "year_gpa": "GPA ی ساڵ"
   },
   "report_cards": {
@@ -336,7 +338,15 @@
     "published_state": "بڵاوکراوەتەوە — دایک و باوکان دەتوانن ئەم کارتانە دابگرن.",
     "unpublished_state": "بڵاو نەکراوەتەوە — دایک و باوکان هێشتا ناتوانن ئەم کارتانە ببینن.",
     "published_toast": "بڵاوکرایەوە — ئێستا دایک و باوکان دەتوانن دایبگرن.",
-    "unpublished": "لە دایک و باوکان شاردرایەوە."
+    "unpublished": "لە دایک و باوکان شاردرایەوە.",
+    "download_class": "PDF ی پۆل",
+    "class_pdf_pick_class": "سەرەتا پۆلێکی دیاریکراو هەڵبژێرە",
+    "download_class_failed": "نەتوانرا PDF ی پۆل دروست بکرێت.",
+    "class_no_released": "هیچ نمرەیەکی بڵاوکراوە بۆ ئەم پۆل و وەرزە نییە.",
+    "transcript": "پێڕستی نمرە",
+    "transcript_failed": "نەتوانرا پێڕستی نمرە دروست بکرێت.",
+    "include_graduated": "دەرچووان لەخۆبگرە",
+    "graduated": "دەرچوو"
   },
   "grade_review": {
     "title": "پێداچوونەوەی نمرە",

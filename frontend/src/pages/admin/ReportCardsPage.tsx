@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'react-toastify';
-import { FileText, Eye, Download, MessageSquarePlus, Settings as SettingsIcon, RefreshCw, Check, Send, EyeOff } from 'lucide-react';
+import { FileText, Eye, Download, MessageSquarePlus, Settings as SettingsIcon, RefreshCw, Check, Send, EyeOff, GraduationCap } from 'lucide-react';
 import { adminApi, reportCardApi } from '../../services/api';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
@@ -15,6 +15,7 @@ import EmptyState from '../../components/common/EmptyState';
 interface RosterRow {
   id: string; fullName: string; className: string | null;
   totalSubjects: number; releasedSubjects: number; hasRemark: boolean;
+  isGraduated?: boolean;
 }
 interface Term { id: string; name: string }
 interface ClassRow { id: string; name: string }
@@ -48,6 +49,7 @@ export default function ReportCardsPage() {
   const [classes, setClasses] = useState<ClassRow[]>([]);
   const [classId, setClassId] = useState('');
   const [lang, setLang] = useState('en');
+  const [includeGraduated, setIncludeGraduated] = useState(false);
 
   const [roster, setRoster] = useState<RosterRow[]>([]);
   const [published, setPublished] = useState(false);
@@ -55,6 +57,7 @@ export default function ReportCardsPage() {
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [classBusy, setClassBusy] = useState(false);
 
   const [editing, setEditing] = useState<RosterRow | null>(null);
   const [showSettings, setShowSettings] = useState(false);
@@ -70,11 +73,11 @@ export default function ReportCardsPage() {
   const load = useCallback(() => {
     if (!year.trim() || !term) { toast.error(t('report_cards.pick_year_term', 'Choose an academic year and term.')); return; }
     setLoading(true);
-    reportCardApi.getRoster(year.trim(), term, classId || undefined)
+    reportCardApi.getRoster(year.trim(), term, classId || undefined, includeGraduated)
       .then(r => { setRoster(r.data?.students ?? []); setPublished(!!r.data?.published); setLoaded(true); })
       .catch((e: any) => toast.error(e.response?.data?.error || t('report_cards.load_failed', 'Could not load the roster.')))
       .finally(() => setLoading(false));
-  }, [year, term, classId, t]);
+  }, [year, term, classId, includeGraduated, t]);
 
   const togglePublish = async () => {
     setPublishing(true);
@@ -108,6 +111,39 @@ export default function ReportCardsPage() {
     }
   };
 
+  // Bulk: whole-class combined PDF (one student per page). Requires a specific
+  // class; the server skips students with no released grades and 404s if none.
+  const downloadClass = async () => {
+    if (!classId) return;
+    setClassBusy(true);
+    try {
+      const r = await reportCardApi.classPdf(classId, year.trim(), term, lang);
+      const cls = classes.find(c => c.id === classId);
+      downloadBlob(r.data, `report-cards-${cls?.name || 'class'}-${year}-${term}.pdf`.replace(/[^a-z0-9.\-]/gi, '_'));
+    } catch (e: any) {
+      const msg = e?.response?.status === 404
+        ? t('report_cards.class_no_released', 'No released grades for this class and term.')
+        : t('report_cards.download_class_failed', 'Could not generate the class PDF.');
+      toast.error(msg);
+    } finally {
+      setClassBusy(false);
+    }
+  };
+
+  // Cumulative transcript for one student (all released terms). Works for
+  // current and graduated students alike.
+  const transcript = async (row: RosterRow) => {
+    setBusyId(row.id);
+    try {
+      const r = await reportCardApi.studentTranscript(row.id, lang);
+      downloadBlob(r.data, `transcript-${row.fullName}.pdf`.replace(/[^a-z0-9.\-]/gi, '_'));
+    } catch (e: any) {
+      toast.error(e.response?.data?.error || t('report_cards.transcript_failed', 'Could not generate the transcript.'));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const termOptions = terms.map(tm => ({ value: tm.name, label: tm.name }));
   const classOptions = [{ value: '', label: t('report_cards.all_classes', 'All classes') }, ...classes.map(c => ({ value: c.id, label: c.name }))];
 
@@ -129,8 +165,22 @@ export default function ReportCardsPage() {
             <div className="w-36">
               <Select label={t('report_cards.language', 'PDF language')} options={LANGS} value={lang} onChange={e => setLang(e.target.value)} />
             </div>
+            <label className="flex items-center gap-2 text-sm text-gray-600 pb-2.5 cursor-pointer whitespace-nowrap">
+              <input type="checkbox" checked={includeGraduated} onChange={e => setIncludeGraduated(e.target.checked)} className="rounded border-gray-300" />
+              {t('report_cards.include_graduated', 'Include graduated')}
+            </label>
             <Button icon={<RefreshCw className="w-4 h-4" />} onClick={load} disabled={!year.trim() || !term}>
               {t('report_cards.load', 'Load')}
+            </Button>
+            <Button
+              variant="outline"
+              icon={<Download className="w-4 h-4" />}
+              onClick={downloadClass}
+              loading={classBusy}
+              disabled={!loaded || !classId}
+              title={!classId ? t('report_cards.class_pdf_pick_class', 'Select a specific class first') : undefined}
+            >
+              {t('report_cards.download_class', 'Class PDF')}
             </Button>
             <div className="flex-1" />
             <Button variant="outline" icon={<SettingsIcon className="w-4 h-4" />} onClick={() => setShowSettings(true)}>
@@ -195,7 +245,16 @@ export default function ReportCardsPage() {
                     const none = s.releasedSubjects === 0;
                     return (
                       <tr key={s.id} className="border-t border-gray-100">
-                        <td className="py-2 pr-3 font-medium text-gray-800">{s.fullName}</td>
+                        <td className="py-2 pr-3 font-medium text-gray-800">
+                          <span className="inline-flex items-center gap-1.5">
+                            {s.fullName}
+                            {s.isGraduated && (
+                              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-green-50 text-green-700">
+                                {t('report_cards.graduated', 'Graduated')}
+                              </span>
+                            )}
+                          </span>
+                        </td>
                         <td className="py-2 px-3 text-gray-500">{s.className || '—'}</td>
                         <td className="py-2 px-3">
                           <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${none ? 'bg-gray-100 text-gray-500' : s.releasedSubjects < s.totalSubjects ? 'bg-amber-50 text-amber-700' : 'bg-green-50 text-green-700'}`}>
@@ -215,6 +274,9 @@ export default function ReportCardsPage() {
                             </button>
                             <button onClick={() => pdf(s, 'download')} disabled={busyId === s.id} title={t('report_cards.download', 'Download')} className="p-1.5 text-gray-400 hover:text-primary-600 transition-colors disabled:opacity-40">
                               <Download className="w-4 h-4" />
+                            </button>
+                            <button onClick={() => transcript(s)} disabled={busyId === s.id} title={t('report_cards.transcript', 'Transcript')} className="p-1.5 text-gray-400 hover:text-primary-600 transition-colors disabled:opacity-40">
+                              <GraduationCap className="w-4 h-4" />
                             </button>
                           </div>
                         </td>

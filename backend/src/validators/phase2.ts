@@ -26,6 +26,7 @@ const marksArr = z.array(z.object({
 
 // ── shared param schemas ────────────────────────────────────────────────
 export const idParam = z.object({ id: uuid });
+export const classIdParam = z.object({ classId: uuid });
 export const commentIdParam = z.object({ commentId: uuid });
 export const familyIdParam = z.object({ familyId: uuid });
 export const msgIdParam = z.object({ msgId: uuid });
@@ -240,10 +241,14 @@ export const reportCardRosterQuery = z.object({
   year: rcYear,
   term: rcTerm,
   classId: z.union([uuid, z.literal('')]).optional(),
+  includeGraduated: z.enum(['0', '1']).optional(),
 });
 export const reportCardPdfQuery = z.object({
   year: rcYear,
   term: rcTerm,
+  lang: z.enum(['en', 'ar', 'ku']).optional(),
+});
+export const reportCardTranscriptQuery = z.object({
   lang: z.enum(['en', 'ar', 'ku']).optional(),
 });
 export const reportCardRemarksQuery = z.object({

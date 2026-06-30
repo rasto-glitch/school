@@ -84,7 +84,53 @@ export async function streamReportCardPdf(data: ReportCardData, lang: Lang, dest
   const doc = new PDFDocument({ size: 'A4', margin: 40, bufferPages: true });
   const F = setupPdfFonts(doc);
   doc.pipe(dest);
+  await drawOneCard(doc, F, l, data);
+  applyFooters(doc, F, l, data.school.name, data.generatedAt, data.config.footerNote);
+  doc.end();
+}
 
+// Combined class PDF (Phase 3): one student's card per page (a card may spill
+// to extra pages). A single shared footer numbers the whole stack and labels
+// every page with its student, so a printed stack stays sortable. Live-rendered
+// from released grades — the controller filters out students with none.
+export async function streamClassReportCardsPdf(
+  cards: ReportCardData[], lang: Lang, dest: NodeJS.WritableStream,
+): Promise<void> {
+  const l = RL[lang];
+  const doc = new PDFDocument({ size: 'A4', margin: 40, bufferPages: true });
+  const F = setupPdfFonts(doc);
+  doc.pipe(dest);
+
+  // Record the first page index of each student so the footer can label pages.
+  const owners: { start: number; name: string }[] = [];
+  for (let i = 0; i < cards.length; i++) {
+    if (i > 0) doc.addPage();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const range = (doc as any).bufferedPageRange();
+    owners.push({ start: range.start + range.count - 1, name: cards[i].student.fullName });
+    await drawOneCard(doc, F, l, cards[i]);
+  }
+
+  const meta = cards[0];
+  applyFooters(
+    doc, F, l,
+    meta ? meta.school.name : '',
+    meta ? meta.generatedAt : '',
+    meta ? meta.config.footerNote : '',
+    owners,
+  );
+  doc.end();
+}
+
+// Draw a single student's card onto the document's CURRENT (fresh) page,
+// starting at the top. Shared by the single-card and class-stack streamers;
+// it does NOT emit the footer — that's applied once across all buffered pages.
+async function drawOneCard(
+  doc: PDFKit.PDFDocument,
+  F: ReturnType<typeof setupPdfFonts>,
+  l: RCLabels,
+  data: ReportCardData,
+): Promise<void> {
   // ─── Header strip: logo + school name + title + meta ────────────────
   const logoBuf = await fetchLogoBuffer(data.school.logoUrl);
   if (logoBuf) {
@@ -176,21 +222,40 @@ export async function streamReportCardPdf(data: ReportCardData, lang: Lang, dest
   };
   sigCol(l.class_teacher, data.config.classTeacher, PAGE_LEFT);
   sigCol(l.principal, data.config.principal, PAGE_LEFT + 300);
+}
 
-  // ─── Per-page footer ────────────────────────────────────────────────
-  const footNote = (data.config.footerNote && data.config.footerNote.trim()) || '';
+// Apply the shared footer to every buffered page. `owners` (optional, sorted
+// ascending by start page) labels each page with its student for class stacks.
+function applyFooters(
+  doc: PDFKit.PDFDocument,
+  F: ReturnType<typeof setupPdfFonts>,
+  l: RCLabels,
+  schoolName: string,
+  generatedAt: string,
+  footerNote: string,
+  owners?: { start: number; name: string }[],
+): void {
+  const footNote = (footerNote && footerNote.trim()) || '';
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const range = (doc as any).bufferedPageRange();
   const total = range.start + range.count;
   for (let i = range.start; i < total; i++) {
     doc.switchToPage(i);
-    const footer = `${data.school.name} · ${l.generated} ${fmtDate(data.generatedAt)} · ${l.page} ${i + 1} ${l.of} ${total}`
+    let who = '';
+    if (owners && owners.length) {
+      for (const o of owners) { if (o.start <= i) who = o.name; else break; }
+    }
+    const footer = `${schoolName}${who ? ` · ${who}` : ''} · ${l.generated} ${fmtDate(generatedAt)} · ${l.page} ${i + 1} ${l.of} ${total}`
       + (footNote ? ` · ${footNote}` : '');
+    // The footer baseline (812) sits below the A4 bottom margin (802); without
+    // zeroing the margin pdfkit auto-inserts a blank page per footer write,
+    // doubling every card's page count. Restore the margin afterwards.
+    const savedBottom = doc.page.margins.bottom;
+    doc.page.margins.bottom = 0;
     doc.font(F.pick(footer)).fontSize(7.5).fillColor(COLORS.muted)
-      .text(footer, PAGE_LEFT, 812, { width: CONTENT_W, align: 'center' });
+      .text(footer, PAGE_LEFT, 812, { width: CONTENT_W, align: 'center', lineBreak: false });
+    doc.page.margins.bottom = savedBottom;
   }
-
-  doc.end();
 }
 
 // Manual subject table. Columns: Subject | [mark columns…] | % | Grade.

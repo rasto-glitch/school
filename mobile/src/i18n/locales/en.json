@@ -367,7 +367,9 @@
     "year_gpa": "Year GPA",
     "year_filter_all": "All years",
     "report_card": "Report card",
-    "report_card_failed": "Could not download the report card."
+    "report_card_failed": "Could not download the report card.",
+    "transcript": "Transcript",
+    "transcript_failed": "Could not download the transcript."
   },
   "reports": {
     "title": "Reports",

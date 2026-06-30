@@ -290,6 +290,8 @@
     "cumulative_gpa": "المعدل التراكمي",
     "report_card": "بطاقة الدرجات",
     "report_card_failed": "تعذّر تنزيل بطاقة الدرجات.",
+    "transcript": "كشف الدرجات",
+    "transcript_failed": "تعذّر تنزيل كشف الدرجات.",
     "year_gpa": "معدل السنة"
   },
   "report_cards": {
@@ -336,7 +338,15 @@
     "published_state": "منشور — يمكن لأولياء الأمور تنزيل هذه البطاقات.",
     "unpublished_state": "غير منشور — لا يمكن لأولياء الأمور رؤية هذه البطاقات بعد.",
     "published_toast": "تم النشر — يمكن لأولياء الأمور التنزيل الآن.",
-    "unpublished": "أُخفيت عن أولياء الأمور."
+    "unpublished": "أُخفيت عن أولياء الأمور.",
+    "download_class": "ملف الصف PDF",
+    "class_pdf_pick_class": "اختر صفًا محددًا أولاً",
+    "download_class_failed": "تعذّر إنشاء ملف الصف.",
+    "class_no_released": "لا توجد درجات معتمدة لهذا الصف وهذا الفصل.",
+    "transcript": "كشف الدرجات",
+    "transcript_failed": "تعذّر إنشاء كشف الدرجات.",
+    "include_graduated": "تضمين المتخرجين",
+    "graduated": "متخرّج"
   },
   "grade_review": {
     "title": "مراجعة الدرجات",

@@ -30,6 +30,7 @@ export default function GradesPage() {
   // download button once the school has published it.
   const [publishedKeys, setPublishedKeys] = useState<Set<string>>(new Set());
   const [dl, setDl] = useState<string | null>(null);
+  const [tDl, setTDl] = useState(false);
 
   useEffect(() => {
     parentApi.getChildren().then(r => {
@@ -62,6 +63,25 @@ export default function GradesPage() {
       toast.error(e.response?.data?.error || t('grades.report_card_failed', 'Could not download the report card.'));
     } finally {
       setDl(null);
+    }
+  };
+
+  // Cumulative transcript across all published+released terms (graduates/leavers
+  // included as long as they're still on the parent's children list).
+  const downloadTranscript = async () => {
+    if (!selectedChild) return;
+    setTDl(true);
+    try {
+      const r = await parentApi.downloadTranscript(selectedChild);
+      const url = URL.createObjectURL(r.data);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'transcript.pdf';
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      toast.error(e.response?.data?.error || t('grades.transcript_failed', 'Could not download the transcript.'));
+    } finally {
+      setTDl(false);
     }
   };
 
@@ -134,6 +154,18 @@ export default function GradesPage() {
           <EmptyState title={t('grades.no_grades')} icon={<GraduationCap className="w-8 h-8 text-gray-400" />} />
         ) : (
         <>
+          {publishedKeys.size > 0 && (
+            <div className="flex justify-end">
+              <button
+                onClick={downloadTranscript}
+                disabled={tDl}
+                className="inline-flex items-center gap-1.5 text-sm font-semibold text-violet-700 hover:text-violet-900 disabled:opacity-50"
+              >
+                <Download className="w-4 h-4" />
+                {t('grades.transcript', 'Transcript')}
+              </button>
+            </div>
+          )}
           {showGpa && cgpa != null && (
             <Card className="flex items-center justify-between !py-4">
               <div className="flex items-center gap-2">

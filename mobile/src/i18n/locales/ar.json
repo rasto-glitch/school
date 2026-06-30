@@ -367,7 +367,9 @@
     "year_gpa": "معدل السنة",
     "year_filter_all": "كل السنوات",
     "report_card": "بطاقة الدرجات",
-    "report_card_failed": "تعذّر تنزيل بطاقة الدرجات."
+    "report_card_failed": "تعذّر تنزيل بطاقة الدرجات.",
+    "transcript": "كشف الدرجات",
+    "transcript_failed": "تعذّر تنزيل كشف الدرجات."
   },
   "reports": {
     "title": "التقارير",

@@ -8,7 +8,8 @@ import {
   rowToGrade, subjectPercent, bandForPercent, averageGpa, averagePercent,
   collectMarkNames, getMarkValue, loadGradingConfig, type GradeLike,
 } from '../utils/gradeCalc';
-import { streamReportCardPdf, type ReportCardData } from '../utils/reportCardPdf';
+import { streamReportCardPdf, streamClassReportCardsPdf, type ReportCardData } from '../utils/reportCardPdf';
+import { streamTranscriptPdf, type TranscriptData, type TranscriptTerm } from '../utils/transcriptPdf';
 
 // Report cards — Phase 1 (migration 066). LIVE-rendered PDFs built on demand
 // from RELEASED `grades`; only the overall remark + the per-school template are
@@ -82,13 +83,16 @@ export async function getRoster(req: AuthRequest, res: Response): Promise<void> 
   const year = String(req.query.year || '').trim();
   const term = String(req.query.term || '').trim();
   const classId = (req.query.classId ? String(req.query.classId) : '').trim();
+  // Graduated students stay in the roster (is_graduated=true) — opt in so the
+  // admin can pull a leaver's transcript without un-graduating them.
+  const includeGraduated = String(req.query.includeGraduated || '') === '1';
   if (!year || !term) { res.status(400).json({ error: 'year and term are required' }); return; }
 
   let sq = supabase.from('students')
-    .select('id, full_name, class_id, classes(name)')
+    .select('id, full_name, class_id, is_graduated, classes(name)')
     .eq('school_id', schoolId)
-    .eq('is_graduated', false)
     .order('full_name');
+  if (!includeGraduated) sq = sq.eq('is_graduated', false);
   if (classId) sq = sq.eq('class_id', classId);
   const { data: students, error: sErr } = await sq;
   if (sErr) { res.status(safeDbErrorStatus(sErr)).json({ error: safeDbErrorMessage(sErr) }); return; }
@@ -145,6 +149,7 @@ export async function getRoster(req: AuthRequest, res: Response): Promise<void> 
         totalSubjects: t ? t.total.size : 0,
         releasedSubjects: t ? t.released.size : 0,
         hasRemark: remarked.has(s.id as string),
+        isGraduated: s.is_graduated === true,
       };
     }),
   });
@@ -326,6 +331,198 @@ export async function getStudentPdf(req: AuthRequest, res: Response): Promise<vo
   if (!built) { res.status(404).json({ error: 'Student not found.' }); return; }
 
   await streamCard(res, built, pickLang(req.query.lang || built.defaultLang));
+}
+
+// ── GET /admin/report-cards/class/:classId/card.pdf?year=&term=&lang= ───────
+// Bulk print stack: one combined PDF with a student per page for the whole
+// class. Students with no released grades this term are skipped; 404 if none
+// have any. Admin only. (Each student is assembled live — a class is bounded
+// small, so the repeated school/config reads are acceptable for v1.)
+export async function getClassPdf(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const classId = req.params.classId as string;
+  const year = String(req.query.year || '').trim();
+  const term = String(req.query.term || '').trim();
+  if (!year || !term) { res.status(400).json({ error: 'year and term are required' }); return; }
+
+  // Class must belong to this school; its name labels the download.
+  const { data: klass, error: cErr } = await supabase
+    .from('classes').select('name').eq('id', classId).eq('school_id', schoolId).maybeSingle();
+  if (cErr) { res.status(safeDbErrorStatus(cErr)).json({ error: safeDbErrorMessage(cErr) }); return; }
+  if (!klass) { res.status(404).json({ error: 'Class not found.' }); return; }
+
+  const { data: students, error: sErr } = await supabase
+    .from('students').select('id')
+    .eq('school_id', schoolId).eq('class_id', classId).eq('is_graduated', false)
+    .order('full_name');
+  if (sErr) { res.status(safeDbErrorStatus(sErr)).json({ error: safeDbErrorMessage(sErr) }); return; }
+
+  const cards: ReportCardData[] = [];
+  let defaultLang = 'en';
+  try {
+    for (const s of (students ?? []) as Record<string, unknown>[]) {
+      const built = await assembleReportCardData(schoolId, s.id as string, year, term);
+      if (built && built.data.subjects.length > 0) { cards.push(built.data); defaultLang = built.defaultLang; }
+    }
+  } catch (e) {
+    const err = e as Parameters<typeof safeDbErrorStatus>[0];
+    res.status(safeDbErrorStatus(err)).json({ error: safeDbErrorMessage(err) }); return;
+  }
+  if (cards.length === 0) { res.status(404).json({ error: 'No released grades for this class and term.' }); return; }
+
+  const safeClass = `${(klass.name as string) || 'class'}-${year}-${term}`.replace(/[^a-z0-9-]/gi, '_');
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="report-cards-${safeClass}.pdf"`);
+  try {
+    await streamClassReportCardsPdf(cards, pickLang(req.query.lang || defaultLang), res);
+  } catch (e) {
+    if (!res.headersSent) res.status(500).json({ error: 'Failed to render the report cards.' });
+    else res.end();
+    void e;
+  }
+}
+
+// Shared assembly for the cumulative transcript: every RELEASED grade for a
+// student across all years/terms, grouped by (year, term) and summarized.
+// `publishedOnly` (parent path) keeps only (year, term) pairs the school has
+// published. Returns null if the student isn't in this school. THROWS on DB error.
+async function assembleTranscriptData(
+  schoolId: string, studentId: string, opts: { publishedOnly: boolean },
+): Promise<{ data: TranscriptData; safeName: string; defaultLang: string } | null> {
+  const { data: school, error: schErr } = await supabase
+    .from('schools').select('name, logo_url, report_card_config').eq('id', schoolId).single();
+  if (schErr || !school) throw schErr ?? new Error('school not found');
+
+  const { data: student, error: stuErr } = await supabase
+    .from('students')
+    .select('id, full_name, date_of_birth, is_graduated, classes(name)')
+    .eq('id', studentId).eq('school_id', schoolId).maybeSingle();
+  if (stuErr) throw stuErr;
+  if (!student) return null;
+
+  const { data: gradeRows, error: gErr } = await supabase
+    .from('grades')
+    .select('subject, marks, daily_grade, quiz_grade, monthly_exam_grade, term_exam_grade, academic_year, grading_period')
+    .eq('school_id', schoolId)
+    .eq('student_id', studentId)
+    .eq('is_released', true);
+  if (gErr) throw gErr;
+
+  let publishedSet: Set<string> | null = null;
+  if (opts.publishedOnly) {
+    const { data: pub, error: pErr } = await supabase
+      .from('report_card_publish').select('academic_year, term').eq('school_id', schoolId);
+    if (pErr) throw pErr;
+    publishedSet = new Set((pub ?? []).map((r: Record<string, unknown>) =>
+      `${String(r.academic_year).toLowerCase().trim()}|||${String(r.term).toLowerCase().trim()}`));
+  }
+
+  const cfgGrading = await loadGradingConfig(supabase, schoolId);
+
+  // Group released grades by (year, term) → subject rows.
+  const groups = new Map<string, { year: string; term: string; rows: Record<string, unknown>[] }>();
+  for (const r of (gradeRows ?? []) as Record<string, unknown>[]) {
+    const year = String(r.academic_year || '').trim();
+    const term = String(r.grading_period || '').trim();
+    if (!year || !term) continue;
+    if (publishedSet && !publishedSet.has(`${year.toLowerCase()}|||${term.toLowerCase()}`)) continue;
+    const key = `${year}|||${term}`;
+    const g = groups.get(key) ?? { year, term, rows: [] };
+    g.rows.push(r);
+    groups.set(key, g);
+  }
+
+  const allPercents: number[] = [];
+  const allPoints: number[] = [];
+  const terms: TranscriptTerm[] = [];
+  for (const { year, term, rows } of groups.values()) {
+    const tPercents: number[] = [];
+    const tPoints: number[] = [];
+    const subjects = rows.map(r => {
+      const g = rowToGrade(r);
+      const pct = subjectPercent(g, cfgGrading.markMaxes);
+      const band = bandForPercent(pct, cfgGrading.bands);
+      if (pct != null) { tPercents.push(pct); allPercents.push(pct); }
+      if (band) { tPoints.push(band.gradePoint); allPoints.push(band.gradePoint); }
+      return { subject: String(r.subject || ''), percent: pct, letter: band?.letter ?? null, gradePoint: band?.gradePoint ?? null };
+    }).sort((a, b) => a.subject.localeCompare(b.subject));
+    terms.push({ academicYear: year, term, subjects, averagePercent: averagePercent(tPercents), gpa: averageGpa(tPoints) });
+  }
+  // Chronological: oldest year first, then term name.
+  terms.sort((a, b) => a.academicYear.localeCompare(b.academicYear) || a.term.localeCompare(b.term));
+
+  const tpl = normalizeConfig(school.report_card_config);
+  const cls = student.classes as { name?: string } | null;
+  const data: TranscriptData = {
+    school: { name: school.name as string, logoUrl: (school.logo_url as string | null) ?? null },
+    student: {
+      fullName: student.full_name as string,
+      className: cls?.name ?? null,
+      dateOfBirth: (student.date_of_birth as string | null) ?? null,
+      graduated: student.is_graduated === true,
+    },
+    generatedAt: new Date().toISOString(),
+    showPercent: cfgGrading.mode === 'scale' || cfgGrading.mode === 'both',
+    showGpa: cfgGrading.mode === 'gpa' || cfgGrading.mode === 'both',
+    terms,
+    cumulative: { averagePercent: averagePercent(allPercents), gpa: averageGpa(allPoints) },
+    config: {
+      classTeacher: tpl.signatories.classTeacher,
+      principal: tpl.signatories.principal,
+      headerNote: tpl.headerNote,
+      footerNote: tpl.footerNote,
+    },
+  };
+  const safeName = `${(student.full_name as string) || 'student'}-transcript`.replace(/[^a-z0-9-]/gi, '_');
+  return { data, safeName, defaultLang: tpl.defaultLang };
+}
+
+async function streamTranscript(res: Response, built: { data: TranscriptData; safeName: string }, lang: ReturnType<typeof pickLang>): Promise<void> {
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="transcript-${built.safeName}.pdf"`);
+  try {
+    await streamTranscriptPdf(built.data, lang, res);
+  } catch (e) {
+    if (!res.headersSent) res.status(500).json({ error: 'Failed to render the transcript.' });
+    else res.end();
+    void e;
+  }
+}
+
+// ── GET /admin/report-cards/student/:id/transcript.pdf?lang= ────────────────
+// Cumulative transcript across all released terms. Admin only; works for any
+// student in the roster, including graduated (is_graduated=true).
+export async function getStudentTranscript(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const studentId = req.params.id as string;
+  let built;
+  try { built = await assembleTranscriptData(schoolId, studentId, { publishedOnly: false }); }
+  catch (e) { const err = e as Parameters<typeof safeDbErrorStatus>[0]; res.status(safeDbErrorStatus(err)).json({ error: safeDbErrorMessage(err) }); return; }
+  if (!built) { res.status(404).json({ error: 'Student not found.' }); return; }
+  await streamTranscript(res, built, pickLang(req.query.lang || built.defaultLang));
+}
+
+// ── GET /parent/children/:id/transcript.pdf?lang= ──────────────────────────
+// Parent download of their child's cumulative transcript. Gated: ownership +
+// PUBLISHED terms only (released grades enforced by the assembler).
+export async function getParentChildTranscript(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId, userId } = req.user!;
+  const studentId = req.params.id as string;
+
+  const parentId = await resolveParentId(userId, schoolId);
+  if (!parentId) { res.status(404).json({ error: 'Student not found.' }); return; }
+  const { data: owned, error: ownErr } = await supabase
+    .from('students').select('id')
+    .eq('id', studentId).eq('school_id', schoolId).eq('parent_id', parentId)
+    .maybeSingle();
+  if (ownErr) { res.status(safeDbErrorStatus(ownErr)).json({ error: safeDbErrorMessage(ownErr) }); return; }
+  if (!owned) { res.status(404).json({ error: 'Student not found.' }); return; }
+
+  let built;
+  try { built = await assembleTranscriptData(schoolId, studentId, { publishedOnly: true }); }
+  catch (e) { const err = e as Parameters<typeof safeDbErrorStatus>[0]; res.status(safeDbErrorStatus(err)).json({ error: safeDbErrorMessage(err) }); return; }
+  if (!built) { res.status(404).json({ error: 'Student not found.' }); return; }
+  await streamTranscript(res, built, pickLang(req.query.lang || built.defaultLang));
 }
 
 // ── POST /admin/report-cards/publish — make a term visible to parents ───────

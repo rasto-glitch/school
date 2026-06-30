@@ -308,6 +308,9 @@ export const parentApi = {
   getReportCardTerms: () => api.get<{ terms: { academicYear: string; term: string }[] }>('/parent/report-card-terms'),
   downloadReportCard: (childId: string, year: string, term: string) =>
     api.get(`/parent/children/${childId}/report-card.pdf`, { params: { year, term }, responseType: 'blob' }),
+  // Cumulative transcript (published terms only) — for graduates/leavers.
+  downloadTranscript: (childId: string) =>
+    api.get(`/parent/children/${childId}/transcript.pdf`, { responseType: 'blob' }),
 };
 
 // ---- TEACHER ----
@@ -1332,9 +1335,10 @@ export const reportCardApi = {
     signatories?: { classTeacher?: string; principal?: string };
     headerNote?: string; footerNote?: string; defaultLang?: 'en' | 'ar' | 'ku';
   }) => api.put('/admin/report-cards/config', data),
-  // Roster + per-student released/total subject counts for a year+term (class optional).
-  getRoster: (year: string, term: string, classId?: string) =>
-    api.get('/admin/report-cards', { params: { year, term, ...(classId ? { classId } : {}) } }),
+  // Roster + per-student released/total subject counts for a year+term (class
+  // optional). includeGraduated keeps leavers in the list for transcripts.
+  getRoster: (year: string, term: string, classId?: string, includeGraduated?: boolean) =>
+    api.get('/admin/report-cards', { params: { year, term, ...(classId ? { classId } : {}), ...(includeGraduated ? { includeGraduated: '1' } : {}) } }),
   getRemarks: (studentId: string, year: string, term: string) =>
     api.get('/admin/report-cards/remarks', { params: { studentId, year, term } }),
   upsertRemarks: (data: { studentId: string; academicYear: string; term: string; homeroomComment?: string | null; principalComment?: string | null }) =>
@@ -1342,6 +1346,12 @@ export const reportCardApi = {
   // One student's term card (PDF blob). lang defaults to the school's config.
   studentPdf: (id: string, year: string, term: string, lang?: string) =>
     api.get(`/admin/report-cards/student/${id}/card.pdf`, { params: { year, term, ...(lang ? { lang } : {}) }, responseType: 'blob' }),
+  // Whole-class combined PDF (one student per page) — bulk print stack.
+  classPdf: (classId: string, year: string, term: string, lang?: string) =>
+    api.get(`/admin/report-cards/class/${classId}/card.pdf`, { params: { year, term, ...(lang ? { lang } : {}) }, responseType: 'blob' }),
+  // Cumulative transcript across all released terms (PDF blob).
+  studentTranscript: (id: string, lang?: string) =>
+    api.get(`/admin/report-cards/student/${id}/transcript.pdf`, { params: { ...(lang ? { lang } : {}) }, responseType: 'blob' }),
   // Publish gate — a term's cards become parent-visible once published.
   publish: (academicYear: string, term: string) => api.post('/admin/report-cards/publish', { academicYear, term }),
   unpublish: (academicYear: string, term: string) => api.delete('/admin/report-cards/publish', { data: { academicYear, term } }),

@@ -358,12 +358,15 @@ export function createRouter(io: SocketServer) {
   router.get('/admin/report-cards/remarks', authenticate, rcManage, validate({ query: vp.reportCardRemarksQuery }), (req, res) => reportCard.getRemarks(req as AuthRequest, res));
   router.put('/admin/report-cards/remarks', authenticate, rcManage, validate({ body: vp.reportCardRemarksSchema }), (req, res) => reportCard.upsertRemarks(req as AuthRequest, res));
   router.get('/admin/report-cards/student/:id/card.pdf', authenticate, rcManage, validate({ params: vp.idParam, query: vp.reportCardPdfQuery }), (req, res) => reportCard.getStudentPdf(req as AuthRequest, res));
+  router.get('/admin/report-cards/class/:classId/card.pdf', authenticate, rcManage, validate({ params: vp.classIdParam, query: vp.reportCardPdfQuery }), (req, res) => reportCard.getClassPdf(req as AuthRequest, res));
+  router.get('/admin/report-cards/student/:id/transcript.pdf', authenticate, rcManage, validate({ params: vp.idParam, query: vp.reportCardTranscriptQuery }), (req, res) => reportCard.getStudentTranscript(req as AuthRequest, res));
   router.post('/admin/report-cards/publish', authenticate, rcManage, validate({ body: vp.reportCardPublishSchema }), (req, res) => reportCard.publishTerm(req as AuthRequest, res));
   router.delete('/admin/report-cards/publish', authenticate, rcManage, validate({ body: vp.reportCardPublishSchema }), (req, res) => reportCard.unpublishTerm(req as AuthRequest, res));
   router.get('/admin/report-cards', authenticate, rcManage, validate({ query: vp.reportCardRosterQuery }), (req, res) => reportCard.getRoster(req as AuthRequest, res));
   // Parent download (Phase 2) — own child, published term, released grades only.
   router.get('/parent/report-card-terms', authenticate, authorize('parent'), (req, res) => reportCard.getParentTerms(req as AuthRequest, res));
   router.get('/parent/children/:id/report-card.pdf', authenticate, authorize('parent'), validate({ params: vp.idParam, query: vp.reportCardPdfQuery }), (req, res) => reportCard.getParentChildPdf(req as AuthRequest, res));
+  router.get('/parent/children/:id/transcript.pdf', authenticate, authorize('parent'), validate({ params: vp.idParam, query: vp.reportCardTranscriptQuery }), (req, res) => reportCard.getParentChildTranscript(req as AuthRequest, res));
 
   // ── Dashboard "Needs your attention" signals + actions (migration 060) ──
   // Per-term grade filing windows (academics.oversee).

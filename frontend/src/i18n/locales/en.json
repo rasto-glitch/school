@@ -290,6 +290,8 @@
     "cumulative_gpa": "Cumulative GPA",
     "report_card": "Report card",
     "report_card_failed": "Could not download the report card.",
+    "transcript": "Transcript",
+    "transcript_failed": "Could not download the transcript.",
     "year_gpa": "Year GPA"
   },
   "report_cards": {
@@ -336,7 +338,15 @@
     "published_state": "Published — parents can download these cards.",
     "unpublished_state": "Not published — parents cannot see these cards yet.",
     "published_toast": "Published — parents can now download.",
-    "unpublished": "Hidden from parents."
+    "unpublished": "Hidden from parents.",
+    "download_class": "Class PDF",
+    "class_pdf_pick_class": "Select a specific class first",
+    "download_class_failed": "Could not generate the class PDF.",
+    "class_no_released": "No released grades for this class and term.",
+    "transcript": "Transcript",
+    "transcript_failed": "Could not generate the transcript.",
+    "include_graduated": "Include graduated",
+    "graduated": "Graduated"
   },
   "grade_review": {
     "title": "Grade Review",

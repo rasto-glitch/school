@@ -102,6 +102,7 @@ export default function GradesScreen() {
   // download button once the school has published it.
   const [publishedKeys, setPublishedKeys] = useState<Set<string>>(new Set());
   const [dl, setDl] = useState<string | null>(null);
+  const [tDl, setTDl] = useState(false);
   const clearGrade = useBadgeStore(s => s.clearGrade);
   const setUnreadCount = useBadgeStore(s => s.setUnreadCount);
 
@@ -144,6 +145,19 @@ export default function GradesScreen() {
       Alert.alert(t('grades.report_card'), t('grades.report_card_failed'));
     } finally {
       setDl(null);
+    }
+  };
+
+  // Cumulative transcript (published + released terms) for the selected child.
+  const downloadTranscript = async () => {
+    if (!selectedChild) return;
+    setTDl(true);
+    try {
+      await downloadAuthPdf(`/parent/children/${selectedChild}/transcript.pdf`, 'transcript.pdf');
+    } catch {
+      Alert.alert(t('grades.transcript'), t('grades.transcript_failed'));
+    } finally {
+      setTDl(false);
     }
   };
 
@@ -221,6 +235,12 @@ export default function GradesScreen() {
         </View>
       ) : (
         <>
+        {publishedKeys.size > 0 && (
+          <TouchableOpacity onPress={downloadTranscript} disabled={tDl} style={[styles.transcriptBtn, { opacity: tDl ? 0.5 : 1 }]}>
+            <FileText size={16} color={colors.primary} />
+            <Text style={styles.transcriptBtnText}>{t('grades.transcript')}</Text>
+          </TouchableOpacity>
+        )}
         {showGpa && cgpa != null && (
           <View style={styles.cgpaCard}>
             <Text style={styles.cgpaLabel}>{t('grades.cumulative_gpa')}</Text>
@@ -405,6 +425,8 @@ const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').u
   termHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.primaryLight, paddingHorizontal: spacing.md, paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: colors.border },
   termTitle: { fontSize: font.xs, fontWeight: '700', color: colors.primary, letterSpacing: 0.5 },
   reportCardBtnText: { fontSize: font.xs, fontWeight: '700', color: colors.primary, letterSpacing: 0.3 },
+  transcriptBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, alignSelf: 'flex-end', paddingVertical: 8, paddingHorizontal: 14, marginBottom: spacing.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card },
+  transcriptBtnText: { fontSize: font.sm, fontWeight: '700', color: colors.primary },
   tableRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: spacing.sm },
   rowEven: { backgroundColor: colors.bg + '80' },
   colHeader: { fontSize: 10, fontWeight: '600', color: colors.textMuted, textAlign: 'center', textTransform: 'uppercase', letterSpacing: 0.3 },
