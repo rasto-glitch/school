@@ -170,8 +170,9 @@ export const staffAttendanceScanSchema = z.object({
 const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Expected time as HH:MM');
 // Admin config: enable toggle, map pin + radius, school-wide schedule. Every
 // field optional; the controller 400s if nothing was supplied.
+// Premium: the feature is provisioned per school by the platform, so the admin
+// only ever sends pin/schedule here — never an enable flag.
 export const updateStaffAttendanceConfigSchema = z.object({
-  enabled: z.boolean().optional(),
   geofence: z.object({
     lat: z.number().min(-90).max(90),
     lng: z.number().min(-180).max(180),
@@ -183,7 +184,7 @@ export const updateStaffAttendanceConfigSchema = z.object({
     lateGraceMinutes: z.number().int().min(0).max(180),
   }).optional(),
 }).refine(
-  d => d.enabled !== undefined || d.geofence !== undefined || d.schedule !== undefined,
+  d => d.geofence !== undefined || d.schedule !== undefined,
   { message: 'Nothing to update' },
 );
 

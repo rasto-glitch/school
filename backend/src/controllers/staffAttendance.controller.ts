@@ -273,7 +273,9 @@ export async function getConfig(req: AuthRequest, res: Response): Promise<void> 
   const features = (school.features ?? {}) as Record<string, boolean>;
   const cfg = normalizeConfig(school.staff_attendance_config);
   res.json({
-    enabled: features.staff_attendance === true,
+    // Premium feature: provisioned per school by the platform (like tuition_fees).
+    // The admin can configure the pin/schedule but never enable the feature.
+    provisioned: features.staff_attendance === true,
     serverConfigured: staffAttendanceConfigured(),
     geofence: cfg.geofence,
     schedule: cfg.schedule,
@@ -281,12 +283,13 @@ export async function getConfig(req: AuthRequest, res: Response): Promise<void> 
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// PUT /staff-attendance/config  (staff_attendance.manage) — pin / schedule / enable
+// PUT /staff-attendance/config  (staff_attendance.manage) — pin / schedule only
+// (premium: the feature itself is provisioned per school by the platform; a
+//  school admin configures it but can never turn it on/off)
 // ════════════════════════════════════════════════════════════════════════════
 export async function updateConfig(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
   const body = req.body as {
-    enabled?: boolean;
     geofence?: { lat: number; lng: number; radiusMeters?: number };
     schedule?: { startTime: string; endTime: string; lateGraceMinutes: number };
   };
@@ -295,7 +298,16 @@ export async function updateConfig(req: AuthRequest, res: Response): Promise<voi
     .from('schools').select('features, staff_attendance_config').eq('id', schoolId).single();
   if (error || !school) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
-  const features = { ...((school.features ?? {}) as Record<string, boolean>) };
+  // Premium gate: staff attendance is a paid feature provisioned per school by
+  // the platform (like tuition_fees). The admin configures the pin/schedule but
+  // can NEVER turn the feature on/off, so editing config requires it to already
+  // be provisioned.
+  const features = (school.features ?? {}) as Record<string, boolean>;
+  if (features.staff_attendance !== true) {
+    res.status(403).json({ error: "Staff attendance is not included in this school's plan.", code: 'NOT_PROVISIONED' });
+    return;
+  }
+
   const before = normalizeConfig(school.staff_attendance_config);
   const next = normalizeConfig(school.staff_attendance_config);
 
@@ -318,39 +330,26 @@ export async function updateConfig(req: AuthRequest, res: Response): Promise<voi
     };
   }
 
-  const patch: Record<string, unknown> = {};
-  if (JSON.stringify(next) !== JSON.stringify(before)) patch.staff_attendance_config = next;
-
-  const wasEnabled = features.staff_attendance === true;
-  if (body.enabled !== undefined) {
-    if (body.enabled === true && (next.geofence.lat == null || next.geofence.lng == null)) {
-      res.status(400).json({ error: 'Drop the school location pin before enabling staff attendance.', code: 'NO_GEOFENCE' });
-      return;
-    }
-    if (wasEnabled !== body.enabled) {
-      // Read-modify-write of the whole `features` JSONB. Safe in practice
-      // because this endpoint is the ONLY in-app writer of schools.features
-      // (everything else only reads it). Mutating it bumps features_version →
-      // forced re-login, which is intended when the tabs/screens change.
-      features.staff_attendance = body.enabled;
-      patch.features = features;
-    }
+  if (JSON.stringify(next) === JSON.stringify(before)) {
+    res.status(400).json({ error: 'Nothing to update.' });
+    return;
   }
 
-  if (Object.keys(patch).length === 0) { res.status(400).json({ error: 'Nothing to update.' }); return; }
-
-  const { error: updErr } = await supabase.from('schools').update(patch).eq('id', schoolId);
+  // Only the config column is ever written here — never `features` (that flag is
+  // the platform-controlled premium gate). So this never bumps features_version.
+  const { error: updErr } = await supabase
+    .from('schools').update({ staff_attendance_config: next }).eq('id', schoolId);
   if (updErr) { res.status(safeDbErrorStatus(updErr)).json({ error: safeDbErrorMessage(updErr) }); return; }
 
   await logAudit({
     req, entityType: 'staff_attendance', entityId: schoolId, action: 'update',
-    before: { staff_attendance_config: before, enabled: wasEnabled },
-    after: { staff_attendance_config: next, enabled: features.staff_attendance === true },
+    before: { staff_attendance_config: before },
+    after: { staff_attendance_config: next },
     label: 'Staff attendance settings',
   });
 
   res.json({
-    enabled: features.staff_attendance === true,
+    provisioned: true,
     serverConfigured: staffAttendanceConfigured(),
     geofence: next.geofence,
     schedule: next.schedule,
