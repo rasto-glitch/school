@@ -365,7 +365,9 @@
     "school_note": "تێبینی لە قوتابخانە",
     "cumulative_gpa": "ناوەندی گشتی (GPA)",
     "year_gpa": "GPA ی ساڵ",
-    "year_filter_all": "هەموو ساڵەکان"
+    "year_filter_all": "هەموو ساڵەکان",
+    "report_card": "کارتی نمرە",
+    "report_card_failed": "نەتوانرا کارتی نمرە دابەزێنرێت."
   },
   "reports": {
     "title": "ڕاپۆرتەکان",

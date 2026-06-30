@@ -1,11 +1,12 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, RefreshControl } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, RefreshControl, Alert } from 'react-native';
 import { CardListSkeleton } from '../../components/Skeleton';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { GraduationCap } from 'lucide-react-native';
+import { GraduationCap, FileText } from 'lucide-react-native';
 import { parentApi } from '../../services/api';
+import { downloadAuthPdf } from '../../utils/download';
 import { useColors, useIsDark } from '../../store/themeStore';
 import { useBadgeStore } from '../../store/badgeStore';
 import { spacing, radius, font, shadow } from '../../theme';
@@ -97,6 +98,10 @@ export default function GradesScreen() {
   const [refreshing, setRefreshing] = useState(false);
   // PR 2 — academic-year filter chip row. '' means "all years".
   const [yearFilter, setYearFilter] = useState('');
+  // Published (year|term) keys, lowercased — a term only gets a "Report card"
+  // download button once the school has published it.
+  const [publishedKeys, setPublishedKeys] = useState<Set<string>>(new Set());
+  const [dl, setDl] = useState<string | null>(null);
   const clearGrade = useBadgeStore(s => s.clearGrade);
   const setUnreadCount = useBadgeStore(s => s.setUnreadCount);
 
@@ -117,7 +122,30 @@ export default function GradesScreen() {
       if (kids.length > 0) setSelectedChild(kids[0].id);
     });
     parentApi.getGradeConfig().then(r => setCfg(r.data)).catch(() => {});
+    parentApi.getReportCardTerms()
+      .then(r => {
+        const s = new Set<string>();
+        (r.data?.terms || []).forEach(x => s.add(`${x.academicYear.toLowerCase().trim()}|||${x.term.toLowerCase().trim()}`));
+        setPublishedKeys(s);
+      })
+      .catch(() => {});
   }, []);
+
+  // Download an own-child report card for a published term. Reuses the
+  // auth'd-PDF helper the fee receipts use (react-native-blob-util → system
+  // viewer / share sheet), so no extra native deps.
+  const downloadCard = async (key: string, childId: string, rawYear: string, rawTerm: string) => {
+    if (!childId) return;
+    setDl(key);
+    try {
+      const path = `/parent/children/${childId}/report-card.pdf?year=${encodeURIComponent(rawYear)}&term=${encodeURIComponent(rawTerm)}`;
+      await downloadAuthPdf(path, `report-card-${rawYear}-${rawTerm}.pdf`.replace(/[^a-z0-9.\-]/gi, '_'));
+    } catch {
+      Alert.alert(t('grades.report_card'), t('grades.report_card_failed'));
+    } finally {
+      setDl(null);
+    }
+  };
 
   const showGpa = cfg.mode === 'gpa' || cfg.mode === 'both';
   const showPct = cfg.mode === 'scale' || cfg.mode === 'both';
@@ -245,10 +273,26 @@ export default function GradesScreen() {
                 <Text style={styles.yearTitle}>{yr}</Text>
               </View>
 
-              {terms.map((term, ti) => (
+              {terms.map((term, ti) => {
+                const sample = Object.values(byYear[yr][term])[0] as Grade | undefined;
+                const rawYear = sample?.academicYear || '';
+                const rawTerm = sample?.gradingPeriod || '';
+                const dlKey = `${yr}|${term}`;
+                const canDownload = !!sample && publishedKeys.has(`${rawYear.toLowerCase().trim()}|||${rawTerm.toLowerCase().trim()}`);
+                return (
                 <View key={term} style={styles.termBlock}>
                   <View style={styles.termHeader}>
                     <Text style={styles.termTitle}>{term.toUpperCase()}</Text>
+                    {canDownload && (
+                      <TouchableOpacity
+                        onPress={() => downloadCard(dlKey, selectedChild, rawYear, rawTerm)}
+                        disabled={dl === dlKey}
+                        style={{ flexDirection: 'row', alignItems: 'center', gap: 4, opacity: dl === dlKey ? 0.5 : 1 }}
+                      >
+                        <FileText size={14} color={colors.primary} />
+                        <Text style={styles.reportCardBtnText}>{t('grades.report_card')}</Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
 
                   <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -305,7 +349,7 @@ export default function GradesScreen() {
                     </View>
                   </ScrollView>
                 </View>
-              ))}
+              ); })}
 
               {/* Admin notes */}
               {notes.map((n, i) => (
@@ -358,8 +402,9 @@ const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').u
   yearHeader: { backgroundColor: colors.bg, borderBottomWidth: 1, borderBottomColor: colors.border, paddingHorizontal: spacing.md, paddingVertical: 10 },
   yearTitle: { fontSize: font.md, fontWeight: '700', color: colors.text },
   termBlock: { borderBottomWidth: 1, borderBottomColor: colors.border },
-  termHeader: { backgroundColor: colors.primaryLight, paddingHorizontal: spacing.md, paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: colors.border },
+  termHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.primaryLight, paddingHorizontal: spacing.md, paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: colors.border },
   termTitle: { fontSize: font.xs, fontWeight: '700', color: colors.primary, letterSpacing: 0.5 },
+  reportCardBtnText: { fontSize: font.xs, fontWeight: '700', color: colors.primary, letterSpacing: 0.3 },
   tableRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: spacing.sm },
   rowEven: { backgroundColor: colors.bg + '80' },
   colHeader: { fontSize: 10, fontWeight: '600', color: colors.textMuted, textAlign: 'center', textTransform: 'uppercase', letterSpacing: 0.3 },

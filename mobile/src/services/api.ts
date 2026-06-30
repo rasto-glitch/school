@@ -246,6 +246,10 @@ export const parentApi = {
   getAssignments: (params?: Record<string, string>) => api.get('/parent/assignments', { params }),
   getGrades: (studentId?: string) => api.get('/parent/grades', { params: studentId ? { studentId } : {} }),
   getGradeConfig: () => api.get('/grade-config'),
+  // Published (academic_year, term) pairs the school has released as report
+  // cards. A term only shows a "Report card" download button once published.
+  getReportCardTerms: () =>
+    api.get<{ terms: { academicYear: string; term: string }[] }>('/parent/report-card-terms'),
   getReports: (params?: Record<string, string>) => api.get('/parent/reports', { params }),
   getAnnouncements: (cursor?: string | null) =>
     api.get<Paginated<Announcement>>('/parent/announcements', { params: cursor ? { cursor } : {} }),

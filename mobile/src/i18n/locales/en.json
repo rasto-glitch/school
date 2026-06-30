@@ -365,7 +365,9 @@
     "school_note": "Note from school",
     "cumulative_gpa": "Cumulative GPA",
     "year_gpa": "Year GPA",
-    "year_filter_all": "All years"
+    "year_filter_all": "All years",
+    "report_card": "Report card",
+    "report_card_failed": "Could not download the report card."
   },
   "reports": {
     "title": "Reports",
