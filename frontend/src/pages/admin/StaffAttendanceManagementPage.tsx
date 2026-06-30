@@ -294,7 +294,7 @@ function TodayTab({ roleLabel, leaveTypeLabel }: {
                             {p.status === 'open' && <Tag cls="bg-green-50 text-green-700">{t('staff_attendance.mgmt.in_progress', 'In')}</Tag>}
                             {p.status === 'closed' && <Tag cls="bg-gray-100 text-gray-600">{t('staff_attendance.mgmt.done', 'Out')}</Tag>}
                             {p.status === 'auto_closed' && <Tag cls="bg-orange-50 text-orange-700">{t('staff_attendance.mgmt.auto_closed', 'Auto')}</Tag>}
-                            {p.flagged && <Tag cls="bg-red-50 text-red-700">{t('staff_attendance.mgmt.flagged', 'Flag')}</Tag>}
+                            {p.flagged && p.status !== 'auto_closed' && <Tag cls="bg-red-50 text-red-700">{t('staff_attendance.mgmt.flagged', 'Flag')}</Tag>}
                           </div>
                         </td>
                       </tr>
@@ -391,7 +391,8 @@ function ReviewTab({ roleLabel }: { roleLabel: (r: string, j: string | null) => 
           </div>
           <div className="flex flex-wrap gap-1">
             {r.status === 'auto_closed' && <Tag cls="bg-orange-50 text-orange-700">{t('staff_attendance.mgmt.auto_closed_full', 'Auto-closed')}</Tag>}
-            {r.flagged && <Tag cls="bg-red-50 text-red-700">{r.flagReason || t('staff_attendance.mgmt.flagged', 'Flagged')}</Tag>}
+            {/* Skip the redundant 'auto_closed' marker — the status tag covers it. */}
+            {r.flagged && r.flagReason !== 'auto_closed' && <Tag cls="bg-red-50 text-red-700">{r.flagReason || t('staff_attendance.mgmt.flagged', 'Flagged')}</Tag>}
             {r.isLate && <Tag cls="bg-amber-50 text-amber-700">{t('staff_attendance.mgmt.late', 'Late')}</Tag>}
           </div>
           <div className="flex-1" />

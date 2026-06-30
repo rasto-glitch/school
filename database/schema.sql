@@ -2077,6 +2077,38 @@ END $$;
 SELECT cron.schedule('cleanup_voided_records', '15 3 * * *', $$SELECT cleanup_voided_records();$$);
 
 -- ============================================================
+-- STAFF ATTENDANCE AUTO-CLOSEOUT (mirror of migration 065)
+-- Closes any open employee punch once its work-day has ended in the school's
+-- own timezone (config.schedule.endTime, default 15:00) → auto_closed + flagged
+-- so it surfaces in the admin Review queue. Hourly because end-of-day is
+-- per-school. check_out_at left NULL (no real checkout); admin corrects it.
+-- ============================================================
+CREATE OR REPLACE FUNCTION staff_attendance_auto_closeout() RETURNS void AS $$
+BEGIN
+  UPDATE staff_attendance sa
+     SET status = 'auto_closed',
+         flagged = TRUE,
+         flag_reason = 'auto_closed'
+    FROM schools s
+   WHERE sa.status = 'open'
+     AND s.id = sa.school_id
+     AND (NOW() AT TIME ZONE COALESCE(NULLIF(s.timezone, ''), 'Asia/Baghdad'))
+         >= (sa.work_date
+             + COALESCE(NULLIF(s.staff_attendance_config->'schedule'->>'endTime', ''), '15:00')::time)
+     AND sa.check_in_at < NOW() - INTERVAL '1 hour';
+END;
+$$ LANGUAGE plpgsql;
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'staff_attendance_auto_closeout') THEN
+    PERFORM cron.unschedule('staff_attendance_auto_closeout');
+  END IF;
+END $$;
+
+SELECT cron.schedule('staff_attendance_auto_closeout', '0 * * * *', $$SELECT staff_attendance_auto_closeout();$$);
+
+-- ============================================================
 -- ACCOUNTING UPGRADES (mirror of migration 009)
 -- Receipt numbers, currency on payments, tax/withholding, refund linkage,
 -- fee-plan kind, late fees, accounting periods, payment accounts, FX rates,
