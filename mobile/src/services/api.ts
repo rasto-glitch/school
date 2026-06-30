@@ -273,6 +273,18 @@ export const parentApi = {
   getSchedule: (studentId: string) => api.get('/parent/schedule', { params: { studentId } }),
 };
 
+// ---- RECEPTION ----
+// Mirrors the web receptionApi (frontend/src/services/api.ts). Reception is the
+// sole confirmer of appointments; on approval it assigns the admin who'll take
+// the meeting and may reschedule the date.
+export const receptionApi = {
+  getPendingAppointmentCount: () => api.get('/reception/appointments/pending-count'),
+  getAppointments: () => api.get('/reception/appointments'),
+  respondToAppointment: (id: string, data: { responseMessage?: string; scheduledDate?: string; status: 'approved' | 'rejected'; assignedAdminId?: string | null }) =>
+    api.put(`/reception/appointments/${id}`, data),
+  getAssignableAdmins: () => api.get('/reception/assignable-admins'),
+};
+
 // ---- FEES (parent) ----
 export const feesApi = {
   getParentFees: () => api.get('/parent/fees'),

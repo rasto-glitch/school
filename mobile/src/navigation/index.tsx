@@ -11,6 +11,7 @@ import SupervisorTabs from './SupervisorTabs';
 import SupervisorNotificationsScreen from '../screens/supervisor/SupervisorNotificationsScreen';
 import SupervisorSalaryScreen from '../screens/supervisor/SupervisorSalaryScreen';
 import TeacherTabs from './TeacherTabs';
+import ReceptionTabs from './ReceptionTabs';
 import TeacherNotificationsScreen from '../screens/teacher/TeacherNotificationsScreen';
 import TeacherScheduleScreen from '../screens/teacher/TeacherScheduleScreen';
 import TeacherSalaryScreen from '../screens/teacher/TeacherSalaryScreen';
@@ -53,6 +54,8 @@ export type RootStackParamList = {
   SupervisorSalary: undefined;
   TeacherTabs: undefined;
   TeacherSettings: undefined;
+  ReceptionTabs: undefined;
+  ReceptionSettings: undefined;
   TeacherNotifications: undefined;
   TeacherSchedule: undefined;
   TeacherSalary: undefined;
@@ -234,6 +237,24 @@ export default function Navigation() {
               component={ChatScreen}
               options={{ headerShown: true, headerBackTitle: 'Back' }}
             />
+            <Stack.Screen
+              name="ReportBug"
+              component={ReportBugScreen}
+              options={{ headerShown: true, headerTitle: 'Report a bug', headerBackTitle: 'Back' }}
+            />
+          </>
+        ) : user?.role === 'reception' ? (
+          <>
+            <Stack.Screen name="ReceptionTabs" component={ReceptionTabs} />
+            <Stack.Screen
+              name="ReceptionSettings"
+              component={SettingsScreen}
+              options={{ headerShown: true, headerTitle: 'Settings', headerBackTitle: 'Back', presentation: 'card' }}
+            />
+            <Stack.Screen name="Security" component={SecurityScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="MfaSettings" component={MfaSettingsScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="PhoneSettings" component={PhoneSettingsScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="Sessions" component={SessionsScreen} options={{ headerShown: false }} />
             <Stack.Screen
               name="ReportBug"
               component={ReportBugScreen}

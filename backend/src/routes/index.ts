@@ -659,12 +659,12 @@ export function createRouter(io: SocketServer) {
   router.get('/parent/pickup-location', authenticate, authorize('parent'), (req, res) => parent.getPickupLocation(req as AuthRequest, res));
 
   // ---- ACCOUNTING (premium feature, gated server-side) ----
-  // Admin & accountant: full read/write. Reception: read-only list/families/student-detail. Parent: own family only.
+  // Accountant: full read/write. Parent: own family only (separate parent routes below).
   // (Routes formerly lived under /admin/fees/*; renamed to /accounting/* when introducing the dedicated accountant role.)
-  // Admin is intentionally excluded — finance is the accountant's domain. Reception keeps RO so the front desk
-  // can answer "how much does this family owe?" walk-ins.
+  // Admin is intentionally excluded — finance is the accountant's domain.
+  // Reception access removed (2026-06-30) — front desk no longer has tuition visibility.
   const accountingRW = ['accountant'] as const;
-  const accountingRO = ['accountant', 'reception'] as const;
+  const accountingRO = ['accountant'] as const;
 
   router.get('/accounting/plans', authenticate, authorize(...accountingRO), (req, res) => fees.listPlans(req as AuthRequest, res));
   router.post('/accounting/plans', authenticate, authorize(...accountingRW), validate({ body: va.createPlanSchema }), (req, res) => fees.createPlan(req as AuthRequest, res));
@@ -696,7 +696,7 @@ export function createRouter(io: SocketServer) {
   router.post('/accounting/students/:studentId/locks', authenticate, authorize(...accountingRW), validate({ params: va.setLockParams, body: va.setLockSchema }), (req, res) => fees.setLock(req as AuthRequest, res));
   router.delete('/accounting/students/:studentId/locks/:feature', authenticate, authorize(...accountingRW), validate({ params: va.removeLockParams }), (req, res) => fees.removeLock(req as AuthRequest, res));
 
-  // Receipt PDFs — auth handled inside the controller (admin/accountant/reception/parent each verified differently).
+  // Receipt PDFs — auth handled inside the controller (admin/accountant/parent each verified differently).
   router.get('/accounting/payments/:id/receipt.pdf', authenticate, (req, res) => fees.paymentReceiptPdf(req as AuthRequest, res));
   router.get('/accounting/student-fees/:id/summary.pdf', authenticate, (req, res) => fees.studentFeeSummaryPdf(req as AuthRequest, res));
 

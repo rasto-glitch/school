@@ -287,15 +287,15 @@ export default function App() {
         <Route path="/reception/profile" element={<ProtectedRoute allowedRoles={['reception']}><ProfilePage /></ProtectedRoute>} />
 
         {/* Accounting Portal — premium tuition module. Owned by accountant.
-            Reception keeps read-only access to the tuition student list so the front desk
-            can answer "how much does this family owe?" walk-ins. Admin is intentionally excluded. */}
-        <Route path="/accounting" element={<ProtectedRoute allowedRoles={['accountant', 'reception']}><AdminTuitionPage /></ProtectedRoute>} />
+            Reception access removed (2026-06-30); finance is the accountant's domain.
+            Admin is intentionally excluded. */}
+        <Route path="/accounting" element={<ProtectedRoute allowedRoles={['accountant']}><AdminTuitionPage /></ProtectedRoute>} />
         <Route path="/accounting/dashboard" element={<ProtectedRoute allowedRoles={['accountant']}><AccountingDashboardPage /></ProtectedRoute>} />
         <Route path="/accounting/staff" element={<ProtectedRoute allowedRoles={['accountant']}><AdminTuitionPage /></ProtectedRoute>} />
         <Route path="/accounting/expenses" element={<ProtectedRoute allowedRoles={['accountant']}><ExpensesPage /></ProtectedRoute>} />
         <Route path="/accounting/ledger" element={<ProtectedRoute allowedRoles={['accountant']}><LedgerPage /></ProtectedRoute>} />
         <Route path="/accounting/general-ledger" element={<ProtectedRoute allowedRoles={['accountant']}><GeneralLedgerPage /></ProtectedRoute>} />
-        <Route path="/accounting/student/:id" element={<ProtectedRoute allowedRoles={['accountant', 'reception']}><AdminTuitionStudentDetailPage /></ProtectedRoute>} />
+        <Route path="/accounting/student/:id" element={<ProtectedRoute allowedRoles={['accountant']}><AdminTuitionStudentDetailPage /></ProtectedRoute>} />
         <Route path="/accounting/reports/ar-aging" element={<ProtectedRoute allowedRoles={['accountant']}><ArAgingPage /></ProtectedRoute>} />
         <Route path="/accounting/reports/profit-loss" element={<ProtectedRoute allowedRoles={['accountant']}><ProfitLossPage /></ProtectedRoute>} />
         <Route path="/accounting/reports/cash-flow" element={<ProtectedRoute allowedRoles={['accountant']}><CashFlowForecastPage /></ProtectedRoute>} />

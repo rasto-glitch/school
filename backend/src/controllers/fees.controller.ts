@@ -1720,13 +1720,13 @@ async function streamArchivedYearSummary(
 
 // Parent visibility on an archived snapshot — the live student_fees row is
 // gone, so we authorize via the snapshot's original_parent_id pointer.
-// Admin/accountant/reception always allowed (school-scoped).
+// Admin/accountant always allowed (school-scoped). (Reception removed 2026-06-30.)
 async function authorizeArchivedReceipt(
   req: AuthRequest, archive: ArchivedReceiptHit['archive'],
 ): Promise<{ ok: boolean }> {
   const { schoolId, userId, role } = req.user!;
   if (archive.schoolId !== schoolId) return { ok: false };
-  if (role === 'admin' || role === 'accountant' || role === 'reception') return { ok: true };
+  if (role === 'admin' || role === 'accountant') return { ok: true };
   if (role === 'parent') {
     if (!archive.originalParentId) return { ok: false };
     const { data } = await supabase
@@ -1785,7 +1785,7 @@ async function loadReceiptContext(schoolId: string, studentFeeId: string) {
 }
 
 // Verifies the requesting user can see this payment.
-// admin/accountant/reception: their school. parent: must own the student.
+// admin/accountant: their school. parent: must own the student. (Reception removed 2026-06-30.)
 async function authorizeReceipt(req: AuthRequest, studentFeeId: string): Promise<{ ok: boolean }> {
   const { schoolId, userId, role } = req.user!;
   const { data: sf } = await supabase
@@ -1793,7 +1793,7 @@ async function authorizeReceipt(req: AuthRequest, studentFeeId: string): Promise
     .select('school_id, students!inner(parents(user_id))')
     .eq('id', studentFeeId).single();
   if (!sf || (sf as any).school_id !== schoolId) return { ok: false };
-  if (role === 'admin' || role === 'accountant' || role === 'reception') return { ok: true };
+  if (role === 'admin' || role === 'accountant') return { ok: true };
   if (role === 'parent') {
     const parentUserId = (sf as any).students?.parents?.user_id;
     if (parentUserId === userId) return { ok: true };
