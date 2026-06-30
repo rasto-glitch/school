@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS schools (
   is_active BOOLEAN DEFAULT TRUE,
   periods_per_day INT NOT NULL DEFAULT 6,
   schedule_days TEXT[] NOT NULL DEFAULT ARRAY['sunday','monday','tuesday','wednesday','thursday'],
-  features JSONB DEFAULT '{"homework":true,"assignments":true,"announcements":true,"grades":true,"reports":true,"bus_tracking":true,"appointments":true,"attendance":true,"weekly_summary":true,"chat":true,"teacher_report_handoff":true}',
+  features JSONB DEFAULT '{"homework":true,"assignments":true,"announcements":true,"grades":true,"reports":true,"bus_tracking":true,"appointments":true,"attendance":true,"weekly_summary":true,"chat":true,"teacher_report_handoff":true,"staff_attendance":false}',
   features_version INTEGER NOT NULL DEFAULT 1,
   tuition_config JSONB DEFAULT '{"currency":"USD","siblingDiscount":{"enabled":false,"type":"percent","tiers":[]}}'::jsonb,
   timezone TEXT NOT NULL DEFAULT 'Asia/Baghdad',
@@ -41,6 +41,11 @@ CREATE TABLE IF NOT EXISTS schools (
   -- rollup (migration 049). Default /100; schools using /20 or other scales
   -- should configure this before the metrics feature ships.
   grade_scale_max NUMERIC(5,2) DEFAULT 100,
+  -- Staff (employee) QR-attendance geofence + schedule (migration 063). Lives
+  -- OUTSIDE `features` so editing the pin/schedule does NOT bump
+  -- features_version / force a re-login. The on/off gate is features.staff_attendance.
+  staff_attendance_config JSONB NOT NULL DEFAULT
+    '{"geofence":{"lat":null,"lng":null,"radiusMeters":250},"schedule":{"startTime":"08:00","endTime":"15:00","lateGraceMinutes":15}}'::jsonb,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 -- Run this if the table already exists:
@@ -50,6 +55,7 @@ CREATE TABLE IF NOT EXISTS schools (
 -- ALTER TABLE schools ADD COLUMN IF NOT EXISTS chat_restrictions JSONB NOT NULL DEFAULT '{"enabled":false}'::jsonb;
 -- ALTER TABLE schools ADD COLUMN IF NOT EXISTS grading_config JSONB NOT NULL DEFAULT '{"mode":"scale"}'::jsonb;
 -- ALTER TABLE schools ADD COLUMN IF NOT EXISTS grade_scale_max NUMERIC(5,2) DEFAULT 100;
+-- ALTER TABLE schools ADD COLUMN IF NOT EXISTS staff_attendance_config JSONB NOT NULL DEFAULT '{"geofence":{"lat":null,"lng":null,"radiusMeters":250},"schedule":{"startTime":"08:00","endTime":"15:00","lateGraceMinutes":15}}'::jsonb;
 
 -- Trigger: auto-increment features_version whenever the features JSONB column changes
 CREATE OR REPLACE FUNCTION increment_features_version()
@@ -76,7 +82,7 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT,
   username TEXT NOT NULL,
   password_hash TEXT NOT NULL,
-  role TEXT NOT NULL CHECK (role IN ('parent','teacher','admin','driver','supervisor','reception','accountant')),
+  role TEXT NOT NULL CHECK (role IN ('parent','teacher','admin','driver','supervisor','reception','accountant','staff')),
   profile_picture TEXT,
   first_name TEXT NOT NULL,
   last_name TEXT NOT NULL,
@@ -115,6 +121,8 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS qualifications TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS notes TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS emergency_contact TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS official_photo TEXT;
+-- Display job title for the generic 'staff' role (migration 063): "Cleaner","Security".
+ALTER TABLE users ADD COLUMN IF NOT EXISTS job_title TEXT;
 
 -- ============================================================
 -- BUSES
@@ -821,6 +829,60 @@ CREATE TABLE IF NOT EXISTS attendance (
 );
 
 -- ============================================================
+-- STAFF ATTENDANCE (employee QR clock-in/out) — migration 063
+-- A SEPARATE domain from the STUDENT `attendance` table above. work_date is
+-- the school-LOCAL date (computed from schools.timezone). One row per
+-- (school,employee,work_date); the toggle resolves in vs out from the open row.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS staff_attendance (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  work_date DATE NOT NULL,
+  check_in_at TIMESTAMPTZ,
+  check_in_lat DOUBLE PRECISION,
+  check_in_lng DOUBLE PRECISION,
+  check_in_method TEXT DEFAULT 'qr',
+  check_out_at TIMESTAMPTZ,
+  check_out_lat DOUBLE PRECISION,
+  check_out_lng DOUBLE PRECISION,
+  check_out_method TEXT,
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','closed','auto_closed')),
+  is_late BOOLEAN NOT NULL DEFAULT FALSE,
+  flagged BOOLEAN NOT NULL DEFAULT FALSE,
+  flag_reason TEXT,
+  corrected_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  corrected_at TIMESTAMPTZ,
+  correction_note TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(school_id, user_id, work_date)
+);
+CREATE INDEX IF NOT EXISTS idx_staff_attendance_school_date
+  ON staff_attendance(school_id, work_date DESC);
+CREATE INDEX IF NOT EXISTS idx_staff_attendance_user
+  ON staff_attendance(user_id, work_date DESC);
+CREATE INDEX IF NOT EXISTS idx_staff_attendance_open
+  ON staff_attendance(school_id) WHERE status = 'open';
+
+-- Lightweight admin leave marker (Phase 1). Full request→approval = Phase 2.
+CREATE TABLE IF NOT EXISTS staff_leave (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  start_date DATE NOT NULL,
+  end_date DATE NOT NULL,
+  leave_type TEXT NOT NULL DEFAULT 'other',
+  note TEXT,
+  created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT staff_leave_dates_ok CHECK (end_date >= start_date)
+);
+CREATE INDEX IF NOT EXISTS idx_staff_leave_school
+  ON staff_leave(school_id, start_date, end_date);
+CREATE INDEX IF NOT EXISTS idx_staff_leave_user
+  ON staff_leave(user_id, start_date, end_date);
+
+-- ============================================================
 -- PASSWORD RESET REQUESTS
 -- ============================================================
 CREATE TABLE IF NOT EXISTS password_reset_requests (
@@ -1410,7 +1472,9 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     -- Migration 058 — admin capability/clearance grants
     'admin_clearance',
     -- Migration 060 — per-term grade filing window set/clear
-    'grade_filing_window'
+    'grade_filing_window',
+    -- Migration 063 — staff (employee) QR attendance corrections + leave
+    'staff_attendance','staff_leave'
   )),
   entity_id UUID NOT NULL,
   action TEXT NOT NULL CHECK (action IN ('create','update','delete')),

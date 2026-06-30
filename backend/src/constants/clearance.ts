@@ -27,6 +27,7 @@ export const CAPABILITIES = [
   'audit.read',            // audit log (IT)
   'settings.manage',       // school settings, logo, academic-year transition (IT)
   'announcements.moderate',// post/delete announcements + notifications
+  'staff_attendance.manage',// employee QR attendance: settings, board, review, corrections, leave
 ] as const;
 
 export type Capability = (typeof CAPABILITIES)[number];
@@ -56,6 +57,7 @@ export const PRESETS = {
     capabilities: [
       'enrollment.read', 'students.manage', 'staff.manage',
       'academics.oversee', 'transfers.manage', 'announcements.moderate',
+      'staff_attendance.manage',
     ] as Capability[],
   },
   it: {

@@ -10,7 +10,7 @@ import { isCapability } from '../constants/clearance';
 export interface AuthPayload {
   userId: string;
   schoolId: string;
-  role: 'parent' | 'teacher' | 'admin' | 'driver' | 'supervisor' | 'reception' | 'accountant';
+  role: 'parent' | 'teacher' | 'admin' | 'driver' | 'supervisor' | 'reception' | 'accountant' | 'staff';
   username: string;
   featuresVersion?: number;
 }

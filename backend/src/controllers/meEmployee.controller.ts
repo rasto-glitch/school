@@ -48,7 +48,10 @@ async function resolveMyOwner(req: AuthRequest): Promise<MyOwner | { error: stri
       if (!data) return { error: 'No driver record linked to this user', status: 404 };
       return { ownerType: 'drivers', ownerId: data.id };
     }
-    case 'supervisor': case 'admin': case 'reception': case 'accountant':
+    // Account-only roles (no dedicated profile table) keep their HR record on
+    // `users` (migration 024). The generic 'staff' role (migration 063) is the
+    // same shape, so it resolves here too.
+    case 'supervisor': case 'admin': case 'reception': case 'accountant': case 'staff':
       return { ownerType: 'users', ownerId: userId };
   }
 }

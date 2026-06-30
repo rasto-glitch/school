@@ -59,7 +59,10 @@ export type AuditEntityType =
   // Phase A — admin capability/clearance grants (migration 058)
   | 'admin_clearance'
   // Per-term grade filing window set/clear (migration 060)
-  | 'grade_filing_window';
+  | 'grade_filing_window'
+  // Staff (employee) QR attendance — settings/corrections + leave (migration 063)
+  | 'staff_attendance'
+  | 'staff_leave';
 
 interface LogParams {
   req: AuthRequest;

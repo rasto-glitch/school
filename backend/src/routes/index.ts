@@ -42,6 +42,7 @@ import { authenticate, authorize, authorizeCapability, authorizeAnyCapability } 
 import type { AuthRequest } from '../middleware/auth';
 import * as clearance from '../controllers/clearance.controller';
 import * as attention from '../controllers/attention.controller';
+import * as staffAttendance from '../controllers/staffAttendance.controller';
 import { validate } from '../middleware/validate';
 import * as v from '../validators/auth';
 import * as va from '../validators/accounting';
@@ -858,6 +859,16 @@ export function createRouter(io: SocketServer) {
   router.post('/driver/location', authenticate, authorize('driver'), validate({ body: vp.updateLocationSchema }), (req: Request, res: Response) => driver.updateLocation(req as AuthRequest, res, io));
   router.post('/driver/start', authenticate, authorize('driver'), validate({ body: vp.startDriveSchema }), (req, res) => driver.startDrive(req as AuthRequest, res));
   router.post('/driver/stop', authenticate, authorize('driver'), (req: Request, res: Response) => driver.stopDrive(req as AuthRequest, res, io));
+
+  // ---- STAFF (EMPLOYEE) QR ATTENDANCE (migration 063) ----
+  // Reception displays the rotating QR; every employee role scans it on mobile.
+  // Management (board/review/corrections/leave/dashboard card) lands in Phase 4/5.
+  const clockingRoles = ['teacher', 'supervisor', 'admin', 'accountant', 'reception', 'driver', 'staff'] as const;
+  router.get('/staff-attendance/kiosk-token', authenticate, authorize('reception'), (req, res) => staffAttendance.getKioskToken(req as AuthRequest, res));
+  router.post('/staff-attendance/scan', authenticate, authorize(...clockingRoles), validate({ body: vp.staffAttendanceScanSchema }), (req, res) => staffAttendance.scan(req as AuthRequest, res));
+  router.get('/staff-attendance/me', authenticate, authorize(...clockingRoles), (req, res) => staffAttendance.getMyAttendance(req as AuthRequest, res));
+  router.get('/staff-attendance/config', authenticate, authorizeCapability('staff_attendance.manage'), (req, res) => staffAttendance.getConfig(req as AuthRequest, res));
+  router.put('/staff-attendance/config', authenticate, authorizeCapability('staff_attendance.manage'), validate({ body: vp.updateStaffAttendanceConfigSchema }), (req, res) => staffAttendance.updateConfig(req as AuthRequest, res));
 
   // ---- SHARED NOTIFICATIONS (all roles) ----
   router.get('/notifications', authenticate, validate({ query: vq.listQuery }), (req, res) => parent.getNotifications(req as AuthRequest, res));

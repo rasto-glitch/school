@@ -17,6 +17,7 @@ export const CAPABILITIES = [
   'audit.read',
   'settings.manage',
   'announcements.moderate',
+  'staff_attendance.manage',
 ] as const;
 
 export type Capability = (typeof CAPABILITIES)[number];
@@ -37,6 +38,7 @@ export const CAPABILITY_META: CapabilityMeta[] = [
   { key: 'academics.oversee',     group: 'operations', label: 'Oversee academics',     description: 'Grade release, schedule, terms, weekly summaries.' },
   { key: 'transfers.manage',      group: 'operations', label: 'Manage transfers',      description: 'Outgoing and incoming student transfers.' },
   { key: 'announcements.moderate',group: 'operations', label: 'Announcements',         description: 'Post and delete announcements and notifications.' },
+  { key: 'staff_attendance.manage',group: 'operations', label: 'Staff attendance',      description: 'Employee QR attendance: settings, board, review, corrections, leave.' },
   { key: 'hr.read',               group: 'hr',         label: 'Read HR / PII',         description: 'View decrypted PII and high-sensitivity documents.' },
   { key: 'hr.manage',             group: 'hr',         label: 'Manage HR',             description: 'HR records, documents, policies and HR grants.' },
   { key: 'accounts.manage',       group: 'it',         label: 'Manage accounts',       description: 'Login accounts, credentials, resets, MFA override.' },
@@ -55,7 +57,7 @@ export const GROUP_LABELS: Record<CapabilityMeta['group'], string> = {
 // Preset bundles (combinable). Owner is special — it sets the owner bit
 // rather than a list — so it's not a togglable bundle here.
 export const PRESET_BUNDLES: { key: 'operations' | 'it' | 'hr'; label: string; capabilities: Capability[] }[] = [
-  { key: 'operations', label: 'Operations', capabilities: ['enrollment.read', 'students.manage', 'staff.manage', 'academics.oversee', 'transfers.manage', 'announcements.moderate'] },
+  { key: 'operations', label: 'Operations', capabilities: ['enrollment.read', 'students.manage', 'staff.manage', 'academics.oversee', 'transfers.manage', 'announcements.moderate', 'staff_attendance.manage'] },
   { key: 'it',         label: 'IT',         capabilities: ['accounts.manage', 'audit.read', 'settings.manage'] },
   { key: 'hr',         label: 'HR',         capabilities: ['staff.manage', 'hr.read', 'hr.manage'] },
 ];

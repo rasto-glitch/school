@@ -155,6 +155,38 @@ export const startDriveSchema = z.object({
   })).max(1000).optional(),
 });
 
+// ── Staff (employee) QR attendance (migration 063) ─────────────────────────
+// Scan: the rotating kiosk token + the device's GPS fix. The controller re-
+// validates the token signature/window, geofence and toggle.
+export const staffAttendanceScanSchema = z.object({
+  token: z.string().trim().min(1).max(512),
+  latitude: z.number().min(-90).max(90),
+  longitude: z.number().min(-180).max(180),
+  // Reported GPS accuracy radius (m), optional — kept for future last-known fallback.
+  accuracyMeters: z.number().nonnegative().max(100_000).optional(),
+});
+
+// "HH:MM" 24-hour clock.
+const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Expected time as HH:MM');
+// Admin config: enable toggle, map pin + radius, school-wide schedule. Every
+// field optional; the controller 400s if nothing was supplied.
+export const updateStaffAttendanceConfigSchema = z.object({
+  enabled: z.boolean().optional(),
+  geofence: z.object({
+    lat: z.number().min(-90).max(90),
+    lng: z.number().min(-180).max(180),
+    radiusMeters: z.number().min(50).max(5000).optional(),
+  }).optional(),
+  schedule: z.object({
+    startTime: hhmm,
+    endTime: hhmm,
+    lateGraceMinutes: z.number().int().min(0).max(180),
+  }).optional(),
+}).refine(
+  d => d.enabled !== undefined || d.geofence !== undefined || d.schedule !== undefined,
+  { message: 'Nothing to update' },
+);
+
 // ── Admin: students / classes / subjects / curriculum ──────────────────
 const studentBase = {
   fullName: nonEmptyStr(200),

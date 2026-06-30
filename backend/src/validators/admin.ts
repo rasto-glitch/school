@@ -10,7 +10,7 @@ import { strongPasswordSchema } from '../utils/passwordPolicy';
 // controller's existing semantic rules (username prefix, archive
 // linking, school scoping) untouched.
 
-const role = z.enum(['parent', 'teacher', 'admin', 'driver', 'supervisor', 'reception', 'accountant']);
+const role = z.enum(['parent', 'teacher', 'admin', 'driver', 'supervisor', 'reception', 'accountant', 'staff']);
 // Any password the admin types must satisfy the policy (utils/passwordPolicy.ts).
 // Auto-generated defaults (Parent@123 / Teacher@123 / Driver@123 / restore-temp)
 // are constructed in the controller and don't pass through this schema.

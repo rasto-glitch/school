@@ -19,7 +19,8 @@ export type DefaultPasswordRole =
   | 'driver'
   | 'supervisor'
   | 'accountant'
-  | 'reception';
+  | 'reception'
+  | 'staff';
 
 const DEFAULTS: Record<DefaultPasswordRole, string> = {
   parent:     'Parent@123',
@@ -28,6 +29,7 @@ const DEFAULTS: Record<DefaultPasswordRole, string> = {
   supervisor: 'Supervisor@123',
   accountant: 'Accountant@123',
   reception:  'Reception@123',
+  staff:      'Staff@123',
 };
 
 export function defaultPasswordFor(role: DefaultPasswordRole): string {
