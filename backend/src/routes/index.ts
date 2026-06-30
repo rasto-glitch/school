@@ -870,6 +870,20 @@ export function createRouter(io: SocketServer) {
   router.get('/staff-attendance/config', authenticate, authorizeCapability('staff_attendance.manage'), (req, res) => staffAttendance.getConfig(req as AuthRequest, res));
   router.put('/staff-attendance/config', authenticate, authorizeCapability('staff_attendance.manage'), validate({ body: vp.updateStaffAttendanceConfigSchema }), (req, res) => staffAttendance.updateConfig(req as AuthRequest, res));
 
+  // Phase 4 — admin management (capability `staff_attendance.manage`, premium-gated
+  // in the controller). Board / review / corrections / leave / CSV export.
+  const attManage = authorizeCapability('staff_attendance.manage');
+  router.get('/staff-attendance/employees', authenticate, attManage, (req, res) => staffAttendance.getEmployees(req as AuthRequest, res));
+  router.get('/staff-attendance/board', authenticate, attManage, validate({ query: vp.staffAttendanceBoardQuery }), (req, res) => staffAttendance.getBoard(req as AuthRequest, res));
+  router.get('/staff-attendance/summary', authenticate, attManage, validate({ query: vp.staffAttendanceBoardQuery }), (req, res) => staffAttendance.getSummary(req as AuthRequest, res));
+  router.get('/staff-attendance/review', authenticate, attManage, (req, res) => staffAttendance.getReview(req as AuthRequest, res));
+  router.get('/staff-attendance/export', authenticate, attManage, validate({ query: vp.staffAttendanceExportQuery }), (req, res) => staffAttendance.exportCsv(req as AuthRequest, res));
+  router.get('/staff-attendance/leave', authenticate, attManage, validate({ query: vp.staffAttendanceLeaveQuery }), (req, res) => staffAttendance.listLeave(req as AuthRequest, res));
+  router.post('/staff-attendance/leave', authenticate, attManage, validate({ body: vp.staffAttendanceLeaveCreateSchema }), (req, res) => staffAttendance.createLeave(req as AuthRequest, res));
+  router.delete('/staff-attendance/leave/:id', authenticate, attManage, validate({ params: vp.idParam }), (req, res) => staffAttendance.deleteLeave(req as AuthRequest, res));
+  // Keep the `:id` correction route LAST so it can't shadow the named subpaths above.
+  router.patch('/staff-attendance/:id', authenticate, attManage, validate({ params: vp.idParam, body: vp.staffAttendanceCorrectionSchema }), (req, res) => staffAttendance.correct(req as AuthRequest, res));
+
   // ---- SHARED NOTIFICATIONS (all roles) ----
   router.get('/notifications', authenticate, validate({ query: vq.listQuery }), (req, res) => parent.getNotifications(req as AuthRequest, res));
   router.patch('/notifications/:id/read', authenticate, validate({ params: vp.idParam }), (req, res) => parent.markNotificationRead(req as AuthRequest, res));

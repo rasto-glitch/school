@@ -1281,6 +1281,45 @@ export const receptionApi = {
   getKioskToken: () => api.get('/staff-attendance/kiosk-token'),
 };
 
+// ---- STAFF (EMPLOYEE) ATTENDANCE — admin management (Phase 4) ----
+// Premium (platform-provisioned) + capability `staff_attendance.manage`. The
+// settings PUT 403s NOT_PROVISIONED if the school isn't on the plan; the page
+// only renders for an admin holding the capability on a provisioned school.
+export const staffAttendanceApi = {
+  // Active employee roster — the leave-add picker.
+  getEmployees: () => api.get('/staff-attendance/employees'),
+  // Day board: present / late / absent / on-leave for a date (default today).
+  getBoard: (date?: string) => api.get('/staff-attendance/board', { params: date ? { date } : {} }),
+  // Lean counts + who's late, for the admin dashboard card (live via socket).
+  getSummary: (date?: string) => api.get('/staff-attendance/summary', { params: date ? { date } : {} }),
+  // Flagged / auto-closed rows awaiting review.
+  getReview: () => api.get('/staff-attendance/review'),
+  // Manual correction of a punch (note is mandatory; sends only changed fields).
+  correct: (id: string, data: {
+    checkInAt?: string | null;
+    checkOutAt?: string | null;
+    status?: 'open' | 'closed' | 'auto_closed';
+    isLate?: boolean;
+    resolveFlag?: boolean;
+    note: string;
+  }) => api.patch(`/staff-attendance/${id}`, data),
+  // Leave markers — current+future by default, or a date window via from/to.
+  getLeave: (from?: string, to?: string) =>
+    api.get('/staff-attendance/leave', { params: { ...(from ? { from } : {}), ...(to ? { to } : {}) } }),
+  createLeave: (data: { userId: string; startDate: string; endDate: string; leaveType: string; note?: string | null }) =>
+    api.post('/staff-attendance/leave', data),
+  deleteLeave: (id: string) => api.delete(`/staff-attendance/leave/${id}`),
+  // Pin + schedule settings (no enable toggle — the feature is provisioned).
+  getConfig: () => api.get('/staff-attendance/config'),
+  updateConfig: (data: {
+    geofence?: { lat: number; lng: number; radiusMeters?: number };
+    schedule?: { startTime: string; endTime: string; lateGraceMinutes: number };
+  }) => api.put('/staff-attendance/config', data),
+  // CSV export of attendance rows in a date range (returns a blob).
+  exportCsv: (from: string, to: string) =>
+    api.get('/staff-attendance/export', { params: { from, to }, responseType: 'blob' }),
+};
+
 // ---- CHAT ----
 export const chatApi = {
   getContacts: () => api.get('/chat/contacts'),

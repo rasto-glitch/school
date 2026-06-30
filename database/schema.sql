@@ -871,7 +871,10 @@ CREATE TABLE IF NOT EXISTS staff_leave (
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   start_date DATE NOT NULL,
   end_date DATE NOT NULL,
-  leave_type TEXT NOT NULL DEFAULT 'other',
+  -- Migration 064 — closed vocabulary ('official' = school-sanctioned duty
+  -- leave, e.g. training/conference).
+  leave_type TEXT NOT NULL DEFAULT 'other'
+    CHECK (leave_type IN ('sick','vacation','personal','unpaid','official','other')),
   note TEXT,
   created_by UUID REFERENCES users(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

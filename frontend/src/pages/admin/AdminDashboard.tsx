@@ -1,14 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import {
   GraduationCap, Users, Bus, Wallet, TrendingUp,
   ClipboardX, FileWarning, FileCheck, FileClock, CalendarClock, CalendarDays,
-  UserPlus, ShieldAlert, Loader2, Check,
+  UserPlus, ShieldAlert, Loader2, Check, ClipboardCheck, Clock,
 } from 'lucide-react';
-import { adminApi } from '../../services/api';
+import { adminApi, staffAttendanceApi } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
+import { useSocketStore } from '../../store/socketStore';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
 import SetGradeWindowModal from '../../components/admin/SetGradeWindowModal';
@@ -51,6 +52,13 @@ interface AttendanceGap {
   lastNotifiedAt: string | null;
 }
 interface AccountReq { total: number; byRole: Record<string, number> }
+interface StaffAttSummary {
+  date: string;
+  isWorkingDay: boolean;
+  counts: { total: number; present: number; late: number; absent: number; onLeave: number };
+  late: { userId: string; name: string; role: string; jobTitle: string | null; checkInAt: string | null }[];
+  serverConfigured: boolean;
+}
 interface FailedLogins {
   alert: boolean;
   username?: string;
@@ -78,6 +86,12 @@ function ago(iso?: string): string {
   return `${Math.floor(h / 24)}d`;
 }
 
+// Local clock time "HH:MM" (24h) for a timestamp — staff check-in times.
+function hm(iso: string | null): string {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
 // True when an action was last fired within the server's 3h cooldown — used to
 // pre-disable the Notify/Remind buttons with a "done" state on load.
 function withinCooldown(iso?: string | null): boolean {
@@ -87,13 +101,18 @@ function withinCooldown(iso?: string | null): boolean {
 
 export default function AdminDashboard() {
   const { t, i18n } = useTranslation();
-  const { user } = useAuthStore();
+  const { user, school } = useAuthStore();
+  const { socket } = useSocketStore();
   const navigate = useNavigate();
 
   // Owner sees all; missing clearance (legacy session) also falls back to all
   // since the server re-enforces every route anyway.
   const clearance = user?.clearance;
   const has = (cap: string) => !clearance || clearance.isOwner || clearance.capabilities.includes(cap);
+
+  // Staff-attendance card: admin-only, premium (platform-provisioned, default-off
+  // via `=== true`) + capability-gated. Supervisors never see it.
+  const showStaffAtt = has('staff_attendance.manage') && school?.features?.staff_attendance === true;
 
   const [students, setStudents] = useState({ total: 0, newThisMonth: 0 });
   const [staff, setStaff] = useState({ teachers: 0, drivers: 0 });
@@ -102,6 +121,7 @@ export default function AdminDashboard() {
   const [attendanceGap, setAttendanceGap] = useState<AttendanceGap | null>(null);
   const [accountReq, setAccountReq] = useState<AccountReq | null>(null);
   const [failedLogins, setFailedLogins] = useState<FailedLogins | null>(null);
+  const [staffAtt, setStaffAtt] = useState<StaffAttSummary | null>(null);
   const [finance, setFinance] = useState<FinanceOverview | null>(null);
   const [audit, setAudit] = useState<AuditLog[]>([]);
 
@@ -167,10 +187,36 @@ export default function AdminDashboard() {
         setAudit((a?.data?.logs ?? []) as AuditLog[]);
         if (fl?.data) setFailedLogins(fl.data as FailedLogins);
       }
+      if (showStaffAtt) {
+        const sa = await safe(staffAttendanceApi.getSummary());
+        if (sa?.data) setStaffAtt(sa.data as StaffAttSummary);
+      }
     };
     void run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Live refresh of the staff-attendance card. Every check-in/out/correction
+  // emits `staff_attendance:update` to the admins room; debounce a refetch so a
+  // burst of scans at the door collapses into one request.
+  const saTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loadStaffAtt = useCallback(() => {
+    staffAttendanceApi.getSummary()
+      .then(r => setStaffAtt(r.data as StaffAttSummary))
+      .catch(() => {});
+  }, []);
+  useEffect(() => {
+    if (!showStaffAtt || !socket) return;
+    const onUpdate = () => {
+      if (saTimer.current) clearTimeout(saTimer.current);
+      saTimer.current = setTimeout(loadStaffAtt, 1500);
+    };
+    socket.on('staff_attendance:update', onUpdate);
+    return () => {
+      socket.off('staff_attendance:update', onUpdate);
+      if (saTimer.current) clearTimeout(saTimer.current);
+    };
+  }, [showStaffAtt, socket, loadStaffAtt]);
 
   // Fire a Notify/Remind action, with toast + busy/done state.
   const runAction = async (key: string, fn: () => Promise<unknown>) => {
@@ -393,6 +439,50 @@ export default function AdminDashboard() {
                 : <div key={k.key}>{Inner}</div>;
             })}
           </div>
+        )}
+
+        {/* Staff attendance (admin-only, premium + capability-gated; live via socket) */}
+        {showStaffAtt && staffAtt && (
+          <Card>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-semibold text-gray-900 flex items-center gap-2">
+                <ClipboardCheck className="w-4 h-4 text-primary-600" />
+                {t('staff_attendance.card.title', 'Staff attendance')}
+                <span className="text-xs font-normal text-gray-400">· {t('common.today', 'Today')}</span>
+              </h2>
+              <button onClick={() => navigate('/admin/attendance')} className="text-xs font-medium text-primary-600 hover:text-primary-700">
+                {t('staff_attendance.card.view', 'View board')}
+              </button>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {[
+                { label: t('staff_attendance.card.present', 'Present'), value: staffAtt.counts.present, cls: 'text-green-600' },
+                { label: t('staff_attendance.card.late', 'Late'), value: staffAtt.counts.late, cls: 'text-amber-600' },
+                { label: t('staff_attendance.card.absent', 'Absent'), value: staffAtt.isWorkingDay ? staffAtt.counts.absent : 0, cls: 'text-red-600' },
+                { label: t('staff_attendance.card.on_leave', 'On leave'), value: staffAtt.counts.onLeave, cls: 'text-blue-600' },
+              ].map(s => (
+                <div key={s.label} className="rounded-xl bg-gray-50 px-3 py-2">
+                  <p className={`text-2xl font-bold ${s.cls}`}>{s.value}</p>
+                  <p className="text-xs text-gray-500">{s.label}</p>
+                </div>
+              ))}
+            </div>
+            {!staffAtt.isWorkingDay ? (
+              <p className="text-xs text-gray-400 mt-3">{t('staff_attendance.card.non_working_day', 'Non-working day')}</p>
+            ) : staffAtt.late.length > 0 && (
+              <div className="mt-3 flex items-start gap-2 text-sm">
+                <Clock className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                <p className="text-gray-600">
+                  <span className="font-medium text-gray-800">{t('staff_attendance.card.late_label', 'Late')}:</span>{' '}
+                  {staffAtt.late.slice(0, 5).map(l => `${l.name} (${hm(l.checkInAt)})`).join(', ')}
+                  {staffAtt.late.length > 5 && t('staff_attendance.card.plus_more', { count: staffAtt.late.length - 5, defaultValue: ' +{{count}} more' })}
+                </p>
+              </div>
+            )}
+            {!staffAtt.serverConfigured && (
+              <p className="text-xs text-amber-600 mt-3">{t('staff_attendance.card.server_unconfigured', 'Scanning is disabled until the platform sets the QR secret.')}</p>
+            )}
+          </Card>
         )}
 
         <div className={`grid grid-cols-1 gap-4 ${hasRightRail ? 'lg:grid-cols-3' : ''}`}>

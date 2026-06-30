@@ -101,6 +101,8 @@ const adminNav: AdminNavNode[] = [
     ],
   },
   { kind: 'leaf', path: '/admin/drivers', icon: Bus, labelKey: 'nav.drivers', labelFallback: 'Drivers', feature: 'bus_tracking', capabilities: ['staff.manage'] },
+  // Premium (platform-provisioned, in PREMIUM_FEATURES) + capability-gated.
+  { kind: 'leaf', path: '/admin/attendance', icon: ClipboardCheck, labelKey: 'nav.staff_attendance', labelFallback: 'Staff Attendance', feature: 'staff_attendance', capabilities: ['staff_attendance.manage'] },
   {
     kind: 'group', key: 'hr', icon: ClipboardCheck,
     labelKey: 'nav.hr', labelFallback: 'HR',

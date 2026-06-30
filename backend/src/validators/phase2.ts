@@ -188,6 +188,51 @@ export const updateStaffAttendanceConfigSchema = z.object({
   { message: 'Nothing to update' },
 );
 
+// ── Staff attendance management (Phase 4 — admin `staff_attendance.manage`) ──
+const leaveType = z.enum(['sick', 'vacation', 'personal', 'unpaid', 'official', 'other']);
+// ISO-8601 instant (what new Date().toISOString() emits); accept an explicit
+// offset too. `null` clears the timestamp in a correction.
+const isoInstant = z.string().datetime({ offset: true });
+
+// GET /staff-attendance/board?date=
+export const staffAttendanceBoardQuery = z.object({ date: isoDate.optional() });
+
+// GET /staff-attendance/leave?from=&to=  (both optional; controller defaults to current+future)
+export const staffAttendanceLeaveQuery = z.object({
+  from: isoDate.optional(),
+  to: isoDate.optional(),
+});
+
+// GET /staff-attendance/export?from=&to=  (both required — bounded range)
+export const staffAttendanceExportQuery = z.object({
+  from: isoDate,
+  to: isoDate,
+}).refine(d => d.to >= d.from, { message: 'to must be on or after from' });
+
+// PATCH /staff-attendance/:id — manual correction. `note` is mandatory (audit
+// trail); at least one actual change must accompany it.
+export const staffAttendanceCorrectionSchema = z.object({
+  checkInAt: z.union([isoInstant, z.null()]).optional(),
+  checkOutAt: z.union([isoInstant, z.null()]).optional(),
+  status: z.enum(['open', 'closed', 'auto_closed']).optional(),
+  isLate: z.boolean().optional(),
+  resolveFlag: z.boolean().optional(),
+  note: nonEmptyStr(1000),
+}).refine(
+  d => d.checkInAt !== undefined || d.checkOutAt !== undefined
+    || d.status !== undefined || d.isLate !== undefined || d.resolveFlag !== undefined,
+  { message: 'No correction fields supplied' },
+);
+
+// POST /staff-attendance/leave
+export const staffAttendanceLeaveCreateSchema = z.object({
+  userId: uuid,
+  startDate: isoDate,
+  endDate: isoDate,
+  leaveType,
+  note: optText(1000),
+}).refine(d => d.endDate >= d.startDate, { message: 'End date must be on or after the start date' });
+
 // ── Admin: students / classes / subjects / curriculum ──────────────────
 const studentBase = {
   fullName: nonEmptyStr(200),
