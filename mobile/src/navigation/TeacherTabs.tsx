@@ -4,7 +4,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { Users, Bell, User, MessageSquare, Settings } from 'lucide-react-native';
+import { Users, Bell, User, MessageSquare, Settings, Clock } from 'lucide-react-native';
 import HouseIcon from '../components/HouseIcon';
 import CalendarCheckIcon from '../components/CalendarCheckIcon';
 import BookOpenIcon from '../components/BookOpenIcon';
@@ -19,6 +19,7 @@ import TeacherAttendanceScreen from '../screens/teacher/TeacherAttendanceScreen'
 import TeacherContentScreen from '../screens/teacher/TeacherContentScreen';
 import TeacherStudentsScreen from '../screens/teacher/TeacherStudentsScreen';
 import TeacherMeScreen from '../screens/teacher/TeacherMeScreen';
+import StaffAttendanceScreen from '../screens/staff/StaffAttendanceScreen';
 import ChatListScreen from '../screens/chat/ChatListScreen';
 
 function TabBadge({ count }: { count: number }) {
@@ -42,6 +43,7 @@ export default function TeacherTabs() {
   const navigation = useNavigation<any>();
   const { school } = useAuthStore();
   const feat = (key: string) => school?.features?.[key] !== false;
+  const showClockIn = school?.features?.staff_attendance === true;
   const { socket } = useSocketStore();
   const { width: screenWidth } = useWindowDimensions();
   const [activeIndex, setActiveIndex] = useState(0);
@@ -51,6 +53,7 @@ export default function TeacherTabs() {
   const tabCount = 3
     + (feat('attendance') ? 1 : 0)
     + (feat('chat') ? 1 : 0)
+    + (showClockIn ? 1 : 0)
     + 1;
 
   useEffect(() => {
@@ -204,7 +207,7 @@ export default function TeacherTabs() {
           name="TeacherContent"
           component={TeacherContentScreen}
           options={{
-            tabBarLabel: 'Content',
+            tabBarLabel: t('nav.content', 'Content'),
             tabBarIcon: ({ color, focused }) => <BookOpenIcon size={ICON_SIZE} color={color} fillColor={focused ? activeFill : 'none'} />,
           }}
         />
@@ -233,6 +236,17 @@ export default function TeacherTabs() {
                   <TabBadge count={chatCount} />
                 </View>
               ),
+            }}
+          />
+        ) : null}
+        {showClockIn ? (
+          <Tab.Screen
+            name="TeacherClockIn"
+            component={StaffAttendanceScreen}
+            initialParams={{ embedded: true }}
+            options={{
+              tabBarLabel: t('nav.clock_in', 'Clock In'),
+              tabBarIcon: ({ color, focused }) => <Clock size={ICON_SIZE} color={color} fill={focused ? activeFill : 'transparent'} />,
             }}
           />
         ) : null}

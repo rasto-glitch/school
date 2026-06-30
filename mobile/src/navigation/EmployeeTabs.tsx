@@ -1,36 +1,26 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated, useWindowDimensions } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { View, StyleSheet, TouchableOpacity, Animated, useWindowDimensions } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { Calendar, User, Settings, Clock } from 'lucide-react-native';
-import HouseIcon from '../components/HouseIcon';
+import { Clock, User, Settings } from 'lucide-react-native';
 import HeaderBrand from '../components/HeaderBrand';
 import { makeSlideTransition } from './tabSlide';
 import { useColors, useIsDark } from '../store/themeStore';
-import { receptionApi } from '../services/api';
-import ReceptionDashboardScreen from '../screens/reception/ReceptionDashboardScreen';
-import ReceptionAppointmentsScreen from '../screens/reception/ReceptionAppointmentsScreen';
-import ReceptionMeScreen from '../screens/reception/ReceptionMeScreen';
 import StaffAttendanceScreen from '../screens/staff/StaffAttendanceScreen';
-import { useAuthStore } from '../store/authStore';
+import EmployeeMeScreen from '../screens/staff/EmployeeMeScreen';
 
+// Minimal tab app for roles whose ONLY mobile purpose is clocking in/out:
+// admin, accountant, staff. Two fixed tabs — Clock In + Me. The Clock In screen
+// itself handles the staff_attendance-off case, so the tab is always present.
 const Tab = createBottomTabNavigator();
 
 const ICON_SIZE = 22;
 const INDICATOR_WIDTH = 32;
+const TAB_COUNT = 2;
 
-function TabBadge({ count }: { count: number }) {
-  if (count <= 0) return null;
-  return (
-    <View style={styles.badge}>
-      <Text style={styles.badgeText}>{count > 99 ? '99+' : count}</Text>
-    </View>
-  );
-}
-
-export default function ReceptionTabs() {
+export default function EmployeeTabs() {
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const colors = useColors();
@@ -39,26 +29,13 @@ export default function ReceptionTabs() {
   const { width: screenWidth } = useWindowDimensions();
   const [activeIndex, setActiveIndex] = useState(0);
   const indicatorX = useRef(new Animated.Value(0)).current;
-  const { school } = useAuthStore();
-  const showClockIn = school?.features?.staff_attendance === true;
-  const tabCount = 3 + (showClockIn ? 1 : 0);
-
-  const [pendingCount, setPendingCount] = useState(0);
-  const fetchPending = useCallback(() => {
-    receptionApi.getPendingAppointmentCount().then(r => setPendingCount(r.data?.count ?? 0)).catch(() => {});
-  }, []);
-  useEffect(() => {
-    fetchPending();
-    const interval = setInterval(fetchPending, 60000);
-    return () => clearInterval(interval);
-  }, [fetchPending]);
 
   useEffect(() => {
     if (!screenWidth) return;
-    const tabW = screenWidth / tabCount;
+    const tabW = screenWidth / TAB_COUNT;
     const target = activeIndex * tabW + (tabW - INDICATOR_WIDTH) / 2;
     Animated.spring(indicatorX, { toValue: target, useNativeDriver: true, tension: 140, friction: 16 }).start();
-  }, [activeIndex, screenWidth, tabCount, indicatorX]);
+  }, [activeIndex, screenWidth, indicatorX]);
 
   const headerIconBg = isDark ? 'rgba(255,255,255,0.12)' : colors.primaryLight;
   const headerIconColor = isDark ? '#FFFFFF' : colors.primary;
@@ -66,7 +43,7 @@ export default function ReceptionTabs() {
 
   const SettingsButton = () => (
     <TouchableOpacity
-      onPress={() => navigation.navigate('ReceptionSettings')}
+      onPress={() => navigation.navigate('EmployeeSettings')}
       style={[styles.headerBtn, { backgroundColor: headerIconBg }]}
       activeOpacity={0.7}
     >
@@ -81,10 +58,7 @@ export default function ReceptionTabs() {
         screenListeners={{
           state: (e) => {
             const s: any = (e.data as any)?.state;
-            if (s && typeof s.index === 'number') {
-              setActiveIndex(s.index);
-              if (s.routes?.[s.index]?.name === 'ReceptionAppointments') fetchPending();
-            }
+            if (s && typeof s.index === 'number') setActiveIndex(s.index);
           },
         }}
         screenOptions={{
@@ -105,44 +79,16 @@ export default function ReceptionTabs() {
         }}
       >
         <Tab.Screen
-          name="ReceptionDashboard"
-          component={ReceptionDashboardScreen}
-          options={{ tabBarLabel: t('nav.dashboard'), tabBarIcon: ({ color, focused }) => (
-            <HouseIcon
-              size={ICON_SIZE}
-              color={color}
-              fillColor={focused ? activeFill : 'none'}
-              doorColor={focused ? (isDark ? '#000000' : colors.card) : 'none'}
-            />
-          ) }}
-        />
-        <Tab.Screen
-          name="ReceptionAppointments"
-          component={ReceptionAppointmentsScreen}
-          listeners={{ tabPress: () => fetchPending() }}
+          name="EmployeeAttendance"
+          component={StaffAttendanceScreen}
           options={{
-            tabBarLabel: t('nav.appointments'),
-            tabBarIcon: ({ color, focused }) => (
-              <View>
-                <Calendar size={ICON_SIZE} color={color} fill={focused ? activeFill : 'transparent'} />
-                <TabBadge count={pendingCount} />
-              </View>
-            ),
+            tabBarLabel: t('nav.clock_in', 'Clock In'),
+            tabBarIcon: ({ color, focused }) => <Clock size={ICON_SIZE} color={color} fill={focused ? activeFill : 'transparent'} />,
           }}
         />
-        {showClockIn ? (
-          <Tab.Screen
-            name="ReceptionClockIn"
-            component={StaffAttendanceScreen}
-            options={{
-              tabBarLabel: t('nav.clock_in', 'Clock In'),
-              tabBarIcon: ({ color, focused }) => <Clock size={ICON_SIZE} color={color} fill={focused ? activeFill : 'transparent'} />,
-            }}
-          />
-        ) : null}
         <Tab.Screen
-          name="ReceptionMe"
-          component={ReceptionMeScreen}
+          name="EmployeeMe"
+          component={EmployeeMeScreen}
           options={{
             tabBarLabel: t('nav.me', 'Me'),
             tabBarIcon: ({ color, focused }) => <User size={ICON_SIZE} color={color} fill={focused ? activeFill : 'transparent'} />,
@@ -178,12 +124,4 @@ const styles = StyleSheet.create({
     marginHorizontal: 12,
   },
   activeTopLine: { position: 'absolute', left: 0, width: 32, height: 2, borderRadius: 1 },
-  badge: {
-    position: 'absolute', top: -4, right: -6,
-    minWidth: 16, height: 16, borderRadius: 8,
-    backgroundColor: '#EF4444',
-    alignItems: 'center', justifyContent: 'center',
-    paddingHorizontal: 3,
-  },
-  badgeText: { fontSize: 9, fontWeight: '800', color: '#fff' },
 });

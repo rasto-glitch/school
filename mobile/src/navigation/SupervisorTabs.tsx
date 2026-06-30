@@ -4,7 +4,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { Users, User, MessageSquare, Settings } from 'lucide-react-native';
+import { Users, User, MessageSquare, Settings, Clock } from 'lucide-react-native';
 import HouseIcon from '../components/HouseIcon';
 import CalendarCheckIcon from '../components/CalendarCheckIcon';
 import BookOpenIcon from '../components/BookOpenIcon';
@@ -17,6 +17,7 @@ import SupervisorAttendanceScreen from '../screens/supervisor/SupervisorAttendan
 import SupervisorContentScreen from '../screens/supervisor/SupervisorContentScreen';
 import SupervisorStudentsScreen from '../screens/supervisor/SupervisorStudentsScreen';
 import SupervisorMeScreen from '../screens/supervisor/SupervisorMeScreen';
+import StaffAttendanceScreen from '../screens/staff/StaffAttendanceScreen';
 import ChatListScreen from '../screens/chat/ChatListScreen';
 import { chatApi } from '../services/api';
 import { useSocketStore } from '../store/socketStore';
@@ -42,6 +43,7 @@ export default function SupervisorTabs() {
   const navigation = useNavigation<any>();
   const { school } = useAuthStore();
   const feat = (key: string) => school?.features?.[key] !== false;
+  const showClockIn = school?.features?.staff_attendance === true;
   const { socket } = useSocketStore();
   const [chatCount, setChatCount] = useState(0);
   const chatListActive = useRef(false);
@@ -52,6 +54,7 @@ export default function SupervisorTabs() {
   const tabCount = 3
     + (feat('attendance') ? 1 : 0)
     + (feat('chat') ? 1 : 0)
+    + (showClockIn ? 1 : 0)
     + 1; // Me tab
 
   useEffect(() => {
@@ -177,6 +180,16 @@ export default function SupervisorTabs() {
                   <TabBadge count={chatCount} />
                 </View>
               ),
+            }}
+          />
+        ) : null}
+        {showClockIn ? (
+          <Tab.Screen
+            name="SupervisorClockIn"
+            component={StaffAttendanceScreen}
+            options={{
+              tabBarLabel: t('nav.clock_in', 'Clock In'),
+              tabBarIcon: ({ color, focused }) => <Clock size={ICON_SIZE} color={color} fill={focused ? activeFill : 'transparent'} />,
             }}
           />
         ) : null}

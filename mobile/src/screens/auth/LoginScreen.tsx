@@ -13,7 +13,10 @@ import MfaEnrollPanel, { type MfaEnrollSuccessForced } from '../../components/Mf
 import PreLoginLanguageSwitcher from '../../components/PreLoginLanguageSwitcher';
 import { colors, spacing, radius, font, shadow } from '../../theme';
 
-const MOBILE_ROLES = ['parent', 'teacher', 'driver', 'supervisor'];
+// Roles allowed to use the mobile app. reception (full app) + admin/accountant/
+// staff (EmployeeTabs, staff QR attendance) were added in Phase 3; reception had
+// a mobile app since Phase 0 but was missing from this gate.
+const MOBILE_ROLES = ['parent', 'teacher', 'driver', 'supervisor', 'reception', 'admin', 'accountant', 'staff'];
 
 export default function LoginScreen() {
   const { setAuth } = useAuthStore();
@@ -23,9 +26,10 @@ export default function LoginScreen() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  // MFA step. Phase 2 makes teacher + supervisor eligible too, so this
-  // path can land for real mobile users now (admin + accountant are
-  // still web-only; the finalizeLogin role check filters them out).
+  // MFA step. Mobile now serves teacher/supervisor/reception/admin/accountant/
+  // staff (staff QR attendance, Phase 3), so this path can land for any of the
+  // MOBILE_ROLES; the finalizeLogin role check only filters out 'parent'-less
+  // unknowns.
   const [mfaTicket, setMfaTicket] = useState<string | null>(null);
   const [mfaCode, setMfaCode] = useState('');
   const [mfaVerifying, setMfaVerifying] = useState(false);

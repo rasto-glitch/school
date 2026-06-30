@@ -36,6 +36,8 @@ function tabScreenForRole(role?: Role): string {
   if (role === 'supervisor') return 'SupervisorTabs';
   if (role === 'teacher') return 'TeacherTabs';
   if (role === 'driver') return 'DriverTabs';
+  if (role === 'reception') return 'ReceptionTabs';
+  if (role === 'admin' || role === 'accountant' || role === 'staff') return 'EmployeeTabs';
   return 'ParentTabs';
 }
 
@@ -88,20 +90,27 @@ export async function openNotificationTarget(d: NotifDispatch): Promise<void> {
     }
 
     if (role !== 'parent') {
-      if (role === 'teacher' && (d.type === 'salary_due_soon' || d.type === 'salary_paid')) {
-        (navigationRef as any).navigate('TeacherSalary');
+      if (role === 'teacher') {
+        if (d.type === 'salary_due_soon' || d.type === 'salary_paid') {
+          (navigationRef as any).navigate('TeacherSalary');
+          return;
+        }
+        if (d.type === 'announcement' && d.relatedId) {
+          (navigationRef as any).navigate('AnnouncementDetail', { announcementId: d.relatedId });
+          return;
+        }
+        if (d.type === 'post' && d.relatedId) {
+          (navigationRef as any).navigate('PostDetail', { postId: d.relatedId });
+          return;
+        }
+        try { (navigationRef as any).navigate('TeacherNotifications'); } catch {}
         return;
       }
-      if (role === 'teacher' && d.type === 'announcement' && d.relatedId) {
-        (navigationRef as any).navigate('AnnouncementDetail', { announcementId: d.relatedId });
-        return;
-      }
-      if (role === 'teacher' && d.type === 'post' && d.relatedId) {
-        (navigationRef as any).navigate('PostDetail', { postId: d.relatedId });
-        return;
-      }
-      const notifScreen = role === 'teacher' ? 'TeacherNotifications' : 'Notifications';
-      try { (navigationRef as any).navigate(notifScreen); } catch { goTab('Feed'); }
+      // reception → deep-link appointment notifications to their Appointments tab.
+      // admin / accountant / staff (EmployeeTabs) have no in-app notifications
+      // screen, so just opening the app is enough — navigating to the parent-only
+      // 'Notifications' route would throw for these stacks.
+      if (role === 'reception' && d.type === 'appointment') { goTab('ReceptionAppointments'); return; }
       return;
     }
 

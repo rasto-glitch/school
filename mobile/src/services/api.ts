@@ -285,6 +285,16 @@ export const receptionApi = {
   getAssignableAdmins: () => api.get('/reception/assignable-admins'),
 };
 
+// ---- STAFF (EMPLOYEE) QR ATTENDANCE ----
+export const staffAttendanceApi = {
+  // Employee scans the rotating reception QR; server validates token + geofence
+  // + resolves check-in/out from today's open row.
+  scan: (data: { token: string; latitude: number; longitude: number; accuracyMeters?: number }) =>
+    api.post('/staff-attendance/scan', data),
+  // Today's status + recent history for the signed-in employee.
+  getMyAttendance: () => api.get('/staff-attendance/me'),
+};
+
 // ---- FEES (parent) ----
 export const feesApi = {
   getParentFees: () => api.get('/parent/fees'),

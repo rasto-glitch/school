@@ -4,7 +4,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { Navigation, Users, User, Settings } from 'lucide-react-native';
+import { Navigation, Users, User, Settings, Clock } from 'lucide-react-native';
 import HouseIcon from '../components/HouseIcon';
 import HeaderBrand from '../components/HeaderBrand';
 import { makeSlideTransition } from './tabSlide';
@@ -13,12 +13,13 @@ import DriverDashboardScreen from '../screens/driver/DriverDashboardScreen';
 import StartDriveScreen from '../screens/driver/StartDriveScreen';
 import DriverStudentsScreen from '../screens/driver/DriverStudentsScreen';
 import DriverMeScreen from '../screens/driver/DriverMeScreen';
+import StaffAttendanceScreen from '../screens/staff/StaffAttendanceScreen';
+import { useAuthStore } from '../store/authStore';
 
 const Tab = createBottomTabNavigator();
 
 const ICON_SIZE = 22;
 const INDICATOR_WIDTH = 32;
-const TAB_COUNT = 4;
 
 export default function DriverTabs() {
   const { t } = useTranslation();
@@ -29,10 +30,13 @@ export default function DriverTabs() {
   const { width: screenWidth } = useWindowDimensions();
   const [activeIndex, setActiveIndex] = useState(0);
   const indicatorX = useRef(new Animated.Value(0)).current;
+  const { school } = useAuthStore();
+  const showClockIn = school?.features?.staff_attendance === true;
+  const tabCount = 4 + (showClockIn ? 1 : 0);
 
   useEffect(() => {
     if (!screenWidth) return;
-    const tabW = screenWidth / TAB_COUNT;
+    const tabW = screenWidth / tabCount;
     const target = activeIndex * tabW + (tabW - INDICATOR_WIDTH) / 2;
     Animated.spring(indicatorX, {
       toValue: target,
@@ -40,7 +44,7 @@ export default function DriverTabs() {
       tension: 140,
       friction: 16,
     }).start();
-  }, [activeIndex, screenWidth, indicatorX]);
+  }, [activeIndex, screenWidth, tabCount, indicatorX]);
 
   const headerIconBg = isDark ? 'rgba(255,255,255,0.12)' : colors.primaryLight;
   const headerIconColor = isDark ? '#FFFFFF' : colors.primary;
@@ -105,6 +109,16 @@ export default function DriverTabs() {
           component={DriverStudentsScreen}
           options={{ tabBarLabel: t('nav.students'), tabBarIcon: ({ color, focused }) => <Users size={ICON_SIZE} color={color} fill={focused ? activeFill : 'transparent'} /> }}
         />
+        {showClockIn ? (
+          <Tab.Screen
+            name="DriverClockIn"
+            component={StaffAttendanceScreen}
+            options={{
+              tabBarLabel: t('nav.clock_in', 'Clock In'),
+              tabBarIcon: ({ color, focused }) => <Clock size={ICON_SIZE} color={color} fill={focused ? activeFill : 'transparent'} />,
+            }}
+          />
+        ) : null}
         <Tab.Screen
           name="DriverMe"
           component={DriverMeScreen}

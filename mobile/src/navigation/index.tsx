@@ -12,6 +12,7 @@ import SupervisorNotificationsScreen from '../screens/supervisor/SupervisorNotif
 import SupervisorSalaryScreen from '../screens/supervisor/SupervisorSalaryScreen';
 import TeacherTabs from './TeacherTabs';
 import ReceptionTabs from './ReceptionTabs';
+import EmployeeTabs from './EmployeeTabs';
 import TeacherNotificationsScreen from '../screens/teacher/TeacherNotificationsScreen';
 import TeacherScheduleScreen from '../screens/teacher/TeacherScheduleScreen';
 import TeacherSalaryScreen from '../screens/teacher/TeacherSalaryScreen';
@@ -56,6 +57,8 @@ export type RootStackParamList = {
   TeacherSettings: undefined;
   ReceptionTabs: undefined;
   ReceptionSettings: undefined;
+  EmployeeTabs: undefined;
+  EmployeeSettings: undefined;
   TeacherNotifications: undefined;
   TeacherSchedule: undefined;
   TeacherSalary: undefined;
@@ -248,6 +251,26 @@ export default function Navigation() {
             <Stack.Screen name="ReceptionTabs" component={ReceptionTabs} />
             <Stack.Screen
               name="ReceptionSettings"
+              component={SettingsScreen}
+              options={{ headerShown: true, headerTitle: 'Settings', headerBackTitle: 'Back', presentation: 'card' }}
+            />
+            <Stack.Screen name="Security" component={SecurityScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="MfaSettings" component={MfaSettingsScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="PhoneSettings" component={PhoneSettingsScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="Sessions" component={SessionsScreen} options={{ headerShown: false }} />
+            <Stack.Screen
+              name="ReportBug"
+              component={ReportBugScreen}
+              options={{ headerShown: true, headerTitle: 'Report a bug', headerBackTitle: 'Back' }}
+            />
+          </>
+        ) : (user?.role === 'admin' || user?.role === 'accountant' || user?.role === 'staff') ? (
+          // EmployeeTabs — desk-bound roles (admin/accountant) and the generic
+          // staff role whose only mobile purpose is QR clock-in/out (Phase 3).
+          <>
+            <Stack.Screen name="EmployeeTabs" component={EmployeeTabs} />
+            <Stack.Screen
+              name="EmployeeSettings"
               component={SettingsScreen}
               options={{ headerShown: true, headerTitle: 'Settings', headerBackTitle: 'Back', presentation: 'card' }}
             />

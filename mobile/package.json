@@ -16,6 +16,7 @@
     "axios": "1.16.1",
     "date-fns": "^4.1.0",
     "expo": "~55.0.6",
+    "expo-camera": "~55.0.20",
     "expo-dev-client": "~55.0.16",
     "expo-device": "~55.0.9",
     "expo-document-picker": "~55.0.9",
