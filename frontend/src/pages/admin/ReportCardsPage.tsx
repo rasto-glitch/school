@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'react-toastify';
-import { FileText, Eye, Download, MessageSquarePlus, Settings as SettingsIcon, RefreshCw, Check } from 'lucide-react';
+import { FileText, Eye, Download, MessageSquarePlus, Settings as SettingsIcon, RefreshCw, Check, Send, EyeOff } from 'lucide-react';
 import { adminApi, reportCardApi } from '../../services/api';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
@@ -50,6 +50,8 @@ export default function ReportCardsPage() {
   const [lang, setLang] = useState('en');
 
   const [roster, setRoster] = useState<RosterRow[]>([]);
+  const [published, setPublished] = useState(false);
+  const [publishing, setPublishing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -69,10 +71,29 @@ export default function ReportCardsPage() {
     if (!year.trim() || !term) { toast.error(t('report_cards.pick_year_term', 'Choose an academic year and term.')); return; }
     setLoading(true);
     reportCardApi.getRoster(year.trim(), term, classId || undefined)
-      .then(r => { setRoster(r.data?.students ?? []); setLoaded(true); })
+      .then(r => { setRoster(r.data?.students ?? []); setPublished(!!r.data?.published); setLoaded(true); })
       .catch((e: any) => toast.error(e.response?.data?.error || t('report_cards.load_failed', 'Could not load the roster.')))
       .finally(() => setLoading(false));
   }, [year, term, classId, t]);
+
+  const togglePublish = async () => {
+    setPublishing(true);
+    try {
+      if (published) {
+        await reportCardApi.unpublish(year.trim(), term);
+        setPublished(false);
+        toast.success(t('report_cards.unpublished', 'Hidden from parents.'));
+      } else {
+        await reportCardApi.publish(year.trim(), term);
+        setPublished(true);
+        toast.success(t('report_cards.published_toast', 'Published — parents can now download.'));
+      }
+    } catch (e: any) {
+      toast.error(e.response?.data?.error || t('report_cards.save_failed', 'Could not save.'));
+    } finally {
+      setPublishing(false);
+    }
+  };
 
   const pdf = async (row: RosterRow, mode: 'preview' | 'download') => {
     setBusyId(row.id);
@@ -117,6 +138,29 @@ export default function ReportCardsPage() {
             </Button>
           </div>
         </Card>
+
+        {/* Publish state — parents only see a term's cards once it's published */}
+        {loaded && (
+          <Card className={published ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200'}>
+            <div className="flex flex-wrap items-center gap-3">
+              {published ? <Eye className="w-5 h-5 text-green-600" /> : <EyeOff className="w-5 h-5 text-amber-600" />}
+              <div className="flex-1 min-w-[200px]">
+                <p className={`text-sm font-medium ${published ? 'text-green-800' : 'text-amber-800'}`}>
+                  {published ? t('report_cards.published_state', 'Published — parents can download these cards.') : t('report_cards.unpublished_state', 'Not published — parents cannot see these cards yet.')}
+                </p>
+                <p className="text-xs text-gray-500">{year} · {term}</p>
+              </div>
+              <Button
+                variant={published ? 'outline' : 'primary'}
+                icon={published ? <EyeOff className="w-4 h-4" /> : <Send className="w-4 h-4" />}
+                onClick={togglePublish}
+                loading={publishing}
+              >
+                {published ? t('report_cards.unpublish', 'Unpublish') : t('report_cards.publish', 'Publish to parents')}
+              </Button>
+            </div>
+          </Card>
+        )}
 
         {/* Roster */}
         {loading ? (

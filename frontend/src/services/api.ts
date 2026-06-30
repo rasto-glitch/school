@@ -304,6 +304,10 @@ export const parentApi = {
   getUnreadCount: () => api.get('/parent/notifications/unread-count'),
   markTypeRead: (type: string) => api.patch(`/parent/notifications/read-type/${type}`),
   getSchedule: (studentId: string) => api.get('/parent/schedule', { params: { studentId } }),
+  // Report cards (Phase 2) — published (year,term) list + one child's card PDF.
+  getReportCardTerms: () => api.get<{ terms: { academicYear: string; term: string }[] }>('/parent/report-card-terms'),
+  downloadReportCard: (childId: string, year: string, term: string) =>
+    api.get(`/parent/children/${childId}/report-card.pdf`, { params: { year, term }, responseType: 'blob' }),
 };
 
 // ---- TEACHER ----
@@ -1338,6 +1342,9 @@ export const reportCardApi = {
   // One student's term card (PDF blob). lang defaults to the school's config.
   studentPdf: (id: string, year: string, term: string, lang?: string) =>
     api.get(`/admin/report-cards/student/${id}/card.pdf`, { params: { year, term, ...(lang ? { lang } : {}) }, responseType: 'blob' }),
+  // Publish gate — a term's cards become parent-visible once published.
+  publish: (academicYear: string, term: string) => api.post('/admin/report-cards/publish', { academicYear, term }),
+  unpublish: (academicYear: string, term: string) => api.delete('/admin/report-cards/publish', { data: { academicYear, term } }),
 };
 
 // ---- CHAT ----

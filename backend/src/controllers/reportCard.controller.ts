@@ -127,8 +127,14 @@ export async function getRoster(req: AuthRequest, res: Response): Promise<void> 
     for (const r of (rem ?? []) as Record<string, unknown>[]) remarked.add(r.student_id as string);
   }
 
+  // Whether this (year, term) is published to parents.
+  const { data: pub } = await supabase
+    .from('report_card_publish').select('id')
+    .eq('school_id', schoolId).eq('academic_year', year).eq('term', term).maybeSingle();
+
   res.json({
     year, term,
+    published: !!pub,
     students: (students ?? []).map((s: Record<string, unknown>) => {
       const t = totals.get(s.id as string);
       const cls = s.classes as { name?: string } | null;
@@ -203,27 +209,23 @@ export async function upsertRemarks(req: AuthRequest, res: Response): Promise<vo
   res.json({ ok: true });
 }
 
-// ── GET /admin/report-cards/student/:id/card.pdf?year=&term=&lang= ──────────
-export async function getStudentPdf(req: AuthRequest, res: Response): Promise<void> {
-  const { schoolId } = req.user!;
-  const studentId = req.params.id as string;
-  const year = String(req.query.year || '').trim();
-  const term = String(req.query.term || '').trim();
-  if (!year || !term) { res.status(400).json({ error: 'year and term are required' }); return; }
-
-  // 1) School (name, logo, template) + student identity.
+// Shared assembly: builds ReportCardData for a (student, year, term) from
+// RELEASED grades + config + remark. Returns null if the student isn't in this
+// school. Used by both the admin and the parent PDF endpoints. THROWS on DB error.
+async function assembleReportCardData(
+  schoolId: string, studentId: string, year: string, term: string,
+): Promise<{ data: ReportCardData; safeName: string; defaultLang: string } | null> {
   const { data: school, error: schErr } = await supabase
     .from('schools').select('name, logo_url, report_card_config').eq('id', schoolId).single();
-  if (schErr || !school) { res.status(safeDbErrorStatus(schErr)).json({ error: safeDbErrorMessage(schErr) }); return; }
+  if (schErr || !school) throw schErr ?? new Error('school not found');
 
   const { data: student, error: stuErr } = await supabase
     .from('students')
     .select('id, full_name, profile_picture, date_of_birth, classes(name)')
     .eq('id', studentId).eq('school_id', schoolId).maybeSingle();
-  if (stuErr) { res.status(safeDbErrorStatus(stuErr)).json({ error: safeDbErrorMessage(stuErr) }); return; }
-  if (!student) { res.status(404).json({ error: 'Student not found.' }); return; }
+  if (stuErr) throw stuErr;
+  if (!student) return null;
 
-  // 2) RELEASED grades for this student/year/term.
   const { data: gradeRows, error: gErr } = await supabase
     .from('grades')
     .select('subject, marks, daily_grade, quiz_grade, monthly_exam_grade, term_exam_grade, admin_note')
@@ -233,9 +235,8 @@ export async function getStudentPdf(req: AuthRequest, res: Response): Promise<vo
     .eq('grading_period', term)
     .eq('is_released', true)
     .order('subject');
-  if (gErr) { res.status(safeDbErrorStatus(gErr)).json({ error: safeDbErrorMessage(gErr) }); return; }
+  if (gErr) throw gErr;
 
-  // 3) Grading config (same math the parent page uses) + overall remark.
   const cfgGrading = await loadGradingConfig(supabase, schoolId);
   const { data: remark } = await supabase
     .from('report_card_remarks')
@@ -244,7 +245,6 @@ export async function getStudentPdf(req: AuthRequest, res: Response): Promise<vo
     .eq('academic_year', year).eq('term', term)
     .maybeSingle();
 
-  // 4) Compute per-subject + overall.
   const rows = (gradeRows ?? []) as Record<string, unknown>[];
   const asGrade = (r: Record<string, unknown>): GradeLike => rowToGrade(r);
   const markColumns = collectMarkNames(rows.map(asGrade));
@@ -268,7 +268,6 @@ export async function getStudentPdf(req: AuthRequest, res: Response): Promise<vo
 
   const tpl = normalizeConfig(school.report_card_config);
   const cls = student.classes as { name?: string } | null;
-  const lang = pickLang(req.query.lang || tpl.defaultLang);
 
   const data: ReportCardData = {
     school: { name: school.name as string, logoUrl: (school.logo_url as string | null) ?? null },
@@ -297,17 +296,127 @@ export async function getStudentPdf(req: AuthRequest, res: Response): Promise<vo
       footerNote: tpl.footerNote,
     },
   };
+  const safeName = `${(student.full_name as string) || 'student'}-${year}-${term}`.replace(/[^a-z0-9-]/gi, '_');
+  return { data, safeName, defaultLang: tpl.defaultLang };
+}
 
-  // All data resolved — safe to stream now.
-  const safe = `${(student.full_name as string) || 'student'}-${year}-${term}`.replace(/[^a-z0-9-]/gi, '_');
+async function streamCard(res: Response, built: { data: ReportCardData; safeName: string }, lang: ReturnType<typeof pickLang>): Promise<void> {
   res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `inline; filename="report-card-${safe}.pdf"`);
+  res.setHeader('Content-Disposition', `inline; filename="report-card-${built.safeName}.pdf"`);
   try {
-    await streamReportCardPdf(data, lang, res);
+    await streamReportCardPdf(built.data, lang, res);
   } catch (e) {
-    // Headers may already be sent; just end the stream.
     if (!res.headersSent) res.status(500).json({ error: 'Failed to render the report card.' });
     else res.end();
     void e;
   }
+}
+
+// ── GET /admin/report-cards/student/:id/card.pdf?year=&term=&lang= ──────────
+export async function getStudentPdf(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const studentId = req.params.id as string;
+  const year = String(req.query.year || '').trim();
+  const term = String(req.query.term || '').trim();
+  if (!year || !term) { res.status(400).json({ error: 'year and term are required' }); return; }
+
+  let built;
+  try { built = await assembleReportCardData(schoolId, studentId, year, term); }
+  catch (e) { const err = e as Parameters<typeof safeDbErrorStatus>[0]; res.status(safeDbErrorStatus(err)).json({ error: safeDbErrorMessage(err) }); return; }
+  if (!built) { res.status(404).json({ error: 'Student not found.' }); return; }
+
+  await streamCard(res, built, pickLang(req.query.lang || built.defaultLang));
+}
+
+// ── POST /admin/report-cards/publish — make a term visible to parents ───────
+export async function publishTerm(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId, userId } = req.user!;
+  const body = req.body as { academicYear: string; term: string };
+  const { error } = await supabase
+    .from('report_card_publish')
+    .upsert(
+      { school_id: schoolId, academic_year: body.academicYear, term: body.term, published_at: new Date().toISOString(), published_by: userId },
+      { onConflict: 'school_id,academic_year,term' },
+    );
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+  await logAudit({
+    req, entityType: 'report_card', entityId: schoolId, action: 'update',
+    before: null, after: { published: true, academic_year: body.academicYear, term: body.term },
+    label: 'Report cards published',
+  });
+  res.json({ published: true });
+}
+
+// ── DELETE /admin/report-cards/publish — hide a term from parents again ─────
+export async function unpublishTerm(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const body = req.body as { academicYear: string; term: string };
+  const { error } = await supabase
+    .from('report_card_publish')
+    .delete()
+    .eq('school_id', schoolId)
+    .eq('academic_year', body.academicYear)
+    .eq('term', body.term);
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+  await logAudit({
+    req, entityType: 'report_card', entityId: schoolId, action: 'update',
+    before: { published: true, academic_year: body.academicYear, term: body.term }, after: null,
+    label: 'Report cards unpublished',
+  });
+  res.json({ published: false });
+}
+
+// Resolve the calling parent's row (school-scoped). null when not a parent here.
+async function resolveParentId(userId: string, schoolId: string): Promise<string | null> {
+  const { data } = await supabase
+    .from('parents').select('id').eq('user_id', userId).eq('school_id', schoolId).maybeSingle();
+  return (data?.id as string | undefined) ?? null;
+}
+
+// ── GET /parent/report-card-terms — published (year, term) list for the school ─
+export async function getParentTerms(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { data, error } = await supabase
+    .from('report_card_publish')
+    .select('academic_year, term')
+    .eq('school_id', schoolId);
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+  res.json({ terms: (data ?? []).map((r: Record<string, unknown>) => ({ academicYear: r.academic_year as string, term: r.term as string })) });
+}
+
+// ── GET /parent/children/:id/report-card.pdf?year=&term=&lang= ─────────────
+// Parent download. Gated three ways: the child must be the caller's, the term
+// must be PUBLISHED, and only RELEASED grades render (assemble enforces that).
+export async function getParentChildPdf(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId, userId } = req.user!;
+  const studentId = req.params.id as string;
+  const year = String(req.query.year || '').trim();
+  const term = String(req.query.term || '').trim();
+  if (!year || !term) { res.status(400).json({ error: 'year and term are required' }); return; }
+
+  // Ownership: the student must belong to this parent at this school.
+  const parentId = await resolveParentId(userId, schoolId);
+  if (!parentId) { res.status(404).json({ error: 'Student not found.' }); return; }
+  const { data: owned, error: ownErr } = await supabase
+    .from('students').select('id')
+    .eq('id', studentId).eq('school_id', schoolId).eq('parent_id', parentId)
+    .maybeSingle();
+  if (ownErr) { res.status(safeDbErrorStatus(ownErr)).json({ error: safeDbErrorMessage(ownErr) }); return; }
+  if (!owned) { res.status(404).json({ error: 'Student not found.' }); return; }
+
+  // Publish gate (case-insensitive — terms/years come from the same dropdowns
+  // but tolerate case drift in legacy data).
+  const { data: pub, error: pubErr } = await supabase
+    .from('report_card_publish').select('id')
+    .eq('school_id', schoolId).ilike('academic_year', year).ilike('term', term)
+    .maybeSingle();
+  if (pubErr) { res.status(safeDbErrorStatus(pubErr)).json({ error: safeDbErrorMessage(pubErr) }); return; }
+  if (!pub) { res.status(403).json({ error: 'This report card has not been published yet.', code: 'NOT_PUBLISHED' }); return; }
+
+  let built;
+  try { built = await assembleReportCardData(schoolId, studentId, year, term); }
+  catch (e) { const err = e as Parameters<typeof safeDbErrorStatus>[0]; res.status(safeDbErrorStatus(err)).json({ error: safeDbErrorMessage(err) }); return; }
+  if (!built) { res.status(404).json({ error: 'Student not found.' }); return; }
+
+  await streamCard(res, built, pickLang(req.query.lang || built.defaultLang));
 }

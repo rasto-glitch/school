@@ -258,6 +258,10 @@ export const reportCardRemarksSchema = z.object({
   homeroomComment: optText(4000),
   principalComment: optText(4000),
 });
+export const reportCardPublishSchema = z.object({
+  academicYear: rcYear,
+  term: rcTerm,
+});
 export const reportCardConfigSchema = z.object({
   signatories: z.object({
     classTeacher: z.string().max(160).optional(),

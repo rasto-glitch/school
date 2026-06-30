@@ -288,6 +288,8 @@
     "subject": "المادة",
     "school_note": "ملاحظة من المدرسة",
     "cumulative_gpa": "المعدل التراكمي",
+    "report_card": "بطاقة الدرجات",
+    "report_card_failed": "تعذّر تنزيل بطاقة الدرجات.",
     "year_gpa": "معدل السنة"
   },
   "report_cards": {
@@ -328,7 +330,13 @@
     "header_ph": "مثال: تقرير نهاية الفصل",
     "footer_note": "ملاحظة التذييل",
     "default_language": "لغة الـ PDF الافتراضية",
-    "settings_saved": "تم حفظ الإعدادات."
+    "settings_saved": "تم حفظ الإعدادات.",
+    "publish": "نشر لأولياء الأمور",
+    "unpublish": "إلغاء النشر",
+    "published_state": "منشور — يمكن لأولياء الأمور تنزيل هذه البطاقات.",
+    "unpublished_state": "غير منشور — لا يمكن لأولياء الأمور رؤية هذه البطاقات بعد.",
+    "published_toast": "تم النشر — يمكن لأولياء الأمور التنزيل الآن.",
+    "unpublished": "أُخفيت عن أولياء الأمور."
   },
   "grade_review": {
     "title": "مراجعة الدرجات",

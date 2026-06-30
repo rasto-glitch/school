@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { GraduationCap } from 'lucide-react';
+import { toast } from 'react-toastify';
+import { GraduationCap, Download } from 'lucide-react';
 import { parentApi } from '../../services/api';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
@@ -25,6 +26,10 @@ export default function GradesPage() {
   // (empty string) shows every year on file. Cumulative GPA still spans
   // the full history regardless of the filter.
   const [yearFilter, setYearFilter] = useState('');
+  // Published (year|term) keys, lowercased — a term only gets a "Report card"
+  // download button once the school has published it.
+  const [publishedKeys, setPublishedKeys] = useState<Set<string>>(new Set());
+  const [dl, setDl] = useState<string | null>(null);
 
   useEffect(() => {
     parentApi.getChildren().then(r => {
@@ -33,7 +38,32 @@ export default function GradesPage() {
       if (kids.length > 0) setSelectedChild(kids[0].id);
     });
     parentApi.getGradeConfig().then(r => setCfg(r.data)).catch(() => {});
+    parentApi.getReportCardTerms()
+      .then(r => {
+        const s = new Set<string>();
+        (r.data?.terms || []).forEach(x => s.add(`${x.academicYear.toLowerCase().trim()}|||${x.term.toLowerCase().trim()}`));
+        setPublishedKeys(s);
+      })
+      .catch(() => {});
   }, []);
+
+  const downloadCard = async (key: string, rawYear: string, rawTerm: string) => {
+    if (!selectedChild) return;
+    setDl(key);
+    try {
+      const r = await parentApi.downloadReportCard(selectedChild, rawYear, rawTerm);
+      const url = URL.createObjectURL(r.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `report-card-${rawYear}-${rawTerm}.pdf`.replace(/[^a-z0-9.\-]/gi, '_');
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      toast.error(e.response?.data?.error || t('grades.report_card_failed', 'Could not download the report card.'));
+    } finally {
+      setDl(null);
+    }
+  };
 
   const showGpa = cfg.mode === 'gpa' || cfg.mode === 'both';
   const showPct = cfg.mode === 'scale' || cfg.mode === 'both';
@@ -162,10 +192,26 @@ export default function GradesPage() {
 
                 <div className="overflow-x-auto">
                   <div className="inline-flex gap-0 min-w-full divide-x divide-gray-200">
-                    {terms.map((term, ti) => (
+                    {terms.map((term, ti) => {
+                      const sample = Object.values(byYear[yr][term])[0] as Grade | undefined;
+                      const rawYear = sample?.academicYear || '';
+                      const rawTerm = sample?.gradingPeriod || '';
+                      const canDownload = !!sample && publishedKeys.has(`${rawYear.toLowerCase().trim()}|||${rawTerm.toLowerCase().trim()}`);
+                      const dlKey = `${yr}|${term}`;
+                      return (
                       <div key={term} className="flex-1 min-w-[260px]">
-                        <div className="px-4 py-2 bg-primary-50 border-b border-gray-200">
+                        <div className="px-4 py-2 bg-primary-50 border-b border-gray-200 flex items-center justify-between gap-2">
                           <p className="text-xs font-semibold text-primary-700 uppercase tracking-wide">{term}</p>
+                          {canDownload && (
+                            <button
+                              onClick={() => downloadCard(dlKey, rawYear, rawTerm)}
+                              disabled={dl === dlKey}
+                              className="inline-flex items-center gap-1 text-xs font-semibold text-primary-700 hover:text-primary-900 disabled:opacity-50"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                              {t('grades.report_card', 'Report card')}
+                            </button>
+                          )}
                         </div>
                         <table className="w-full text-sm">
                           <thead>
@@ -218,7 +264,8 @@ export default function GradesPage() {
                           </tfoot>
                         </table>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
 
