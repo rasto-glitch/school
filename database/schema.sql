@@ -46,6 +46,10 @@ CREATE TABLE IF NOT EXISTS schools (
   -- features_version / force a re-login. The on/off gate is features.staff_attendance.
   staff_attendance_config JSONB NOT NULL DEFAULT
     '{"geofence":{"lat":null,"lng":null,"radiusMeters":250},"schedule":{"startTime":"08:00","endTime":"15:00","lateGraceMinutes":15}}'::jsonb,
+  -- Migration 066 — report-card template (signatories / header-footer / default
+  -- language). Separate column so editing it never bumps features_version.
+  report_card_config JSONB NOT NULL DEFAULT
+    '{"signatories":{"classTeacher":"","principal":""},"headerNote":"","footerNote":"","defaultLang":"en"}'::jsonb,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 -- Run this if the table already exists:
@@ -56,6 +60,7 @@ CREATE TABLE IF NOT EXISTS schools (
 -- ALTER TABLE schools ADD COLUMN IF NOT EXISTS grading_config JSONB NOT NULL DEFAULT '{"mode":"scale"}'::jsonb;
 -- ALTER TABLE schools ADD COLUMN IF NOT EXISTS grade_scale_max NUMERIC(5,2) DEFAULT 100;
 -- ALTER TABLE schools ADD COLUMN IF NOT EXISTS staff_attendance_config JSONB NOT NULL DEFAULT '{"geofence":{"lat":null,"lng":null,"radiusMeters":250},"schedule":{"startTime":"08:00","endTime":"15:00","lateGraceMinutes":15}}'::jsonb;
+-- ALTER TABLE schools ADD COLUMN IF NOT EXISTS report_card_config JSONB NOT NULL DEFAULT '{"signatories":{"classTeacher":"","principal":""},"headerNote":"","footerNote":"","defaultLang":"en"}'::jsonb;
 
 -- Trigger: auto-increment features_version whenever the features JSONB column changes
 CREATE OR REPLACE FUNCTION increment_features_version()
@@ -559,6 +564,41 @@ CREATE INDEX IF NOT EXISTS idx_reports_teacher_yearmonth
   WHERE teacher_id IS NOT NULL;
 -- Run if table already exists:
 -- ALTER TABLE reports ADD COLUMN IF NOT EXISTS marks JSONB DEFAULT '[]';
+
+-- ============================================================
+-- REPORT CARDS (migration 066)
+-- Report cards are LIVE-rendered PDFs from released `grades`; only the bits
+-- not derivable from grades are stored here: the overall homeroom/principal
+-- remark per student/term, and the per-term publish gate (parent visibility).
+-- Per-school template lives in schools.report_card_config (above).
+-- ============================================================
+CREATE TABLE IF NOT EXISTS report_card_remarks (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  academic_year TEXT NOT NULL,
+  term TEXT NOT NULL,
+  homeroom_comment TEXT,
+  principal_comment TEXT,
+  updated_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(school_id, student_id, academic_year, term)
+);
+CREATE INDEX IF NOT EXISTS idx_report_card_remarks_lookup
+  ON report_card_remarks(school_id, student_id, academic_year, term);
+
+CREATE TABLE IF NOT EXISTS report_card_publish (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  academic_year TEXT NOT NULL,
+  term TEXT NOT NULL,
+  published_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  published_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  UNIQUE(school_id, academic_year, term)
+);
+CREATE INDEX IF NOT EXISTS idx_report_card_publish_lookup
+  ON report_card_publish(school_id, academic_year, term);
 
 -- ============================================================
 -- ANNOUNCEMENTS
@@ -1477,7 +1517,9 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     -- Migration 060 — per-term grade filing window set/clear
     'grade_filing_window',
     -- Migration 063 — staff (employee) QR attendance corrections + leave
-    'staff_attendance','staff_leave'
+    'staff_attendance','staff_leave',
+    -- Migration 066 — report cards (config / remarks / publish)
+    'report_card'
   )),
   entity_id UUID NOT NULL,
   action TEXT NOT NULL CHECK (action IN ('create','update','delete')),

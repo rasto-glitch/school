@@ -43,6 +43,7 @@ import type { AuthRequest } from '../middleware/auth';
 import * as clearance from '../controllers/clearance.controller';
 import * as attention from '../controllers/attention.controller';
 import * as staffAttendance from '../controllers/staffAttendance.controller';
+import * as reportCard from '../controllers/reportCard.controller';
 import { validate } from '../middleware/validate';
 import * as v from '../validators/auth';
 import * as va from '../validators/accounting';
@@ -348,6 +349,16 @@ export function createRouter(io: SocketServer) {
   router.post('/admin/grades/upload', authenticate, authorizeCapability('academics.oversee'), upload.single('file'), (req, res) => admin.uploadGrades(req as AuthRequest, res));
   router.put('/admin/grades/:id', authenticate, authorizeCapability('academics.oversee'), validate({ params: vp.idParam, body: vp.updateGradeSchema }), (req, res) => admin.updateGrade(req as AuthRequest, res));
   router.post('/admin/grades/release', authenticate, authorizeCapability('academics.oversee'), validate({ body: vp.releaseGradesSchema }), (req, res) => admin.releaseGrades(req as AuthRequest, res));
+
+  // ---- REPORT CARDS (migration 066) — live-rendered PDFs from released grades ----
+  // Admin only (academics.oversee); parent download + publish gate land in Phase 2.
+  const rcManage = authorizeCapability('academics.oversee');
+  router.get('/admin/report-cards/config', authenticate, rcManage, (req, res) => reportCard.getConfig(req as AuthRequest, res));
+  router.put('/admin/report-cards/config', authenticate, rcManage, validate({ body: vp.reportCardConfigSchema }), (req, res) => reportCard.updateConfig(req as AuthRequest, res));
+  router.get('/admin/report-cards/remarks', authenticate, rcManage, validate({ query: vp.reportCardRemarksQuery }), (req, res) => reportCard.getRemarks(req as AuthRequest, res));
+  router.put('/admin/report-cards/remarks', authenticate, rcManage, validate({ body: vp.reportCardRemarksSchema }), (req, res) => reportCard.upsertRemarks(req as AuthRequest, res));
+  router.get('/admin/report-cards/student/:id/card.pdf', authenticate, rcManage, validate({ params: vp.idParam, query: vp.reportCardPdfQuery }), (req, res) => reportCard.getStudentPdf(req as AuthRequest, res));
+  router.get('/admin/report-cards', authenticate, rcManage, validate({ query: vp.reportCardRosterQuery }), (req, res) => reportCard.getRoster(req as AuthRequest, res));
 
   // ── Dashboard "Needs your attention" signals + actions (migration 060) ──
   // Per-term grade filing windows (academics.oversee).

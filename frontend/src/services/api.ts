@@ -1320,6 +1320,26 @@ export const staffAttendanceApi = {
     api.get('/staff-attendance/export', { params: { from, to }, responseType: 'blob' }),
 };
 
+// ---- REPORT CARDS (migration 066) — admin, academics.oversee ----
+// Live-rendered PDFs from released grades. Parent download + publish = Phase 2.
+export const reportCardApi = {
+  getConfig: () => api.get('/admin/report-cards/config'),
+  updateConfig: (data: {
+    signatories?: { classTeacher?: string; principal?: string };
+    headerNote?: string; footerNote?: string; defaultLang?: 'en' | 'ar' | 'ku';
+  }) => api.put('/admin/report-cards/config', data),
+  // Roster + per-student released/total subject counts for a year+term (class optional).
+  getRoster: (year: string, term: string, classId?: string) =>
+    api.get('/admin/report-cards', { params: { year, term, ...(classId ? { classId } : {}) } }),
+  getRemarks: (studentId: string, year: string, term: string) =>
+    api.get('/admin/report-cards/remarks', { params: { studentId, year, term } }),
+  upsertRemarks: (data: { studentId: string; academicYear: string; term: string; homeroomComment?: string | null; principalComment?: string | null }) =>
+    api.put('/admin/report-cards/remarks', data),
+  // One student's term card (PDF blob). lang defaults to the school's config.
+  studentPdf: (id: string, year: string, term: string, lang?: string) =>
+    api.get(`/admin/report-cards/student/${id}/card.pdf`, { params: { year, term, ...(lang ? { lang } : {}) }, responseType: 'blob' }),
+};
+
 // ---- CHAT ----
 export const chatApi = {
   getContacts: () => api.get('/chat/contacts'),

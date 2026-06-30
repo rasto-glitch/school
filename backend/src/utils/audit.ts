@@ -62,7 +62,9 @@ export type AuditEntityType =
   | 'grade_filing_window'
   // Staff (employee) QR attendance — settings/corrections + leave (migration 063)
   | 'staff_attendance'
-  | 'staff_leave';
+  | 'staff_leave'
+  // Report cards — config / remarks / publish (migration 066)
+  | 'report_card';
 
 interface LogParams {
   req: AuthRequest;

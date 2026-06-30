@@ -64,6 +64,7 @@ import ParentProfilePage from './pages/admin/ParentProfilePage';
 import AnnouncementsPage from './pages/admin/AnnouncementsPage';
 import GradeReviewPage from './pages/admin/GradeReviewPage';
 import StaffAttendanceManagementPage from './pages/admin/StaffAttendanceManagementPage';
+import ReportCardsPage from './pages/admin/ReportCardsPage';
 import AdminStudentsListPage from './pages/admin/AdminStudentsListPage';
 import AdminTeachersListPage from './pages/admin/AdminTeachersListPage';
 import AdminDriversListPage from './pages/admin/AdminDriversListPage';
@@ -245,6 +246,7 @@ export default function App() {
         <Route path="/admin/archive" element={<Navigate to="/admin/students?tab=archived" replace />} />
         <Route path="/admin/classes" element={<ProtectedRoute allowedRoles={['admin']}><ClassesPage /></ProtectedRoute>} />
         <Route path="/admin/grade-review" element={<ProtectedRoute allowedRoles={['admin']}><GradeReviewPage /></ProtectedRoute>} />
+        <Route path="/admin/report-cards" element={<ProtectedRoute allowedRoles={['admin']}><ReportCardsPage /></ProtectedRoute>} />
         <Route path="/admin/attendance" element={<ProtectedRoute allowedRoles={['admin']}><StaffAttendanceManagementPage /></ProtectedRoute>} />
         <Route path="/admin/employees" element={<ProtectedRoute allowedRoles={['admin']}><EmployeesManagement /></ProtectedRoute>} />
         <Route path="/admin/employees/new/:role" element={<ProtectedRoute allowedRoles={['admin']}><NewEmployeePage /></ProtectedRoute>} />

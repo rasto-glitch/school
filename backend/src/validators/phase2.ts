@@ -233,6 +233,41 @@ export const staffAttendanceLeaveCreateSchema = z.object({
   note: optText(1000),
 }).refine(d => d.endDate >= d.startDate, { message: 'End date must be on or after the start date' });
 
+// ── Report cards (migration 066, academics.oversee) ─────────────────────────
+const rcYear = z.string().trim().min(1).max(40);
+const rcTerm = z.string().trim().min(1).max(120);
+export const reportCardRosterQuery = z.object({
+  year: rcYear,
+  term: rcTerm,
+  classId: z.union([uuid, z.literal('')]).optional(),
+});
+export const reportCardPdfQuery = z.object({
+  year: rcYear,
+  term: rcTerm,
+  lang: z.enum(['en', 'ar', 'ku']).optional(),
+});
+export const reportCardRemarksQuery = z.object({
+  studentId: uuid,
+  year: rcYear,
+  term: rcTerm,
+});
+export const reportCardRemarksSchema = z.object({
+  studentId: uuid,
+  academicYear: rcYear,
+  term: rcTerm,
+  homeroomComment: optText(4000),
+  principalComment: optText(4000),
+});
+export const reportCardConfigSchema = z.object({
+  signatories: z.object({
+    classTeacher: z.string().max(160).optional(),
+    principal: z.string().max(160).optional(),
+  }).optional(),
+  headerNote: z.string().max(500).optional(),
+  footerNote: z.string().max(500).optional(),
+  defaultLang: z.enum(['en', 'ar', 'ku']).optional(),
+}).refine(d => Object.keys(d).length > 0, { message: 'Nothing to update' });
+
 // ── Admin: students / classes / subjects / curriculum ──────────────────
 const studentBase = {
   fullName: nonEmptyStr(200),
