@@ -44,6 +44,7 @@ import * as clearance from '../controllers/clearance.controller';
 import * as attention from '../controllers/attention.controller';
 import * as staffAttendance from '../controllers/staffAttendance.controller';
 import * as reportCard from '../controllers/reportCard.controller';
+import * as studentHealth from '../controllers/studentHealth.controller';
 import { validate } from '../middleware/validate';
 import * as v from '../validators/auth';
 import * as va from '../validators/accounting';
@@ -367,6 +368,18 @@ export function createRouter(io: SocketServer) {
   router.get('/parent/report-card-terms', authenticate, authorize('parent'), (req, res) => reportCard.getParentTerms(req as AuthRequest, res));
   router.get('/parent/children/:id/report-card.pdf', authenticate, authorize('parent'), validate({ params: vp.idParam, query: vp.reportCardPdfQuery }), (req, res) => reportCard.getParentChildPdf(req as AuthRequest, res));
   router.get('/parent/children/:id/transcript.pdf', authenticate, authorize('parent'), validate({ params: vp.idParam, query: vp.reportCardTranscriptQuery }), (req, res) => reportCard.getParentChildTranscript(req as AuthRequest, res));
+
+  // ---- STUDENT HEALTH / CLINIC RECORDS (migration 067) — clinic-internal ----
+  // Medical profile + nurse-visit log. Gated by the `health.manage` capability;
+  // sensitive free-text is field-level encrypted (employeePiiCrypto). No parent
+  // surface in v1.
+  const healthManage = authorizeCapability('health.manage');
+  router.get('/admin/health/students/:id/profile', authenticate, healthManage, validate({ params: vp.idParam }), (req, res) => studentHealth.getProfile(req as AuthRequest, res));
+  router.put('/admin/health/students/:id/profile', authenticate, healthManage, validate({ params: vp.idParam, body: vp.healthProfileSchema }), (req, res) => studentHealth.upsertProfile(req as AuthRequest, res));
+  router.get('/admin/health/students/:id/visits', authenticate, healthManage, validate({ params: vp.idParam }), (req, res) => studentHealth.listVisits(req as AuthRequest, res));
+  router.post('/admin/health/students/:id/visits', authenticate, healthManage, validate({ params: vp.idParam, body: vp.healthVisitSchema }), (req, res) => studentHealth.createVisit(req as AuthRequest, res));
+  router.put('/admin/health/visits/:id', authenticate, healthManage, validate({ params: vp.idParam, body: vp.healthVisitSchema }), (req, res) => studentHealth.updateVisit(req as AuthRequest, res));
+  router.delete('/admin/health/visits/:id', authenticate, healthManage, validate({ params: vp.idParam }), (req, res) => studentHealth.deleteVisit(req as AuthRequest, res));
 
   // ── Dashboard "Needs your attention" signals + actions (migration 060) ──
   // Per-term grade filing windows (academics.oversee).

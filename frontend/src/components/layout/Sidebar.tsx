@@ -12,7 +12,7 @@ import {
   FileText, Star, Clock, X, ClipboardCheck, MessageSquare, Archive,
   CreditCard, Wallet, History, Receipt, BookOpenCheck,
   AlertCircle, FileBarChart, BarChart3, CalendarClock, ArrowLeftRight, Scale,
-  ShieldCheck, ShieldAlert, UserPlus, Send, QrCode,
+  ShieldCheck, ShieldAlert, UserPlus, Send, QrCode, HeartPulse,
 } from 'lucide-react';
 import type { Dispatch, SetStateAction } from 'react';
 import type { Role } from '../../types';
@@ -91,6 +91,8 @@ const adminNav: AdminNavNode[] = [
   { kind: 'leaf', path: '/admin/weekly-summary', icon: Clock, labelKey: 'nav.weekly_summary', labelFallback: 'Weekly Summary', feature: 'weekly_summary', capabilities: ['academics.oversee'] },
   { kind: 'leaf', path: '/admin/content-moderation', icon: BookOpen, labelKey: 'nav.content_moderation', labelFallback: 'Homework & Assignments', capabilities: ['academics.oversee'] },
   { kind: 'leaf', path: '/admin/announcements', icon: Megaphone, labelKey: 'nav.announcements', labelFallback: 'Announcements', feature: 'announcements', capabilities: ['announcements.moderate'] },
+  // Clinic-internal student health records (sensitive). Capability-gated only.
+  { kind: 'leaf', path: '/admin/health', icon: HeartPulse, labelKey: 'nav.student_health', labelFallback: 'Student Health', capabilities: ['health.manage'] },
   {
     kind: 'group', key: 'employees', icon: Users,
     labelKey: 'nav.employees', labelFallback: 'Employees',

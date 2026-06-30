@@ -277,6 +277,45 @@ export const reportCardConfigSchema = z.object({
   defaultLang: z.enum(['en', 'ar', 'ku']).optional(),
 }).refine(d => Object.keys(d).length > 0, { message: 'Nothing to update' });
 
+// ── Student health / clinic records (migration 067, health.manage) ──────────
+const bloodType = z.enum(['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'unknown']);
+const visitCategory = z.enum(['injury', 'illness', 'medication', 'mental_health', 'routine', 'other']);
+const visitOutcome = z.enum(['returned_to_class', 'sent_home', 'referred_external', 'kept_observation']);
+const immunizationItem = z.object({
+  name: z.string().trim().min(1).max(120),
+  date: z.string().trim().max(40).optional(),
+  notes: z.string().trim().max(300).optional(),
+});
+const healthEmergencyContact = z.object({
+  name: z.string().trim().min(1).max(160),
+  relationship: z.string().trim().max(80).optional(),
+  phone: z.string().trim().max(40).optional(),
+  altPhone: z.string().trim().max(40).optional(),
+  priority: z.number().int().min(0).max(10).optional(),
+});
+export const healthProfileSchema = z.object({
+  bloodType: z.union([bloodType, z.literal(''), z.null()]).optional(),
+  allergyTags: z.array(z.string().trim().min(1).max(60)).max(50).optional(),
+  immunizations: z.array(immunizationItem).max(60).optional(),
+  emergencyContacts: z.array(healthEmergencyContact).max(10).optional(),
+  physicianName: optText(160),
+  physicianPhone: optText(40),
+  chronicConditions: optText(4000),
+  medications: optText(4000),
+  dietaryNotes: optText(2000),
+  notes: optText(4000),
+});
+export const healthVisitSchema = z.object({
+  visitedAt: z.string().datetime().optional(),
+  category: visitCategory,
+  temperatureC: z.number().min(25).max(45).nullable().optional(),
+  complaint: optText(2000),
+  assessment: optText(2000),
+  treatment: optText(2000),
+  outcome: visitOutcome,
+  parentNotified: z.boolean().optional(),
+});
+
 // ── Admin: students / classes / subjects / curriculum ──────────────────
 const studentBase = {
   fullName: nonEmptyStr(200),

@@ -28,6 +28,7 @@ export const CAPABILITIES = [
   'settings.manage',       // school settings, logo, academic-year transition (IT)
   'announcements.moderate',// post/delete announcements + notifications
   'staff_attendance.manage',// employee QR attendance: settings, board, review, corrections, leave
+  'health.manage',         // student health / clinic records: medical profiles + nurse-visit log (sensitive)
 ] as const;
 
 export type Capability = (typeof CAPABILITIES)[number];

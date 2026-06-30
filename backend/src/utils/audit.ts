@@ -64,7 +64,9 @@ export type AuditEntityType =
   | 'staff_attendance'
   | 'staff_leave'
   // Report cards — config / remarks / publish (migration 066)
-  | 'report_card';
+  | 'report_card'
+  // Student health / clinic records — profile + visit log (migration 067)
+  | 'student_health';
 
 interface LogParams {
   req: AuthRequest;

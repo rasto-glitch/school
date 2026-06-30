@@ -18,6 +18,7 @@ export const CAPABILITIES = [
   'settings.manage',
   'announcements.moderate',
   'staff_attendance.manage',
+  'health.manage',
 ] as const;
 
 export type Capability = (typeof CAPABILITIES)[number];
@@ -39,6 +40,7 @@ export const CAPABILITY_META: CapabilityMeta[] = [
   { key: 'transfers.manage',      group: 'operations', label: 'Manage transfers',      description: 'Outgoing and incoming student transfers.' },
   { key: 'announcements.moderate',group: 'operations', label: 'Announcements',         description: 'Post and delete announcements and notifications.' },
   { key: 'staff_attendance.manage',group: 'operations', label: 'Staff attendance',      description: 'Employee QR attendance: settings, board, review, corrections, leave.' },
+  { key: 'health.manage',         group: 'operations', label: 'Student health',        description: 'Student medical profiles and nurse-visit log (sensitive).' },
   { key: 'hr.read',               group: 'hr',         label: 'Read HR / PII',         description: 'View decrypted PII and high-sensitivity documents.' },
   { key: 'hr.manage',             group: 'hr',         label: 'Manage HR',             description: 'HR records, documents, policies and HR grants.' },
   { key: 'accounts.manage',       group: 'it',         label: 'Manage accounts',       description: 'Login accounts, credentials, resets, MFA override.' },

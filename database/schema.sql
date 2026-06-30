@@ -601,6 +601,54 @@ CREATE INDEX IF NOT EXISTS idx_report_card_publish_lookup
   ON report_card_publish(school_id, academic_year, term);
 
 -- ============================================================
+-- STUDENT HEALTH / CLINIC RECORDS (migration 067)
+-- Clinic-internal medical profile + nurse-visit log. Gated by the
+-- `health.manage` capability. Sensitive free-text lives encrypted in the
+-- *_ct columns (employeePiiCrypto.ts); structured tags stay plaintext.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS student_health_profiles (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  blood_type TEXT CHECK (blood_type IN ('A+','A-','B+','B-','AB+','AB-','O+','O-','unknown')),
+  allergy_tags TEXT[] NOT NULL DEFAULT '{}',
+  immunizations JSONB NOT NULL DEFAULT '[]'::jsonb,
+  emergency_contacts JSONB NOT NULL DEFAULT '[]'::jsonb,
+  physician_name TEXT,
+  physician_phone TEXT,
+  chronic_conditions_ct TEXT,
+  medications_ct TEXT,
+  dietary_notes_ct TEXT,
+  notes_ct TEXT,
+  updated_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(school_id, student_id)
+);
+CREATE INDEX IF NOT EXISTS idx_student_health_profiles_lookup
+  ON student_health_profiles(school_id, student_id);
+
+CREATE TABLE IF NOT EXISTS student_health_visits (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  visited_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  category TEXT NOT NULL CHECK (category IN ('injury','illness','medication','mental_health','routine','other')),
+  temperature_c NUMERIC(4,1),
+  complaint_ct TEXT,
+  assessment_ct TEXT,
+  treatment_ct TEXT,
+  outcome TEXT NOT NULL CHECK (outcome IN ('returned_to_class','sent_home','referred_external','kept_observation')),
+  parent_notified BOOLEAN NOT NULL DEFAULT FALSE,
+  parent_notified_at TIMESTAMPTZ,
+  recorded_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_student_health_visits_student
+  ON student_health_visits(school_id, student_id, visited_at DESC);
+
+-- ============================================================
 -- ANNOUNCEMENTS
 -- ============================================================
 CREATE TABLE IF NOT EXISTS announcements (
@@ -1519,7 +1567,9 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     -- Migration 063 — staff (employee) QR attendance corrections + leave
     'staff_attendance','staff_leave',
     -- Migration 066 — report cards (config / remarks / publish)
-    'report_card'
+    'report_card',
+    -- Migration 067 — student health / clinic records
+    'student_health'
   )),
   entity_id UUID NOT NULL,
   action TEXT NOT NULL CHECK (action IN ('create','update','delete')),

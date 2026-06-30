@@ -1357,6 +1357,40 @@ export const reportCardApi = {
   unpublish: (academicYear: string, term: string) => api.delete('/admin/report-cards/publish', { data: { academicYear, term } }),
 };
 
+// ---- STUDENT HEALTH / CLINIC RECORDS (admin, health.manage) ----
+export interface HealthImmunization { name: string; date?: string; notes?: string }
+export interface HealthEmergencyContact { name: string; relationship?: string; phone?: string; altPhone?: string }
+export interface HealthProfilePayload {
+  bloodType?: string | null;
+  allergyTags?: string[];
+  immunizations?: HealthImmunization[];
+  emergencyContacts?: HealthEmergencyContact[];
+  physicianName?: string | null;
+  physicianPhone?: string | null;
+  chronicConditions?: string | null;
+  medications?: string | null;
+  dietaryNotes?: string | null;
+  notes?: string | null;
+}
+export interface HealthVisitPayload {
+  visitedAt?: string;
+  category: string;
+  temperatureC?: number | null;
+  complaint?: string | null;
+  assessment?: string | null;
+  treatment?: string | null;
+  outcome: string;
+  parentNotified?: boolean;
+}
+export const healthApi = {
+  getProfile: (studentId: string) => api.get(`/admin/health/students/${studentId}/profile`),
+  saveProfile: (studentId: string, data: HealthProfilePayload) => api.put(`/admin/health/students/${studentId}/profile`, data),
+  listVisits: (studentId: string) => api.get(`/admin/health/students/${studentId}/visits`),
+  createVisit: (studentId: string, data: HealthVisitPayload) => api.post(`/admin/health/students/${studentId}/visits`, data),
+  updateVisit: (visitId: string, data: HealthVisitPayload) => api.put(`/admin/health/visits/${visitId}`, data),
+  deleteVisit: (visitId: string) => api.delete(`/admin/health/visits/${visitId}`),
+};
+
 // ---- CHAT ----
 export const chatApi = {
   getContacts: () => api.get('/chat/contacts'),

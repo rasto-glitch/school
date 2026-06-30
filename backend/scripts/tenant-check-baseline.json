@@ -198,6 +198,10 @@
       "table": "users"
     },
     {
+      "file": "studentHealth.controller.ts",
+      "table": "student_health_visits"
+    },
+    {
       "file": "teacher.controller.ts",
       "table": "attendance"
     },
