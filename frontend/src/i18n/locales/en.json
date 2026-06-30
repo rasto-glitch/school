@@ -58,6 +58,7 @@
     "past_records": "Past Records",
     "track_bus": "Track Bus",
     "appointments": "Appointments",
+    "clock_in_qr": "Clock In QR",
     "tuition": "Tuition",
     "staff_salaries": "Staff Salaries",
     "accounting": "Accounting",
@@ -1056,6 +1057,20 @@
     "invite_from": "Invited by {{name}}",
     "parent_requested": "Parent requested: {{date}}",
     "assign_required": "Choose an admin before approving"
+  },
+  "staff_attendance": {
+    "qr_title": "Staff Clock-In",
+    "qr_subtitle": "Scan with the school app to check in or out",
+    "qr_instructions": "Open the app, go to Attendance, and scan this code",
+    "qr_refresh_in": "New code in {{seconds}}s",
+    "qr_loading": "Loading code…",
+    "qr_feature_off": "Staff attendance isn't enabled for this school yet.",
+    "qr_feature_off_hint": "An administrator can turn it on in Settings.",
+    "qr_not_configured": "Staff attendance isn't set up on the server yet.",
+    "qr_error": "Couldn't load the code. Retrying…",
+    "qr_fullscreen": "Full screen",
+    "qr_exit_fullscreen": "Exit full screen",
+    "qr_back": "Back"
   },
   "admin": {
     "dashboard_title": "Admin Dashboard",

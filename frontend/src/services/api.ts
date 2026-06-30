@@ -1277,6 +1277,8 @@ export const receptionApi = {
   respondToAppointment: (id: string, data: object) => api.put(`/reception/appointments/${id}`, data),
   // Phase D — admins reception can assign a meeting to.
   getAssignableAdmins: () => api.get('/reception/assignable-admins'),
+  // Staff attendance (Phase 2) — rotating kiosk QR for the reception display.
+  getKioskToken: () => api.get('/staff-attendance/kiosk-token'),
 };
 
 // ---- CHAT ----

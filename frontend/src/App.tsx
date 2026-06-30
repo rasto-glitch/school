@@ -89,6 +89,7 @@ import WriteAssignmentsPage from './pages/teacher/WriteAssignmentsPage';
 // Reception
 import ReceptionDashboard from './pages/reception/ReceptionDashboard';
 import ReceptionAppointmentsPage from './pages/reception/AppointmentsPage';
+import QrDisplayPage from './pages/reception/QrDisplayPage';
 
 // Driver
 import DriverDashboard from './pages/driver/DriverDashboard';
@@ -284,6 +285,7 @@ export default function App() {
         {/* Reception Portal */}
         <Route path="/reception/dashboard" element={<ProtectedRoute allowedRoles={['reception']}><ReceptionDashboard /></ProtectedRoute>} />
         <Route path="/reception/appointments" element={<ProtectedRoute allowedRoles={['reception']}><ReceptionAppointmentsPage /></ProtectedRoute>} />
+        <Route path="/reception/qr-display" element={<ProtectedRoute allowedRoles={['reception']}><QrDisplayPage /></ProtectedRoute>} />
         <Route path="/reception/profile" element={<ProtectedRoute allowedRoles={['reception']}><ProfilePage /></ProtectedRoute>} />
 
         {/* Accounting Portal — premium tuition module. Owned by accountant.

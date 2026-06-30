@@ -58,6 +58,7 @@
     "past_records": "السجلات السابقة",
     "track_bus": "تتبع الحافلة",
     "appointments": "المواعيد",
+    "clock_in_qr": "رمز الحضور",
     "tuition": "الرسوم الدراسية",
     "staff_salaries": "رواتب الموظفين",
     "accounting": "المحاسبة",
@@ -1056,6 +1057,20 @@
     "invite_from": "بدعوة من {{name}}",
     "parent_requested": "طلب ولي الأمر: {{date}}",
     "assign_required": "اختر مسؤولاً قبل الموافقة"
+  },
+  "staff_attendance": {
+    "qr_title": "تسجيل حضور الموظفين",
+    "qr_subtitle": "امسح الرمز بتطبيق المدرسة لتسجيل الدخول أو الخروج",
+    "qr_instructions": "افتح التطبيق، انتقل إلى الحضور، وامسح هذا الرمز",
+    "qr_refresh_in": "رمز جديد خلال {{seconds}} ثانية",
+    "qr_loading": "جارٍ تحميل الرمز…",
+    "qr_feature_off": "تسجيل حضور الموظفين غير مُفعّل لهذه المدرسة بعد.",
+    "qr_feature_off_hint": "يمكن للمسؤول تفعيله من الإعدادات.",
+    "qr_not_configured": "لم يتم إعداد تسجيل حضور الموظفين على الخادم بعد.",
+    "qr_error": "تعذّر تحميل الرمز. جارٍ إعادة المحاولة…",
+    "qr_fullscreen": "ملء الشاشة",
+    "qr_exit_fullscreen": "إنهاء ملء الشاشة",
+    "qr_back": "رجوع"
   },
   "admin": {
     "dashboard_title": "لوحة تحكم المسؤول",

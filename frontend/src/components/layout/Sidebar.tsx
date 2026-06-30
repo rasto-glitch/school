@@ -12,7 +12,7 @@ import {
   FileText, Star, Clock, X, ClipboardCheck, MessageSquare, Archive,
   CreditCard, Wallet, History, Receipt, BookOpenCheck,
   AlertCircle, FileBarChart, BarChart3, CalendarClock, ArrowLeftRight, Scale,
-  ShieldCheck, ShieldAlert, UserPlus, Send,
+  ShieldCheck, ShieldAlert, UserPlus, Send, QrCode,
 } from 'lucide-react';
 import type { Dispatch, SetStateAction } from 'react';
 import type { Role } from '../../types';
@@ -261,6 +261,7 @@ const navItems: Partial<Record<Role, NavItem[]>> = {
   reception: [
     { to: '/reception/dashboard', icon: Home, label: 'Dashboard' },
     { to: '/reception/appointments', icon: Calendar, label: 'Appointments', feature: 'appointments' },
+    { to: '/reception/qr-display', icon: QrCode, label: 'Clock In QR', feature: 'staff_attendance' },
   ],
   accountant: [
     { to: '/accounting/dashboard', icon: Home, label: 'Dashboard', feature: 'tuition_fees' },
@@ -407,10 +408,12 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
   }, [location.pathname]);
 
   const isRTL = ['ar', 'ku'].includes(i18n.language);
-  // Premium-only features default to OFF when the key is missing — so a school
-  // without a premium plan never sees the tab even if their features JSONB
-  // pre-dates the feature flag being added.
-  const PREMIUM_FEATURES = ['tuition_fees', 'archive'];
+  // Opt-in features default to OFF when the key is missing — so a school never
+  // sees the tab until it's explicitly enabled, even if their features JSONB
+  // pre-dates the flag. Covers paid-premium plans (tuition_fees, archive) and
+  // admin-enabled features like staff_attendance (mirrors the backend's
+  // `features.staff_attendance === true` gate; absent key = not enabled).
+  const PREMIUM_FEATURES = ['tuition_fees', 'archive', 'staff_attendance'];
   const isFeatureEnabled = (feature?: string) => {
     if (!feature) return true;
     if (PREMIUM_FEATURES.includes(feature)) return school?.features?.[feature] === true;
