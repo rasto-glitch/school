@@ -21,9 +21,10 @@ const ROLE_COLORS: Record<string, string> = {
   parent:     'bg-green-100 text-green-700',
   reception:  'bg-pink-100 text-pink-700',
   accountant: 'bg-amber-100 text-amber-700',
+  staff:      'bg-slate-100 text-slate-700',
 };
 
-const ROLE_FILTERS = ['all', 'parent', 'teacher', 'driver', 'supervisor', 'admin', 'reception', 'accountant'] as const;
+const ROLE_FILTERS = ['all', 'parent', 'teacher', 'driver', 'supervisor', 'admin', 'reception', 'accountant', 'staff'] as const;
 type RoleFilter = typeof ROLE_FILTERS[number];
 
 export default function AccountsPage() {

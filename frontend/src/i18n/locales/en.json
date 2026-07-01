@@ -1685,6 +1685,7 @@
       "role_admin": "Admin",
       "role_reception": "Reception",
       "role_accountant": "Accountant",
+      "role_staff": "Staff",
       "first_name": "First Name",
       "first_name_ph": "First name",
       "last_name": "Last Name",
@@ -2573,6 +2574,10 @@
     },
     "staff_emp": {
       "finance_note": "Salary, insurance and payments are managed by the accountant in the <b>Accounting portal</b>. New staff start with no salary set — add the figure there.",
+      "create_login": "Create a login for clock-in",
+      "create_login_hint": "Give this staff member an app account so they can sign in and clock in/out. Leave it off for staff who won't use the app.",
+      "username_optional": "Username (optional)",
+      "password_default": "Default: Staff@123",
       "add_staff": "Add Staff",
       "edit_staff": "Edit Staff",
       "full_name": "Full Name",

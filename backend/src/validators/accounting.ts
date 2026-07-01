@@ -157,6 +157,14 @@ const staffBase = {
   insurancePercentage: z.number().min(0).max(100).nullable().optional(),
   previousArchiveId: optionalId,
   emergencyContact: optText(120),
+  // Optional login account so a generic staff member can sign in on mobile to
+  // clock in/out. When createLogin is true, createStaff provisions a users row
+  // (role 'staff') and links it; username/password are optional (auto-derived /
+  // default when blank, same as the teacher flow). Ignored by updateStaff and
+  // the accounting-portal routes.
+  createLogin: z.boolean().optional(),
+  username: optText(120),
+  password: optText(200),
   ...hrFields,
 };
 export const createStaffSchema = z.object(staffBase);

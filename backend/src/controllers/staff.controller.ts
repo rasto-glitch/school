@@ -12,6 +12,8 @@ import { assertPeriodOpen } from '../utils/period';
 import { resolveDrawerAmount } from '../utils/fx';
 import { hasArchiveFeature, normalizeArchiveReason, resolveEmployeeArchiveId, rewriteOwnershipToArchive } from '../utils/employeeArchive';
 import { hrColumns, hrSnapshot } from '../utils/employeeHr';
+import bcrypt from 'bcryptjs';
+import { defaultPasswordFor } from '../utils/defaultPasswords';
 import { parseCursorParams, buildPageWith, keysetAfter } from '../utils/pagination';
 
 // Snapshot a voided staff member into the unified archived_employees table
@@ -134,6 +136,10 @@ interface StaffBody {
   isActive?: boolean;
   insurancePercentage?: number | null;
   previousArchiveId?: string | null;
+  // Optional login account (mobile clock-in). See createStaff.
+  createLogin?: boolean;
+  username?: string;
+  password?: string;
   // HR fields (migration 024) — read generically via hrColumns().
   address?: string | null;
   hireDate?: string | null;
@@ -368,7 +374,7 @@ export async function createStaff(req: AuthRequest, res: Response): Promise<void
   const guard = await ensurePremium(schoolId);
   if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
 
-  const { userId, fullName, position, salaryAmount, currency, nextPaymentDate, isActive, insurancePercentage, previousArchiveId } = req.body as StaffBody;
+  const { userId, fullName, position, salaryAmount, currency, nextPaymentDate, isActive, insurancePercentage, previousArchiveId, createLogin, username, password } = req.body as StaffBody;
   if (!fullName || !fullName.trim()) { res.status(400).json({ error: 'fullName is required' }); return; }
   if (typeof salaryAmount !== 'number' || salaryAmount < 0) { res.status(400).json({ error: 'salaryAmount must be a non-negative number' }); return; }
   if (!currency || currency.length < 1 || currency.length > 8) { res.status(400).json({ error: 'currency is required' }); return; }
@@ -382,17 +388,57 @@ export async function createStaff(req: AuthRequest, res: Response): Promise<void
     insurancePct = insurancePercentage;
   }
 
-  // If linking a user, validate the user belongs to this school
+  // Resolve the users row to link. Either link an explicitly-passed user, or
+  // (opt-in) provision a fresh 'staff' login so this employee can sign in on
+  // mobile to clock in/out. Username/password mirror the teacher flow:
+  // auto-derived from the name / a role default when left blank.
+  let resolvedUserId: string | null = userId ?? null;
+  let createdLogin: { username: string; tempPassword: string } | null = null;
+
   if (userId) {
     const { data: u } = await supabase.from('users').select('id').eq('id', userId).eq('school_id', schoolId).single();
     if (!u) { res.status(400).json({ error: 'Linked user not found in this school' }); return; }
+  } else if (createLogin) {
+    const { data: schoolData } = await supabase.from('schools').select('abbreviation').eq('id', schoolId).single();
+    const abbrev = (schoolData?.abbreviation || '').toLowerCase();
+    const rawUsername = (username?.trim() || fullName.trim().split(/\s+/).slice(0, 2).join('.')).toLowerCase();
+    const finalUsername = abbrev && !rawUsername.startsWith(`${abbrev}_`) ? `${abbrev}_${rawUsername}` : rawUsername;
+
+    const rounds = parseInt(process.env.BCRYPT_ROUNDS || '10');
+    const usedDefault = !password;
+    const finalPassword = password || defaultPasswordFor('staff');
+    const passwordHash = await bcrypt.hash(finalPassword, rounds);
+
+    const nameParts = fullName.trim().split(/\s+/);
+    const firstName = nameParts[0] || fullName.trim();
+    const lastName = nameParts.slice(1).join(' ') || '';
+
+    const { data: newUser, error: userErr } = await supabase.from('users').insert({
+      school_id: schoolId,
+      first_name: firstName,
+      last_name: lastName,
+      username: finalUsername,
+      password_hash: passwordHash,
+      role: 'staff',
+      must_change_password: usedDefault,
+    }).select('id').single();
+
+    if (userErr) {
+      const isDupe = userErr.code === '23505' || /unique|duplicate/i.test(userErr.message);
+      res.status(isDupe ? 409 : safeDbErrorStatus(userErr)).json({
+        error: isDupe ? `Username "${finalUsername}" already exists. Try a different username.` : safeDbErrorMessage(userErr),
+      });
+      return;
+    }
+    resolvedUserId = newUser.id;
+    createdLogin = { username: finalUsername, tempPassword: finalPassword };
   }
 
   const prevArchiveId = await resolveEmployeeArchiveId(previousArchiveId, schoolId, 'staff');
 
   const { data, error } = await supabase.from('staff_members').insert({
     school_id: schoolId,
-    user_id: userId ?? null,
+    user_id: resolvedUserId,
     full_name: fullName.trim(),
     position: position?.trim() || null,
     salary_amount: salaryAmount,
@@ -412,7 +458,9 @@ export async function createStaff(req: AuthRequest, res: Response): Promise<void
   }
 
   await logAudit({ req, entityType: 'staff_member', entityId: data.id, action: 'create', after: data, label: data.full_name });
-  res.status(201).json(toCC(data));
+  // Surface the new credentials so the wizard can show them once (temp
+  // password can't be recovered later — only reset).
+  res.status(201).json({ ...(toCC(data) as object), ...(createdLogin ?? {}) });
 }
 
 export async function updateStaff(req: AuthRequest, res: Response): Promise<void> {

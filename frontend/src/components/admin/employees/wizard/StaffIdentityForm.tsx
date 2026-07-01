@@ -14,6 +14,7 @@ import { Info } from 'lucide-react';
 import { adminApi } from '../../../../services/api';
 import Input from '../../../common/Input';
 import Button from '../../../common/Button';
+import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from '../../../../utils/passwordPolicy';
 import ReturningEmployeeSearch, { type ReturningEmployeeCandidate } from '../../../common/ReturningEmployeeSearch';
 import EmployeeHRFields, { hrPayload, type EmployeeHRFormFields } from '../../EmployeeHRFields';
 import type { CreatedEmployee } from './TeacherIdentityForm';
@@ -22,6 +23,8 @@ type FormFields = {
   fullName: string;
   position: string;
   emergencyContact: string;
+  username: string;
+  password: string;
 } & EmployeeHRFormFields;
 
 interface Props {
@@ -31,12 +34,17 @@ interface Props {
 export default function StaffIdentityForm({ onCreated }: Props) {
   const { t } = useTranslation();
   const [submitting, setSubmitting] = useState(false);
+  const [createLogin, setCreateLogin] = useState(false);
   const [prevArchiveId, setPrevArchiveId] = useState<string | null>(null);
   const [prevArchiveLabel, setPrevArchiveLabel] = useState('');
   const form = useForm<FormFields>();
   const watchedName = form.watch('fullName');
 
   const onSubmit = async (data: FormFields) => {
+    if (createLogin && data.password && !isStrongPassword(data.password)) {
+      toast.error(PASSWORD_POLICY_MESSAGE);
+      return;
+    }
     setSubmitting(true);
     try {
       const res = await adminApi.createStaff({
@@ -47,10 +55,15 @@ export default function StaffIdentityForm({ onCreated }: Props) {
         salaryAmount: 0,
         currency: 'USD',
         previousArchiveId: prevArchiveId || undefined,
+        createLogin,
+        username: createLogin ? (data.username || undefined) : undefined,
+        password: createLogin ? (data.password || undefined) : undefined,
       });
       const created: CreatedEmployee = {
         id: res.data?.id,
         fullName: data.fullName,
+        username: res.data?.username,
+        tempPassword: res.data?.tempPassword,
       };
       toast.success(t('admin.wizard.identity_saved', 'Employee created. Add optional details below.'));
       onCreated(created);
@@ -86,6 +99,32 @@ export default function StaffIdentityForm({ onCreated }: Props) {
           <label className="block text-xs font-medium text-gray-500 mb-1">{t('admin.staff_emp.emergency_contact')}</label>
           <Input placeholder={t('admin.staff_emp.emergency_contact')} {...form.register('emergencyContact')} />
         </div>
+      </div>
+
+      {/* Optional login — lets this staff member sign in on mobile to clock in/out. */}
+      <div className="rounded-xl border border-gray-200 p-3 space-y-2">
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={createLogin}
+            onChange={e => setCreateLogin(e.target.checked)}
+            className="w-4 h-4 text-primary-600"
+          />
+          <span className="text-sm font-medium text-gray-700">{t('admin.staff_emp.create_login')}</span>
+        </label>
+        <p className="text-xs text-gray-400">{t('admin.staff_emp.create_login_hint')}</p>
+        {createLogin && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">{t('admin.staff_emp.username_optional')}</label>
+              <Input placeholder={t('admin.staff_emp.username_optional')} {...form.register('username')} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">{t('admin.staff_emp.password')}</label>
+              <Input type="password" placeholder={t('admin.staff_emp.password_default')} {...form.register('password')} />
+            </div>
+          </div>
+        )}
       </div>
 
       <ReturningEmployeeSearch
