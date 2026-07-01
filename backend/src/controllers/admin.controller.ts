@@ -26,7 +26,7 @@ import { hasArchiveFeature, normalizeArchiveReason, resolveEmployeeArchiveId, re
 import { loadArchivedEmployeeForPdf, streamArchivedEmployeePdf } from '../utils/archivedEmployeePdf';
 import { loadArchivedStudentForPdf, streamArchivedStudentPdf } from '../utils/archivedStudentPdf';
 import { pickLang, fetchLogoBuffer } from '../utils/archivePdfShared';
-import { streamSchedulePdf, type SchedSlot, type SchedPage, type SchedRow, type SchedCell } from '../utils/schedulePdf';
+import { streamSchedulePdf, type SchedSlot, type SchedPage, type SchedRow, type SchedCell, type MasterGridData } from '../utils/schedulePdf';
 import { hrColumns, hrSnapshot } from '../utils/employeeHr';
 import { defaultPasswordFor } from '../utils/defaultPasswords';
 import { propagateAdminSetPhone } from '../utils/adminPhonePropagation';
@@ -6604,37 +6604,52 @@ export async function downloadSchedulePdf(req: AuthRequest, res: Response): Prom
     byClass.get(a.class_id)!.set(k, a);
   }
 
+  // The lesson period numbers, in order (breaks excluded).
+  const periods: number[] = columns.filter(c => c.kind === 'lesson').map(c => c.period as number);
+
+  // Teachers → ONE master grid: rows = teachers (with >=1 lesson), columns =
+  // day × period, cell = class (+ subject) taught then.
+  const masterRows: MasterGridData['rows'] = [];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const buildRows = (lookup: Map<string, any>, mode: 'teacher' | 'class'): SchedRow[] =>
+  for (const t of (teachers || []) as any[]) {
+    if (!teacherHas.has(t.id)) continue;
+    const lookup = byTeacher.get(t.id)!;
+    const cells: (SchedCell | null)[] = [];
+    for (const d of dayIndices) for (const p of periods) {
+      const a = lookup.get(`${d}:${p}`);
+      cells.push(a ? { line1: classNm.get(a.class_id) ?? '', line2: a.subject_id ? (subjectNm.get(a.subject_id) ?? '') : '' } : null);
+    }
+    masterRows.push({ teacher: t.full_name, cells });
+  }
+  const master: MasterGridData | null = masterRows.length ? { days: dayIndices, periods, rows: masterRows } : null;
+
+  // Classes → one page each: rows = days, columns = skeleton, cell = subject/teacher/room.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const buildClassRows = (lookup: Map<string, any>): SchedRow[] =>
     dayIndices.map(dayIndex => ({
       dayIndex,
       cells: columns.map((col): SchedCell | null => {
         if (col.kind !== 'lesson') return null;
         const a = lookup.get(`${dayIndex}:${col.period}`);
         if (!a) return null;
-        const subj = a.subject_id ? (subjectNm.get(a.subject_id) ?? '') : '';
-        const room = a.room_id ? (roomNm.get(a.room_id) ?? '') : '';
-        return mode === 'teacher'
-          ? { line1: classNm.get(a.class_id) ?? '', line2: subj, line3: room }
-          : { line1: subj, line2: teacherNm.get(a.teacher_id) ?? '', line3: room };
+        return {
+          line1: a.subject_id ? (subjectNm.get(a.subject_id) ?? '') : '',
+          line2: teacherNm.get(a.teacher_id) ?? '',
+          line3: a.room_id ? (roomNm.get(a.room_id) ?? '') : '',
+        };
       }),
     }));
-
-  const pages: SchedPage[] = [];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  for (const t of (teachers || []) as any[]) {
-    if (teacherHas.has(t.id)) pages.push({ title: t.full_name, kind: 'teacher', rows: buildRows(byTeacher.get(t.id)!, 'teacher') });
-  }
+  const classPages: SchedPage[] = [];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   for (const c of (classes || []) as any[]) {
-    if (classHas.has(c.id)) pages.push({ title: c.name, kind: 'class', rows: buildRows(byClass.get(c.id)!, 'class') });
+    if (classHas.has(c.id)) classPages.push({ title: c.name, kind: 'class', rows: buildClassRows(byClass.get(c.id)!) });
   }
 
   const logo = await fetchLogoBuffer((school?.logo_url as string | null) ?? null);
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', 'inline; filename="schedule.pdf"');
   await streamSchedulePdf(
-    { schoolName: (school?.name as string) || '', logo, columns, pages, generatedAt: new Date().toISOString() },
+    { schoolName: (school?.name as string) || '', logo, columns, master, classPages, generatedAt: new Date().toISOString() },
     lang, res,
   );
 }
