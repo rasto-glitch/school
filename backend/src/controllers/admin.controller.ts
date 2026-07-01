@@ -25,7 +25,8 @@ import { solveTimetable, type SolverRequirement, type SolverLocked } from '../ut
 import { hasArchiveFeature, normalizeArchiveReason, resolveEmployeeArchiveId, rewriteOwnershipToArchive } from '../utils/employeeArchive';
 import { loadArchivedEmployeeForPdf, streamArchivedEmployeePdf } from '../utils/archivedEmployeePdf';
 import { loadArchivedStudentForPdf, streamArchivedStudentPdf } from '../utils/archivedStudentPdf';
-import { pickLang } from '../utils/archivePdfShared';
+import { pickLang, fetchLogoBuffer } from '../utils/archivePdfShared';
+import { streamSchedulePdf, type SchedSlot, type SchedPage, type SchedRow, type SchedCell } from '../utils/schedulePdf';
 import { hrColumns, hrSnapshot } from '../utils/employeeHr';
 import { defaultPasswordFor } from '../utils/defaultPasswords';
 import { propagateAdminSetPhone } from '../utils/adminPhonePropagation';
@@ -6534,6 +6535,108 @@ export async function deleteSubstitution(req: AuthRequest, res: Response): Promi
   const { error } = await supabase.from('substitutions').delete().eq('id', id).eq('school_id', schoolId);
   if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json({ success: true });
+}
+
+// ---- SCHEDULE PDF EXPORT (Schedule 2.0) ----
+// Whole-school timetable: one page per teacher (their classes) + one page per
+// class (their lessons). Landscape A4, RTL-aware. Admin-only.
+export async function downloadSchedulePdf(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const lang = pickLang(req.query.lang);
+  const config = await readScheduleConfig(schoolId);
+
+  const [
+    { data: school, error: scErr },
+    { data: teachers, error: tErr },
+    { data: classes, error: cErr },
+    { data: subjects, error: sErr },
+    { data: rooms, error: roErr },
+    { data: assigns, error: aErr },
+  ] = await Promise.all([
+    supabase.from('schools').select('name, logo_url').eq('id', schoolId).single(),
+    supabase.from('teachers').select('id, full_name').eq('school_id', schoolId).order('full_name'),
+    supabase.from('classes').select('id, name').eq('school_id', schoolId).order('name'),
+    supabase.from('subjects').select('id, name').eq('school_id', schoolId),
+    supabase.from('rooms').select('id, name').eq('school_id', schoolId),
+    supabase.from('schedule_assignments').select('teacher_id, class_id, day_of_week, period_index, subject_id, room_id').eq('school_id', schoolId),
+  ]);
+  if (scErr || tErr || cErr || sErr || roErr || aErr) {
+    res.status(500).json({ error: scErr?.message || tErr?.message || cErr?.message || sErr?.message || roErr?.message || aErr?.message }); return;
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const assignments = (assigns || []) as any[];
+  if (assignments.length === 0) {
+    res.status(400).json({ error: 'There is no schedule to export yet. Build or generate the timetable first.' }); return;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const teacherNm = new Map<string, string>((teachers || []).map((t: any) => [t.id, t.full_name]));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const classNm = new Map<string, string>((classes || []).map((c: any) => [c.id, c.name]));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const subjectNm = new Map<string, string>((subjects || []).map((s: any) => [s.id, s.name]));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const roomNm = new Map<string, string>((rooms || []).map((r: any) => [r.id, r.name]));
+
+  const dayIndices = (config.scheduleDays as string[])
+    .map(d => VALID_DAYS.indexOf(String(d).toLowerCase()))
+    .filter(i => i >= 0)
+    .sort((a, b) => a - b);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const columns: SchedSlot[] = (config.skeleton as any[]).map(s => s.kind === 'lesson'
+    ? { kind: 'lesson', period: s.index, start: s.start, end: s.end }
+    : { kind: 'break', label: s.label, start: s.start, end: s.end });
+
+  // Index every lesson by teacher and by class → (day:period) → assignment.
+  const teacherHas = new Set<string>();
+  const classHas = new Set<string>();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const byTeacher = new Map<string, Map<string, any>>();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const byClass = new Map<string, Map<string, any>>();
+  for (const a of assignments) {
+    teacherHas.add(a.teacher_id); classHas.add(a.class_id);
+    const k = `${a.day_of_week}:${a.period_index}`;
+    if (!byTeacher.has(a.teacher_id)) byTeacher.set(a.teacher_id, new Map());
+    byTeacher.get(a.teacher_id)!.set(k, a);
+    if (!byClass.has(a.class_id)) byClass.set(a.class_id, new Map());
+    byClass.get(a.class_id)!.set(k, a);
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const buildRows = (lookup: Map<string, any>, mode: 'teacher' | 'class'): SchedRow[] =>
+    dayIndices.map(dayIndex => ({
+      dayIndex,
+      cells: columns.map((col): SchedCell | null => {
+        if (col.kind !== 'lesson') return null;
+        const a = lookup.get(`${dayIndex}:${col.period}`);
+        if (!a) return null;
+        const subj = a.subject_id ? (subjectNm.get(a.subject_id) ?? '') : '';
+        const room = a.room_id ? (roomNm.get(a.room_id) ?? '') : '';
+        return mode === 'teacher'
+          ? { line1: classNm.get(a.class_id) ?? '', line2: subj, line3: room }
+          : { line1: subj, line2: teacherNm.get(a.teacher_id) ?? '', line3: room };
+      }),
+    }));
+
+  const pages: SchedPage[] = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const t of (teachers || []) as any[]) {
+    if (teacherHas.has(t.id)) pages.push({ title: t.full_name, kind: 'teacher', rows: buildRows(byTeacher.get(t.id)!, 'teacher') });
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const c of (classes || []) as any[]) {
+    if (classHas.has(c.id)) pages.push({ title: c.name, kind: 'class', rows: buildRows(byClass.get(c.id)!, 'class') });
+  }
+
+  const logo = await fetchLogoBuffer((school?.logo_url as string | null) ?? null);
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', 'inline; filename="schedule.pdf"');
+  await streamSchedulePdf(
+    { schoolName: (school?.name as string) || '', logo, columns, pages, generatedAt: new Date().toISOString() },
+    lang, res,
+  );
 }
 
 // ---- MARK TYPES ----

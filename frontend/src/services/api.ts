@@ -414,6 +414,7 @@ export const adminApi = {
     api.post('/admin/substitutions/assign', data),
   deleteSubstitution: (id: string) => api.delete(`/admin/substitutions/${id}`),
   scheduleTemplate: () => api.get('/admin/schedule/template.xlsx', { responseType: 'blob' }),
+  downloadSchedulePdf: (lang?: string) => api.get('/admin/schedule/pdf', { params: lang ? { lang } : {}, responseType: 'blob' }),
   uploadSchedule: (file: File) => {
     const fd = new FormData();
     fd.append('file', file);

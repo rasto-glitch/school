@@ -812,6 +812,8 @@
     "no_room": "—",
     "pin": "Pin (keep on regenerate)",
     "unpin": "Unpin",
+    "download_pdf": "Download PDF",
+    "pdf_failed": "Could not export the schedule.",
     "generate": {
       "title": "Auto-generate timetable",
       "hint": "Fill the grid from the teaching plan, honoring teacher/class/room clashes, availability, weekly load and the daily subject cap. Locked (pinned) lessons are always kept.",

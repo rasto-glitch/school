@@ -29,7 +29,7 @@ function addMinutes(hhmm: string, mins: number): string {
 }
 
 export default function SchedulePage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const dayLabel = (day: string) => t(`common.days.${day}`);
 
   const [scheduleDays, setScheduleDays] = useState<string[]>(['sunday', 'monday', 'tuesday', 'wednesday', 'thursday']);
@@ -53,6 +53,7 @@ export default function SchedulePage() {
   const [generating, setGenerating] = useState(false);
   const [clearUnlocked, setClearUnlocked] = useState(true);
   const [genResult, setGenResult] = useState<GenResult | null>(null);
+  const [pdfBusy, setPdfBusy] = useState(false);
 
   const load = () =>
     adminApi.getSchedule().then(r => {
@@ -178,6 +179,19 @@ export default function SchedulePage() {
     catch { toast.error(t('admin.schedule_upload.template_failed', 'Could not download the template.')); }
     finally { setTemplateBusy(false); }
   };
+  const downloadPdf = async () => {
+    setPdfBusy(true);
+    try {
+      const res = await adminApi.downloadSchedulePdf(i18n.language);
+      saveBlob(res.data as Blob, 'schedule.pdf');
+    } catch (err: any) {
+      // A blob-typed error body holds the JSON error — read it back for a useful message.
+      let msg = t('schedule2.pdf_failed', 'Could not export the schedule.');
+      const data = err?.response?.data;
+      if (data instanceof Blob) { try { const j = JSON.parse(await data.text()); if (j?.error) msg = j.error; } catch { /* keep default */ } }
+      toast.error(msg);
+    } finally { setPdfBusy(false); }
+  };
   const onUpload = async (file: File) => {
     setUploading(true); setUploadResult(null);
     try {
@@ -195,6 +209,12 @@ export default function SchedulePage() {
   return (
     <PageLayout title={t('admin.weekly_schedule')}>
       <div className="space-y-6">
+        <div className="flex justify-end">
+          <Button type="button" variant="outline" icon={<Download className="w-4 h-4" />} loading={pdfBusy} onClick={downloadPdf}>
+            {t('schedule2.download_pdf', 'Download PDF')}
+          </Button>
+        </div>
+
         {/* Day structure (skeleton) + school days */}
         <Card>
           <h2 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
