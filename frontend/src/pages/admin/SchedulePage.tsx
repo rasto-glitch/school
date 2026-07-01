@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'react-toastify';
-import { Calendar, X, Download, Upload, FileSpreadsheet, Plus, Trash2, ArrowUp, ArrowDown, Coffee, DoorOpen } from 'lucide-react';
+import { Calendar, X, Download, Upload, FileSpreadsheet, Plus, Trash2, ArrowUp, ArrowDown, Coffee, DoorOpen, Wand2, Lock, Unlock, Ban, CheckCircle2 } from 'lucide-react';
 import { adminApi, type ScheduleSlot } from '../../services/api';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 
 interface ScheduleUploadResult { placed: number; days: string[]; warnings: string[] }
+interface UnplacedRow { className: string | null; subjectName: string | null; teacherName: string | null; count: number; reason: string }
+interface GenResult { generated: number; demand: number; fullyPlaced: boolean; attempts: number; cleared: boolean; unplaced: UnplacedRow[] }
 
 const DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
 const DAY_INDEX: Record<string, number> = Object.fromEntries(DAY_NAMES.map((d, i) => [d, i]));
@@ -47,6 +49,10 @@ export default function SchedulePage() {
   const [templateBusy, setTemplateBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<ScheduleUploadResult | null>(null);
+
+  const [generating, setGenerating] = useState(false);
+  const [clearUnlocked, setClearUnlocked] = useState(true);
+  const [genResult, setGenResult] = useState<GenResult | null>(null);
 
   const load = () =>
     adminApi.getSchedule().then(r => {
@@ -96,6 +102,39 @@ export default function SchedulePage() {
       toast.error(err.response?.data?.error || t('admin.cell_update_failed'));
     }
   };
+
+  // Pin/unpin a lesson — locked cells survive auto-generation.
+  const toggleLock = async (cell: Cell) => {
+    try {
+      const res = await adminApi.setScheduleCell({
+        teacherId: cell.teacherId, dayOfWeek: cell.dayOfWeek, periodIndex: cell.periodIndex,
+        classId: cell.classId, subjectId: cell.subjectId ?? null, roomId: cell.roomId ?? null, isLocked: !cell.isLocked,
+      });
+      const key = `${cell.teacherId}:${cell.dayOfWeek}:${cell.periodIndex}`;
+      setCells(prev => prev.map(c => (`${c.teacherId}:${c.dayOfWeek}:${c.periodIndex}` === key ? (res.data.assignment as Cell) : c)));
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || t('admin.cell_update_failed'));
+    }
+  };
+
+  const onGenerate = async () => {
+    setGenerating(true); setGenResult(null);
+    try {
+      const res = await adminApi.generateSchedule({ clearUnlocked });
+      const data = res.data as GenResult;
+      setGenResult(data);
+      if (data.fullyPlaced) toast.success(t('schedule2.generate.done_full', { count: data.generated, defaultValue: 'Placed all {{count}} lessons.' }));
+      else toast.info(t('schedule2.generate.done_partial', { count: data.generated, defaultValue: 'Placed {{count}} lessons — some couldn\'t be scheduled.' }));
+      await load();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || t('schedule2.generate.failed', 'Could not generate the timetable.'));
+    } finally { setGenerating(false); }
+  };
+
+  const reasonLabel = (reason: string) =>
+    reason === 'no_teacher'
+      ? t('schedule2.generate.reason_no_teacher', 'no teacher assigned')
+      : t('schedule2.generate.reason_no_slot', 'no free slot');
 
   // ── Day-structure (skeleton) editing ──
   const lastEnd = () => (draftSkeleton.length ? draftSkeleton[draftSkeleton.length - 1].end : '08:00');
@@ -214,6 +253,47 @@ export default function SchedulePage() {
         {/* Rooms */}
         <RoomsCard rooms={rooms} classes={classes} onChange={load} />
 
+        {/* Teacher availability (feeds the generator) */}
+        <AvailabilityCard
+          teachers={teachers}
+          periods={columns.filter(c => c.kind === 'lesson').map(c => c.period as number)}
+          orderedDays={orderedDays}
+          dayLabel={dayLabel}
+        />
+
+        {/* Auto-generate */}
+        <Card>
+          <h2 className="font-semibold text-gray-900 mb-1 flex items-center gap-2"><Wand2 className="w-4 h-4" /> {t('schedule2.generate.title', 'Auto-generate timetable')}</h2>
+          <p className="text-sm text-gray-500 mb-3">{t('schedule2.generate.hint', 'Fill the grid from the teaching plan, honoring teacher/class/room clashes, availability, weekly load and the daily subject cap. Locked (pinned) lessons are always kept.')}</p>
+          <div className="flex flex-wrap items-center gap-4">
+            <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+              <input type="checkbox" checked={clearUnlocked} onChange={e => setClearUnlocked(e.target.checked)} className="rounded border-gray-300" />
+              {t('schedule2.generate.clear_unlocked', 'Replace unpinned lessons')}
+            </label>
+            <Button type="button" icon={<Wand2 className="w-4 h-4" />} loading={generating} onClick={onGenerate}>{t('schedule2.generate.run', 'Generate')}</Button>
+          </div>
+          {genResult && (
+            <div className="mt-4 border-t border-gray-100 pt-4 space-y-2">
+              <div className="flex flex-wrap gap-2">
+                <span className="text-xs font-semibold bg-green-50 text-green-700 px-2.5 py-1 rounded-full">{t('schedule2.generate.placed_stat', { count: genResult.generated, defaultValue: '{{count}} placed' })}</span>
+                <span className="text-xs font-semibold bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full">{t('schedule2.generate.demand_stat', { count: genResult.demand, defaultValue: '{{count}} demanded' })}</span>
+              </div>
+              {genResult.fullyPlaced ? (
+                <p className="flex items-center gap-1.5 text-sm text-green-700"><CheckCircle2 className="w-4 h-4" /> {t('schedule2.generate.all_placed', 'Every lesson was placed.')}</p>
+              ) : genResult.unplaced.length > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  <p className="text-sm text-amber-900 font-medium mb-1">{t('schedule2.generate.unplaced_title', { count: genResult.unplaced.reduce((s, u) => s + u.count, 0), defaultValue: '{{count}} lesson(s) could not be placed' })}</p>
+                  <ul className="text-xs text-amber-800 list-disc list-inside space-y-0.5 max-h-48 overflow-y-auto">
+                    {genResult.unplaced.map((u, i) => (
+                      <li key={i}>{[u.subjectName, u.className].filter(Boolean).join(' · ')}{u.teacherName ? ` (${u.teacherName})` : ''} — {u.count} {reasonLabel(u.reason)}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+        </Card>
+
         {/* Bulk upload */}
         <Card>
           <div className="flex items-start gap-3 mb-4">
@@ -289,13 +369,19 @@ export default function SchedulePage() {
                             const subjName = cell?.subjectId ? subjectsById.get(cell.subjectId)?.name : undefined;
                             const roomName = cell?.roomId ? roomsById.get(cell.roomId)?.name : undefined;
                             return (
-                              <td key={col.key} className="border-b border-r border-gray-200 p-0.5 text-center align-top">
+                              <td key={col.key} className={`border-b border-r p-0.5 text-center align-top ${cell?.isLocked ? 'bg-amber-50/70 border-amber-200' : 'border-gray-200'}`}>
                                 <div className="flex items-center justify-center gap-0.5">
                                   <select value={cell?.classId ?? ''} onChange={e => setCellClass(tch.id, dayIdx, col.period, e.target.value || null)}
                                     className="w-full px-1 py-1 text-[11px] border border-transparent hover:border-gray-200 focus:border-primary-400 rounded bg-transparent focus:outline-none cursor-pointer">
                                     <option value="">—</option>
                                     {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                                   </select>
+                                  {cell && (
+                                    <button type="button" onClick={() => toggleLock(cell)} title={cell.isLocked ? t('schedule2.unpin', 'Unpin') : t('schedule2.pin', 'Pin (keep on regenerate)')}
+                                      className={cell.isLocked ? 'text-amber-600' : 'text-gray-300 hover:text-amber-500'}>
+                                      {cell.isLocked ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
+                                    </button>
+                                  )}
                                   {cell && <button type="button" onClick={() => setCellClass(tch.id, dayIdx, col.period, null)} className="text-gray-300 hover:text-rose-500" title={t('admin.clear')}><X className="w-3 h-3" /></button>}
                                 </div>
                                 {(subjName || roomName) && <div className="text-[9px] text-gray-400 truncate leading-tight">{[subjName, roomName].filter(Boolean).join(' · ')}</div>}
@@ -380,6 +466,78 @@ function RoomsCard({ rooms, classes, onChange }: { rooms: Room[]; classes: Class
               </div>
             ))}
           </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// ── Teacher availability: per-teacher day×period grid of blocked cells ──
+function AvailabilityCard({ teachers, periods, orderedDays, dayLabel }: {
+  teachers: TeacherRow[]; periods: number[]; orderedDays: string[]; dayLabel: (d: string) => string;
+}) {
+  const { t } = useTranslation();
+  const [teacherId, setTeacherId] = useState('');
+  const [blocked, setBlocked] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    adminApi.getTeacherUnavailability().then(r => {
+      const s = new Set<string>();
+      for (const u of (r.data.unavailability || []) as { teacherId: string; dayOfWeek: number; periodIndex: number }[]) s.add(`${u.teacherId}:${u.dayOfWeek}:${u.periodIndex}`);
+      setBlocked(s);
+    }).catch(() => {});
+  }, []);
+  useEffect(() => { if (!teacherId && teachers.length) setTeacherId(teachers[0].id); }, [teachers, teacherId]);
+
+  const toggle = async (d: number, p: number) => {
+    if (!teacherId) return;
+    const key = `${teacherId}:${d}:${p}`;
+    try {
+      const r = await adminApi.toggleTeacherUnavailability({ teacherId, dayOfWeek: d, periodIndex: p });
+      setBlocked(prev => { const n = new Set(prev); if (r.data.blocked) n.add(key); else n.delete(key); return n; });
+    } catch (e: any) { toast.error(e.response?.data?.error || t('schedule2.availability.failed', 'Could not update availability.')); }
+  };
+
+  return (
+    <Card>
+      <h2 className="font-semibold text-gray-900 mb-1 flex items-center gap-2"><Ban className="w-4 h-4" /> {t('schedule2.availability.title', 'Teacher availability')}</h2>
+      <p className="text-sm text-gray-500 mb-3">{t('schedule2.availability.hint', 'Click a period to block it for the selected teacher. The generator won’t place any lesson in a red cell.')}</p>
+      <select value={teacherId} onChange={e => setTeacherId(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm mb-3">
+        {teachers.length === 0 && <option value="">—</option>}
+        {teachers.map(tc => <option key={tc.id} value={tc.id}>{tc.fullName}</option>)}
+      </select>
+      {teacherId && periods.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="border-collapse text-xs">
+            <thead>
+              <tr>
+                <th className="px-2 py-1 text-left text-gray-500 font-semibold" />
+                {periods.map(p => <th key={p} className="px-1 py-1 text-center text-gray-500 font-semibold w-9">{p}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {orderedDays.map(day => {
+                const d = DAY_INDEX[day];
+                return (
+                  <tr key={day}>
+                    <td className="px-2 py-1 text-gray-700 whitespace-nowrap">{dayLabel(day)}</td>
+                    {periods.map(p => {
+                      const isBlocked = blocked.has(`${teacherId}:${d}:${p}`);
+                      return (
+                        <td key={p} className="p-0.5">
+                          <button type="button" onClick={() => toggle(d, p)}
+                            className={`w-8 h-7 rounded flex items-center justify-center transition-colors ${isBlocked ? 'bg-rose-500 text-white hover:bg-rose-600' : 'bg-gray-50 hover:bg-gray-200 border border-gray-100'}`}
+                            title={isBlocked ? t('schedule2.availability.blocked', 'Blocked') : t('schedule2.availability.available', 'Available')}>
+                            {isBlocked ? <Ban className="w-3.5 h-3.5" /> : null}
+                          </button>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
     </Card>

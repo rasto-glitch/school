@@ -12,7 +12,7 @@ import {
   FileText, Star, Clock, X, ClipboardCheck, MessageSquare, Archive,
   CreditCard, Wallet, History, Receipt, BookOpenCheck,
   AlertCircle, FileBarChart, BarChart3, CalendarClock, ArrowLeftRight, Scale,
-  ShieldCheck, ShieldAlert, UserPlus, Send, QrCode, HeartPulse,
+  ShieldCheck, ShieldAlert, UserPlus, Send, QrCode, HeartPulse, Replace,
 } from 'lucide-react';
 import type { Dispatch, SetStateAction } from 'react';
 import type { Role } from '../../types';
@@ -86,6 +86,8 @@ const adminNav: AdminNavNode[] = [
     ],
   },
   { kind: 'leaf', path: '/admin/schedule', icon: Calendar, labelKey: 'nav.schedule', labelFallback: 'Schedule', capabilities: ['academics.oversee'] },
+  { kind: 'leaf', path: '/admin/teaching-plan', icon: GraduationCap, labelKey: 'nav.teaching_plan', labelFallback: 'Teaching Plan', capabilities: ['academics.oversee'] },
+  { kind: 'leaf', path: '/admin/substitutions', icon: Replace, labelKey: 'nav.substitutions', labelFallback: 'Substitutes', capabilities: ['academics.oversee'] },
   { kind: 'leaf', path: '/admin/grade-review', icon: Star, labelKey: 'nav.grade_review', labelFallback: 'Grade Review', feature: 'grades', capabilities: ['academics.oversee'] },
   { kind: 'leaf', path: '/admin/report-cards', icon: FileText, labelKey: 'nav.report_cards', labelFallback: 'Report Cards', feature: 'grades', capabilities: ['academics.oversee'] },
   { kind: 'leaf', path: '/admin/weekly-summary', icon: Clock, labelKey: 'nav.weekly_summary', labelFallback: 'Weekly Summary', feature: 'weekly_summary', capabilities: ['academics.oversee'] },

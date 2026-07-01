@@ -21,6 +21,7 @@ import { loadEmployeeArchiveSnapshot, streamPdf as streamEmployeePdf, buildXlsx 
 import { streamCredentialsPdf, type CredentialEntry } from '../utils/credentialsPdf';
 import { logAudit } from '../utils/audit';
 import { resolveSkeleton, normalizeSkeleton, defaultSkeleton, lessonCount } from '../utils/scheduleSkeleton';
+import { solveTimetable, type SolverRequirement, type SolverLocked } from '../utils/timetableSolver';
 import { hasArchiveFeature, normalizeArchiveReason, resolveEmployeeArchiveId, rewriteOwnershipToArchive } from '../utils/employeeArchive';
 import { loadArchivedEmployeeForPdf, streamArchivedEmployeePdf } from '../utils/archivedEmployeePdf';
 import { loadArchivedStudentForPdf, streamArchivedStudentPdf } from '../utils/archivedStudentPdf';
@@ -5928,6 +5929,575 @@ export async function setClassRoom(req: AuthRequest, res: Response): Promise<voi
   const { error } = await supabase.from('classes').update({ room_id: rid }).eq('id', classId).eq('school_id', schoolId);
   if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json({ success: true, roomId: rid });
+}
+
+// ---- TEACHING PLAN / بەشە وانە (Schedule 2.0 Phase 2, migration 069) ----
+// The "demand" side of the timetable: per (class, subject) how many periods a
+// week, which teacher, which room, and the daily cap. Plus each teacher's
+// weekly load vs their نصاب cap. Feeds the Phase-3 auto-generator and lets the
+// admin validate the manual grid against the intended demand.
+
+// Full teaching-plan payload: requirements (enriched), pick-lists, and a
+// per-teacher load board (required demand vs cap vs what's actually placed).
+export async function getTeachingPlan(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+
+  const [
+    { data: reqRows, error: rqErr },
+    { data: classes, error: cErr },
+    { data: subjects, error: sErr },
+    { data: teachers, error: tErr },
+    { data: rooms, error: roErr },
+    { data: placed, error: pErr },
+  ] = await Promise.all([
+    supabase
+      .from('timetable_requirements')
+      .select('id, class_id, subject_id, teacher_id, periods_per_week, max_per_day, room_id, classes(name), subjects(name), teachers(full_name), rooms(name)')
+      .eq('school_id', schoolId),
+    supabase.from('classes').select('id, name, grade_level').eq('school_id', schoolId).order('name'),
+    supabase.from('subjects').select('id, name').eq('school_id', schoolId).order('name'),
+    supabase.from('teachers').select('id, full_name, subject, max_periods_per_week').eq('school_id', schoolId).order('full_name'),
+    supabase.from('rooms').select('id, name').eq('school_id', schoolId).order('name'),
+    supabase.from('schedule_assignments').select('teacher_id').eq('school_id', schoolId),
+  ]);
+  if (rqErr || cErr || sErr || tErr || roErr || pErr) {
+    res.status(500).json({ error: rqErr?.message || cErr?.message || sErr?.message || tErr?.message || roErr?.message || pErr?.message });
+    return;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const requirements = (reqRows || []).map((r: any) => ({
+    id: r.id,
+    classId: r.class_id,
+    className: r.classes?.name ?? null,
+    subjectId: r.subject_id,
+    subjectName: r.subjects?.name ?? null,
+    teacherId: r.teacher_id,
+    teacherName: r.teachers?.full_name ?? null,
+    periodsPerWeek: r.periods_per_week,
+    maxPerDay: r.max_per_day,
+    roomId: r.room_id,
+    roomName: r.rooms?.name ?? null,
+  }));
+
+  // Required load per teacher = SUM(periods_per_week) over their requirements.
+  const requiredByTeacher = new Map<string, number>();
+  for (const r of requirements) {
+    if (!r.teacherId) continue;
+    requiredByTeacher.set(r.teacherId, (requiredByTeacher.get(r.teacherId) || 0) + (r.periodsPerWeek || 0));
+  }
+  // Placed load per teacher = actual cells already in the grid.
+  const placedByTeacher = new Map<string, number>();
+  for (const p of placed || []) {
+    const tid = (p as { teacher_id: string }).teacher_id;
+    placedByTeacher.set(tid, (placedByTeacher.get(tid) || 0) + 1);
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const load = (teachers || []).map((t: any) => ({
+    teacherId: t.id,
+    fullName: t.full_name,
+    subject: t.subject ?? null,
+    maxPeriodsPerWeek: t.max_periods_per_week ?? null,
+    requiredPeriods: requiredByTeacher.get(t.id) || 0,
+    placedPeriods: placedByTeacher.get(t.id) || 0,
+  }));
+  // Demand with no teacher assigned yet (won't count toward anyone's load).
+  const unassignedPeriods = requirements
+    .filter(r => !r.teacherId)
+    .reduce((sum, r) => sum + (r.periodsPerWeek || 0), 0);
+
+  res.json({
+    requirements,
+    classes: toCC(classes),
+    subjects: toCC(subjects),
+    rooms: toCC(rooms),
+    load,
+    unassignedPeriods,
+  });
+}
+
+// Create or update the requirement for a (class, subject). Upserts on the
+// (class_id, subject_id) unique key so the same subject can't be listed twice
+// for a class.
+export async function upsertTeachingRequirement(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { classId, subjectId, teacherId, periodsPerWeek, maxPerDay, roomId } = req.body as {
+    classId?: string; subjectId?: string; teacherId?: string | null;
+    periodsPerWeek?: number; maxPerDay?: number; roomId?: string | null;
+  };
+  if (!classId || !subjectId || typeof periodsPerWeek !== 'number') {
+    res.status(400).json({ error: 'classId, subjectId and periodsPerWeek are required' }); return;
+  }
+
+  // Scope every referenced row to this school.
+  const [{ data: cls }, { data: subj }] = await Promise.all([
+    supabase.from('classes').select('id').eq('id', classId).eq('school_id', schoolId).maybeSingle(),
+    supabase.from('subjects').select('id').eq('id', subjectId).eq('school_id', schoolId).maybeSingle(),
+  ]);
+  if (!cls) { res.status(404).json({ error: 'Class not found' }); return; }
+  if (!subj) { res.status(404).json({ error: 'Subject not found' }); return; }
+
+  let resolvedTeacherId: string | null = null;
+  if (teacherId) {
+    const { data: tch } = await supabase.from('teachers').select('id').eq('id', teacherId).eq('school_id', schoolId).maybeSingle();
+    if (!tch) { res.status(404).json({ error: 'Teacher not found' }); return; }
+    resolvedTeacherId = teacherId;
+  }
+  let resolvedRoomId: string | null = null;
+  if (roomId) {
+    const { data: room } = await supabase.from('rooms').select('id').eq('id', roomId).eq('school_id', schoolId).maybeSingle();
+    if (!room) { res.status(404).json({ error: 'Room not found' }); return; }
+    resolvedRoomId = roomId;
+  }
+
+  const { data, error } = await supabase
+    .from('timetable_requirements')
+    .upsert({
+      school_id: schoolId,
+      class_id: classId,
+      subject_id: subjectId,
+      teacher_id: resolvedTeacherId,
+      periods_per_week: periodsPerWeek,
+      max_per_day: typeof maxPerDay === 'number' ? maxPerDay : 2,
+      room_id: resolvedRoomId,
+    }, { onConflict: 'class_id,subject_id' })
+    .select('id')
+    .single();
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+  res.json({ success: true, id: data?.id });
+}
+
+export async function deleteTeachingRequirement(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const id = req.params.id as string;
+  const { error } = await supabase.from('timetable_requirements').delete().eq('id', id).eq('school_id', schoolId);
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+  res.json({ success: true });
+}
+
+// Set (or clear, null) a teacher's weekly load cap (نصاب).
+export async function setTeacherLoadCap(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const id = req.params.id as string;
+  const { maxPeriodsPerWeek } = req.body as { maxPeriodsPerWeek?: number | null };
+  const cap = typeof maxPeriodsPerWeek === 'number' ? maxPeriodsPerWeek : null;
+  const { data: tch } = await supabase.from('teachers').select('id').eq('id', id).eq('school_id', schoolId).maybeSingle();
+  if (!tch) { res.status(404).json({ error: 'Teacher not found' }); return; }
+  const { error } = await supabase.from('teachers').update({ max_periods_per_week: cap }).eq('id', id).eq('school_id', schoolId);
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+  res.json({ success: true, maxPeriodsPerWeek: cap });
+}
+
+// Pull any (class, subject) from the curriculum that has no requirement yet into
+// a placeholder requirement (1 period/week). Lets an admin who just edited the
+// curriculum populate the teaching plan without hand-adding every row.
+export async function seedTeachingPlan(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const [{ data: curr, error: cErr }, { data: existing, error: eErr }] = await Promise.all([
+    supabase.from('class_subject_teachers').select('class_id, subject_id, teacher_id, created_at').eq('school_id', schoolId).order('created_at'),
+    supabase.from('timetable_requirements').select('class_id, subject_id').eq('school_id', schoolId),
+  ]);
+  if (cErr || eErr) { res.status(500).json({ error: cErr?.message || eErr?.message }); return; }
+
+  const have = new Set((existing || []).map(e => `${(e as { class_id: string }).class_id}:${(e as { subject_id: string }).subject_id}`));
+  const seen = new Set<string>();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const missing: any[] = [];
+  for (const r of curr || []) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const row = r as any;
+    const k = `${row.class_id}:${row.subject_id}`;
+    if (have.has(k) || seen.has(k)) continue;
+    seen.add(k);
+    missing.push(row);
+  }
+  if (missing.length === 0) { res.json({ success: true, added: 0 }); return; }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await supabase.from('timetable_requirements').insert(
+    missing.map((row: any) => ({
+      school_id: schoolId,
+      class_id: row.class_id,
+      subject_id: row.subject_id,
+      teacher_id: row.teacher_id,
+      periods_per_week: 1,
+      max_per_day: 2,
+    })),
+  );
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+  res.json({ success: true, added: missing.length });
+}
+
+// ---- AUTO-GENERATE TIMETABLE (Schedule 2.0 Phase 3) ----
+// Fill the weekly grid from the teaching requirements using the constraint
+// solver. Locked lessons are always preserved; unlocked ones are replaced
+// (clearUnlocked, the default) or kept as fixed obstacles (top-up mode).
+export async function generateSchedule(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const clearUnlocked = (req.body?.clearUnlocked ?? true) !== false;
+  const seed = typeof req.body?.seed === 'number' ? req.body.seed : 1;
+
+  const config = await readScheduleConfig(schoolId);
+  const periods = Array.from({ length: config.periodsPerDay }, (_, i) => i + 1);
+  const days = (config.scheduleDays as string[])
+    .map(d => VALID_DAYS.indexOf(String(d).toLowerCase()))
+    .filter(i => i >= 0);
+  if (days.length === 0 || periods.length === 0) {
+    res.status(400).json({ error: 'Set up the day structure (school days + lesson periods) before generating.' }); return;
+  }
+
+  const [
+    { data: reqRows, error: rqErr },
+    { data: classes, error: cErr },
+    { data: subjects, error: sErr },
+    { data: teachers, error: tErr },
+    { data: existing, error: eErr },
+    { data: unavail, error: uErr },
+  ] = await Promise.all([
+    supabase.from('timetable_requirements').select('id, class_id, subject_id, teacher_id, periods_per_week, max_per_day, room_id').eq('school_id', schoolId),
+    supabase.from('classes').select('id, name, room_id').eq('school_id', schoolId),
+    supabase.from('subjects').select('id, name').eq('school_id', schoolId),
+    supabase.from('teachers').select('id, full_name').eq('school_id', schoolId),
+    supabase.from('schedule_assignments').select('id, teacher_id, class_id, subject_id, room_id, day_of_week, period_index, is_locked').eq('school_id', schoolId),
+    supabase.from('teacher_unavailability').select('teacher_id, day_of_week, period_index').eq('school_id', schoolId),
+  ]);
+  if (rqErr || cErr || sErr || tErr || eErr || uErr) {
+    res.status(500).json({ error: rqErr?.message || cErr?.message || sErr?.message || tErr?.message || eErr?.message || uErr?.message }); return;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const homeRoom = new Map<string, string | null>((classes || []).map((c: any) => [c.id, c.room_id ?? null]));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const requirements: SolverRequirement[] = (reqRows || []).map((r: any) => ({
+    id: r.id,
+    classId: r.class_id,
+    subjectId: r.subject_id,
+    teacherId: r.teacher_id ?? null,
+    // Room = the requirement's explicit room, else the class's home room, else none.
+    roomId: (r.room_id as string | null) ?? homeRoom.get(r.class_id) ?? null,
+    periodsPerWeek: r.periods_per_week,
+    maxPerDay: r.max_per_day,
+  }));
+
+  // Immovable obstacles: locked lessons always; in top-up mode, every existing
+  // lesson (so the solver only fills the gaps).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const existingRows = (existing || []) as any[];
+  const immovableRows = clearUnlocked ? existingRows.filter(a => a.is_locked) : existingRows;
+  const immovable: SolverLocked[] = immovableRows.map(a => ({
+    classId: a.class_id,
+    teacherId: a.teacher_id,
+    subjectId: a.subject_id ?? null,
+    roomId: a.room_id ?? null,
+    dayOfWeek: a.day_of_week,
+    periodIndex: a.period_index,
+  }));
+
+  const unavailable = new Set<string>();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const u of (unavail || []) as any[]) unavailable.add(`${u.teacher_id}:${u.day_of_week}:${u.period_index}`);
+
+  const result = solveTimetable({ days, periods, requirements, immovable, unavailable, seed, timeBudgetMs: 3000 });
+
+  // Persist: clear the unlocked lessons (if asked), then insert the placements.
+  if (clearUnlocked) {
+    const { error: delErr } = await supabase.from('schedule_assignments').delete().eq('school_id', schoolId).eq('is_locked', false);
+    if (delErr) { res.status(safeDbErrorStatus(delErr)).json({ error: safeDbErrorMessage(delErr) }); return; }
+  }
+  if (result.placements.length > 0) {
+    const { error: insErr } = await supabase.from('schedule_assignments').insert(
+      result.placements.map(p => ({
+        school_id: schoolId,
+        teacher_id: p.teacherId,
+        class_id: p.classId,
+        subject_id: p.subjectId,
+        room_id: p.roomId,
+        day_of_week: p.dayOfWeek,
+        period_index: p.periodIndex,
+        is_locked: false,
+      })),
+    );
+    if (insErr) { res.status(safeDbErrorStatus(insErr)).json({ error: safeDbErrorMessage(insErr) }); return; }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const classNm = new Map<string, string>((classes || []).map((c: any) => [c.id, c.name]));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const subjNm = new Map<string, string>((subjects || []).map((s: any) => [s.id, s.name]));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tchNm = new Map<string, string>((teachers || []).map((t: any) => [t.id, t.full_name]));
+  const unplaced = result.unplaced.map(u => ({
+    className: classNm.get(u.classId) ?? null,
+    subjectName: subjNm.get(u.subjectId) ?? null,
+    teacherName: u.teacherId ? (tchNm.get(u.teacherId) ?? null) : null,
+    count: u.count,
+    reason: u.reason,
+  }));
+
+  res.json({
+    generated: result.placedCount,
+    demand: result.demandCount,
+    fullyPlaced: result.fullyPlaced,
+    attempts: result.attempts,
+    cleared: clearUnlocked,
+    unplaced,
+  });
+}
+
+// ---- TEACHER AVAILABILITY (Schedule 2.0 Phase 3) ----
+export async function getTeacherUnavailability(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { data, error } = await supabase
+    .from('teacher_unavailability').select('teacher_id, day_of_week, period_index').eq('school_id', schoolId);
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  res.json({ unavailability: (data || []).map((u: any) => ({ teacherId: u.teacher_id, dayOfWeek: u.day_of_week, periodIndex: u.period_index })) });
+}
+
+// Toggle a single (teacher, day, period) blocked cell on/off.
+export async function toggleTeacherUnavailability(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { teacherId, dayOfWeek, periodIndex } = req.body as { teacherId?: string; dayOfWeek?: number; periodIndex?: number };
+  if (!teacherId || typeof dayOfWeek !== 'number' || typeof periodIndex !== 'number') {
+    res.status(400).json({ error: 'teacherId, dayOfWeek and periodIndex are required' }); return;
+  }
+  const { data: tch } = await supabase.from('teachers').select('id').eq('id', teacherId).eq('school_id', schoolId).maybeSingle();
+  if (!tch) { res.status(404).json({ error: 'Teacher not found' }); return; }
+
+  const { data: existing } = await supabase
+    .from('teacher_unavailability').select('id')
+    .eq('school_id', schoolId).eq('teacher_id', teacherId).eq('day_of_week', dayOfWeek).eq('period_index', periodIndex)
+    .maybeSingle();
+  if (existing) {
+    const { error } = await supabase.from('teacher_unavailability').delete().eq('id', (existing as { id: string }).id).eq('school_id', schoolId);
+    if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+    res.json({ blocked: false }); return;
+  }
+  const { error } = await supabase.from('teacher_unavailability')
+    .insert({ school_id: schoolId, teacher_id: teacherId, day_of_week: dayOfWeek, period_index: periodIndex });
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+  res.json({ blocked: true });
+}
+
+// ---- SUBSTITUTE MANAGEMENT (Schedule 2.0 Phase 4) ----
+const isDateStr = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s);
+// Weekday index (0=Sun..6=Sat) — parse as UTC so it never shifts by timezone.
+const dowOf = (date: string) => new Date(`${date}T00:00:00Z`).getUTCDay();
+
+// Board for a date: who's on leave, plus every cover already recorded.
+export async function getSubstitutions(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const date = String(req.query.date || '');
+  if (!isDateStr(date)) { res.status(400).json({ error: 'A valid date (YYYY-MM-DD) is required' }); return; }
+  const dow = dowOf(date);
+
+  const [{ data: leave, error: lErr }, { data: subs, error: sErr }, { data: teachers, error: tErr }] = await Promise.all([
+    supabase.from('staff_leave').select('user_id, leave_type').eq('school_id', schoolId).lte('start_date', date).gte('end_date', date),
+    supabase.from('substitutions').select('id, period_index, class_id, subject_id, original_teacher_id, substitute_teacher_id, status, note, classes(name), subjects(name)').eq('school_id', schoolId).eq('date', date).order('period_index'),
+    supabase.from('teachers').select('id, full_name, user_id').eq('school_id', schoolId).order('full_name'),
+  ]);
+  if (lErr || sErr || tErr) { res.status(500).json({ error: lErr?.message || sErr?.message || tErr?.message }); return; }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tById = new Map<string, string>((teachers || []).map((t: any) => [t.id, t.full_name]));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tByUser = new Map<string, any>((teachers || []).map((t: any) => [t.user_id, t]));
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const absentees = (leave || []).map((l: any) => {
+    const tt = tByUser.get(l.user_id);
+    return tt ? { teacherId: tt.id, fullName: tt.full_name, leaveType: l.leave_type } : null;
+  }).filter(Boolean);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const substitutions = (subs || []).map((s: any) => ({
+    id: s.id, periodIndex: s.period_index,
+    classId: s.class_id, className: s.classes?.name ?? null,
+    subjectId: s.subject_id, subjectName: s.subjects?.name ?? null,
+    originalTeacherId: s.original_teacher_id, originalTeacherName: s.original_teacher_id ? (tById.get(s.original_teacher_id) ?? null) : null,
+    substituteTeacherId: s.substitute_teacher_id, substituteTeacherName: s.substitute_teacher_id ? (tById.get(s.substitute_teacher_id) ?? null) : null,
+    status: s.status, note: s.note,
+  }));
+
+  res.json({
+    date, dayOfWeek: dow, absentees, substitutions,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    teachers: (teachers || []).map((t: any) => ({ id: t.id, fullName: t.full_name })),
+  });
+}
+
+// The absent teacher's lessons that weekday, each with ranked cover candidates
+// (free = no clash / not unavailable / not on leave / not already covering;
+// qualified = teaches that subject) plus any cover already assigned.
+export async function getSubstituteLessons(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const teacherId = String(req.query.teacherId || '');
+  const date = String(req.query.date || '');
+  if (!teacherId || !isDateStr(date)) { res.status(400).json({ error: 'teacherId and a valid date are required' }); return; }
+  const dow = dowOf(date);
+
+  const [
+    { data: lessons, error: lsErr },
+    { data: dayAssign, error: daErr },
+    { data: unavail, error: uErr },
+    { data: leave, error: leErr },
+    { data: cst, error: cErr },
+    { data: st, error: stErr },
+    { data: teachers, error: tErr },
+    { data: subsToday, error: subErr },
+  ] = await Promise.all([
+    supabase.from('schedule_assignments').select('class_id, subject_id, period_index, classes(name), subjects(name), rooms(name)').eq('school_id', schoolId).eq('teacher_id', teacherId).eq('day_of_week', dow).order('period_index'),
+    supabase.from('schedule_assignments').select('teacher_id, period_index').eq('school_id', schoolId).eq('day_of_week', dow),
+    supabase.from('teacher_unavailability').select('teacher_id, period_index').eq('school_id', schoolId).eq('day_of_week', dow),
+    supabase.from('staff_leave').select('user_id').eq('school_id', schoolId).lte('start_date', date).gte('end_date', date),
+    supabase.from('class_subject_teachers').select('subject_id, teacher_id').eq('school_id', schoolId),
+    supabase.from('subject_teachers').select('subject_id, teacher_id').eq('school_id', schoolId),
+    supabase.from('teachers').select('id, full_name, user_id').eq('school_id', schoolId).order('full_name'),
+    supabase.from('substitutions').select('id, class_id, period_index, substitute_teacher_id, status').eq('school_id', schoolId).eq('date', date),
+  ]);
+  if (lsErr || daErr || uErr || leErr || cErr || stErr || tErr || subErr) {
+    res.status(500).json({ error: lsErr?.message || daErr?.message || uErr?.message || leErr?.message || cErr?.message || stErr?.message || tErr?.message || subErr?.message }); return;
+  }
+
+  const busy = new Set<string>();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const a of (dayAssign || []) as any[]) busy.add(`${a.teacher_id}:${a.period_index}`);
+  const unav = new Set<string>();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const u of (unavail || []) as any[]) unav.add(`${u.teacher_id}:${u.period_index}`);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tByUser = new Map<string, any>((teachers || []).map((t: any) => [t.user_id, t]));
+  const onLeave = new Set<string>();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const l of (leave || []) as any[]) { const tt = tByUser.get(l.user_id); if (tt) onLeave.add(tt.id); }
+
+  const qual = new Map<string, Set<string>>();
+  const addQual = (subjectId: string, tId: string) => {
+    if (!subjectId) return;
+    if (!qual.has(subjectId)) qual.set(subjectId, new Set());
+    qual.get(subjectId)!.add(tId);
+  };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const r of (cst || []) as any[]) addQual(r.subject_id, r.teacher_id);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const r of (st || []) as any[]) addQual(r.subject_id, r.teacher_id);
+
+  // A substitute already covering another class in the same period is busy too.
+  const subBusy = new Set<string>();
+  const subsByKey = new Map<string, { id: string; substituteTeacherId: string | null; status: string }>();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const s of (subsToday || []) as any[]) {
+    subsByKey.set(`${s.class_id}:${s.period_index}`, { id: s.id, substituteTeacherId: s.substitute_teacher_id, status: s.status });
+    if (s.status === 'assigned' && s.substitute_teacher_id) subBusy.add(`${s.substitute_teacher_id}:${s.period_index}`);
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tList = (teachers || []) as any[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const out = (lessons || []).map((ls: any) => {
+    const p = ls.period_index;
+    const qset = ls.subject_id ? qual.get(ls.subject_id) : undefined;
+    const candidates = tList
+      .filter(t => t.id !== teacherId && !busy.has(`${t.id}:${p}`) && !unav.has(`${t.id}:${p}`) && !subBusy.has(`${t.id}:${p}`) && !onLeave.has(t.id))
+      .map(t => ({ teacherId: t.id, fullName: t.full_name, qualified: qset ? qset.has(t.id) : false }))
+      .sort((a, b) => (b.qualified ? 1 : 0) - (a.qualified ? 1 : 0) || a.fullName.localeCompare(b.fullName))
+      .slice(0, 20);
+    const ex = subsByKey.get(`${ls.class_id}:${p}`);
+    return {
+      classId: ls.class_id, className: ls.classes?.name ?? null,
+      subjectId: ls.subject_id, subjectName: ls.subjects?.name ?? null,
+      periodIndex: p, roomName: ls.rooms?.name ?? null,
+      existing: ex ? { id: ex.id, substituteTeacherId: ex.substituteTeacherId, substituteTeacherName: ex.substituteTeacherId ? ((tList.find(t => t.id === ex.substituteTeacherId)?.full_name) ?? null) : null, status: ex.status } : null,
+      candidates,
+    };
+  });
+
+  res.json({ dayOfWeek: dow, teacherId, lessons: out });
+}
+
+// Assign (upsert) a cover for one class-period and notify the substitute
+// (and optionally the class's parents).
+export async function assignSubstitution(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId, userId } = req.user!;
+  const { date, classId, periodIndex, substituteTeacherId, originalTeacherId, subjectId, note, notifyParents } = req.body as {
+    date?: string; classId?: string; periodIndex?: number; substituteTeacherId?: string;
+    originalTeacherId?: string | null; subjectId?: string | null; note?: string | null; notifyParents?: boolean;
+  };
+  if (!date || !isDateStr(date) || !classId || typeof periodIndex !== 'number' || !substituteTeacherId) {
+    res.status(400).json({ error: 'date, classId, periodIndex and substituteTeacherId are required' }); return;
+  }
+  const dow = dowOf(date);
+
+  const [{ data: cls }, { data: subT }] = await Promise.all([
+    supabase.from('classes').select('id, name').eq('id', classId).eq('school_id', schoolId).maybeSingle(),
+    supabase.from('teachers').select('id, full_name, user_id').eq('id', substituteTeacherId).eq('school_id', schoolId).maybeSingle(),
+  ]);
+  if (!cls) { res.status(404).json({ error: 'Class not found' }); return; }
+  if (!subT) { res.status(404).json({ error: 'Substitute teacher not found' }); return; }
+
+  // Fill subject/original teacher from the timetable slot if the client didn't.
+  let subj: string | null = subjectId || null;
+  let orig: string | null = originalTeacherId || null;
+  if (!subj || !orig) {
+    const { data: sa } = await supabase
+      .from('schedule_assignments').select('subject_id, teacher_id')
+      .eq('school_id', schoolId).eq('class_id', classId).eq('day_of_week', dow).eq('period_index', periodIndex).maybeSingle();
+    if (sa) { subj = subj || ((sa as { subject_id: string | null }).subject_id ?? null); orig = orig || ((sa as { teacher_id: string | null }).teacher_id ?? null); }
+  }
+
+  const { data: row, error } = await supabase
+    .from('substitutions')
+    .upsert({
+      school_id: schoolId, date, day_of_week: dow, period_index: periodIndex, class_id: classId,
+      subject_id: subj, original_teacher_id: orig, substitute_teacher_id: substituteTeacherId,
+      status: 'assigned', note: note || null, created_by: userId,
+    }, { onConflict: 'school_id,date,class_id,period_index' })
+    .select('id').single();
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+
+  // Notify the substitute.
+  let subjName: string | null = null;
+  if (subj) {
+    const { data: sj } = await supabase.from('subjects').select('name').eq('id', subj).eq('school_id', schoolId).maybeSingle();
+    subjName = (sj as { name?: string } | null)?.name ?? null;
+  }
+  const subUser = (subT as { user_id: string }).user_id;
+  const className = (cls as { name: string }).name;
+  await notify({
+    schoolId, userId: subUser,
+    title: 'Substitute assignment',
+    message: `You're covering ${className}${subjName ? ` (${subjName})` : ''}, period ${periodIndex}, on ${date}.`,
+    type: 'substitute', relatedId: (row as { id: string })?.id,
+  });
+
+  // Optionally notify the class's parents.
+  if (notifyParents === true) {
+    const { data: studs } = await supabase.from('students').select('parent_id').eq('school_id', schoolId).eq('class_id', classId);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const parentIds = Array.from(new Set(((studs || []) as any[]).map(s => s.parent_id).filter(Boolean)));
+    if (parentIds.length > 0) {
+      const { data: parents } = await supabase.from('parents').select('user_id').eq('school_id', schoolId).in('id', parentIds);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const payloads = ((parents || []) as any[]).filter(p => p.user_id).map(p => ({
+        schoolId, userId: p.user_id as string,
+        title: 'Substitute teacher',
+        message: `${className} will have a substitute teacher for period ${periodIndex} on ${date}.`,
+        type: 'substitute', relatedId: (row as { id: string })?.id,
+      }));
+      if (payloads.length > 0) await notifyMany(payloads);
+    }
+  }
+
+  res.json({ success: true, id: (row as { id: string })?.id });
+}
+
+export async function deleteSubstitution(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const id = req.params.id as string;
+  const { error } = await supabase.from('substitutions').delete().eq('id', id).eq('school_id', schoolId);
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+  res.json({ success: true });
 }
 
 // ---- MARK TYPES ----

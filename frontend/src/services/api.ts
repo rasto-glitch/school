@@ -394,6 +394,25 @@ export const adminApi = {
   updateRoom: (id: string, data: { name?: string; roomType?: string | null; capacity?: number | null }) => api.put(`/admin/rooms/${id}`, data),
   deleteRoom: (id: string) => api.delete(`/admin/rooms/${id}`),
   setClassRoom: (classId: string, roomId: string | null) => api.put(`/admin/classes/${classId}/room`, { roomId }),
+  // Teaching plan / بەشە وانە (Schedule 2.0 Phase 2)
+  getTeachingPlan: () => api.get('/admin/teaching-plan'),
+  upsertTeachingRequirement: (data: { classId: string; subjectId: string; teacherId?: string | null; periodsPerWeek: number; maxPerDay?: number; roomId?: string | null }) =>
+    api.post('/admin/teaching-plan/requirements', data),
+  deleteTeachingRequirement: (id: string) => api.delete(`/admin/teaching-plan/requirements/${id}`),
+  setTeacherLoadCap: (teacherId: string, maxPeriodsPerWeek: number | null) =>
+    api.put(`/admin/teaching-plan/teachers/${teacherId}/cap`, { maxPeriodsPerWeek }),
+  seedTeachingPlan: () => api.post('/admin/teaching-plan/seed'),
+  // Auto-generate + teacher availability (Schedule 2.0 Phase 3)
+  generateSchedule: (data?: { clearUnlocked?: boolean; seed?: number }) => api.post('/admin/schedule/generate', data || {}),
+  getTeacherUnavailability: () => api.get('/admin/teacher-unavailability'),
+  toggleTeacherUnavailability: (data: { teacherId: string; dayOfWeek: number; periodIndex: number }) =>
+    api.post('/admin/teacher-unavailability/toggle', data),
+  // Substitute management (Schedule 2.0 Phase 4)
+  getSubstitutions: (date: string) => api.get('/admin/substitutions', { params: { date } }),
+  getSubstituteLessons: (teacherId: string, date: string) => api.get('/admin/substitutions/lessons', { params: { teacherId, date } }),
+  assignSubstitution: (data: { date: string; classId: string; periodIndex: number; substituteTeacherId: string; originalTeacherId?: string | null; subjectId?: string | null; note?: string | null; notifyParents?: boolean }) =>
+    api.post('/admin/substitutions/assign', data),
+  deleteSubstitution: (id: string) => api.delete(`/admin/substitutions/${id}`),
   scheduleTemplate: () => api.get('/admin/schedule/template.xlsx', { responseType: 'blob' }),
   uploadSchedule: (file: File) => {
     const fd = new FormData();

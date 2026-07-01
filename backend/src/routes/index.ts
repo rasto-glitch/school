@@ -589,6 +589,22 @@ export function createRouter(io: SocketServer) {
   router.put('/admin/rooms/:id', authenticate, authorizeCapability('academics.oversee'), validate({ params: vp.idParam, body: vp.roomSchema }), (req, res) => admin.updateRoom(req as AuthRequest, res));
   router.delete('/admin/rooms/:id', authenticate, authorizeCapability('academics.oversee'), validate({ params: vp.idParam }), (req, res) => admin.deleteRoom(req as AuthRequest, res));
   router.put('/admin/classes/:id/room', authenticate, authorizeCapability('academics.oversee'), validate({ params: vp.idParam, body: vp.setClassRoomSchema }), (req, res) => admin.setClassRoom(req as AuthRequest, res));
+  // Teaching plan / بەشە وانە (Schedule 2.0, migration 069) — per-(class,subject)
+  // weekly demand + per-teacher load cap. Feeds the Phase-3 auto-generator.
+  router.get('/admin/teaching-plan', authenticate, authorizeCapability('academics.oversee'), (req, res) => admin.getTeachingPlan(req as AuthRequest, res));
+  router.post('/admin/teaching-plan/requirements', authenticate, authorizeCapability('academics.oversee'), validate({ body: vp.teachingRequirementSchema }), (req, res) => admin.upsertTeachingRequirement(req as AuthRequest, res));
+  router.delete('/admin/teaching-plan/requirements/:id', authenticate, authorizeCapability('academics.oversee'), validate({ params: vp.idParam }), (req, res) => admin.deleteTeachingRequirement(req as AuthRequest, res));
+  router.put('/admin/teaching-plan/teachers/:id/cap', authenticate, authorizeCapability('academics.oversee'), validate({ params: vp.idParam, body: vp.teacherLoadCapSchema }), (req, res) => admin.setTeacherLoadCap(req as AuthRequest, res));
+  router.post('/admin/teaching-plan/seed', authenticate, authorizeCapability('academics.oversee'), (req, res) => admin.seedTeachingPlan(req as AuthRequest, res));
+  // Auto-generate the weekly grid from the teaching plan + teacher availability (Phase 3).
+  router.post('/admin/schedule/generate', authenticate, authorizeCapability('academics.oversee'), validate({ body: vp.generateScheduleSchema }), (req, res) => admin.generateSchedule(req as AuthRequest, res));
+  router.get('/admin/teacher-unavailability', authenticate, authorizeCapability('academics.oversee'), (req, res) => admin.getTeacherUnavailability(req as AuthRequest, res));
+  router.post('/admin/teacher-unavailability/toggle', authenticate, authorizeCapability('academics.oversee'), validate({ body: vp.toggleUnavailabilitySchema }), (req, res) => admin.toggleTeacherUnavailability(req as AuthRequest, res));
+  // Substitute management (Phase 4) — cover an absent teacher's lessons.
+  router.get('/admin/substitutions', authenticate, authorizeCapability('academics.oversee'), validate({ query: vp.substitutionsBoardQuery }), (req, res) => admin.getSubstitutions(req as AuthRequest, res));
+  router.get('/admin/substitutions/lessons', authenticate, authorizeCapability('academics.oversee'), validate({ query: vp.substituteLessonsQuery }), (req, res) => admin.getSubstituteLessons(req as AuthRequest, res));
+  router.post('/admin/substitutions/assign', authenticate, authorizeCapability('academics.oversee'), validate({ body: vp.assignSubstitutionSchema }), (req, res) => admin.assignSubstitution(req as AuthRequest, res));
+  router.delete('/admin/substitutions/:id', authenticate, authorizeCapability('academics.oversee'), validate({ params: vp.idParam }), (req, res) => admin.deleteSubstitution(req as AuthRequest, res));
 
   router.get('/admin/announcements', authenticate, authorize('admin', 'teacher', 'parent', 'supervisor'), validate({ query: vq.listQuery }), (req, res) => admin.getAnnouncements(req as AuthRequest, res));
   router.get('/link-preview', authenticate, (req, res) => admin.getLinkPreview(req as AuthRequest, res));

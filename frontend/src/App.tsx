@@ -66,6 +66,8 @@ import GradeReviewPage from './pages/admin/GradeReviewPage';
 import StaffAttendanceManagementPage from './pages/admin/StaffAttendanceManagementPage';
 import ReportCardsPage from './pages/admin/ReportCardsPage';
 import StudentHealthPage from './pages/admin/StudentHealthPage';
+import TeachingPlanPage from './pages/admin/TeachingPlanPage';
+import SubstitutionsPage from './pages/admin/SubstitutionsPage';
 import AdminStudentsListPage from './pages/admin/AdminStudentsListPage';
 import AdminTeachersListPage from './pages/admin/AdminTeachersListPage';
 import AdminDriversListPage from './pages/admin/AdminDriversListPage';
@@ -246,6 +248,8 @@ export default function App() {
         {/* Archive views moved under Students > Archived. Kept as a redirect so old links still work. */}
         <Route path="/admin/archive" element={<Navigate to="/admin/students?tab=archived" replace />} />
         <Route path="/admin/classes" element={<ProtectedRoute allowedRoles={['admin']}><ClassesPage /></ProtectedRoute>} />
+        <Route path="/admin/teaching-plan" element={<ProtectedRoute allowedRoles={['admin']}><TeachingPlanPage /></ProtectedRoute>} />
+        <Route path="/admin/substitutions" element={<ProtectedRoute allowedRoles={['admin']}><SubstitutionsPage /></ProtectedRoute>} />
         <Route path="/admin/grade-review" element={<ProtectedRoute allowedRoles={['admin']}><GradeReviewPage /></ProtectedRoute>} />
         <Route path="/admin/report-cards" element={<ProtectedRoute allowedRoles={['admin']}><ReportCardsPage /></ProtectedRoute>} />
         <Route path="/admin/health" element={<ProtectedRoute allowedRoles={['admin']}><StudentHealthPage /></ProtectedRoute>} />

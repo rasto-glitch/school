@@ -398,6 +398,45 @@ export const roomSchema = z.object({
   capacity: z.number().int().min(0).max(2000).nullable().optional(),
 });
 export const setClassRoomSchema = z.object({ roomId: optId });
+
+// ── Teaching plan / بەشە وانە (migration 069, academics.oversee) ────────────
+export const teachingRequirementSchema = z.object({
+  classId: uuid,
+  subjectId: uuid,
+  teacherId: optId,
+  periodsPerWeek: z.number().int().min(0).max(60),
+  maxPerDay: z.number().int().min(1).max(12).optional(),
+  roomId: optId,
+});
+export const teacherLoadCapSchema = z.object({
+  maxPeriodsPerWeek: z.number().int().min(0).max(80).nullable().optional(),
+});
+
+// ── Auto-generate + teacher availability (migration 070, academics.oversee) ──
+export const generateScheduleSchema = z.object({
+  // Default true (regenerate the unlocked grid); false = top-up around everything.
+  clearUnlocked: z.boolean().optional(),
+  seed: z.number().int().optional(),
+});
+export const toggleUnavailabilitySchema = z.object({
+  teacherId: uuid,
+  dayOfWeek: z.number().int().min(0).max(6),
+  periodIndex: z.number().int().min(1).max(50),
+});
+
+// ── Substitute management (migration 071, academics.oversee) ────────────────
+export const substitutionsBoardQuery = z.object({ date: isoDate });
+export const substituteLessonsQuery = z.object({ teacherId: uuid, date: isoDate });
+export const assignSubstitutionSchema = z.object({
+  date: isoDate,
+  classId: uuid,
+  periodIndex: z.number().int().min(1).max(50),
+  substituteTeacherId: uuid,
+  originalTeacherId: optId,
+  subjectId: optId,
+  note: optText(1000),
+  notifyParents: z.boolean().optional(),
+});
 // Settings carry free-form JSON (chatRestrictions etc.) — validate the
 // known keys but DON'T strip the rest.
 export const updateSettingsSchema = z.object({

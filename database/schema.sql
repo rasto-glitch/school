@@ -219,6 +219,8 @@ ALTER TABLE teachers ADD COLUMN IF NOT EXISTS employment_type TEXT;
 ALTER TABLE teachers ADD COLUMN IF NOT EXISTS qualifications TEXT;
 ALTER TABLE teachers ADD COLUMN IF NOT EXISTS notes TEXT;
 ALTER TABLE teachers ADD COLUMN IF NOT EXISTS official_photo TEXT;
+-- Weekly teaching-load cap/target — نصاب (migration 069, Schedule 2.0 Phase 2).
+ALTER TABLE teachers ADD COLUMN IF NOT EXISTS max_periods_per_week INT;
 
 CREATE TABLE IF NOT EXISTS teacher_classes (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -926,6 +928,78 @@ ALTER TABLE schedule_assignments ADD COLUMN IF NOT EXISTS is_locked BOOLEAN NOT 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_schedule_room_slot
   ON schedule_assignments(school_id, room_id, day_of_week, period_index)
   WHERE room_id IS NOT NULL;
+
+-- ============================================================
+-- TEACHING REQUIREMENTS — بەشە وانە (migration 069 — Schedule 2.0 Phase 2)
+-- The demand side of the timetable (aSc "lesson cards"): one row per
+-- (class, subject) = N periods/week, taught by teacher T, in room R, with at
+-- most max_per_day of it in any single day. Placed here so classes/subjects/
+-- teachers/rooms all exist. Seeded from class_subject_teachers.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS timetable_requirements (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  class_id UUID NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+  subject_id UUID NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+  teacher_id UUID REFERENCES teachers(id) ON DELETE SET NULL,
+  periods_per_week INT NOT NULL DEFAULT 1 CHECK (periods_per_week >= 0 AND periods_per_week <= 60),
+  max_per_day INT NOT NULL DEFAULT 2 CHECK (max_per_day >= 1 AND max_per_day <= 12),
+  room_id UUID REFERENCES rooms(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(class_id, subject_id)
+);
+CREATE INDEX IF NOT EXISTS idx_ttr_school ON timetable_requirements(school_id);
+CREATE INDEX IF NOT EXISTS idx_ttr_class ON timetable_requirements(class_id);
+CREATE INDEX IF NOT EXISTS idx_ttr_teacher ON timetable_requirements(teacher_id);
+
+INSERT INTO timetable_requirements (school_id, class_id, subject_id, teacher_id, periods_per_week, max_per_day)
+SELECT DISTINCT ON (cst.class_id, cst.subject_id)
+  cst.school_id, cst.class_id, cst.subject_id, cst.teacher_id, 1, 2
+FROM class_subject_teachers cst
+ORDER BY cst.class_id, cst.subject_id, cst.created_at
+ON CONFLICT (class_id, subject_id) DO NOTHING;
+
+-- ============================================================
+-- TEACHER AVAILABILITY (migration 070 — Schedule 2.0 Phase 3)
+-- A row = the teacher is unavailable at that (day, period). The auto-generator
+-- treats these cells as forbidden for the teacher.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS teacher_unavailability (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  teacher_id UUID NOT NULL REFERENCES teachers(id) ON DELETE CASCADE,
+  day_of_week SMALLINT NOT NULL CHECK (day_of_week BETWEEN 0 AND 6),
+  period_index SMALLINT NOT NULL CHECK (period_index >= 1),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(teacher_id, day_of_week, period_index)
+);
+CREATE INDEX IF NOT EXISTS idx_teacher_unavail_school ON teacher_unavailability(school_id);
+CREATE INDEX IF NOT EXISTS idx_teacher_unavail_teacher ON teacher_unavailability(teacher_id);
+
+-- ============================================================
+-- SUBSTITUTIONS (migration 071 — Schedule 2.0 Phase 4)
+-- Cover for an absent teacher's lessons on a date. One row per covered
+-- (class, period) on that date.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS substitutions (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  date DATE NOT NULL,
+  day_of_week SMALLINT NOT NULL CHECK (day_of_week BETWEEN 0 AND 6),
+  period_index SMALLINT NOT NULL CHECK (period_index >= 1),
+  class_id UUID NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+  subject_id UUID REFERENCES subjects(id) ON DELETE SET NULL,
+  original_teacher_id UUID REFERENCES teachers(id) ON DELETE SET NULL,
+  substitute_teacher_id UUID REFERENCES teachers(id) ON DELETE SET NULL,
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','assigned','cancelled')),
+  note TEXT,
+  created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(school_id, date, class_id, period_index)
+);
+CREATE INDEX IF NOT EXISTS idx_substitutions_school_date ON substitutions(school_id, date);
+CREATE INDEX IF NOT EXISTS idx_substitutions_substitute ON substitutions(substitute_teacher_id);
+CREATE INDEX IF NOT EXISTS idx_substitutions_original ON substitutions(original_teacher_id);
 
 -- ============================================================
 -- ATTENDANCE
