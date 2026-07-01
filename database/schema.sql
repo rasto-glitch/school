@@ -37,6 +37,10 @@ CREATE TABLE IF NOT EXISTS schools (
   -- Grading display mode. Lives OUTSIDE `features` so changing it does NOT
   -- bump features_version / force a re-login.
   grading_config JSONB NOT NULL DEFAULT '{"mode":"scale"}'::jsonb,
+  -- Schedule 2.0 day skeleton (migration 068): ordered lesson+break slots with
+  -- start/end times, same every working day. Empty {} → backend derives a
+  -- default from periods_per_day. Outside `features` (no version bump).
+  schedule_config JSONB NOT NULL DEFAULT '{}'::jsonb,
   -- School-wide raw-to-percentage normalisation factor used by the metrics
   -- rollup (migration 049). Default /100; schools using /20 or other scales
   -- should configure this before the metrics feature ships.
@@ -899,6 +903,29 @@ SELECT st.school_id, tc.class_id, st.subject_id, st.teacher_id
 FROM subject_teachers st
 JOIN teacher_classes tc ON tc.teacher_id = st.teacher_id
 ON CONFLICT (class_id, subject_id, teacher_id) DO NOTHING;
+
+-- ============================================================
+-- ROOMS + schedule enrichment (migration 068 — Schedule 2.0 Phase 1)
+-- Placed here so schools/classes/subjects/schedule_assignments all exist.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS rooms (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  room_type TEXT CHECK (room_type IN ('classroom','lab','computer','gym','library','other')),
+  capacity INT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(school_id, name)
+);
+CREATE INDEX IF NOT EXISTS idx_rooms_school ON rooms(school_id);
+
+ALTER TABLE classes ADD COLUMN IF NOT EXISTS room_id UUID REFERENCES rooms(id) ON DELETE SET NULL;
+ALTER TABLE schedule_assignments ADD COLUMN IF NOT EXISTS subject_id UUID REFERENCES subjects(id) ON DELETE SET NULL;
+ALTER TABLE schedule_assignments ADD COLUMN IF NOT EXISTS room_id UUID REFERENCES rooms(id) ON DELETE SET NULL;
+ALTER TABLE schedule_assignments ADD COLUMN IF NOT EXISTS is_locked BOOLEAN NOT NULL DEFAULT FALSE;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_schedule_room_slot
+  ON schedule_assignments(school_id, room_id, day_of_week, period_index)
+  WHERE room_id IS NOT NULL;
 
 -- ============================================================
 -- ATTENDANCE

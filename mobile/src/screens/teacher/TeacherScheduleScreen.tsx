@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useTranslation } from 'react-i18next';
-import { Calendar } from 'lucide-react-native';
+import { Calendar, Coffee } from 'lucide-react-native';
 import { teacherApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
 import { spacing, radius, font, shadow } from '../../theme';
@@ -9,7 +9,8 @@ import { spacing, radius, font, shadow } from '../../theme';
 const DAY_NAMES = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'] as const;
 const DAY_INDEX: Record<string, number> = Object.fromEntries(DAY_NAMES.map((d, i) => [d, i]));
 
-interface Cell { id: string; dayOfWeek: number; periodIndex: number; classes?: { id: string; name: string } }
+interface Slot { kind: 'lesson' | 'break'; index?: number; label?: string; start: string; end: string }
+interface Cell { dayOfWeek: number; periodIndex: number; className?: string | null; subjectName?: string | null; roomName?: string | null }
 type ViewMode = 'week' | 'today';
 
 export default function TeacherScheduleScreen() {
@@ -18,7 +19,7 @@ export default function TeacherScheduleScreen() {
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
-  const [periodsPerDay, setPeriodsPerDay] = useState(6);
+  const [skeleton, setSkeleton] = useState<Slot[]>([]);
   const [scheduleDays, setScheduleDays] = useState<string[]>([]);
   const [cells, setCells] = useState<Cell[]>([]);
   const [loading, setLoading] = useState(true);
@@ -27,7 +28,7 @@ export default function TeacherScheduleScreen() {
   useEffect(() => {
     teacherApi.getSchedule()
       .then(r => {
-        setPeriodsPerDay(r.data?.periodsPerDay ?? 6);
+        setSkeleton(r.data?.skeleton ?? []);
         setScheduleDays(r.data?.scheduleDays ?? []);
         setCells(r.data?.assignments ?? []);
       })
@@ -37,6 +38,13 @@ export default function TeacherScheduleScreen() {
   const orderedDays = useMemo(() =>
     [...scheduleDays].sort((a, b) => (DAY_INDEX[a] ?? 99) - (DAY_INDEX[b] ?? 99)),
   [scheduleDays]);
+
+  const columns = useMemo(() => {
+    let p = 0;
+    return skeleton.map((s, i) => s.kind === 'lesson'
+      ? { key: `c${i}`, kind: 'lesson' as const, period: ++p, start: s.start, end: s.end }
+      : { key: `c${i}`, kind: 'break' as const, label: s.label || t('schedule2.break', 'Break'), start: s.start, end: s.end });
+  }, [skeleton, t]);
 
   const todayName = DAY_NAMES[new Date().getDay()];
   const todayIsScheduled = orderedDays.includes(todayName);
@@ -92,9 +100,14 @@ export default function TeacherScheduleScreen() {
               <View style={[styles.cell, styles.headerCell, styles.dayCol]}>
                 <Text style={styles.headerText}>{t('common.day')}</Text>
               </View>
-              {Array.from({ length: periodsPerDay }, (_, i) => (
-                <View key={i} style={[styles.cell, styles.headerCell]}>
-                  <Text style={styles.headerText}>{t('schedule.period_short', { n: i + 1 })}</Text>
+              {columns.map(col => col.kind === 'break' ? (
+                <View key={col.key} style={[styles.cell, styles.headerCell, styles.breakCell]}>
+                  <Coffee size={12} color={colors.warning} />
+                </View>
+              ) : (
+                <View key={col.key} style={[styles.cell, styles.headerCell]}>
+                  <Text style={styles.headerText}>{t('schedule.period_short', { n: col.period })}</Text>
+                  <Text style={styles.timeText}>{col.start}</Text>
                 </View>
               ))}
             </View>
@@ -106,12 +119,18 @@ export default function TeacherScheduleScreen() {
                   <View style={[styles.cell, styles.dayCell, styles.dayCol]}>
                     <Text style={styles.dayText}>{dayLabel(day)}</Text>
                   </View>
-                  {Array.from({ length: periodsPerDay }, (_, i) => {
-                    const cell = cellMap.get(`${dayIdx}:${i + 1}`);
+                  {columns.map(col => {
+                    if (col.kind === 'break') return <View key={col.key} style={[styles.cell, styles.breakCell]} />;
+                    const cell = cellMap.get(`${dayIdx}:${col.period}`);
                     return (
-                      <View key={i} style={styles.cell}>
-                        {cell?.classes?.name ? (
-                          <Text style={styles.classText}>{cell.classes.name}</Text>
+                      <View key={col.key} style={styles.cell}>
+                        {cell?.className ? (
+                          <>
+                            <Text style={styles.classText}>{cell.className}</Text>
+                            {(cell.subjectName || cell.roomName) && (
+                              <Text style={styles.subText}>{[cell.subjectName, cell.roomName].filter(Boolean).join(' · ')}</Text>
+                            )}
+                          </>
                         ) : (
                           <Text style={styles.emptyCellText}>—</Text>
                         )}
@@ -153,8 +172,11 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   dayCol: { minWidth: 100 },
   headerCell: { backgroundColor: colors.primaryLight },
   headerText: { fontSize: font.xs, fontWeight: '700', color: colors.primary },
+  timeText: { fontSize: 9, color: colors.textMuted, marginTop: 1 },
+  breakCell: { backgroundColor: colors.warningLight, minWidth: 44 },
   dayCell: { backgroundColor: colors.bg },
   dayText: { fontSize: font.sm, fontWeight: '700', color: colors.text },
   classText: { fontSize: font.sm, fontWeight: '600', color: colors.primary },
+  subText: { fontSize: 9, color: colors.textMuted, marginTop: 1, textAlign: 'center' },
   emptyCellText: { fontSize: font.sm, color: colors.textMuted },
 });

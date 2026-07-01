@@ -20,6 +20,7 @@ import { loadArchiveSnapshot, streamPdf, buildXlsx } from '../utils/archiveExpor
 import { loadEmployeeArchiveSnapshot, streamPdf as streamEmployeePdf, buildXlsx as buildEmployeeXlsx } from '../utils/employeeArchiveExport';
 import { streamCredentialsPdf, type CredentialEntry } from '../utils/credentialsPdf';
 import { logAudit } from '../utils/audit';
+import { resolveSkeleton, normalizeSkeleton, defaultSkeleton, lessonCount } from '../utils/scheduleSkeleton';
 import { hasArchiveFeature, normalizeArchiveReason, resolveEmployeeArchiveId, rewriteOwnershipToArchive } from '../utils/employeeArchive';
 import { loadArchivedEmployeeForPdf, streamArchivedEmployeePdf } from '../utils/archivedEmployeePdf';
 import { loadArchivedStudentForPdf, streamArchivedStudentPdf } from '../utils/archivedStudentPdf';
@@ -5433,13 +5434,14 @@ const VALID_DAYS = ['sunday','monday','tuesday','wednesday','thursday','friday',
 async function readScheduleConfig(schoolId: string) {
   const { data } = await supabase
     .from('schools')
-    .select('periods_per_day, schedule_days')
+    .select('periods_per_day, schedule_days, schedule_config')
     .eq('id', schoolId)
     .single();
-  return {
-    periodsPerDay: (data?.periods_per_day as number | null) ?? 6,
-    scheduleDays: (data?.schedule_days as string[] | null) ?? ['sunday','monday','tuesday','wednesday','thursday'],
-  };
+  const scheduleDays = (data?.schedule_days as string[] | null) ?? ['sunday','monday','tuesday','wednesday','thursday'];
+  // The skeleton (lesson+break times) is authoritative for display; periodsPerDay
+  // is derived from its lesson count so legacy grid-width consumers stay correct.
+  const skeleton = resolveSkeleton(data?.schedule_config, (data?.periods_per_day as number | null) ?? 6);
+  return { periodsPerDay: lessonCount(skeleton), scheduleDays, skeleton };
 }
 
 // Admin: full grid — config + every cell + every teacher + every class.
@@ -5447,13 +5449,15 @@ export async function getAdminSchedule(req: AuthRequest, res: Response): Promise
   const { schoolId } = req.user!;
   const config = await readScheduleConfig(schoolId);
 
-  const [{ data: teachers, error: tErr }, { data: classes, error: cErr }, { data: cells, error: aErr }] = await Promise.all([
+  const [{ data: teachers, error: tErr }, { data: classes, error: cErr }, { data: cells, error: aErr }, { data: rooms, error: rErr }, { data: subjects, error: sErr }] = await Promise.all([
     supabase.from('teachers').select('id, full_name, subject').eq('school_id', schoolId).order('full_name'),
-    supabase.from('classes').select('id, name, grade_level').eq('school_id', schoolId).order('name'),
-    supabase.from('schedule_assignments').select('id, teacher_id, class_id, day_of_week, period_index').eq('school_id', schoolId),
+    supabase.from('classes').select('id, name, grade_level, room_id').eq('school_id', schoolId).order('name'),
+    supabase.from('schedule_assignments').select('id, teacher_id, class_id, day_of_week, period_index, subject_id, room_id, is_locked').eq('school_id', schoolId),
+    supabase.from('rooms').select('id, name, room_type, capacity').eq('school_id', schoolId).order('name'),
+    supabase.from('subjects').select('id, name').eq('school_id', schoolId).order('name'),
   ]);
-  if (tErr || cErr || aErr) {
-    res.status(500).json({ error: tErr?.message || cErr?.message || aErr?.message }); return;
+  if (tErr || cErr || aErr || rErr || sErr) {
+    res.status(500).json({ error: tErr?.message || cErr?.message || aErr?.message || rErr?.message || sErr?.message }); return;
   }
 
   res.json({
@@ -5461,20 +5465,37 @@ export async function getAdminSchedule(req: AuthRequest, res: Response): Promise
     teachers: toCC(teachers),
     classes: toCC(classes),
     assignments: toCC(cells),
+    rooms: toCC(rooms),
+    subjects: toCC(subjects),
   });
 }
 
 export async function updateScheduleConfig(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
-  const { periodsPerDay, scheduleDays } = req.body as { periodsPerDay?: number; scheduleDays?: string[] };
+  const { periodsPerDay, scheduleDays, skeleton } = req.body as {
+    periodsPerDay?: number; scheduleDays?: string[]; skeleton?: unknown[];
+  };
 
   const update: Record<string, unknown> = {};
-  if (typeof periodsPerDay === 'number') {
+  let newLessonCount: number | null = null;
+
+  // Preferred path (Schedule 2.0 UI): a full day skeleton of lesson+break slots.
+  if (Array.isArray(skeleton)) {
+    const norm = normalizeSkeleton(skeleton);
+    if (!norm) { res.status(400).json({ error: 'The day structure needs at least one valid lesson or break slot.' }); return; }
+    update.schedule_config = { periods: norm };
+    newLessonCount = lessonCount(norm);
+    update.periods_per_day = newLessonCount;         // keep legacy column in sync
+  } else if (typeof periodsPerDay === 'number') {
+    // Legacy path: just a lesson count → regenerate a default skeleton to match.
     if (!Number.isInteger(periodsPerDay) || periodsPerDay < 1 || periodsPerDay > 20) {
       res.status(400).json({ error: 'periodsPerDay must be an integer between 1 and 20' }); return;
     }
     update.periods_per_day = periodsPerDay;
+    update.schedule_config = { periods: defaultSkeleton(periodsPerDay) };
+    newLessonCount = periodsPerDay;
   }
+
   if (Array.isArray(scheduleDays)) {
     const cleaned = scheduleDays.map(d => String(d).toLowerCase()).filter(d => VALID_DAYS.includes(d));
     if (cleaned.length === 0) {
@@ -5482,15 +5503,15 @@ export async function updateScheduleConfig(req: AuthRequest, res: Response): Pro
     }
     update.schedule_days = cleaned;
   }
-  if (Object.keys(update).length === 0) { res.json({ success: true }); return; }
+  if (Object.keys(update).length === 0) { res.json({ ...await readScheduleConfig(schoolId) }); return; }
 
-  // If periodsPerDay shrinks, drop assignments past the new max.
-  if (typeof update.periods_per_day === 'number') {
+  // If the lesson count shrank, drop assignments past the new last period.
+  if (newLessonCount != null) {
     await supabase
       .from('schedule_assignments')
       .delete()
       .eq('school_id', schoolId)
-      .gt('period_index', update.periods_per_day as number);
+      .gt('period_index', newLessonCount);
   }
 
   const { error } = await supabase.from('schools').update(update).eq('id', schoolId);
@@ -5501,9 +5522,11 @@ export async function updateScheduleConfig(req: AuthRequest, res: Response): Pro
 // Upsert (or clear) a single cell. classId=null clears the cell.
 export async function setScheduleCell(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
-  const { teacherId, dayOfWeek, periodIndex, classId } = req.body as {
+  const { teacherId, dayOfWeek, periodIndex, classId, subjectId, roomId, isLocked } = req.body as {
     teacherId?: string; dayOfWeek?: number; periodIndex?: number; classId?: string | null;
+    subjectId?: string | null; roomId?: string | null; isLocked?: boolean;
   };
+  const roomProvided = Object.prototype.hasOwnProperty.call(req.body, 'roomId');
 
   if (!teacherId || typeof dayOfWeek !== 'number' || typeof periodIndex !== 'number') {
     res.status(400).json({ error: 'teacherId, dayOfWeek, and periodIndex are required' }); return;
@@ -5552,6 +5575,48 @@ export async function setScheduleCell(req: AuthRequest, res: Response): Promise<
     return;
   }
 
+  // Resolve the subject: explicit if given (and valid), else the unambiguous
+  // curriculum subject for this (class, teacher) pair.
+  let resolvedSubjectId: string | null = null;
+  if (subjectId) {
+    const { data: subj } = await supabase.from('subjects').select('id').eq('id', subjectId).eq('school_id', schoolId).maybeSingle();
+    resolvedSubjectId = subj ? subjectId : null;
+  } else {
+    const { data: currRows } = await supabase
+      .from('class_subject_teachers').select('subject_id')
+      .eq('school_id', schoolId).eq('class_id', classId).eq('teacher_id', teacherId);
+    if (currRows && currRows.length === 1) resolvedSubjectId = currRows[0].subject_id as string;
+  }
+
+  // Resolve the room: explicit roomId if the client sent one (null = clear),
+  // otherwise fall back to the class's home room.
+  let resolvedRoomId: string | null = null;
+  if (roomProvided) {
+    if (roomId) {
+      const { data: room } = await supabase.from('rooms').select('id').eq('id', roomId).eq('school_id', schoolId).maybeSingle();
+      resolvedRoomId = room ? roomId : null;
+    }
+  } else {
+    const { data: clsRoom } = await supabase.from('classes').select('room_id').eq('id', classId).eq('school_id', schoolId).maybeSingle();
+    resolvedRoomId = (clsRoom?.room_id as string | null) ?? null;
+  }
+
+  // Room clash: another lesson already uses this room at the same slot.
+  if (resolvedRoomId) {
+    const { data: roomConflict } = await supabase
+      .from('schedule_assignments')
+      .select('id, rooms(name)')
+      .eq('school_id', schoolId).eq('room_id', resolvedRoomId)
+      .eq('day_of_week', dayOfWeek).eq('period_index', periodIndex)
+      .neq('teacher_id', teacherId)
+      .maybeSingle();
+    if (roomConflict) {
+      const roomName = (roomConflict as { rooms?: { name?: string } }).rooms?.name ?? 'That room';
+      res.status(409).json({ error: `${roomName} is already in use at this period.` });
+      return;
+    }
+  }
+
   // Upsert by (teacher, day, period). Delete existing then insert — safer than relying on
   // ON CONFLICT with two unique constraints.
   await supabase
@@ -5570,8 +5635,11 @@ export async function setScheduleCell(req: AuthRequest, res: Response): Promise<
       class_id: classId,
       day_of_week: dayOfWeek,
       period_index: periodIndex,
+      subject_id: resolvedSubjectId,
+      room_id: resolvedRoomId,
+      is_locked: isLocked === true,
     })
-    .select('id, teacher_id, class_id, day_of_week, period_index')
+    .select('id, teacher_id, class_id, day_of_week, period_index, subject_id, room_id, is_locked')
     .single();
   if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json({ success: true, assignment: toCC(data) });
@@ -5719,12 +5787,20 @@ export async function getTeacherSchedule(req: AuthRequest, res: Response): Promi
 
   const { data, error } = await supabase
     .from('schedule_assignments')
-    .select('id, day_of_week, period_index, classes(id, name)')
+    .select('id, day_of_week, period_index, is_locked, class_id, classes(name), subjects(name), rooms(name)')
     .eq('school_id', schoolId)
     .eq('teacher_id', teacher.id);
   if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
-  res.json({ ...config, assignments: toCC(data) });
+  const assignments = (data || []).map((a) => {
+    const row = a as { id: string; day_of_week: number; period_index: number; is_locked: boolean; class_id: string; classes?: { name?: string } | null; subjects?: { name?: string } | null; rooms?: { name?: string } | null };
+    return {
+      id: row.id, dayOfWeek: row.day_of_week, periodIndex: row.period_index, isLocked: row.is_locked,
+      classId: row.class_id, className: row.classes?.name ?? null,
+      subjectName: row.subjects?.name ?? null, roomName: row.rooms?.name ?? null,
+    };
+  });
+  res.json({ ...config, assignments });
 }
 
 // Parent: schedule for a specific child's class — cells carry teacher name + subject.
@@ -5748,22 +5824,19 @@ export async function getParentSchedule(req: AuthRequest, res: Response): Promis
   const config = await readScheduleConfig(schoolId);
   const { data, error } = await supabase
     .from('schedule_assignments')
-    .select('id, teacher_id, day_of_week, period_index, teachers(id, full_name, subject)')
+    .select('id, teacher_id, day_of_week, period_index, teachers(full_name, subject), subjects(name), rooms(name)')
     .eq('school_id', schoolId)
     .eq('class_id', student.class_id);
   if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
-  // `teachers.subject` is the comma-joined list of every subject the teacher teaches
-  // across ALL classes. For a parent looking at one child's class we want only the
-  // subject(s) that teacher teaches to THIS class, so resolve from class_subject_teachers
-  // (the curriculum source of truth). Fall back to teachers.subject when the school has
-  // no curriculum rows for the pair yet, so unconfigured schools aren't left blank.
+  // Fallback subject for lessons whose subject_id isn't set yet: the subject(s)
+  // that teacher teaches to THIS class (class_subject_teachers = curriculum truth),
+  // then teachers.subject as a last resort so unconfigured schools aren't blank.
   const { data: cst } = await supabase
     .from('class_subject_teachers')
     .select('teacher_id, subjects(name)')
     .eq('school_id', schoolId)
     .eq('class_id', student.class_id);
-
   const subjectsByTeacher = new Map<string, string[]>();
   for (const row of (cst || []) as Array<{ teacher_id: string; subjects?: { name?: string } | null }>) {
     const name = row.subjects?.name?.trim();
@@ -5774,15 +5847,87 @@ export async function getParentSchedule(req: AuthRequest, res: Response): Promis
   }
 
   const assignments = (data || []).map((a) => {
-    const cell = a as { teacher_id?: string; teachers?: { subject?: string } | null };
-    const classSubjects = cell.teacher_id ? subjectsByTeacher.get(cell.teacher_id) : undefined;
-    if (classSubjects && classSubjects.length > 0 && cell.teachers) {
-      cell.teachers.subject = classSubjects.join(', ');
-    }
-    return a;
+    const row = a as { id: string; teacher_id: string; day_of_week: number; period_index: number; teachers?: { full_name?: string; subject?: string } | null; subjects?: { name?: string } | null; rooms?: { name?: string } | null };
+    const fallback = subjectsByTeacher.get(row.teacher_id);
+    const subjectName = row.subjects?.name
+      ?? (fallback && fallback.length ? fallback.join(', ') : (row.teachers?.subject ?? null));
+    return {
+      id: row.id, teacherId: row.teacher_id, dayOfWeek: row.day_of_week, periodIndex: row.period_index,
+      teacherName: row.teachers?.full_name ?? null, subjectName, roomName: row.rooms?.name ?? null,
+    };
   });
 
-  res.json({ ...config, assignments: toCC(assignments) });
+  res.json({ ...config, assignments });
+}
+
+// ---- ROOMS (Schedule 2.0, migration 068) — physical rooms/labs ----
+const ROOM_TYPES = ['classroom', 'lab', 'computer', 'gym', 'library', 'other'];
+
+export async function listRooms(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { data, error } = await supabase
+    .from('rooms').select('id, name, room_type, capacity').eq('school_id', schoolId).order('name');
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+  res.json({ rooms: toCC(data) });
+}
+
+export async function createRoom(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { name, roomType, capacity } = req.body as { name?: string; roomType?: string | null; capacity?: number | null };
+  const clean = (name || '').trim();
+  if (!clean) { res.status(400).json({ error: 'Room name is required' }); return; }
+  const rt = roomType && ROOM_TYPES.includes(roomType) ? roomType : null;
+  const { data, error } = await supabase
+    .from('rooms')
+    .insert({ school_id: schoolId, name: clean, room_type: rt, capacity: typeof capacity === 'number' ? capacity : null })
+    .select('id, name, room_type, capacity').single();
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+  res.status(201).json(toCC(data));
+}
+
+export async function updateRoom(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const id = req.params.id as string;
+  const { name, roomType, capacity } = req.body as { name?: string; roomType?: string | null; capacity?: number | null };
+  const patch: Record<string, unknown> = {};
+  if (typeof name === 'string') {
+    const c = name.trim();
+    if (!c) { res.status(400).json({ error: 'Room name cannot be empty' }); return; }
+    patch.name = c;
+  }
+  if (roomType !== undefined) patch.room_type = roomType && ROOM_TYPES.includes(roomType) ? roomType : null;
+  if (capacity !== undefined) patch.capacity = typeof capacity === 'number' ? capacity : null;
+  if (Object.keys(patch).length === 0) { res.json({ success: true }); return; }
+  const { error } = await supabase.from('rooms').update(patch).eq('id', id).eq('school_id', schoolId);
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+  res.json({ success: true });
+}
+
+export async function deleteRoom(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const id = req.params.id as string;
+  // FKs are ON DELETE SET NULL, so classes/lessons using it are unlinked, not blocked.
+  const { error } = await supabase.from('rooms').delete().eq('id', id).eq('school_id', schoolId);
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+  res.json({ success: true });
+}
+
+// Set (or clear, roomId=null) a class's home room.
+export async function setClassRoom(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const classId = req.params.id as string;
+  const { roomId } = req.body as { roomId?: string | null };
+  const { data: cls } = await supabase.from('classes').select('id').eq('id', classId).eq('school_id', schoolId).maybeSingle();
+  if (!cls) { res.status(404).json({ error: 'Class not found' }); return; }
+  let rid: string | null = null;
+  if (roomId) {
+    const { data: room } = await supabase.from('rooms').select('id').eq('id', roomId).eq('school_id', schoolId).maybeSingle();
+    if (!room) { res.status(404).json({ error: 'Room not found' }); return; }
+    rid = roomId;
+  }
+  const { error } = await supabase.from('classes').update({ room_id: rid }).eq('id', classId).eq('school_id', schoolId);
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+  res.json({ success: true, roomId: rid });
 }
 
 // ---- MARK TYPES ----

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Calendar } from 'lucide-react';
-import { parentApi } from '../../services/api';
+import { Calendar, Coffee } from 'lucide-react';
+import { parentApi, type ScheduleSlot } from '../../services/api';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
 import Select from '../../components/common/Select';
@@ -11,7 +11,7 @@ import type { Student } from '../../types';
 const DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
 const DAY_INDEX: Record<string, number> = Object.fromEntries(DAY_NAMES.map((d, i) => [d, i]));
 
-interface Cell { id: string; dayOfWeek: number; periodIndex: number; teachers?: { id: string; fullName: string; subject?: string } }
+interface Cell { dayOfWeek: number; periodIndex: number; teacherName?: string | null; subjectName?: string | null; roomName?: string | null }
 
 type View = 'week' | 'today';
 
@@ -20,7 +20,7 @@ export default function ParentSchedulePage() {
   const dayLabel = (day: string) => t(`common.days.${day}`);
   const [children, setChildren] = useState<Student[]>([]);
   const [selectedChild, setSelectedChild] = useState('');
-  const [periodsPerDay, setPeriodsPerDay] = useState(6);
+  const [skeleton, setSkeleton] = useState<ScheduleSlot[]>([]);
   const [scheduleDays, setScheduleDays] = useState<string[]>([]);
   const [cells, setCells] = useState<Cell[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,7 +42,7 @@ export default function ParentSchedulePage() {
     parentApi.getSchedule(selectedChild)
       .then(r => {
         const d = r.data;
-        setPeriodsPerDay(d.periodsPerDay);
+        setSkeleton(d.skeleton || []);
         setScheduleDays(d.scheduleDays || []);
         setCells(d.assignments || []);
       })
@@ -52,6 +52,13 @@ export default function ParentSchedulePage() {
   const orderedDays = useMemo(() =>
     [...scheduleDays].sort((a, b) => (DAY_INDEX[a] ?? 99) - (DAY_INDEX[b] ?? 99)),
   [scheduleDays]);
+
+  const columns = useMemo(() => {
+    let p = 0;
+    return skeleton.map((s, i) => s.kind === 'lesson'
+      ? { key: `c${i}`, kind: 'lesson' as const, period: ++p, start: s.start, end: s.end }
+      : { key: `c${i}`, kind: 'break' as const, label: s.label || t('schedule2.break', 'Break'), start: s.start, end: s.end });
+  }, [skeleton, t]);
 
   const todayName = DAY_NAMES[new Date().getDay()];
   const todayIsScheduled = orderedDays.includes(todayName);
@@ -120,12 +127,12 @@ export default function ParentSchedulePage() {
                     <th className="bg-gray-50 border-r border-b border-gray-200 px-3 py-2 text-left font-semibold text-gray-700 min-w-[120px]">
                       {t('schedule.day')}
                     </th>
-                    {Array.from({ length: periodsPerDay }, (_, i) => (
-                      <th
-                        key={i}
-                        className="bg-blue-50 border-r border-b border-gray-200 px-3 py-2 text-center font-semibold text-gray-700"
-                      >
-                        {t('schedule.period', { number: i + 1 })}
+                    {columns.map(col => col.kind === 'break' ? (
+                      <th key={col.key} className="bg-amber-50 border-r border-b border-amber-200 px-1 py-2 text-center w-10 align-middle" title={`${col.label} · ${col.start}–${col.end}`}><Coffee className="w-3.5 h-3.5 mx-auto text-amber-600" /></th>
+                    ) : (
+                      <th key={col.key} className="bg-blue-50 border-r border-b border-gray-200 px-3 py-2 text-center font-semibold text-gray-700">
+                        <div>{t('schedule.period', { number: col.period })}</div>
+                        <div className="text-[10px] font-normal text-gray-400">{col.start}–{col.end}</div>
                       </th>
                     ))}
                   </tr>
@@ -138,19 +145,17 @@ export default function ParentSchedulePage() {
                         <td className="border-r border-b border-gray-200 px-3 py-2 font-bold text-gray-900 bg-yellow-50">
                           {dayLabel(day)}
                         </td>
-                        {Array.from({ length: periodsPerDay }, (_, i) => {
-                          const cell = cellMap.get(`${dayIdx}:${i + 1}`);
-                          const subject = cell?.teachers?.subject?.trim();
-                          const teacher = cell?.teachers?.fullName;
+                        {columns.map(col => {
+                          if (col.kind === 'break') return <td key={col.key} className="border-r border-b border-amber-100 bg-amber-50/40" />;
+                          const cell = cellMap.get(`${dayIdx}:${col.period}`);
+                          const subject = cell?.subjectName?.trim();
                           return (
-                            <td
-                              key={i}
-                              className="border-r border-b border-gray-200 px-3 py-2 text-center align-middle"
-                            >
+                            <td key={col.key} className="border-r border-b border-gray-200 px-3 py-2 text-center align-middle">
                               {subject ? (
                                 <div>
                                   <div className="text-sm font-semibold text-gray-900">{subject}</div>
-                                  {teacher && <div className="text-[11px] text-gray-500 mt-0.5">{teacher}</div>}
+                                  {cell?.teacherName && <div className="text-[11px] text-gray-500 mt-0.5">{cell.teacherName}</div>}
+                                  {cell?.roomName && <div className="text-[10px] text-gray-400">{cell.roomName}</div>}
                                 </div>
                               ) : (
                                 <span className="text-gray-300">—</span>

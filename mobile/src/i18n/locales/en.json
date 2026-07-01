@@ -694,6 +694,9 @@
     "none_setup": "No schedule has been set up yet.",
     "period_short": "P{{n}}"
   },
+  "schedule2": {
+    "break": "Break"
+  },
   "teacher": {
     "share_report_label": "Share with other teachers of this student",
     "share_report_help": "Other teachers who currently or previously teach this student will be able to see this report.",

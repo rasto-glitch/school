@@ -14,7 +14,7 @@ import type { Announcement } from '../../types';
 interface ClassItem { id: string; name: string }
 interface HomeworkItem { id: string; title: string; subject?: string; dueDate?: string; classes?: { name: string } }
 interface PeriodItem { id: string; weekStartDate: string; weekEndDate: string }
-interface ScheduleCell { id: string; dayOfWeek: number; periodIndex: number; classes?: { id: string; name: string } }
+interface ScheduleCell { dayOfWeek: number; periodIndex: number; className?: string | null; subjectName?: string | null; roomName?: string | null }
 
 const DAY_NAMES = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'] as const;
 
@@ -175,8 +175,8 @@ export default function TeacherDashboardScreen() {
                   return (
                     <View key={i} style={styles.todayRow}>
                       <Text style={styles.todayPeriod}>{t('schedule.period_short', { n: i + 1 })}</Text>
-                      {cell?.classes?.name ? (
-                        <Text style={styles.todayClass}>{cell.classes.name}</Text>
+                      {cell?.className ? (
+                        <Text style={styles.todayClass}>{cell.className}</Text>
                       ) : (
                         <Text style={styles.todayEmpty}>—</Text>
                       )}

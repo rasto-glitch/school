@@ -790,6 +790,33 @@
     "subtitle_teacher": "Your weekly class assignments",
     "none_published_teacher": "No schedule has been set up yet. Ask the admin to publish the weekly grid."
   },
+  "schedule2": {
+    "day_structure": "Day structure",
+    "periods_breaks": "Periods & breaks",
+    "day_structure_hint": "The same layout applies to every school day. Lessons are numbered automatically; breaks are shown but never scheduled.",
+    "lesson": "Lesson",
+    "break": "Break",
+    "add_lesson": "Add lesson",
+    "add_break": "Add break",
+    "lesson_total": "{{count}} lesson period(s)",
+    "need_lesson": "Add at least one lesson period.",
+    "rooms": "Rooms",
+    "room_name": "Room name",
+    "capacity": "Capacity",
+    "add_room": "Add room",
+    "room_failed": "Could not save the room.",
+    "confirm_delete_room": "Delete this room? Lessons using it will be unassigned.",
+    "home_rooms": "Class home rooms",
+    "no_room": "—",
+    "room_type": {
+      "classroom": "Classroom",
+      "lab": "Lab",
+      "computer": "Computer",
+      "gym": "Gym",
+      "library": "Library",
+      "other": "Other"
+    }
+  },
   "tuition": {
     "title": "Tuition",
     "subtitle": "Your tuition status and payment history",

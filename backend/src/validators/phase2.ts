@@ -369,16 +369,35 @@ export const sendNotificationSchema = z.object({
   type: z.string().max(60).optional(),
   targetRole: z.string().max(40).optional(),
 });
+const slotTime = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'time must be HH:MM');
+const scheduleSlotSchema = z.object({
+  kind: z.enum(['lesson', 'break']).optional(),
+  label: z.string().max(40).optional(),
+  start: slotTime,
+  end: slotTime,
+});
 export const updateScheduleConfigSchema = z.object({
   periodsPerDay: z.number().int().min(1).max(20).optional(),
   scheduleDays: z.array(z.string().max(20)).max(7).optional(),
+  // Schedule 2.0 day skeleton (lesson + break slots with times).
+  skeleton: z.array(scheduleSlotSchema).max(40).optional(),
 });
 export const setScheduleCellSchema = z.object({
   teacherId: optId,
   dayOfWeek: z.number().int().min(0).max(6).optional(),
   periodIndex: z.number().int().min(0).max(50).optional(),
   classId: optId,
+  subjectId: optId,
+  roomId: optId,
+  isLocked: z.boolean().optional(),
 });
+const roomType = z.enum(['classroom', 'lab', 'computer', 'gym', 'library', 'other']);
+export const roomSchema = z.object({
+  name: z.string().trim().min(1).max(80).optional(),
+  roomType: z.union([roomType, z.null()]).optional(),
+  capacity: z.number().int().min(0).max(2000).nullable().optional(),
+});
+export const setClassRoomSchema = z.object({ roomId: optId });
 // Settings carry free-form JSON (chatRestrictions etc.) — validate the
 // known keys but DON'T strip the rest.
 export const updateSettingsSchema = z.object({

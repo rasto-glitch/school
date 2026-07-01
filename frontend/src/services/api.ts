@@ -355,6 +355,9 @@ export const teacherApi = {
 // Roles that support bulk upload (admin excluded — created individually).
 export type BulkEmployeeRole = 'teacher' | 'driver' | 'supervisor' | 'reception' | 'accountant' | 'staff';
 
+// Schedule 2.0 day-skeleton slot (lesson carries an index; break is display-only).
+export interface ScheduleSlot { kind: 'lesson' | 'break'; index?: number; label?: string; start: string; end: string }
+
 export const adminApi = {
   getStudents: (params?: Record<string, string>) => api.get('/admin/students', { params }),
   // Bulk lookup: pages through /admin/students (using the returned `total`)
@@ -381,10 +384,16 @@ export const adminApi = {
   deleteStudent: (id: string) => api.delete(`/admin/students/${id}`),
   assignStudent: (data: object) => api.post('/admin/students/assign', data),
   getSchedule: () => api.get('/admin/schedule'),
-  updateScheduleConfig: (data: { periodsPerDay?: number; scheduleDays?: string[] }) =>
+  updateScheduleConfig: (data: { periodsPerDay?: number; scheduleDays?: string[]; skeleton?: ScheduleSlot[] }) =>
     api.put('/admin/schedule/config', data),
-  setScheduleCell: (data: { teacherId: string; dayOfWeek: number; periodIndex: number; classId: string | null }) =>
+  setScheduleCell: (data: { teacherId: string; dayOfWeek: number; periodIndex: number; classId: string | null; subjectId?: string | null; roomId?: string | null; isLocked?: boolean }) =>
     api.put('/admin/schedule/cell', data),
+  // Rooms (Schedule 2.0)
+  listRooms: () => api.get('/admin/rooms'),
+  createRoom: (data: { name: string; roomType?: string | null; capacity?: number | null }) => api.post('/admin/rooms', data),
+  updateRoom: (id: string, data: { name?: string; roomType?: string | null; capacity?: number | null }) => api.put(`/admin/rooms/${id}`, data),
+  deleteRoom: (id: string) => api.delete(`/admin/rooms/${id}`),
+  setClassRoom: (classId: string, roomId: string | null) => api.put(`/admin/classes/${classId}/room`, { roomId }),
   scheduleTemplate: () => api.get('/admin/schedule/template.xlsx', { responseType: 'blob' }),
   uploadSchedule: (file: File) => {
     const fd = new FormData();

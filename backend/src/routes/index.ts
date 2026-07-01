@@ -583,6 +583,12 @@ export function createRouter(io: SocketServer) {
   router.put('/admin/schedule/cell', authenticate, authorizeCapability('academics.oversee'), validate({ body: vp.setScheduleCellSchema }), (req, res) => admin.setScheduleCell(req as AuthRequest, res));
   router.get('/admin/schedule/template.xlsx', authenticate, authorizeCapability('academics.oversee'), (req, res) => admin.scheduleTemplate(req as AuthRequest, res));
   router.post('/admin/schedule/upload', authenticate, authorizeCapability('academics.oversee'), upload.single('file'), (req, res) => admin.uploadSchedule(req as AuthRequest, res));
+  // Rooms (Schedule 2.0, migration 068) — physical rooms/labs for timetabling.
+  router.get('/admin/rooms', authenticate, authorizeCapability('academics.oversee'), (req, res) => admin.listRooms(req as AuthRequest, res));
+  router.post('/admin/rooms', authenticate, authorizeCapability('academics.oversee'), validate({ body: vp.roomSchema }), (req, res) => admin.createRoom(req as AuthRequest, res));
+  router.put('/admin/rooms/:id', authenticate, authorizeCapability('academics.oversee'), validate({ params: vp.idParam, body: vp.roomSchema }), (req, res) => admin.updateRoom(req as AuthRequest, res));
+  router.delete('/admin/rooms/:id', authenticate, authorizeCapability('academics.oversee'), validate({ params: vp.idParam }), (req, res) => admin.deleteRoom(req as AuthRequest, res));
+  router.put('/admin/classes/:id/room', authenticate, authorizeCapability('academics.oversee'), validate({ params: vp.idParam, body: vp.setClassRoomSchema }), (req, res) => admin.setClassRoom(req as AuthRequest, res));
 
   router.get('/admin/announcements', authenticate, authorize('admin', 'teacher', 'parent', 'supervisor'), validate({ query: vq.listQuery }), (req, res) => admin.getAnnouncements(req as AuthRequest, res));
   router.get('/link-preview', authenticate, (req, res) => admin.getLinkPreview(req as AuthRequest, res));

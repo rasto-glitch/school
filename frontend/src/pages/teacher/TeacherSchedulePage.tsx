@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Calendar } from 'lucide-react';
-import { teacherApi } from '../../services/api';
+import { Calendar, Coffee } from 'lucide-react';
+import { teacherApi, type ScheduleSlot } from '../../services/api';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
@@ -9,14 +9,13 @@ import LoadingSpinner from '../../components/common/LoadingSpinner';
 const DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
 const DAY_INDEX: Record<string, number> = Object.fromEntries(DAY_NAMES.map((d, i) => [d, i]));
 
-interface Cell { id: string; dayOfWeek: number; periodIndex: number; classes?: { id: string; name: string } }
-
+interface Cell { dayOfWeek: number; periodIndex: number; className?: string | null; subjectName?: string | null; roomName?: string | null }
 type View = 'week' | 'today';
 
 export default function TeacherSchedulePage() {
   const { t } = useTranslation();
   const dayLabel = (day: string) => t(`common.days.${day}`);
-  const [periodsPerDay, setPeriodsPerDay] = useState(6);
+  const [skeleton, setSkeleton] = useState<ScheduleSlot[]>([]);
   const [scheduleDays, setScheduleDays] = useState<string[]>([]);
   const [cells, setCells] = useState<Cell[]>([]);
   const [loading, setLoading] = useState(true);
@@ -25,15 +24,21 @@ export default function TeacherSchedulePage() {
   useEffect(() => {
     teacherApi.getSchedule().then(r => {
       const d = r.data;
-      setPeriodsPerDay(d.periodsPerDay);
+      setSkeleton(d.skeleton || []);
       setScheduleDays(d.scheduleDays || []);
       setCells(d.assignments || []);
     }).finally(() => setLoading(false));
   }, []);
 
   const orderedDays = useMemo(() =>
-    [...scheduleDays].sort((a, b) => (DAY_INDEX[a] ?? 99) - (DAY_INDEX[b] ?? 99)),
-  [scheduleDays]);
+    [...scheduleDays].sort((a, b) => (DAY_INDEX[a] ?? 99) - (DAY_INDEX[b] ?? 99)), [scheduleDays]);
+
+  const columns = useMemo(() => {
+    let p = 0;
+    return skeleton.map((s, i) => s.kind === 'lesson'
+      ? { key: `c${i}`, kind: 'lesson' as const, period: ++p, start: s.start, end: s.end }
+      : { key: `c${i}`, kind: 'break' as const, label: s.label || t('schedule2.break', 'Break'), start: s.start, end: s.end });
+  }, [skeleton, t]);
 
   const todayName = DAY_NAMES[new Date().getDay()];
   const todayIsScheduled = orderedDays.includes(todayName);
@@ -50,50 +55,28 @@ export default function TeacherSchedulePage() {
   return (
     <PageLayout title={t('schedule.title')} subtitle={t('schedule.subtitle_teacher')}>
       <div className="space-y-4">
-        {/* Toggle */}
         <div className="inline-flex rounded-xl bg-gray-100 p-1">
-          <button
-            onClick={() => setView('week')}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${view === 'week' ? 'bg-white text-primary-600 shadow-sm' : 'text-gray-600'}`}
-          >
-            {t('schedule.whole_week')}
-          </button>
-          <button
-            onClick={() => setView('today')}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${view === 'today' ? 'bg-white text-primary-600 shadow-sm' : 'text-gray-600'}`}
-          >
-            {t('common.today')}
-          </button>
+          <button onClick={() => setView('week')} className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${view === 'week' ? 'bg-white text-primary-600 shadow-sm' : 'text-gray-600'}`}>{t('schedule.whole_week')}</button>
+          <button onClick={() => setView('today')} className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${view === 'today' ? 'bg-white text-primary-600 shadow-sm' : 'text-gray-600'}`}>{t('common.today')}</button>
         </div>
 
         {view === 'today' && !todayIsScheduled ? (
-          <Card>
-            <div className="flex items-center gap-3 text-gray-500">
-              <Calendar className="w-5 h-5" />
-              <p className="text-sm">{t('schedule.no_classes_today', { day: dayLabel(todayName) })}</p>
-            </div>
-          </Card>
+          <Card><div className="flex items-center gap-3 text-gray-500"><Calendar className="w-5 h-5" /><p className="text-sm">{t('schedule.no_classes_today', { day: dayLabel(todayName) })}</p></div></Card>
         ) : visibleDays.length === 0 || cells.length === 0 ? (
-          <Card>
-            <div className="text-center py-8 text-gray-400 text-sm">
-              {t('schedule.none_published_teacher')}
-            </div>
-          </Card>
+          <Card><div className="text-center py-8 text-gray-400 text-sm">{t('schedule.none_published_teacher')}</div></Card>
         ) : (
           <Card className="!p-0 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="border-collapse text-sm w-full">
                 <thead>
                   <tr>
-                    <th className="bg-gray-50 border-r border-b border-gray-200 px-3 py-2 text-left font-semibold text-gray-700 min-w-[120px]">
-                      {t('schedule.day')}
-                    </th>
-                    {Array.from({ length: periodsPerDay }, (_, i) => (
-                      <th
-                        key={i}
-                        className="bg-blue-50 border-r border-b border-gray-200 px-3 py-2 text-center font-semibold text-gray-700"
-                      >
-                        {t('schedule.period', { number: i + 1 })}
+                    <th className="bg-gray-50 border-r border-b border-gray-200 px-3 py-2 text-left font-semibold text-gray-700 min-w-[120px]">{t('schedule.day')}</th>
+                    {columns.map(col => col.kind === 'break' ? (
+                      <th key={col.key} className="bg-amber-50 border-r border-b border-amber-200 px-1 py-2 text-center w-10 align-middle" title={`${col.label} · ${col.start}–${col.end}`}><Coffee className="w-3.5 h-3.5 mx-auto text-amber-600" /></th>
+                    ) : (
+                      <th key={col.key} className="bg-blue-50 border-r border-b border-gray-200 px-3 py-2 text-center font-semibold text-gray-700">
+                        <div>{t('schedule.period', { number: col.period })}</div>
+                        <div className="text-[10px] font-normal text-gray-400">{col.start}–{col.end}</div>
                       </th>
                     ))}
                   </tr>
@@ -103,23 +86,18 @@ export default function TeacherSchedulePage() {
                     const dayIdx = DAY_INDEX[day];
                     return (
                       <tr key={day} className="hover:bg-gray-50/50">
-                        <td className="border-r border-b border-gray-200 px-3 py-2 font-bold text-gray-900 bg-yellow-50">
-                          {dayLabel(day)}
-                        </td>
-                        {Array.from({ length: periodsPerDay }, (_, i) => {
-                          const cell = cellMap.get(`${dayIdx}:${i + 1}`);
+                        <td className="border-r border-b border-gray-200 px-3 py-2 font-bold text-gray-900 bg-yellow-50">{dayLabel(day)}</td>
+                        {columns.map(col => {
+                          if (col.kind === 'break') return <td key={col.key} className="border-r border-b border-amber-100 bg-amber-50/40" />;
+                          const cell = cellMap.get(`${dayIdx}:${col.period}`);
                           return (
-                            <td
-                              key={i}
-                              className="border-r border-b border-gray-200 px-3 py-2 text-center"
-                            >
-                              {cell?.classes?.name ? (
-                                <span className="inline-block px-2.5 py-1 rounded-lg bg-primary-50 text-primary-700 text-xs font-semibold">
-                                  {cell.classes.name}
-                                </span>
-                              ) : (
-                                <span className="text-gray-300">—</span>
-                              )}
+                            <td key={col.key} className="border-r border-b border-gray-200 px-3 py-2 text-center align-top">
+                              {cell?.className ? (
+                                <div>
+                                  <span className="inline-block px-2.5 py-1 rounded-lg bg-primary-50 text-primary-700 text-xs font-semibold">{cell.className}</span>
+                                  {(cell.subjectName || cell.roomName) && <div className="text-[10px] text-gray-500 mt-0.5">{[cell.subjectName, cell.roomName].filter(Boolean).join(' · ')}</div>}
+                                </div>
+                              ) : <span className="text-gray-300">—</span>}
                             </td>
                           );
                         })}
