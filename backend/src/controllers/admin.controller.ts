@@ -1296,17 +1296,14 @@ export async function bulkUploadEmployees(req: AuthRequest, res: Response): Prom
   // =========================================================
   // PASS 2 — batch create missing classes (teacher) / buses (driver)
   // =========================================================
+  // Class auto-creation is DISABLED for teacher upload (2026-07-01): normalized
+  // matching can miss a differently-spelled existing class and create a
+  // duplicate. The import now only LINKS teachers to classes that already
+  // exist; unknown class names are reported so the admin creates them first.
   const autoCreatedClasses: string[] = [];
   if (role === 'teacher' && newClassesNeeded.size > 0) {
-    const { data: nc, error: ncErr } = await supabase.from('classes')
-      .insert(Array.from(newClassesNeeded.values()).map(name => ({ school_id: schoolId, name, grade_level: name })))
-      .select('id, name');
-    if (ncErr) { errors.push(`Failed to create classes: ${ncErr.message}`); }
-    else for (const c of (nc || [])) {
-      classExactMap.set(c.name.toLowerCase(), c.id);
-      classNormMap.set(stripGradePrefix(c.name), c.id);
-      autoCreatedClasses.push(c.name);
-    }
+    const missing = Array.from(newClassesNeeded.values());
+    errors.push(`${missing.length} class name(s) were not found and left unlinked (class auto-creation is off): ${missing.join(', ')}. Create these classes first, then link teachers to them in Curriculum.`);
   }
 
   const autoCreatedBuses: string[] = [];
