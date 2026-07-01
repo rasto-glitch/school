@@ -136,7 +136,9 @@ export default function ReceptionTabs() {
             component={StaffAttendanceScreen}
             options={{
               tabBarLabel: t('nav.clock_in', 'Clock In'),
-              tabBarIcon: ({ color, focused }) => <Clock size={ICON_SIZE} color={color} fill={focused ? activeFill : 'transparent'} />,
+              // Focused clock keeps its fill but gets a contrasting stroke so the
+              // ring + hands stay visible (white on light, indigo on dark).
+              tabBarIcon: ({ color, focused }) => <Clock size={ICON_SIZE} color={focused ? (isDark ? colors.primary : '#FFFFFF') : color} fill={focused ? activeFill : 'transparent'} />,
             }}
           />
         ) : null}
