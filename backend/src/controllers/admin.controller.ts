@@ -5934,55 +5934,95 @@ export async function setClassRoom(req: AuthRequest, res: Response): Promise<voi
 // weekly load vs their نصاب cap. Feeds the Phase-3 auto-generator and lets the
 // admin validate the manual grid against the intended demand.
 
-// Full teaching-plan payload: requirements (enriched), pick-lists, and a
-// per-teacher load board (required demand vs cap vs what's actually placed).
+// Teacher-centric teaching plan: each teacher with their lines (one per
+// class+subject they own), the load = SUM of those lines' periods/week, their
+// نصاب target, and what's actually placed. The demand model is unchanged — a
+// "line" is still a timetable_requirements row keyed by (class, subject); this
+// just groups it BY TEACHER (the natural way to enter بەشە وانە) rather than by
+// class. Ownership of a (class, subject): the requirement's teacher if a
+// requirement exists, otherwise the curriculum teacher (from bulk upload).
 export async function getTeachingPlan(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
 
   const [
     { data: reqRows, error: rqErr },
+    { data: curr, error: cuErr },
     { data: classes, error: cErr },
     { data: subjects, error: sErr },
     { data: teachers, error: tErr },
     { data: rooms, error: roErr },
     { data: placed, error: pErr },
   ] = await Promise.all([
-    supabase
-      .from('timetable_requirements')
-      .select('id, class_id, subject_id, teacher_id, periods_per_week, max_per_day, room_id, classes(name), subjects(name), teachers(full_name), rooms(name)')
-      .eq('school_id', schoolId),
+    supabase.from('timetable_requirements').select('id, class_id, subject_id, teacher_id, periods_per_week, max_per_day, room_id').eq('school_id', schoolId),
+    supabase.from('class_subject_teachers').select('class_id, subject_id, teacher_id').eq('school_id', schoolId),
     supabase.from('classes').select('id, name, grade_level').eq('school_id', schoolId).order('name'),
     supabase.from('subjects').select('id, name').eq('school_id', schoolId).order('name'),
     supabase.from('teachers').select('id, full_name, subject, max_periods_per_week').eq('school_id', schoolId).order('full_name'),
     supabase.from('rooms').select('id, name').eq('school_id', schoolId).order('name'),
     supabase.from('schedule_assignments').select('teacher_id').eq('school_id', schoolId),
   ]);
-  if (rqErr || cErr || sErr || tErr || roErr || pErr) {
-    res.status(500).json({ error: rqErr?.message || cErr?.message || sErr?.message || tErr?.message || roErr?.message || pErr?.message });
+  if (rqErr || cuErr || cErr || sErr || tErr || roErr || pErr) {
+    res.status(500).json({ error: rqErr?.message || cuErr?.message || cErr?.message || sErr?.message || tErr?.message || roErr?.message || pErr?.message });
     return;
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const requirements = (reqRows || []).map((r: any) => ({
-    id: r.id,
-    classId: r.class_id,
-    className: r.classes?.name ?? null,
-    subjectId: r.subject_id,
-    subjectName: r.subjects?.name ?? null,
-    teacherId: r.teacher_id,
-    teacherName: r.teachers?.full_name ?? null,
-    periodsPerWeek: r.periods_per_week,
-    maxPerDay: r.max_per_day,
-    roomId: r.room_id,
-    roomName: r.rooms?.name ?? null,
-  }));
+  const classNm = new Map<string, string>((classes || []).map((c: any) => [c.id, c.name]));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const subjNm = new Map<string, string>((subjects || []).map((s: any) => [s.id, s.name]));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const roomNm = new Map<string, string>((rooms || []).map((r: any) => [r.id, r.name]));
+  const teacherIds = new Set<string>((teachers || []).map((t: { id: string }) => t.id));
 
-  // Required load per teacher = SUM(periods_per_week) over their requirements.
-  const requiredByTeacher = new Map<string, number>();
-  for (const r of requirements) {
-    if (!r.teacherId) continue;
-    requiredByTeacher.set(r.teacherId, (requiredByTeacher.get(r.teacherId) || 0) + (r.periodsPerWeek || 0));
+  // Merge requirement rows + curriculum pairs into a per-(class,subject) key set.
+  const keyOf = (classId: string, subjectId: string) => `${classId}|${subjectId}`;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const reqByKey = new Map<string, any>();
+  const keyMeta = new Map<string, { classId: string; subjectId: string }>();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const r of (reqRows || []) as any[]) {
+    const k = keyOf(r.class_id, r.subject_id);
+    reqByKey.set(k, r);
+    keyMeta.set(k, { classId: r.class_id, subjectId: r.subject_id });
   }
+  const currTeacher = new Map<string, string>(); // key → first curriculum teacher
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const c of (curr || []) as any[]) {
+    const k = keyOf(c.class_id, c.subject_id);
+    if (!currTeacher.has(k)) currTeacher.set(k, c.teacher_id);
+    if (!keyMeta.has(k)) keyMeta.set(k, { classId: c.class_id, subjectId: c.subject_id });
+  }
+
+  const linesByTeacher = new Map<string, Array<Record<string, unknown>>>();
+  const ensure = (tid: string) => { const a = linesByTeacher.get(tid) ?? []; linesByTeacher.set(tid, a); return a; };
+  let unassignedPeriods = 0;
+  const unassignedLines: Array<Record<string, unknown>> = [];
+
+  for (const [k, meta] of keyMeta) {
+    const req = reqByKey.get(k);
+    // Ownership matches the generator: the solver reads ONLY requirement.teacher_id,
+    // so a requirement's own teacher is authoritative. Fall back to the curriculum
+    // teacher only when NO requirement row exists (a pure curriculum pair, periods 0).
+    // A requirement whose teacher_id is NULL is 'no_teacher' to the solver — it must
+    // flow to unassigned rather than inflate a curriculum teacher's load.
+    const owner: string | null = req ? (req.teacher_id ?? null) : (currTeacher.get(k) ?? null);
+    const periods = req?.periods_per_week ?? 0;
+    const line = {
+      requirementId: req?.id ?? null,
+      classId: meta.classId, className: classNm.get(meta.classId) ?? null,
+      subjectId: meta.subjectId, subjectName: subjNm.get(meta.subjectId) ?? null,
+      periodsPerWeek: periods,
+      maxPerDay: req?.max_per_day ?? 2,
+      roomId: req?.room_id ?? null,
+      roomName: req?.room_id ? (roomNm.get(req.room_id) ?? null) : null,
+    };
+    if (owner && teacherIds.has(owner)) ensure(owner).push(line);
+    else if (periods > 0) {
+      unassignedPeriods += periods;
+      unassignedLines.push({ classId: meta.classId, className: line.className, subjectId: meta.subjectId, subjectName: line.subjectName, periodsPerWeek: periods });
+    }
+  }
+
   // Placed load per teacher = actual cells already in the grid.
   const placedByTeacher = new Map<string, number>();
   for (const p of placed || []) {
@@ -5991,26 +6031,25 @@ export async function getTeachingPlan(req: AuthRequest, res: Response): Promise<
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const load = (teachers || []).map((t: any) => ({
-    teacherId: t.id,
-    fullName: t.full_name,
-    subject: t.subject ?? null,
-    maxPeriodsPerWeek: t.max_periods_per_week ?? null,
-    requiredPeriods: requiredByTeacher.get(t.id) || 0,
-    placedPeriods: placedByTeacher.get(t.id) || 0,
-  }));
-  // Demand with no teacher assigned yet (won't count toward anyone's load).
-  const unassignedPeriods = requirements
-    .filter(r => !r.teacherId)
-    .reduce((sum, r) => sum + (r.periodsPerWeek || 0), 0);
+  const teachersOut = (teachers || []).map((t: any) => {
+    const lines = (linesByTeacher.get(t.id) || []).sort((a, b) =>
+      String(a.subjectName || '').localeCompare(String(b.subjectName || '')) || String(a.className || '').localeCompare(String(b.className || '')));
+    const load = lines.reduce((sum, l) => sum + (Number(l.periodsPerWeek) || 0), 0);
+    return {
+      id: t.id, fullName: t.full_name, subject: t.subject ?? null,
+      target: t.max_periods_per_week ?? null,
+      load, placed: placedByTeacher.get(t.id) || 0,
+      lines,
+    };
+  });
 
   res.json({
-    requirements,
+    teachers: teachersOut,
     classes: toCC(classes),
     subjects: toCC(subjects),
     rooms: toCC(rooms),
-    load,
     unassignedPeriods,
+    unassignedLines,
   });
 }
 
