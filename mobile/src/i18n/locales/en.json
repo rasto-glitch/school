@@ -1,4 +1,11 @@
 {
+  "healthBrief": {
+    "title": "Health & safety",
+    "allergies": "Allergies",
+    "conditions": "Conditions",
+    "dietary": "Dietary notes",
+    "confidential": "Confidential — for student safety only."
+  },
   "past_records": {
     "title": "Past Records",
     "subtitle": "Graduated or departed children",

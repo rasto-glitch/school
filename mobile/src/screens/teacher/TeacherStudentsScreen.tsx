@@ -4,6 +4,7 @@ import {
   TouchableOpacity, TextInput, RefreshControl, Modal, Image, ActivityIndicator,
 } from 'react-native';
 import { CardListSkeleton } from '../../components/Skeleton';
+import HealthSafetyPanel, { type StudentHealthBrief } from '../../components/HealthSafetyPanel';
 import { useTranslation } from 'react-i18next';
 import { Search, User, X, FileText, Star } from 'lucide-react-native';
 import { teacherApi } from '../../services/api';
@@ -30,6 +31,7 @@ interface StudentBrief {
   student: StudentItem & { phoneNumber?: string; emergencyContact?: string; homeAddress?: string };
   reports: ReportItem[];
   grades: GradeItem[];
+  health?: StudentHealthBrief | null;
 }
 
 function totalMarks(marks?: MarkRow[] | null): number {
@@ -186,6 +188,8 @@ export default function TeacherStudentsScreen() {
                     </View>
                   ) : null}
                 </View>
+
+                <HealthSafetyPanel health={brief.health} />
 
                 {/* Grades — this teacher's only */}
                 <View style={styles.sectionHeader}>

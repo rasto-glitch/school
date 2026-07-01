@@ -4,6 +4,7 @@ import {
   TouchableOpacity, TextInput,
 } from 'react-native';
 import { CardListSkeleton } from '../../components/Skeleton';
+import HealthSafetyPanel, { type StudentHealthBrief } from '../../components/HealthSafetyPanel';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { Search, FileText, ChevronDown, ChevronUp } from 'lucide-react-native';
@@ -49,7 +50,7 @@ export default function SupervisorStudentReportsScreen({ embedded = false }: { e
   const [query, setQuery] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
   const [selected, setSelected] = useState<Student | null>(null);
-  const [brief, setBrief] = useState<{ student: any; reports: Report[]; grades: Grade[] } | null>(null);
+  const [brief, setBrief] = useState<{ student: any; reports: Report[]; grades: Grade[]; health?: StudentHealthBrief | null } | null>(null);
   const [loading, setLoading] = useState(false);
   const [expandedSection, setExpandedSection] = useState<'grades' | 'reports' | null>('grades');
 
@@ -153,6 +154,8 @@ export default function SupervisorStudentReportsScreen({ embedded = false }: { e
               </Text>
             </View>
           </View>
+
+          <HealthSafetyPanel health={brief.health} />
 
           {/* Grades section */}
           <TouchableOpacity

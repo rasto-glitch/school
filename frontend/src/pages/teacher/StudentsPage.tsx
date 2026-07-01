@@ -12,6 +12,7 @@ import Select from '../../components/common/Select';
 import Modal from '../../components/common/Modal';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import EmptyState from '../../components/common/EmptyState';
+import HealthSafetyPanel, { type StudentHealthBrief } from '../../components/common/HealthSafetyPanel';
 import type { Student, Class, Report, Grade, Mark } from '../../types';
 
 // PR 2 — the teacher's per-student view shifts from "only my work" to
@@ -36,6 +37,7 @@ interface StudentHistory {
   reports: ReportWithOrigin[];
   grades: Grade[];
   enrollmentHistory: EnrollmentEntry[];
+  health?: StudentHealthBrief | null;
 }
 
 function totalMarks(marks?: Mark[] | null): number {
@@ -222,6 +224,8 @@ export default function StudentsPage() {
               <div><span className="text-gray-500">{t('teacher.emergency_label')}</span> <span className="font-medium">{history.student.emergencyContact || '—'}</span></div>
               <div><span className="text-gray-500">{t('common.address')}:</span> <span className="font-medium">{history.student.homeAddress || '—'}</span></div>
             </div>
+
+            <HealthSafetyPanel health={history.health} />
 
             {/* Year filter for the entire history view */}
             {allYears.length > 1 && (

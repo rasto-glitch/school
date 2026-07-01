@@ -14,6 +14,7 @@ import {
   type AttendanceWriteStatus,
 } from '../utils/attendance';
 import { resolveCurrentAcademicYear, loadEnrollmentHistory, rowsToSnapshot } from '../utils/studentEnrollments';
+import { loadHealthBrief } from '../utils/studentHealthBrief';
 import { getOpenWindowForTerm, listGradeWindows } from '../utils/gradeWindow';
 import { logAudit } from '../utils/audit';
 // Elevated client for STORAGE-only operations — see chat.controller.ts
@@ -662,10 +663,14 @@ export async function getStudentBrief(req: AuthRequest, res: Response): Promise<
   if (reportsRes.error) { res.status(500).json({ error: reportsRes.error.message }); return; }
   if (gradesRes.error) { res.status(500).json({ error: gradesRes.error.message }); return; }
 
+  // Safety subset of the clinic health profile — same as getStudentHistory.
+  const health = await loadHealthBrief(req.db!, schoolId, String(studentId));
+
   res.json({
     student: toCC(student),
     reports: toCC(reportsRes.data || []),
     grades: toCC(gradesRes.data || []),
+    health,
   });
 }
 
@@ -795,12 +800,17 @@ export async function getStudentHistory(req: AuthRequest, res: Response): Promis
   const enrollmentRows = await loadEnrollmentHistory(schoolId, String(studentId));
   const enrollmentHistory = rowsToSnapshot(enrollmentRows);
 
+  // Safety subset of the clinic health profile (allergies / conditions / diet)
+  // for this student the teacher already teaches. Visit log stays clinic-only.
+  const health = await loadHealthBrief(req.db!, schoolId, String(studentId));
+
   res.json({
     student: toCC(student),
     handoffEnabled: handoffOn,
     reports: toCC(reports),
     grades: toCC(grades || []),
     enrollmentHistory,
+    health,
   });
 }
 

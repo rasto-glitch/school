@@ -27,6 +27,7 @@ import { loadArchivedEmployeeForPdf, streamArchivedEmployeePdf } from '../utils/
 import { loadArchivedStudentForPdf, streamArchivedStudentPdf } from '../utils/archivedStudentPdf';
 import { pickLang, fetchLogoBuffer } from '../utils/archivePdfShared';
 import { streamSchedulePdf, type SchedSlot, type SchedPage, type SchedRow, type SchedCell, type MasterGridData } from '../utils/schedulePdf';
+import { loadHealthBrief } from '../utils/studentHealthBrief';
 import { hrColumns, hrSnapshot } from '../utils/employeeHr';
 import { defaultPasswordFor } from '../utils/defaultPasswords';
 import { propagateAdminSetPhone } from '../utils/adminPhonePropagation';
@@ -3897,18 +3898,23 @@ export async function getStudentBrief(req: AuthRequest, res: Response): Promise<
   const { schoolId } = req.user!;
   const { id } = req.params;
 
-  const [studentRes, reportsRes, gradesRes] = await Promise.all([
+  const [studentRes, reportsRes, gradesRes, health] = await Promise.all([
     supabase.from('students')
       .select('*, classes(name), parents(id, full_name, phone_number, email), drivers(full_name, buses(bus_number))')
       .eq('id', id).eq('school_id', schoolId).single(),
     supabase.from('reports').select('*, teachers(full_name)').eq('student_id', id).eq('school_id', schoolId).order('created_at', { ascending: false }),
     supabase.from('grades').select('*').eq('student_id', id).eq('school_id', schoolId),
+    // Safety subset of the clinic health profile (allergies / conditions / diet)
+    // for the brief — surfaced to admins + supervisors (this endpoint) and
+    // teachers (getStudentHistory). The visit log stays clinic-only.
+    loadHealthBrief(supabase, schoolId, String(id)),
   ]);
 
   res.json({
     student: toCC(studentRes.data),
     reports: toCC(reportsRes.data) || [],
     grades: toCC(gradesRes.data) || [],
+    health,
   });
 }
 

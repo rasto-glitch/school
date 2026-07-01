@@ -8,6 +8,7 @@ import Card from '../../components/common/Card';
 import Select from '../../components/common/Select';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import EmptyState from '../../components/common/EmptyState';
+import HealthSafetyPanel, { type StudentHealthBrief } from '../../components/common/HealthSafetyPanel';
 import type { Report, Grade } from '../../types';
 import { format, parseISO, differenceInYears } from 'date-fns';
 
@@ -18,7 +19,7 @@ export default function SupervisorStudentReportsPage() {
   const [selectedStudentId, setSelectedStudentId] = useState(searchParams.get('id') || '');
   const [selectedSubject, setSelectedSubject] = useState('');
   const [selectedYear, setSelectedYear] = useState('');
-  const [brief, setBrief] = useState<{ student: any; reports: Report[]; grades: Grade[] } | null>(null);
+  const [brief, setBrief] = useState<{ student: any; reports: Report[]; grades: Grade[]; health?: StudentHealthBrief | null } | null>(null);
   const [search, setSearch] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -191,6 +192,8 @@ export default function SupervisorStudentReportsPage() {
                 </div>
               </div>
             </Card>
+
+            <HealthSafetyPanel health={brief.health} />
 
             {/* Grades */}
             <div>
