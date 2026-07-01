@@ -29,17 +29,17 @@ export default function ContactPage() {
     }
   };
 
-  const input = 'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-primary-400 focus:ring-4 focus:ring-primary-100 outline-none transition';
-  const label = 'block text-sm font-semibold text-slate-800 mb-1.5';
+  const input = 'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-primary-400 focus:ring-4 focus:ring-primary-100 outline-none transition dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-primary-500 dark:focus:ring-primary-500/20';
+  const label = 'block text-sm font-semibold text-slate-800 mb-1.5 dark:text-slate-200';
 
   if (status === 'success') {
     return (
       <section className="py-24 md:py-32">
         <div className="mx-auto max-w-xl container-px text-center">
-          <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 mb-6">
+          <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 mb-6 dark:bg-emerald-500/10 dark:text-emerald-400">
             <CheckCircle2 size={36} />
           </div>
-          <h1 className="text-3xl md:text-4xl font-extrabold text-slate-900">
+          <h1 className="text-3xl md:text-4xl font-extrabold text-slate-900 dark:text-white">
             {t('contact.form.success')}
           </h1>
         </div>
@@ -51,13 +51,13 @@ export default function ContactPage() {
     <section className="py-16 md:py-20">
       <div className="mx-auto max-w-2xl container-px">
         <div className="text-center mb-10">
-          <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight text-slate-900">
+          <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight text-slate-900 dark:text-white">
             {t('contact.title')}
           </h1>
-          <p className="mt-3 text-slate-600">{t('contact.subtitle')}</p>
+          <p className="mt-3 text-slate-600 dark:text-slate-400">{t('contact.subtitle')}</p>
           <a
             href="mailto:contact@scholify.krd"
-            className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-primary-600 hover:text-primary-700"
+            className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300"
           >
             <Mail size={16} />
             contact@scholify.krd
@@ -66,7 +66,7 @@ export default function ContactPage() {
 
         <form
           onSubmit={(e) => { e.preventDefault(); submit(new FormData(e.currentTarget)); }}
-          className="rounded-3xl border border-slate-200 bg-white shadow-sm p-6 sm:p-10 space-y-5"
+          className="rounded-3xl border border-slate-200 bg-white shadow-sm p-6 sm:p-10 space-y-5 dark:border-slate-800 dark:bg-slate-900"
         >
           {/* Honeypot — hidden from real users */}
           <input
@@ -100,7 +100,7 @@ export default function ContactPage() {
           </div>
 
           {status === 'error' && (
-            <div className="flex items-start gap-2 rounded-xl bg-rose-50 border border-rose-200 p-3 text-sm text-rose-700">
+            <div className="flex items-start gap-2 rounded-xl bg-rose-50 border border-rose-200 p-3 text-sm text-rose-700 dark:bg-rose-500/10 dark:border-rose-500/30 dark:text-rose-300">
               <AlertCircle size={16} className="shrink-0 mt-0.5" />
               <span>{errorMsg || t('contact.form.error')}</span>
             </div>

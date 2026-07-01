@@ -47,18 +47,18 @@ export default function ResetPasswordPage() {
     }
   };
 
-  const input = 'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-primary-400 focus:ring-4 focus:ring-primary-100 outline-none transition';
-  const label = 'block text-sm font-semibold text-slate-800 mb-1.5';
+  const input = 'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-primary-400 focus:ring-4 focus:ring-primary-100 outline-none transition dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-primary-500 dark:focus:ring-primary-500/20';
+  const label = 'block text-sm font-semibold text-slate-800 mb-1.5 dark:text-slate-200';
 
   if (status === 'success') {
     return (
       <section className="py-24 md:py-32">
         <div className="mx-auto max-w-xl container-px text-center">
-          <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 mb-6">
+          <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 mb-6 dark:bg-emerald-500/10 dark:text-emerald-400">
             <CheckCircle2 size={36} />
           </div>
-          <h1 className="text-3xl md:text-4xl font-extrabold text-slate-900">{t('reset.success_title')}</h1>
-          <p className="mt-3 text-slate-600">{t('reset.success_body')}</p>
+          <h1 className="text-3xl md:text-4xl font-extrabold text-slate-900 dark:text-white">{t('reset.success_title')}</h1>
+          <p className="mt-3 text-slate-600 dark:text-slate-400">{t('reset.success_body')}</p>
         </div>
       </section>
     );
@@ -68,18 +68,18 @@ export default function ResetPasswordPage() {
     <section className="py-16 md:py-20">
       <div className="mx-auto max-w-md container-px">
         <div className="text-center mb-10">
-          <div className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-primary-50 text-primary-600 mb-4">
+          <div className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-primary-50 text-primary-600 mb-4 dark:bg-primary-500/10 dark:text-primary-400">
             <Lock size={26} />
           </div>
-          <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-slate-900">
+          <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white">
             {t('reset.title')}
           </h1>
-          <p className="mt-3 text-slate-600">{t('reset.subtitle')}</p>
+          <p className="mt-3 text-slate-600 dark:text-slate-400">{t('reset.subtitle')}</p>
         </div>
 
         <form
           onSubmit={submit}
-          className="rounded-3xl border border-slate-200 bg-white shadow-sm p-6 sm:p-8 space-y-4"
+          className="rounded-3xl border border-slate-200 bg-white shadow-sm p-6 sm:p-8 space-y-4 dark:border-slate-800 dark:bg-slate-900"
         >
           <div>
             <label className={label}>{t('reset.new_password')}</label>
@@ -109,7 +109,7 @@ export default function ResetPasswordPage() {
           </div>
 
           {status === 'error' && errorMsg && (
-            <div className="flex items-start gap-2 rounded-xl bg-rose-50 border border-rose-200 p-3 text-sm text-rose-700">
+            <div className="flex items-start gap-2 rounded-xl bg-rose-50 border border-rose-200 p-3 text-sm text-rose-700 dark:bg-rose-500/10 dark:border-rose-500/30 dark:text-rose-300">
               <AlertCircle size={16} className="shrink-0 mt-0.5" />
               <span>{errorMsg}</span>
             </div>
@@ -124,7 +124,7 @@ export default function ResetPasswordPage() {
           </button>
 
           <div className="text-center pt-2">
-            <Link to="/" className="text-sm text-slate-500 hover:text-slate-800">
+            <Link to="/" className="text-sm text-slate-500 hover:text-slate-800 dark:text-slate-500 dark:hover:text-slate-300">
               {t('reset.back_home')}
             </Link>
           </div>

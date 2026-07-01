@@ -6,6 +6,10 @@
   color-scheme: light;
 }
 
+html.dark {
+  color-scheme: dark;
+}
+
 html {
   scroll-behavior: smooth;
 }
@@ -21,6 +25,12 @@ html, body, #root {
 body {
   @apply font-sans text-slate-900 antialiased;
   background: #fff;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+html.dark body {
+  @apply text-slate-100;
+  background: #020617;
 }
 
 html[dir="rtl"] body {

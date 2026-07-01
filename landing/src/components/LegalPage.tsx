@@ -18,11 +18,11 @@ export default function LegalPage({ doc }: Props) {
   return (
     <section className="py-16 md:py-20">
       <div className="mx-auto max-w-3xl container-px">
-        <header className="mb-10 border-b border-slate-200 pb-8">
-          <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-slate-900">
+        <header className="mb-10 border-b border-slate-200 pb-8 dark:border-slate-800">
+          <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white">
             {content.title}
           </h1>
-          <p className="mt-3 text-sm text-slate-500">
+          <p className="mt-3 text-sm text-slate-500 dark:text-slate-500">
             {t('legal.lastUpdated')}: {content.lastUpdated}
           </p>
         </header>
@@ -30,16 +30,16 @@ export default function LegalPage({ doc }: Props) {
         <div className="space-y-10">
           {content.sections.map((s) => (
             <div key={s.heading}>
-              <h2 className="text-xl font-bold text-slate-900 mb-3">{s.heading}</h2>
+              <h2 className="text-xl font-bold text-slate-900 mb-3 dark:text-white">{s.heading}</h2>
 
               {s.paragraphs?.map((p, i) => (
-                <p key={i} className="text-slate-700 leading-relaxed mb-3">
+                <p key={i} className="text-slate-700 leading-relaxed mb-3 dark:text-slate-300">
                   {p}
                 </p>
               ))}
 
               {s.list && (
-                <ul className="list-disc ps-6 space-y-2 text-slate-700 leading-relaxed">
+                <ul className="list-disc ps-6 space-y-2 text-slate-700 leading-relaxed dark:text-slate-300">
                   {s.list.map((item, i) => (
                     <li key={i}>{item}</li>
                   ))}

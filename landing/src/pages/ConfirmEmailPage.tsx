@@ -50,27 +50,27 @@ export default function ConfirmEmailPage() {
       <div className="mx-auto max-w-xl container-px text-center">
         {status === 'pending' && (
           <>
-            <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-primary-50 text-primary-600 mb-6 animate-pulse">
+            <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-primary-50 text-primary-600 mb-6 animate-pulse dark:bg-primary-500/10 dark:text-primary-400">
               <Loader size={32} className="animate-spin" />
             </div>
-            <h1 className="text-3xl md:text-4xl font-extrabold text-slate-900">{t('confirm.pending_title')}</h1>
-            <p className="mt-3 text-slate-600">{t('confirm.pending_body')}</p>
+            <h1 className="text-3xl md:text-4xl font-extrabold text-slate-900 dark:text-white">{t('confirm.pending_title')}</h1>
+            <p className="mt-3 text-slate-600 dark:text-slate-400">{t('confirm.pending_body')}</p>
           </>
         )}
 
         {status === 'success' && (
           <>
-            <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 mb-6">
+            <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 mb-6 dark:bg-emerald-500/10 dark:text-emerald-400">
               <CheckCircle2 size={36} />
             </div>
-            <h1 className="text-3xl md:text-4xl font-extrabold text-slate-900">{t('confirm.success_title')}</h1>
-            <p className="mt-3 text-slate-600">{t('confirm.success_body')}</p>
-            <p className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-primary-700">
+            <h1 className="text-3xl md:text-4xl font-extrabold text-slate-900 dark:text-white">{t('confirm.success_title')}</h1>
+            <p className="mt-3 text-slate-600 dark:text-slate-400">{t('confirm.success_body')}</p>
+            <p className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-primary-700 dark:text-primary-300">
               <Mail size={16} />
               {confirmedEmail}
             </p>
             <div className="mt-8">
-              <Link to="/" className="text-sm text-slate-500 hover:text-slate-800">
+              <Link to="/" className="text-sm text-slate-500 hover:text-slate-800 dark:text-slate-500 dark:hover:text-slate-300">
                 {t('confirm.back_home')}
               </Link>
             </div>
@@ -79,13 +79,13 @@ export default function ConfirmEmailPage() {
 
         {status === 'error' && (
           <>
-            <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-rose-50 text-rose-600 mb-6">
+            <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-rose-50 text-rose-600 mb-6 dark:bg-rose-500/10 dark:text-rose-400">
               <AlertCircle size={36} />
             </div>
-            <h1 className="text-3xl md:text-4xl font-extrabold text-slate-900">{t('confirm.error_title')}</h1>
-            <p className="mt-3 text-slate-600">{errorMsg || t('confirm.error_body')}</p>
+            <h1 className="text-3xl md:text-4xl font-extrabold text-slate-900 dark:text-white">{t('confirm.error_title')}</h1>
+            <p className="mt-3 text-slate-600 dark:text-slate-400">{errorMsg || t('confirm.error_body')}</p>
             <div className="mt-8">
-              <Link to="/" className="text-sm text-slate-500 hover:text-slate-800">
+              <Link to="/" className="text-sm text-slate-500 hover:text-slate-800 dark:text-slate-500 dark:hover:text-slate-300">
                 {t('confirm.back_home')}
               </Link>
             </div>

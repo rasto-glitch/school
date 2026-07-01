@@ -32,8 +32,8 @@ export default function PartnerPage() {
     }
   };
 
-  const input = 'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-primary-400 focus:ring-4 focus:ring-primary-100 outline-none transition';
-  const label = 'block text-sm font-semibold text-slate-800 mb-1.5';
+  const input = 'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-primary-400 focus:ring-4 focus:ring-primary-100 outline-none transition dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-primary-500 dark:focus:ring-primary-500/20';
+  const label = 'block text-sm font-semibold text-slate-800 mb-1.5 dark:text-slate-200';
 
   const reasons = [
     { key: 'pilot',   icon: Sparkles },
@@ -45,10 +45,10 @@ export default function PartnerPage() {
     return (
       <section className="py-24 md:py-32">
         <div className="mx-auto max-w-xl container-px text-center">
-          <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 mb-6">
+          <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 mb-6 dark:bg-emerald-500/10 dark:text-emerald-400">
             <CheckCircle2 size={36} />
           </div>
-          <h1 className="text-3xl md:text-4xl font-extrabold text-slate-900">
+          <h1 className="text-3xl md:text-4xl font-extrabold text-slate-900 dark:text-white">
             {t('partner.form.success')}
           </h1>
         </div>
@@ -60,29 +60,29 @@ export default function PartnerPage() {
     <>
       <section className="py-16 md:py-20">
         <div className="mx-auto max-w-content container-px text-center">
-          <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight text-slate-900">
+          <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight text-slate-900 dark:text-white">
             {t('partner.title')}
           </h1>
-          <p className="mt-4 max-w-2xl mx-auto text-slate-600">{t('partner.subtitle')}</p>
+          <p className="mt-4 max-w-2xl mx-auto text-slate-600 dark:text-slate-400">{t('partner.subtitle')}</p>
         </div>
       </section>
 
       <section className="pb-10">
         <div className="mx-auto max-w-content container-px">
-          <h2 className="text-2xl md:text-3xl font-extrabold text-slate-900 text-center mb-10">
+          <h2 className="text-2xl md:text-3xl font-extrabold text-slate-900 text-center mb-10 dark:text-white">
             {t('partner.whyTitle')}
           </h2>
           <div className="grid gap-5 md:grid-cols-3">
             {reasons.map(({ key, icon: Icon }, i) => (
               <Reveal key={key} delay={i * 0.05}>
-                <div className="h-full rounded-2xl border border-slate-200 bg-white p-6">
-                  <div className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-primary-50 text-primary-600 mb-4">
+                <div className="h-full rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
+                  <div className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-primary-50 text-primary-600 mb-4 dark:bg-primary-500/10 dark:text-primary-400">
                     <Icon size={22} />
                   </div>
-                  <h3 className="text-lg font-bold text-slate-900 mb-2">
+                  <h3 className="text-lg font-bold text-slate-900 mb-2 dark:text-white">
                     {t(`partner.why.${key}.title`)}
                   </h3>
-                  <p className="text-sm text-slate-600 leading-relaxed">
+                  <p className="text-sm text-slate-600 leading-relaxed dark:text-slate-400">
                     {t(`partner.why.${key}.desc`)}
                   </p>
                 </div>
@@ -96,7 +96,7 @@ export default function PartnerPage() {
         <div className="mx-auto max-w-2xl container-px">
           <form
             onSubmit={(e) => { e.preventDefault(); submit(new FormData(e.currentTarget)); }}
-            className="rounded-3xl border border-slate-200 bg-white shadow-sm p-6 sm:p-10 space-y-5"
+            className="rounded-3xl border border-slate-200 bg-white shadow-sm p-6 sm:p-10 space-y-5 dark:border-slate-800 dark:bg-slate-900"
           >
             {/* Honeypot */}
             <input
@@ -141,7 +141,7 @@ export default function PartnerPage() {
             </div>
 
             {status === 'error' && (
-              <div className="flex items-start gap-2 rounded-xl bg-rose-50 border border-rose-200 p-3 text-sm text-rose-700">
+              <div className="flex items-start gap-2 rounded-xl bg-rose-50 border border-rose-200 p-3 text-sm text-rose-700 dark:bg-rose-500/10 dark:border-rose-500/30 dark:text-rose-300">
                 <AlertCircle size={16} className="shrink-0 mt-0.5" />
                 <span>{errorMsg || t('partner.form.error')}</span>
               </div>

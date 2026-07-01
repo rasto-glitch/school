@@ -4,79 +4,169 @@
     "features": "Features",
     "portals": "Portals",
     "mobile": "Mobile app",
+    "security": "Security",
     "demo": "Request a demo",
     "partner": "Become a partner"
   },
   "hero": {
-    "eyebrow": "Modern school management",
-    "title": "One platform for every part of the school day.",
-    "subtitle": "Scholify connects parents, teachers, supervisors, drivers, and administrators in real time — attendance, grades, bus GPS, homework, chat, and more.",
+    "eyebrow": "School management, done properly",
+    "title": "Run the whole school day in one place.",
+    "subtitle": "Attendance, timetables, grades, bus tracking, fees and messaging — connected in real time for parents, teachers, supervisors, drivers and administrators. In English, العربية and کوردی.",
     "ctaPrimary": "Request a demo",
-    "ctaSecondary": "Become a partner",
-    "stats": {
-      "tenants": "Multi-tenant",
-      "tenantsDesc": "Every school isolated",
-      "realtime": "Real-time",
-      "realtimeDesc": "Live bus & alerts",
-      "languages": "3 languages",
-      "languagesDesc": "English · العربية · کوردی"
+    "ctaSecondary": "See what's inside",
+    "facts": {
+      "portals": "6 role portals",
+      "bus": "Live bus GPS",
+      "langs": "EN · AR · KU · RTL",
+      "platforms": "Web · iOS · Android"
+    },
+    "shot": {
+      "caption": "Admin dashboard — the real thing"
+    }
+  },
+  "flagship": {
+    "eyebrow": "The parts schools run on",
+    "title": "Not a generic CRM with a school skin.",
+    "subtitle": "The features below are the ones a school touches every single day. Here's how they actually look.",
+    "items": {
+      "schedule": {
+        "tag": "Timetables",
+        "title": "Timetables that build themselves.",
+        "desc": "Enter each teacher's weekly load once. Scholify generates a conflict-free timetable — no teacher, class or room double-booked — that you can still pin and rearrange by hand.",
+        "points": {
+          "a": "Auto-generate from teaching load, with room and availability constraints",
+          "b": "Pin the lessons you like, regenerate the rest",
+          "c": "Cover an absence with a substitute in a couple of clicks"
+        }
+      },
+      "bus": {
+        "tag": "Bus tracking",
+        "title": "Parents always know where the bus is.",
+        "desc": "Drivers share live GPS while the trip is running. Parents watch the bus move on a map and get a heads-up before it reaches their stop — no more waiting at the gate guessing.",
+        "points": {
+          "a": "Location updates every 30 seconds during the trip",
+          "b": "Proximity alerts at 10, 5 and 2 minutes, and on arrival",
+          "c": "Each family sets its own pickup point on the map"
+        }
+      },
+      "grades": {
+        "tag": "Grades & reports",
+        "title": "From daily marks to official report cards.",
+        "desc": "Every school defines its own mark types. Teachers file grades, admins publish per term, and Scholify turns the released marks into printable report cards and cumulative transcripts.",
+        "points": {
+          "a": "Admin-defined quizzes, exams and daily marks",
+          "b": "Report-card and transcript PDFs in EN, AR and KU",
+          "c": "Published per term — parents only see what's final"
+        }
+      },
+      "attendance": {
+        "tag": "Attendance",
+        "title": "Attendance for students — and for staff.",
+        "desc": "Teachers take the roll in a couple of taps. Employees clock in and out with a rotating QR code at reception, checked against the school's location, with automatic end-of-day close-out and simple leave.",
+        "points": {
+          "a": "Daily student roll with weekly summaries and full history",
+          "b": "Staff clock-in via rotating QR + location check",
+          "c": "Auto close-out at day's end, plus leave requests"
+        }
+      }
     }
   },
   "features": {
-    "eyebrow": "What you get",
-    "title": "Everything a school actually runs on.",
-    "subtitle": "Purpose-built for the daily reality of schools — not a generic CRM with a school skin.",
+    "eyebrow": "And everything around them",
+    "title": "The rest of what a school needs.",
+    "subtitle": "One system instead of a drawer full of spreadsheets, group chats and paper files.",
     "items": {
-      "attendance": {
-        "title": "Attendance & reports",
-        "desc": "Daily roll, weekly summaries, student reports, and full history — all synced across roles."
-      },
-      "grades": {
-        "title": "Grades your way",
-        "desc": "Admin-defined mark types. Each school configures quizzes, exams, and daily marks to match their curriculum."
-      },
-      "bus": {
-        "title": "Live bus GPS",
-        "desc": "Drivers share location every 30 seconds. Parents get proximity alerts at 10, 5, 2 minutes, and on arrival."
-      },
       "chat": {
-        "title": "Parent–teacher chat",
-        "desc": "Direct messaging between parents and teachers with typing indicators and real-time delivery."
+        "title": "Chat & meeting invites",
+        "desc": "Parents and teachers message directly — and a supervisor can propose a meeting right inside the conversation, which the parent confirms in a tap."
       },
       "homework": {
         "title": "Homework & assignments",
-        "desc": "Post, attach files, and track submissions. Parents see what's due tonight, not what was due yesterday."
+        "desc": "Post work, attach files, track submissions. Parents see what's due tonight, not what was due yesterday."
       },
       "academic": {
         "title": "Academic portal",
-        "desc": "A separate space for rich posts and ebooks. Teachers publish, families read, everything searchable."
+        "desc": "A separate space for rich lesson posts and ebooks. Teachers publish, families read, everything stays searchable."
+      },
+      "health": {
+        "title": "Student health & safety",
+        "desc": "A clinic record with a nurse-visit log, plus the allergies and conditions teachers need to know — sensitive notes encrypted, staff-only."
+      },
+      "hr": {
+        "title": "Employee records",
+        "desc": "Contracts, documents and salaries in one HR file per employee, with sensitive personal data encrypted at rest."
+      },
+      "clearance": {
+        "title": "Roles & clearance",
+        "desc": "Give each administrator exactly the powers they should have — finance, HR, health, academics — no more, no less."
+      },
+      "fees": {
+        "title": "Tuition & accounting",
+        "desc": "Invoices, payments, receivables aging and a proper ledger — the money side of the school, not just the classroom."
+      },
+      "login": {
+        "title": "Secure sign-in",
+        "desc": "Optional phone or email one-time codes on top of the password, plus recovery codes — protection without locking people out."
       }
     }
   },
   "portals": {
     "eyebrow": "Built for every role",
-    "title": "Six portals, one source of truth.",
-    "subtitle": "Each role sees only what they need — and everything they need.",
+    "title": "One source of truth, seen from every seat.",
+    "subtitle": "Each role gets its own portal — only what they need, and everything they need.",
     "items": {
-      "parent": { "title": "Parents", "desc": "Live bus tracking, attendance, grades, homework, and chat with teachers." },
-      "teacher": { "title": "Teachers", "desc": "Attendance, grading, homework, weekly summaries, and reports." },
-      "supervisor": { "title": "Supervisors", "desc": "Attendance oversight, student reports, weekly reviews." },
-      "driver": { "title": "Drivers", "desc": "Route, student list, start/stop trip, automatic location sharing." },
-      "admin": { "title": "Admins", "desc": "Schools, classes, users, features, announcements — all from one panel." },
-      "reception": { "title": "Reception", "desc": "Appointments, visitor check-in, internal announcements." }
+      "parent": { "title": "Parents", "desc": "Live bus tracking, attendance, grades, homework, report cards and chat with teachers." },
+      "teacher": { "title": "Teachers", "desc": "Attendance, grading, homework, timetables, weekly summaries and student briefs." },
+      "supervisor": { "title": "Supervisors", "desc": "Attendance oversight, student reports, weekly reviews and parent meetings." },
+      "driver": { "title": "Drivers", "desc": "Route and student list, start/stop trip, automatic live location sharing." },
+      "admin": { "title": "Admins", "desc": "Classes, users, timetables, features and announcements — the whole school from one panel." },
+      "accountant": { "title": "Accountants", "desc": "Tuition, invoices, payments, expenses and financial reports." },
+      "reception": { "title": "Reception", "desc": "Appointments, visitor check-in and the staff attendance desk." },
+      "staff": { "title": "Staff", "desc": "Any employee can clock in and out and manage their own leave." }
     }
   },
   "mobile": {
-    "eyebrow": "Take it everywhere",
-    "title": "Mobile app for parents, teachers, supervisors, and drivers.",
-    "subtitle": "Same data, same real-time updates — in your pocket. Dark mode, three languages, full RTL.",
+    "eyebrow": "The school in your pocket",
+    "title": "The same system, on the phone.",
+    "subtitle": "Parents, teachers, supervisors, drivers and staff carry Scholify with them — the same real-time data, dark mode, and full support for English, Arabic and Kurdish.",
     "appStore": "Download on the App Store",
     "playStore": "Get it on Google Play",
-    "comingSoon": "Coming soon"
+    "chips": {
+      "dark": "Dark mode",
+      "langs": "EN · AR · KU · RTL",
+      "offline": "Real-time push"
+    },
+    "screens": {
+      "home": "Parent home",
+      "clock": "Staff clock-in"
+    }
+  },
+  "security": {
+    "eyebrow": "Built to be trusted",
+    "title": "Student and family data, handled seriously.",
+    "subtitle": "A school holds some of the most sensitive data there is. Scholify is built accordingly.",
+    "items": {
+      "tenant": {
+        "title": "Every school isolated",
+        "desc": "Multi-tenant from the ground up — one school can never see another's students, staff or records."
+      },
+      "encryption": {
+        "title": "Sensitive data encrypted",
+        "desc": "Health notes and personal employee data are encrypted at rest with a per-school key, not stored as plain text."
+      },
+      "mfa": {
+        "title": "Multi-factor sign-in",
+        "desc": "Phone and email one-time codes plus recovery codes protect accounts, without locking anyone out of their child's data."
+      },
+      "audit": {
+        "title": "Every action logged",
+        "desc": "Sensitive changes are written to an audit trail, so administrators can always see who did what, and when."
+      }
+    }
   },
   "cta": {
-    "title": "Ready to see Scholify in your school?",
-    "subtitle": "Request a demo and we'll set up a personalized walkthrough for your team.",
+    "title": "See Scholify running in your school.",
+    "subtitle": "Book a walkthrough and we'll tailor it to your school — your grades, your timetable, your language.",
     "primary": "Request a demo",
     "secondary": "Become a partner"
   },
