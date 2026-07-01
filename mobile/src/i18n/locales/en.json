@@ -680,6 +680,11 @@
     "declined_body": "Scholify requires acceptance of the Terms of Service and Privacy Policy. You can review and accept them to continue.",
     "review_again": "Review Again"
   },
+  "update": {
+    "title": "Update required",
+    "body": "A new version of Scholify is available. Please update to keep using the app.",
+    "button": "Update now"
+  },
   "profile": {
     "title": "Profile",
     "subtitle": "Your account information",

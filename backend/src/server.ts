@@ -217,6 +217,16 @@ app.get('/health', async (_req, res) => {
     .json({ status: db === 'ok' ? 'ok' : 'degraded', db, timestamp: new Date().toISOString() });
 });
 
+// Minimum-supported mobile build gate. The mobile app reads this on launch and
+// compares it against its own runtimeVersion; anything below is shown a
+// blocking "update required" screen that deep-links to the store. Platform-
+// controlled via MIN_APP_RUNTIME_VERSION (e.g. "1.3" once a new native build
+// ships); default "0" gates nothing. Root-level + unlimited (like /health) so
+// a mass cold-start from a NAT'd school never trips a rate limit.
+app.get('/app-version', (_req, res) => {
+  res.json({ minRuntimeVersion: process.env.MIN_APP_RUNTIME_VERSION || '0' });
+});
+
 // Global error handler — catches any unhandled errors from route handlers
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
