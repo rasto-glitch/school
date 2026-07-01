@@ -4,6 +4,7 @@ import {
   TextInput, ActivityIndicator, Alert, Modal, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { Plus, Trash2, Send, ChevronDown, Check, Share2, Lock } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { teacherApi } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
@@ -21,6 +22,7 @@ interface Props { subject?: string; classes: ClassItem[]; subjects?: SubjectOpt[
 export default function TeacherReportScreen({ subject, classes, subjects, teaching }: Props) {
   const { t } = useTranslation();
   const colors = useColors();
+  const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [selectedClass, setSelectedClass] = useState('');
@@ -225,7 +227,7 @@ export default function TeacherReportScreen({ subject, classes, subjects, teachi
       {/* Mark type picker modal */}
       <Modal visible={pickerIndex !== null} animationType="slide" presentationStyle="pageSheet" transparent>
         <View style={styles.pickerOverlay}>
-          <View style={[styles.pickerBox, { backgroundColor: colors.card }]}>
+          <View style={[styles.pickerBox, { backgroundColor: colors.card, paddingBottom: insets.bottom + spacing.lg }]}>
             <Text style={styles.pickerTitle}>{t('teacher.select_mark_type_title')}</Text>
             {markTypes.map(mt => (
               <TouchableOpacity

@@ -196,7 +196,7 @@ export default function SupervisorStudentsScreen() {
         {/* Tap the dimmed area to dismiss (keyboard + sheet); taps inside the
             box are captured so they don't close it. */}
         <Pressable style={styles.modalOverlay} onPress={() => { Keyboard.dismiss(); setInviteFor(null); }}>
-          <Pressable style={[styles.modalBox, { backgroundColor: colors.card }]} onPress={() => {}}>
+          <Pressable style={[styles.modalBox, { backgroundColor: colors.card, paddingBottom: insets.bottom + spacing.lg }]} onPress={() => {}}>
             <Text style={styles.modalTitle}>{t('supervisor.invite_meeting')}</Text>
             <Text style={styles.modalSub}>{inviteFor?.parents?.fullName || inviteFor?.fullName}</Text>
             <TextInput

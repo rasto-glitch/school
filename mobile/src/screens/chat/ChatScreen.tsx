@@ -4,7 +4,7 @@ import {
   KeyboardAvoidingView, Platform, ActivityIndicator, Alert, Image,
   Pressable, Linking, Animated, Modal, Keyboard,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Send, Paperclip, Check, X, FileText, CalendarPlus, CalendarClock, Clock, CheckCircle2, XCircle } from 'lucide-react-native';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import { useHeaderHeight } from '@react-navigation/elements';
@@ -261,6 +261,7 @@ export default function ChatScreen() {
   const route = useRoute<any>();
   const conversation: Conversation = route.params?.conversation;
   const colors = useColors();
+  const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
   const { socket } = useSocketStore();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -739,7 +740,7 @@ export default function ChatScreen() {
       <Modal visible={!!completing} animationType="slide" transparent onRequestClose={() => setCompleting(null)}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <Pressable style={s.modalOverlay} onPress={() => { Keyboard.dismiss(); if (!inviteBusy) setCompleting(null); }}>
-            <Pressable style={[s.modalBox, { backgroundColor: colors.card }]} onPress={() => {}}>
+            <Pressable style={[s.modalBox, { backgroundColor: colors.card, paddingBottom: insets.bottom + 24 }]} onPress={() => {}}>
               <Text style={[s.modalTitle, { color: colors.text }]}>{t('chat.invite.fill_title')}</Text>
               <Text style={[s.modalLabel, { color: colors.textMuted }]}>{t('chat.invite.your_reason')}</Text>
               <TextInput
@@ -777,7 +778,7 @@ export default function ChatScreen() {
       <Modal visible={sendInviteOpen} animationType="slide" transparent onRequestClose={() => setSendInviteOpen(false)}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <Pressable style={s.modalOverlay} onPress={() => { Keyboard.dismiss(); if (!inviteBusy) setSendInviteOpen(false); }}>
-            <Pressable style={[s.modalBox, { backgroundColor: colors.card }]} onPress={() => {}}>
+            <Pressable style={[s.modalBox, { backgroundColor: colors.card, paddingBottom: insets.bottom + 24 }]} onPress={() => {}}>
               <Text style={[s.modalTitle, { color: colors.text }]}>{t('chat.invite.send_title')}</Text>
               <Text style={[s.modalLabel, { color: colors.textMuted, marginTop: 0 }]}>{t('chat.invite.send_desc', { name: otherUser?.fullName || '' })}</Text>
               <TextInput

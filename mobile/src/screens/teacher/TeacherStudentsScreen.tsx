@@ -6,6 +6,7 @@ import {
 import { CardListSkeleton } from '../../components/Skeleton';
 import HealthSafetyPanel, { type StudentHealthBrief } from '../../components/HealthSafetyPanel';
 import { useTranslation } from 'react-i18next';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Search, User, X, FileText, Star } from 'lucide-react-native';
 import { teacherApi } from '../../services/api';
 import { useColors, useIsDark } from '../../store/themeStore';
@@ -42,6 +43,7 @@ export default function TeacherStudentsScreen() {
   const { t } = useTranslation();
   const colors = useColors();
   const isDark = useIsDark();
+  const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors, isDark), [colors, isDark]);
 
   const [classes, setClasses] = useState<ClassItem[]>([]);
@@ -151,7 +153,7 @@ export default function TeacherStudentsScreen() {
       {/* Student detail modal */}
       <Modal visible={!!selected} animationType="slide" presentationStyle="pageSheet" transparent>
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalBox, { backgroundColor: colors.card }]}>
+          <View style={[styles.modalBox, { backgroundColor: colors.card, paddingBottom: insets.bottom + spacing.lg }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>{selected?.fullName}</Text>
               <TouchableOpacity onPress={() => setSelected(null)}>
