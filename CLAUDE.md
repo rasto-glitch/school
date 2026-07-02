@@ -2,6 +2,16 @@
 
 Multi-tenant school management monorepo. Six workspaces share one Supabase database.
 
+## Finding code — query the knowledge graph first
+
+Before grep-crawling the repo to answer a "where is / how does / what calls X" question, query the prebuilt **graphify** knowledge graph in `graphify-out/`. It's a persistent map of the whole codebase — nodes (files, functions, types, concepts), edges (imports, calls, references), plus community clusters and god nodes — so it resolves cross-file "how does X work" questions faster than reading files blind.
+
+- **Answer a question:** `graphify query "how does a grade get released"` — returns the relevant nodes with `source_file:line` citations to open.
+- **Trace between two things:** `graphify path "<A>" "<B>"` · **explain one symbol:** `graphify explain "<name>"`.
+- **Big picture:** read `graphify-out/GRAPH_REPORT.md` (god nodes, communities, import cycles); open `graphify-out/graph.html` for the interactive map.
+
+Caveats: the graph is a **snapshot** built from all app code + docs but **excludes `tests/`**. After nontrivial code changes, refresh it with `/graphify E:\school project --update` before trusting it. Every hit is a **pointer** — open the cited file to confirm before acting on it. `graphify-out/` is gitignored and regenerable (rebuild with `/graphify` if it's missing).
+
 ## Workspaces
 
 | Folder | What it is | Where it runs |
