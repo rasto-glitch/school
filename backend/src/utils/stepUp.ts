@@ -8,7 +8,7 @@ import {
   otpiqConfigured,
 } from './otpiq';
 import { toOtpiqFormat, maskPhone } from './phoneE164';
-import { verifyMfaCodeForUser } from '../controllers/mfa.controller';
+import { verifyMfaCodeForUser } from './mfaVerify';
 
 // Step-up authentication for sensitive contact changes (migration 051).
 //
