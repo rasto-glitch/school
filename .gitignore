@@ -14,6 +14,12 @@ Thumbs.db
 # Mobile signing credentials — managed remotely by EAS, never commit
 mobile/credentials.json
 mobile/credentials/
+# App Store Connect / APNs API keys (.p8 private keys) referenced by eas.json
+*.p8
+mobile/AuthKey_*.p8
+
+# Generated knowledge-graph output (graphify) — regenerable, not source
+graphify-out/
 
 # Pen-test report — contains live exploitation details, not for source control
 PENTEST_FINDINGS.md

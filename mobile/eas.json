@@ -26,6 +26,13 @@
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "ascApiKeyPath": "E:/school project/AuthKey_97Q46AWKNM.p8",
+        "ascApiKeyId": "97Q46AWKNM",
+        "ascApiKeyIssuerId": "98370413-b7e2-42e9-92d8-f2ccfb9a6a20",
+        "ascAppId": "6764818420"
+      }
+    }
   }
 }
