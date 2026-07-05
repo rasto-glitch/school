@@ -16,6 +16,15 @@ export interface ArchivePaymentEntry {
   method: string | null;
   reference: string | null;
   notes: string | null;
+  // Refund rows are stored as positive amounts flagged is_refund (same
+  // convention as fee_payments). Renderers show them as labeled negative
+  // lines; totals subtract them (audit H-2).
+  isRefund: boolean;
+}
+
+/** Net paid across entries — refunds subtract (audit H-2). */
+export function netPaid(payments: ArchivePaymentEntry[]): number {
+  return payments.reduce((s, p) => s + (p.isRefund ? -p.amount : p.amount), 0);
 }
 
 export interface ArchivePlanEntry {
@@ -116,7 +125,7 @@ export async function streamArchivePaymentPdf(stream: Writable, data: ArchivePay
     y += 18;
 
     const due = plan.totalAmount + plan.adjustment;
-    const paid = plan.payments.reduce((s, p) => s + p.amount, 0);
+    const paid = netPaid(plan.payments);
     grandDue += due;
     grandPaid += paid;
 
@@ -142,11 +151,12 @@ export async function streamArchivePaymentPdf(stream: Writable, data: ArchivePay
 
       for (const p of plan.payments) {
         if (y > 760) { doc.addPage(); y = 60; }
+        const methodLabel = p.method ? p.method[0].toUpperCase() + p.method.slice(1) : '—';
         doc.font(F.regular).fontSize(10).fillColor(COLOR_HEADING);
         doc.text(p.paidOn, 40, y, { width: 80 });
-        doc.text(p.method ? p.method[0].toUpperCase() + p.method.slice(1) : '—', 120, y, { width: 90 });
+        doc.text(p.isRefund ? `Refund · ${methodLabel}` : methodLabel, 120, y, { width: 90 });
         doc.text(p.reference || '—', 210, y, { width: 200, ellipsis: true });
-        doc.text(fmt(p.amount, plan.currency), 410, y, { width: 145, align: 'right' });
+        doc.text(p.isRefund ? `−${fmt(p.amount, plan.currency)}` : fmt(p.amount, plan.currency), 410, y, { width: 145, align: 'right' });
         y += 16;
       }
     }
@@ -195,7 +205,7 @@ export function buildArchivePaymentXlsx(data: ArchivePaymentExportData): Buffer 
   ];
   for (const plan of data.plans) {
     const due = plan.totalAmount + plan.adjustment;
-    const paid = plan.payments.reduce((s, p) => s + p.amount, 0);
+    const paid = netPaid(plan.payments);
     summaryRows.push([
       plan.planName,
       plan.academicYear ?? '',
@@ -212,7 +222,7 @@ export function buildArchivePaymentXlsx(data: ArchivePaymentExportData): Buffer 
 
   // Sheet 2 — flat payments list
   const paymentsRows: (string | number)[][] = [
-    ['Plan', 'Academic year', 'Currency', 'Date', 'Amount', 'Method', 'Reference', 'Notes'],
+    ['Plan', 'Academic year', 'Currency', 'Date', 'Type', 'Amount', 'Method', 'Reference', 'Notes'],
   ];
   for (const plan of data.plans) {
     for (const p of plan.payments) {
@@ -221,7 +231,8 @@ export function buildArchivePaymentXlsx(data: ArchivePaymentExportData): Buffer 
         plan.academicYear ?? '',
         plan.currency,
         p.paidOn,
-        p.amount,
+        p.isRefund ? 'Refund' : 'Payment',
+        p.isRefund ? -p.amount : p.amount,
         p.method ?? '',
         p.reference ?? '',
         p.notes ?? '',
@@ -229,7 +240,7 @@ export function buildArchivePaymentXlsx(data: ArchivePaymentExportData): Buffer 
     }
   }
   const paymentsWs = XLSX.utils.aoa_to_sheet(paymentsRows);
-  paymentsWs['!cols'] = [{ wch: 24 }, { wch: 14 }, { wch: 10 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 22 }, { wch: 30 }];
+  paymentsWs['!cols'] = [{ wch: 24 }, { wch: 14 }, { wch: 10 }, { wch: 12 }, { wch: 10 }, { wch: 14 }, { wch: 12 }, { wch: 22 }, { wch: 30 }];
   XLSX.utils.book_append_sheet(wb, paymentsWs, 'Payments');
 
   return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer;

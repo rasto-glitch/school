@@ -10,8 +10,20 @@ import EmptyState from '../../components/common/EmptyState';
 import ErrorMessage from '../../components/common/ErrorMessage';
 import { GradesTableSkeleton } from '../../components/common/Skeleton';
 import type { Student, Grade } from '../../types';
-import { getMarkNames, getMarkValue, gradeTotal, subjectPercent, bandForPercent, averageGpa } from '../../utils/marks';
+import { getMarkNames, getMarkValue, subjectPercent, bandForPercent, averagePercent, subjectYear, remedialTotal } from '../../utils/marks';
 import type { GradingConfig } from '../../utils/marks';
+
+// A released Round Two entry (REMEDIAL_TERM_PLAN.md P4).
+interface RemedialRow {
+  id: string;
+  subject: string;
+  forPeriod: string;
+  academicYear: string;
+  examValue: number | null;
+  carryName: string | null;
+  carryValue: number;
+  carryMissing: boolean;
+}
 
 export default function GradesPage() {
   const { t } = useTranslation();
@@ -87,8 +99,12 @@ export default function GradesPage() {
 
   const showGpa = cfg.mode === 'gpa' || cfg.mode === 'both';
   const showPct = cfg.mode === 'scale' || cfg.mode === 'both';
-  // Grade point for one subject (null if no band matches / no marks).
-  const points = (g: Grade) => bandForPercent(subjectPercent(g, cfg.markMaxes), cfg.bands)?.gradePoint ?? null;
+  // Letters are pure presentation of the percent math (M-3b decision 16):
+  // every letter is bandForPercent of a percent AVERAGE — grade points are
+  // never averaged, and there is no lifetime cumulative figure (decision 19).
+  const letterOf = (v: number | null) => bandForPercent(v, cfg.bands)?.letter ?? null;
+
+  const [remedial, setRemedial] = useState<RemedialRow[]>([]);
 
   useEffect(() => {
     if (!selectedChild) return;
@@ -98,6 +114,9 @@ export default function GradesPage() {
       .then(r => setGrades(r.data || []))
       .catch(() => setError(true))
       .finally(() => setLoading(false));
+    parentApi.getRemedialGrades(selectedChild)
+      .then(r => setRemedial(r.data || []))
+      .catch(() => setRemedial([]));
   }, [selectedChild, retryKey]);
 
   // Group: year → term → subject → Grade. Normalize the labels so case
@@ -114,10 +133,6 @@ export default function GradesPage() {
 
   const allYears = Object.keys(byYear).sort((a, b) => b.localeCompare(a));
   const years = yearFilter ? allYears.filter(y => y === yearFilter) : allYears;
-
-  // Cumulative GPA across everything on file (equal-weight) — deliberately
-  // NOT filtered by the year picker; the cumulative is the lifetime number.
-  const cgpa = averageGpa(grades.map(g => points(g)).filter((p): p is number => p != null));
 
   return (
     <PageLayout title={t('grades.title')} subtitle={t('grades.subtitle')}>
@@ -166,15 +181,6 @@ export default function GradesPage() {
               </button>
             </div>
           )}
-          {showGpa && cgpa != null && (
-            <Card className="flex items-center justify-between !py-4">
-              <div className="flex items-center gap-2">
-                <GraduationCap className="w-5 h-5 text-violet-600" />
-                <span className="font-semibold text-gray-900">{t('grades.cumulative_gpa')}</span>
-              </div>
-              <span className="text-2xl font-extrabold text-violet-700">{cgpa.toFixed(2)}</span>
-            </Card>
-          )}
           {years.map(yr => {
             const terms = Object.keys(byYear[yr]).sort();
             const subjects = Array.from(
@@ -203,18 +209,36 @@ export default function GradesPage() {
             }
 
             // Term averages
-            const termAvgs = terms.map(term => termAverage(subjects, byYear[yr][term], markNames));
-            const validTermAvgs = termAvgs.filter(a => a > 0);
-            const overallYearAvg = validTermAvgs.length === 0 ? 0
-              : Math.round((validTermAvgs.reduce((a, b) => a + b, 0) / validTermAvgs.length) * 10) / 10;
+            const termAvgs = terms.map(term => termAverage(subjects, byYear[yr][term], cfg.markMaxes));
 
-            // GPA per term + for the whole year (equal-weight average of points)
-            const termGpas = terms.map(term =>
-              averageGpa(subjects.map(s => byYear[yr][term][s] ? points(byYear[yr][term][s]) : null)
-                .filter((p): p is number => p != null)));
-            const yearGpa = averageGpa(terms.flatMap(term =>
-              subjects.map(s => byYear[yr][term][s] ? points(byYear[yr][term][s]) : null))
-              .filter((p): p is number => p != null));
+            // Official year math (M-3b): per subject — Round One = mean of the
+            // ORIGINAL term percents; released Round Two retakes substitute
+            // into the final. Year average = mean of subject finals.
+            const remForYear = remedial.filter(r => canonicalLabel(r.academicYear) === yr);
+            const yearRows = subjects.map(subject => {
+              const originalByTerm: Record<string, number | null> = {};
+              for (const term of terms) {
+                const g = byYear[yr][term][subject];
+                originalByTerm[term] = g ? subjectPercent(g, cfg.markMaxes) : null;
+              }
+              const retakes = remForYear.filter(r => canonicalLabel(r.subject) === subject);
+              const remedialByTerm: Record<string, number | null> = {};
+              for (const r of retakes) {
+                remedialByTerm[canonicalLabel(r.forPeriod)] = remedialTotal(r.examValue, r.carryValue);
+              }
+              return { subject, retakes, ...subjectYear(terms, originalByTerm, remedialByTerm) };
+            });
+            const anyRoundTwo = yearRows.some(r => r.satRemedial);
+            const passMark = cfg.passPercent ?? 50;
+            const overallYearAvg = averagePercent(yearRows.map(r => r.final).filter((v): v is number => v != null));
+
+            // Round Two report card download — available once the school
+            // publishes the remedial term for this year (its own gate).
+            const sampleGrade = Object.values(byYear[yr][terms[0]] || {})[0] as Grade | undefined;
+            const rawYearForDl = sampleGrade?.academicYear || '';
+            const remedialTermName = cfg.remedial?.termName || '';
+            const canDlRoundTwo = anyRoundTwo && !!remedialTermName && !!rawYearForDl
+              && publishedKeys.has(`${rawYearForDl.toLowerCase().trim()}|||${remedialTermName.toLowerCase().trim()}`);
 
             return (
               <Card key={yr} className="p-0 overflow-hidden">
@@ -258,8 +282,8 @@ export default function GradesPage() {
                           <tbody className="divide-y divide-gray-50">
                             {subjects.map(subject => {
                               const g = byYear[yr][term][subject];
-                              const total = g ? gradeTotal(g, markNames) : 0;
-                              const band = g ? bandForPercent(subjectPercent(g, cfg.markMaxes), cfg.bands) : null;
+                              const pct = g ? subjectPercent(g, cfg.markMaxes) : null;
+                              const band = bandForPercent(pct, cfg.bands);
                               return (
                                 <tr key={subject} className="hover:bg-gray-50">
                                   <td className="px-4 py-2.5 font-medium text-gray-800 text-sm">{subject}</td>
@@ -271,8 +295,8 @@ export default function GradesPage() {
                                   <td className="px-2 py-2.5 text-center">
                                     {!g ? <span className="text-gray-300">—</span> : (
                                       <div className="flex flex-col items-center gap-1">
-                                        {showPct && (total > 0 ? <MarkBadge value={total} /> : (!showGpa && <span className="text-gray-300">—</span>))}
-                                        {showGpa && (band ? <GpaBadge letter={band.letter} points={band.gradePoint} /> : (!showPct && <span className="text-gray-300">—</span>))}
+                                        {showPct && (pct != null && pct !== 0 ? <MarkBadge value={pct} /> : (!showGpa && <span className="text-gray-300">—</span>))}
+                                        {showGpa && (band ? <LetterBadge letter={band.letter} /> : (!showPct && <span className="text-gray-300">—</span>))}
                                       </div>
                                     )}
                                   </td>
@@ -288,8 +312,8 @@ export default function GradesPage() {
                               </td>
                               <td className="px-2 py-2.5 text-center">
                                 <div className="flex flex-col items-center gap-1">
-                                  {showPct && (termAvgs[ti] > 0 ? <MarkBadge value={termAvgs[ti]} /> : (!showGpa && <span className="text-gray-300">—</span>))}
-                                  {showGpa && <GpaValue value={termGpas[ti]} />}
+                                  {showPct && (termAvgs[ti] != null && termAvgs[ti] !== 0 ? <MarkBadge value={termAvgs[ti]} /> : (!showGpa && <span className="text-gray-300">—</span>))}
+                                  {showGpa && <LetterBadge letter={letterOf(termAvgs[ti])} />}
                                 </div>
                               </td>
                             </tr>
@@ -300,6 +324,71 @@ export default function GradesPage() {
                     })}
                   </div>
                 </div>
+
+                {/* Year summary — Round One (originals) and, when the student
+                    sat retakes, Round Two side-by-side (REMEDIAL_TERM_PLAN P4). */}
+                {(terms.length > 1 || anyRoundTwo) && (
+                  <div className="border-t border-gray-200 px-4 py-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                        {t('grades.year_summary')}
+                      </p>
+                      {canDlRoundTwo && (
+                        <button
+                          onClick={() => downloadCard(`${yr}|round2`, rawYearForDl, remedialTermName)}
+                          disabled={dl === `${yr}|round2`}
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-primary-700 hover:text-primary-900 disabled:opacity-50"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          {t('grades.round_two_card', 'Round Two card')}
+                        </button>
+                      )}
+                    </div>
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-xs text-gray-500">
+                          <th className="text-left py-1.5 font-medium">{t('grades.subject')}</th>
+                          <th className="text-center py-1.5 font-medium">{t('grades.round_one')}</th>
+                          {anyRoundTwo && <th className="text-center py-1.5 font-medium">{t('grades.round_two')}</th>}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {yearRows.map(row => (
+                          <tr key={row.subject}>
+                            <td className="py-1.5 font-medium text-gray-800">{row.subject}</td>
+                            <td className="py-1.5 text-center">
+                              {row.roundOne == null ? <span className="text-gray-300">—</span> : (
+                                <span className={`font-semibold ${row.roundOne < passMark ? 'text-red-600' : 'text-gray-800'}`}>
+                                  {fmtWithLetter(row.roundOne, showPct, showGpa, letterOf)}
+                                </span>
+                              )}
+                            </td>
+                            {anyRoundTwo && (
+                              <td className="py-1.5 text-center">
+                                {!row.satRemedial ? <span className="text-gray-300">—</span> : row.final == null ? <span className="text-gray-300">—</span> : (
+                                  <span className={`font-semibold ${row.final < passMark ? 'text-red-600' : 'text-emerald-700'}`}>
+                                    {fmtWithLetter(row.final, showPct, showGpa, letterOf)}
+                                  </span>
+                                )}
+                              </td>
+                            )}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {anyRoundTwo && (
+                      <div className="mt-2 space-y-1">
+                        {yearRows.flatMap(row => row.retakes.map(r => (
+                          <p key={r.id} className="text-xs text-gray-500">
+                            {row.subject} · {t('grades.retake_of', { term: r.forPeriod })}: {r.examValue ?? '—'}
+                            {r.carryName ? ` + ${r.carryName} ${r.carryValue}` : ''}
+                            {r.examValue != null ? ` = ${remedialTotal(r.examValue, r.carryValue)}` : ''}
+                          </p>
+                        )))}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {notes.length > 0 && (
                   <div className="border-t border-gray-200 px-4 py-3 space-y-2">
@@ -316,11 +405,13 @@ export default function GradesPage() {
 
                 <div className="border-t-2 border-gray-200 px-4 py-3 bg-gray-50 flex items-center justify-between">
                   <span className="text-sm font-semibold text-gray-700">
-                    {showGpa && !showPct ? t('grades.year_gpa') : t('grades.year_average')}
+                    {t('grades.year_average')}
                   </span>
                   <div className="flex items-center gap-2">
-                    {showPct && (overallYearAvg > 0 ? <MarkBadge value={overallYearAvg} /> : (!showGpa && <span className="text-gray-300 text-sm">—</span>))}
-                    {showGpa && <GpaValue value={yearGpa} />}
+                    {overallYearAvg != null && overallYearAvg !== 0
+                      ? <MarkBadge value={overallYearAvg} />
+                      : (!showGpa && <span className="text-gray-300 text-sm">—</span>)}
+                    {showGpa && <LetterBadge letter={letterOf(overallYearAvg)} />}
                   </div>
                 </div>
               </Card>
@@ -341,10 +432,14 @@ function canonicalLabel(s: string | null | undefined): string {
   return s.trim().toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
 }
 
-function termAverage(subjects: string[], termData: Record<string, Grade>, markNames: string[]): number {
-  const totals = subjects.map(s => termData[s] ? gradeTotal(termData[s], markNames) : 0).filter(t => t > 0);
-  if (totals.length === 0) return 0;
-  return Math.round((totals.reduce((a, b) => a + b, 0) / totals.length) * 10) / 10;
+// Mean of subjectPercent across the term's subjects — the SAME number the
+// report-card PDF prints (audit M-3): normalized percents, zeros counted,
+// subjects with no grade skipped.
+function termAverage(subjects: string[], termData: Record<string, Grade>, markMaxes: Record<string, number>): number | null {
+  const percents = subjects
+    .map(s => termData[s] ? subjectPercent(termData[s], markMaxes) : null)
+    .filter((p): p is number => p != null);
+  return averagePercent(percents);
 }
 
 // Insertion-order preserving set of strings
@@ -354,23 +449,28 @@ class LinkedSet {
   values(): string[] { return Array.from(this.map.keys()); }
 }
 
-// Subject GPA: letter + grade point, e.g. "A (4.0)".
-function GpaBadge({ letter, points }: { letter: string; points: number }) {
+// A letter derived from a percent average — pure presentation, no grade
+// points (M-3b decision 16/20).
+function LetterBadge({ letter }: { letter?: string | null }) {
+  if (!letter) return <span className="text-gray-300">—</span>;
   return (
     <span className="inline-block px-2 py-0.5 rounded-lg text-sm font-semibold text-violet-700 bg-violet-50">
-      {letter} ({points.toFixed(1)})
+      {letter}
     </span>
   );
 }
 
-// An averaged GPA value (term / year), e.g. "3.50".
-function GpaValue({ value }: { value?: number | null }) {
-  if (value == null) return <span className="text-gray-300">—</span>;
-  return (
-    <span className="inline-block px-2 py-0.5 rounded-lg text-sm font-bold text-violet-700 bg-violet-50">
-      {value.toFixed(2)}
-    </span>
-  );
+// "88.4 (B+)" in both mode, "88.4" in scale mode, "B+" in letters-only mode.
+function fmtWithLetter(
+  value: number,
+  showPct: boolean,
+  showGpa: boolean,
+  letterOf: (v: number | null) => string | null,
+): string {
+  const letter = showGpa ? letterOf(value) : null;
+  if (showPct && letter) return `${value} (${letter})`;
+  if (showPct) return String(value);
+  return letter ?? String(value);
 }
 
 function MarkBadge({ value }: { value?: number | null }) {

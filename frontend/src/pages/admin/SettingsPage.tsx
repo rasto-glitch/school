@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'react-toastify';
-import { CalendarDays, Settings, Tag, Trash2, Plus, Layers, Image as ImageIcon, GraduationCap, ShieldCheck } from 'lucide-react';
+import { CalendarDays, Settings, Tag, Trash2, Plus, Layers, Image as ImageIcon, GraduationCap, ShieldCheck, Repeat } from 'lucide-react';
 import { adminApi } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import PageLayout from '../../components/layout/PageLayout';
@@ -88,6 +88,15 @@ export default function SettingsPage() {
   const [bands, setBands] = useState<BandRow[]>([]);
   const [savingGrading, setSavingGrading] = useState(false);
 
+  // Remedial (Round Two) config — 075. The term itself is created/renamed
+  // through this section only; the exam/carry pair must sum to exactly 100.
+  const [remTermName, setRemTermName] = useState('');
+  const [remExam, setRemExam] = useState('');
+  const [remCarry, setRemCarry] = useState('');
+  const [passPercent, setPassPercent] = useState('50');
+  const [remedialConfigured, setRemedialConfigured] = useState(false);
+  const [savingRemedial, setSavingRemedial] = useState(false);
+
   useEffect(() => {
     setLoading(true);
     adminApi.getSettings()
@@ -135,6 +144,13 @@ export default function SettingsPage() {
         setBands((r.data?.bands || []).map((b: any) => ({
           minPercent: String(b.minPercent), letter: b.letter, gradePoint: String(b.gradePoint),
         })));
+        setPassPercent(String(r.data?.passPercent ?? 50));
+        if (r.data?.remedial) {
+          setRemedialConfigured(true);
+          setRemTermName(r.data.remedial.termName || '');
+          setRemExam(r.data.remedial.examMarkType || '');
+          setRemCarry(r.data.remedial.carryMarkType || '');
+        }
       })
       .catch(() => {});
   }, []);
@@ -154,14 +170,21 @@ export default function SettingsPage() {
 
   const addMarkType = async () => {
     if (!newName.trim()) return;
+    // Grade-applicable mark types must declare what the mark is out of —
+    // without a max the component can't be normalized into the official
+    // percentage (audit M-2). Report-only types stay freeform.
+    if (newAppliesTo !== 'report' && !(Number(newMax) > 0)) {
+      toast.error(t('admin.settings.mark_max_required', { defaultValue: 'Grade mark types must define what the mark is out of (a positive max value).' }));
+      return;
+    }
     setAddingMark(true);
     try {
       const r = await adminApi.createMarkType({ name: newName.trim(), appliesTo: newAppliesTo, maxValue: newMax.trim() === '' ? null : Number(newMax) });
       setMarkTypes(prev => [...prev, r.data]);
       setNewName('');
       setNewMax('');
-    } catch {
-      toast.error(t('admin.settings.failed_add_mark'));
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || t('admin.settings.failed_add_mark'));
     } finally {
       setAddingMark(false);
     }
@@ -206,41 +229,80 @@ export default function SettingsPage() {
     try {
       const r = await adminApi.updateMarkType(mt.id, { maxValue: next });
       setMarkTypes(prev => prev.map(m => m.id === mt.id ? r.data : m));
-    } catch {
-      toast.error(t('admin.settings.failed_update_max'));
+    } catch (err: any) {
+      // Server rejects clearing the max on a grade-applicable type (M-2) —
+      // surface its message rather than a generic failure.
+      toast.error(err.response?.data?.error || t('admin.settings.failed_update_max'));
     }
   };
 
+  // Letters are pure presentation of percent thresholds (M-3b decision 20) —
+  // the 4.0-style grade points are retired from the UI. gradePoint is kept in
+  // the row state only to preserve stored values on round-trip saves.
   const DEFAULT_BANDS: BandRow[] = [
-    { minPercent: '90', letter: 'A', gradePoint: '4.0' },
-    { minPercent: '80', letter: 'B', gradePoint: '3.0' },
-    { minPercent: '70', letter: 'C', gradePoint: '2.0' },
-    { minPercent: '60', letter: 'D', gradePoint: '1.0' },
-    { minPercent: '0', letter: 'F', gradePoint: '0.0' },
+    { minPercent: '90', letter: 'A', gradePoint: '0' },
+    { minPercent: '80', letter: 'B', gradePoint: '0' },
+    { minPercent: '70', letter: 'C', gradePoint: '0' },
+    { minPercent: '60', letter: 'D', gradePoint: '0' },
+    { minPercent: '0', letter: 'F', gradePoint: '0' },
   ];
   const updateBand = (i: number, field: keyof BandRow, val: string) =>
     setBands(prev => prev.map((b, idx) => idx === i ? { ...b, [field]: val } : b));
-  const addBand = () => setBands(prev => [...prev, { minPercent: '', letter: '', gradePoint: '' }]);
+  const addBand = () => setBands(prev => [...prev, { minPercent: '', letter: '', gradePoint: '0' }]);
   const removeBand = (i: number) => setBands(prev => prev.filter((_, idx) => idx !== i));
 
   const saveGrading = async () => {
     setSavingGrading(true);
     try {
       const cleaned = bands
-        .filter(b => b.letter.trim() && b.minPercent !== '' && b.gradePoint !== '')
-        .map(b => ({ minPercent: Number(b.minPercent), letter: b.letter.trim(), gradePoint: Number(b.gradePoint) }))
+        .filter(b => b.letter.trim() && b.minPercent !== '')
+        .map(b => ({ minPercent: Number(b.minPercent), letter: b.letter.trim(), gradePoint: Number(b.gradePoint) || 0 }))
         .sort((a, b) => b.minPercent - a.minPercent);
       if (gradingMode !== 'scale' && cleaned.length === 0) {
         toast.error(t('admin.settings.add_gpa_band_first'));
         setSavingGrading(false);
         return;
       }
+      // A floor band at 0 is required: without it a subject below the lowest
+      // threshold silently drops out of the GPA average (audit M-2 family).
+      if (cleaned.length > 0 && !cleaned.some(b => b.minPercent === 0)) {
+        toast.error(t('admin.settings.floor_band_required', { defaultValue: 'Add a floor band with minimum 0 (e.g. F at 0) so failing subjects still count in the GPA.' }));
+        setSavingGrading(false);
+        return;
+      }
       await adminApi.updateGradingConfig({ mode: gradingMode, bands: cleaned });
       toast.success(t('admin.settings.grading_saved'));
-    } catch {
-      toast.error(t('admin.settings.failed_save_grading'));
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || t('admin.settings.failed_save_grading'));
     } finally {
       setSavingGrading(false);
+    }
+  };
+
+  // Grade mark types with a max — the only valid picks for the remedial pair.
+  const gradeMarkTypes = markTypes.filter(m =>
+    (m.appliesTo === 'grade' || m.appliesTo === 'both') && m.maxValue != null && Number(m.maxValue) > 0);
+  const remExamMax = Number(gradeMarkTypes.find(m => m.name === remExam)?.maxValue ?? 0);
+  const remCarryMax = remCarry ? Number(gradeMarkTypes.find(m => m.name === remCarry)?.maxValue ?? 0) : 0;
+  const remSum = remExamMax + remCarryMax;
+
+  const saveRemedial = async () => {
+    setSavingRemedial(true);
+    try {
+      await adminApi.updateRemedialConfig({
+        termName: remTermName.trim(),
+        examMarkType: remExam,
+        carryMarkType: remCarry || null,
+        passPercent: Number(passPercent) || 50,
+      });
+      setRemedialConfigured(true);
+      toast.success(t('admin.settings.remedial_saved'));
+      // The remedial term may have been created/renamed — refresh the list.
+      adminApi.getTerms().then(r => setTerms(r.data || [])).catch(() => {});
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || t('admin.settings.failed_save_remedial'));
+    } finally {
+      setSavingRemedial(false);
     }
   };
 
@@ -407,12 +469,18 @@ export default function SettingsPage() {
                 {terms.map(term => (
                   <div key={term.id} className="flex items-center justify-between gap-3 px-3 py-2.5 bg-gray-50 rounded-xl">
                     <span className="text-sm font-medium text-gray-800">{term.name}</span>
-                    <button
-                      onClick={() => deleteTerm(term.id)}
-                      className="p-1 text-gray-400 hover:text-red-500 transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {term.kind === 'remedial' ? (
+                      <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-rose-50 text-rose-700">
+                        {t('admin.settings.remedial_badge')}
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => deleteTerm(term.id)}
+                        className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
@@ -543,14 +611,13 @@ export default function SettingsPage() {
                     </button>
                   )}
                 </div>
-                <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 text-[11px] font-medium text-gray-400 uppercase">
-                  <span>{t('admin.settings.min_pct')}</span><span>{t('admin.settings.letter')}</span><span>{t('admin.settings.points')}</span><span />
+                <div className="grid grid-cols-[1fr_1fr_auto] gap-2 text-[11px] font-medium text-gray-400 uppercase">
+                  <span>{t('admin.settings.min_pct')}</span><span>{t('admin.settings.letter')}</span><span />
                 </div>
                 {bands.map((b, i) => (
-                  <div key={i} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-center">
+                  <div key={i} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-center">
                     <input type="number" value={b.minPercent} onChange={e => updateBand(i, 'minPercent', e.target.value)} placeholder="90" className="input-field !py-1.5 text-sm" />
                     <input value={b.letter} onChange={e => updateBand(i, 'letter', e.target.value)} placeholder="A" className="input-field !py-1.5 text-sm" />
-                    <input type="number" step="0.1" value={b.gradePoint} onChange={e => updateBand(i, 'gradePoint', e.target.value)} placeholder="4.0" className="input-field !py-1.5 text-sm" />
                     <button onClick={() => removeBand(i)} className="p-1 text-gray-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
                   </div>
                 ))}
@@ -561,6 +628,81 @@ export default function SettingsPage() {
             )}
 
             <Button onClick={saveGrading} loading={savingGrading}>{t('admin.settings.save_grading')}</Button>
+          </Card>
+        )}
+
+        {/* Remedial term (Round Two) — 075 */}
+        {feat('grades') && (
+          <Card>
+            <div className="flex items-center gap-2 mb-1">
+              <Repeat className="w-5 h-5 text-rose-600" />
+              <h2 className="font-semibold text-gray-900">{t('admin.settings.remedial')}</h2>
+            </div>
+            <p className="text-sm text-gray-500 mb-4">
+              {t('admin.settings.remedial_hint')}
+            </p>
+
+            <div className="space-y-3 mb-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">{t('admin.settings.remedial_term_name')}</label>
+                <Input
+                  placeholder={t('admin.settings.remedial_term_ph')}
+                  value={remTermName}
+                  onChange={e => setRemTermName(e.target.value)}
+                />
+              </div>
+
+              <div className="grid sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">{t('admin.settings.remedial_exam_type')}</label>
+                  <select value={remExam} onChange={e => setRemExam(e.target.value)} className="input-field w-full text-sm">
+                    <option value="">{t('admin.settings.remedial_pick_type')}</option>
+                    {gradeMarkTypes.map(m => (
+                      <option key={m.id} value={m.name}>{m.name} / {m.maxValue}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">{t('admin.settings.remedial_carry_type')}</label>
+                  <select value={remCarry} onChange={e => setRemCarry(e.target.value)} className="input-field w-full text-sm">
+                    <option value="">{t('admin.settings.remedial_carry_none')}</option>
+                    {gradeMarkTypes.filter(m => m.name !== remExam).map(m => (
+                      <option key={m.id} value={m.name}>{m.name} / {m.maxValue}</option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-400 mt-1">{t('admin.settings.remedial_carry_hint')}</p>
+                </div>
+              </div>
+
+              {remExam && (
+                <p className={`text-xs font-medium ${remSum === 100 ? 'text-emerald-600' : 'text-red-600'}`}>
+                  {remSum === 100
+                    ? t('admin.settings.remedial_sum_ok', { exam: remExamMax, carry: remCarryMax })
+                    : t('admin.settings.remedial_sum_bad', { exam: remExamMax, carry: remCarryMax, sum: remSum })}
+                </p>
+              )}
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">{t('admin.settings.pass_percent')}</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={passPercent}
+                  onChange={e => setPassPercent(e.target.value)}
+                  className="input-field w-28 text-sm"
+                />
+                <p className="text-xs text-gray-400 mt-1">{t('admin.settings.pass_percent_hint')}</p>
+              </div>
+            </div>
+
+            <Button
+              onClick={saveRemedial}
+              loading={savingRemedial}
+              disabled={!remTermName.trim() || !remExam || remSum !== 100}
+            >
+              {remedialConfigured ? t('admin.settings.save_remedial') : t('admin.settings.enable_remedial')}
+            </Button>
           </Card>
         )}
 

@@ -8,12 +8,13 @@ import PDFDocument from 'pdfkit';
 import { setupPdfFonts } from './pdfFont';
 import { COLORS, fetchLogoBuffer, type Lang } from './archivePdfShared';
 
+// Letters are pure presentation of the percent math (locked decision 16) —
+// there is no grade-point averaging anywhere on the card.
 export interface ReportCardSubject {
   subject: string;
   components: { name: string; value: number | null }[];
   percent: number | null;
   letter: string | null;
-  gradePoint: number | null;
   adminNote: string | null;
 }
 export interface ReportCardData {
@@ -26,7 +27,7 @@ export interface ReportCardData {
   showGpa: boolean;          // grading mode gpa|both
   markColumns: string[];     // union of component names, in order
   subjects: ReportCardSubject[];
-  overall: { averagePercent: number | null; gpa: number | null };
+  overall: { averagePercent: number | null; letter: string | null };
   remarks: { homeroom: string | null; principal: string | null };
   config: { classTeacher: string; principal: string; headerNote: string; footerNote: string };
 }
@@ -187,7 +188,7 @@ async function drawOneCard(
     if (y > 700) { doc.addPage(); y = 50; }
     const parts: string[] = [];
     if (data.showPercent && data.overall.averagePercent != null) parts.push(`${l.overall} ${l.total}: ${num(data.overall.averagePercent)}`);
-    if (data.showGpa && data.overall.gpa != null) parts.push(`${l.gpa}: ${num(data.overall.gpa, 2)}`);
+    if (data.showGpa && data.overall.letter) parts.push(`${l.grade}: ${data.overall.letter}`);
     if (parts.length) {
       doc.rect(PAGE_LEFT, y, CONTENT_W, 22).fill(COLORS.panel);
       doc.font(F.pick(parts.join('     '), { bold: true })).fontSize(10).fillColor(COLORS.heading)
@@ -314,7 +315,7 @@ function drawSubjectTable(
       }
     }
     if (data.showPercent) cell(s.percent != null ? num(s.percent) : '', pctW, 'center');
-    if (data.showGpa) cell(s.letter ? `${s.letter}${s.gradePoint != null ? ` (${s.gradePoint})` : ''}` : '', gradeW, 'center');
+    if (data.showGpa) cell(s.letter ?? '', gradeW, 'center');
     // Per-subject admin note under the subject cell (parent-visible).
     if (s.adminNote && s.adminNote.trim()) {
       doc.font(F.pick(s.adminNote)).fontSize(7).fillColor(COLORS.muted)

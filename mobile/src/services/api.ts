@@ -245,6 +245,8 @@ export const parentApi = {
   getHomework: (params?: Record<string, string>) => api.get('/parent/homework', { params }),
   getAssignments: (params?: Record<string, string>) => api.get('/parent/assignments', { params }),
   getGrades: (studentId?: string) => api.get('/parent/grades', { params: studentId ? { studentId } : {} }),
+  // Released Round Two entries — shown side-by-side with Round One (075/P4)
+  getRemedialGrades: (studentId?: string) => api.get('/parent/remedial-grades', { params: studentId ? { studentId } : {} }),
   getGradeConfig: () => api.get('/grade-config'),
   // Published (academic_year, term) pairs the school has released as report
   // cards. A term only shows a "Report card" download button once published.

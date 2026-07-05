@@ -47,7 +47,11 @@ export default function TeacherGradingScreen({ subject, classes, subjects, teach
 
   useEffect(() => {
     teacherApi.getMarkTypes('grade').then(r => setMarkTypes(r.data || [])).catch(() => {});
-    teacherApi.getTerms().then(r => setTerms(r.data || [])).catch(() => {});
+    // Remedial (075/P3): Round Two marks are filed from the web remedial
+    // roster only (server rejects normal grade rows under the remedial term),
+    // so keep it out of the mobile picker. Mobile remedial filing is a
+    // deferred enhancement.
+    teacherApi.getTerms().then(r => setTerms((r.data || []).filter((tm: TermItem & { kind?: string }) => tm.kind !== 'remedial'))).catch(() => {});
     teacherApi.getGradeWindows().then(r => setGradeWindows(r.data?.windows || [])).catch(() => {});
     teacherApi.getGradeConfig().then(r => setCfg(r.data)).catch(() => {});
     if (classes.length > 0) setSelectedClass(classes[0].id);
@@ -240,7 +244,8 @@ export default function TeacherGradingScreen({ subject, classes, subjects, teach
                 {showGpa && (() => {
                   const tot = (g.marks || []).reduce((s: number, m: Mark) => s + (parseFloat(String(m.value)) || 0), 0);
                   const band = bandForPercent(subjectPercent(g.marks as any, tot, cfg.markMaxes), cfg.bands);
-                  return band ? <Text style={styles.historyGpa}>{band.letter} {band.gradePoint.toFixed(1)}</Text> : null;
+                  // Letter only — grade points are retired (M-3b decision 20).
+                  return band ? <Text style={styles.historyGpa}>{band.letter}</Text> : null;
                 })()}
                 <Text style={styles.historyTotal}>{(g.marks || []).reduce((s: number, m: Mark) => s + (parseFloat(String(m.value)) || 0), 0).toFixed(1)}</Text>
               </View>

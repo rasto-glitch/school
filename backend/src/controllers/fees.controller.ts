@@ -9,7 +9,7 @@ import type { AuthRequest } from '../middleware/auth';
 import { toCC } from '../utils/transform';
 import { notify, notifyMany } from '../utils/notify';
 import { streamPaymentReceipt, streamYearSummary } from '../utils/receipts';
-import { streamArchivePaymentPdf, buildArchivePaymentXlsx, type ArchivePaymentExportData, type ArchivePlanEntry } from '../utils/paymentArchiveExport';
+import { streamArchivePaymentPdf, buildArchivePaymentXlsx, netPaid, type ArchivePaymentExportData, type ArchivePlanEntry } from '../utils/paymentArchiveExport';
 import { logAudit } from '../utils/audit';
 import { postTuitionBilling, postTuitionPayment, postRefund, reverseEntry, reinstateEntry } from '../utils/glPosting';
 import { resolveDrawerAmount } from '../utils/fx';
@@ -1838,13 +1838,13 @@ export async function paymentReceiptPdf(req: AuthRequest, res: Response): Promis
   const ctx = await loadReceiptContext(schoolId, (payment as any).student_fee_id);
   if (!ctx) { res.status(404).json({ error: 'Not found' }); return; }
 
-  // Sum of payments BEFORE this one
+  // Sum of payments BEFORE this one — refunds subtract (audit H-2)
   const { data: priorRows } = await supabase
-    .from('fee_payments').select('amount, created_at')
+    .from('fee_payments').select('amount, created_at, is_refund')
     .eq('student_fee_id', (payment as any).student_fee_id)
     .is('voided_at', null)
     .lt('created_at', (payment as any).created_at ?? new Date().toISOString());
-  const paidBefore = (priorRows ?? []).reduce((s, p) => s + Number((p as any).amount), 0);
+  const paidBefore = (priorRows ?? []).reduce((s, p) => s + ((p as any).is_refund ? -1 : 1) * Number((p as any).amount), 0);
 
   // Allocation breakdown for this specific payment
   const { data: allocs } = await supabase
@@ -2132,6 +2132,10 @@ function plansFromSnapshot(snapshot: any): ArchivePlanEntry[] {
       method: p.method ?? null,
       reference: p.reference ?? null,
       notes: p.notes ?? null,
+      // Snapshots since migration 008 store isRefund per payment (see
+      // admin.controller buildStudentArchiveSnapshot); older ones lack it,
+      // in which case treating rows as payments matches the old behavior.
+      isRefund: Boolean(p.isRefund),
     })) : [],
   }));
 }
@@ -2146,7 +2150,7 @@ async function plansFromGraduated(schoolId: string, studentId: string): Promise<
   const { data: pays } = sfIds.length
     ? await supabase
         .from('fee_payments')
-        .select('student_fee_id, amount, paid_on, method, reference, notes')
+        .select('student_fee_id, amount, paid_on, method, reference, notes, is_refund')
         .in('student_fee_id', sfIds)
         .is('voided_at', null)
         .order('paid_on', { ascending: true })
@@ -2160,6 +2164,7 @@ async function plansFromGraduated(schoolId: string, studentId: string): Promise<
       method: (p as any).method ?? null,
       reference: (p as any).reference ?? null,
       notes: (p as any).notes ?? null,
+      isRefund: Boolean((p as any).is_refund),
     });
     paysBySf.set((p as any).student_fee_id, arr);
   }
@@ -2177,7 +2182,7 @@ function summarisePlans(plans: ArchivePlanEntry[]): { totalDue: number; totalPai
   let totalDue = 0, totalPaid = 0;
   for (const p of plans) {
     totalDue += p.totalAmount + p.adjustment;
-    totalPaid += p.payments.reduce((s, x) => s + x.amount, 0);
+    totalPaid += netPaid(p.payments); // refunds subtract (audit H-2)
   }
   return {
     totalDue,
@@ -2244,14 +2249,15 @@ export async function listArchivePaymentRecords(req: AuthRequest, res: Response)
   const { data: gradPays } = gradSfIds.length
     ? await supabase
         .from('fee_payments')
-        .select('student_fee_id, amount')
+        .select('student_fee_id, amount, is_refund')
         .in('student_fee_id', gradSfIds)
         .is('voided_at', null)
     : { data: [] as any[] };
 
   const paidBySf = new Map<string, number>();
   for (const p of gradPays ?? []) {
-    paidBySf.set((p as any).student_fee_id, (paidBySf.get((p as any).student_fee_id) ?? 0) + Number((p as any).amount));
+    const sign = (p as any).is_refund ? -1 : 1; // refunds subtract (audit H-2)
+    paidBySf.set((p as any).student_fee_id, (paidBySf.get((p as any).student_fee_id) ?? 0) + sign * Number((p as any).amount));
   }
   const sfsByStudent = new Map<string, any[]>();
   for (const sf of gradSfs ?? []) {

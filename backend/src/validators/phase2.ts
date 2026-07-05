@@ -54,7 +54,11 @@ export const upsertGradeSchema = z.object({
   studentId: uuid,
   classId: uuid,
   subject: nonEmptyStr(160),
-  gradingPeriod: z.string().max(60).optional(),
+  // Required (migration 072): the grades identity index treats NULLs as
+  // distinct, so a missing/empty term would dodge the upsert's ON CONFLICT
+  // and insert a duplicate row instead of updating. Both clients always send
+  // it; the filing-window gate already rejected empty terms with a 403.
+  gradingPeriod: nonEmptyStr(60),
   marks: marksArr.optional(),
 });
 // Admin grade review: edit marks and/or the parent-visible note.
@@ -462,16 +466,30 @@ export const updateMarkTypeSchema = z.object({
   appliesTo: z.enum(['report', 'grade', 'both']).optional(),
   maxValue: z.union([z.number(), z.string().max(12), z.null()]).optional(),
 });
-// GPA grading config: mode + the full band set (replace-all).
+// Grading config: mode + the full band set (replace-all). gradePoint is a
+// retired legacy field (letters are presentation of percent thresholds —
+// M-3b decision 20); accepted optionally for old clients, defaulted to 0.
 export const updateGradingConfigSchema = z.object({
   mode: z.enum(['scale', 'gpa', 'both']).optional(),
   bands: z.array(z.object({
     minPercent: z.number().min(0).max(100),
     letter: nonEmptyStr(8),
-    gradePoint: z.number().min(0).max(10),
+    gradePoint: z.number().min(0).max(10).optional(),
   })).max(40).optional(),
 });
 export const createTermSchema = z.object({ name: nonEmptyStr(120) });
+// Remedial (Round Two) settings — 075. Mark-type semantics (existence, maxes
+// summing to exactly 100) are validated in the controller against the
+// school's mark_types.
+export const updateRemedialConfigSchema = z.object({
+  termName: nonEmptyStr(120),
+  examMarkType: nonEmptyStr(120),
+  carryMarkType: nonEmptyStr(120).nullable().optional(),
+  passPercent: z.number().min(1).max(100),
+});
+// Teacher files ONE remedial exam mark; the ceiling (the exam mark type's
+// max) is enforced in the controller against the school's config.
+export const remedialExamSchema = z.object({ examValue: z.number().min(0).max(1000) });
 
 // ── Announcement comments (admin + academic share the shape) ───────────
 export const createCommentSchema = z.object({

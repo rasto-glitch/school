@@ -131,6 +131,9 @@ export interface Term {
   id: string;
   name: string;
   orderIndex: number;
+  // 075: 'regular' counts in the year average; 'remedial' = the Round Two
+  // retake term (one per school, managed from the Remedial settings section).
+  kind?: 'regular' | 'remedial';
 }
 
 export interface Grade {

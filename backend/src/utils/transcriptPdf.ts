@@ -8,18 +8,26 @@ import PDFDocument from 'pdfkit';
 import { setupPdfFonts } from './pdfFont';
 import { COLORS, fetchLogoBuffer, type Lang } from './archivePdfShared';
 
-export interface TranscriptSubject {
+// One subject row inside a year block (P5): original per-term percents,
+// Round One (originals-only mean), and — when the student sat retakes — the
+// Round Two figure with the remedial totals substituted. `letter` is the
+// band letter of the effective final (letters are presentation of the same
+// percent math — locked decision 16).
+export interface TranscriptYearRow {
   subject: string;
-  percent: number | null;
+  perTerm: (number | null)[];   // aligned with TranscriptYear.terms
+  roundOne: number | null;
+  final: number | null;
+  satRemedial: boolean;
   letter: string | null;
-  gradePoint: number | null;
 }
-export interface TranscriptTerm {
+export interface TranscriptYear {
   academicYear: string;
-  term: string;
-  subjects: TranscriptSubject[];
-  averagePercent: number | null;
-  gpa: number | null;
+  terms: string[];              // regular terms present, school order
+  rows: TranscriptYearRow[];
+  anyRoundTwo: boolean;
+  yearAverage: number | null;   // mean of subject finals (subject-first)
+  yearLetter: string | null;
 }
 export interface TranscriptData {
   school: { name: string; logoUrl: string | null };
@@ -27,37 +35,37 @@ export interface TranscriptData {
   generatedAt: string;       // ISO
   showPercent: boolean;
   showGpa: boolean;
-  terms: TranscriptTerm[];   // chronological: oldest year/term first
-  cumulative: { averagePercent: number | null; gpa: number | null };
+  passPercent: number;       // failing values render red
+  years: TranscriptYear[];   // chronological: oldest year first
   config: { classTeacher: string; principal: string; headerNote: string; footerNote: string };
 }
 
 interface TLabels {
   title: string; student: string; klass: string; dob: string; generated: string;
-  graduated: string; subject: string; total: string; grade: string; gpa: string;
-  term: string; term_average: string; cumulative: string; cumulative_gpa: string;
+  graduated: string; subject: string; grade: string;
+  round_one: string; round_two: string; year_average: string;
   registrar: string; principal: string; no_grades: string; page: string; of: string; em: string;
 }
 
 const TL: Record<Lang, TLabels> = {
   en: {
     title: 'Academic Transcript', student: 'Student', klass: 'Current class', dob: 'Date of birth',
-    generated: 'Generated', graduated: 'Graduated', subject: 'Subject', total: '%', grade: 'Grade', gpa: 'GPA',
-    term: 'Term', term_average: 'Term average', cumulative: 'Cumulative average', cumulative_gpa: 'Cumulative GPA',
+    generated: 'Generated', graduated: 'Graduated', subject: 'Subject', grade: 'Grade',
+    round_one: 'Round One', round_two: 'Round Two', year_average: 'Year average',
     registrar: 'Registrar', principal: 'Principal', no_grades: 'No released grades on record.',
     page: 'Page', of: 'of', em: '—',
   },
   ar: {
-    title: 'كشف الدرجات التراكمي', student: 'الطالب', klass: 'الصف الحالي', dob: 'تاريخ الميلاد',
-    generated: 'أُنشئ في', graduated: 'متخرّج', subject: 'المادة', total: '٪', grade: 'التقدير', gpa: 'المعدل',
-    term: 'الفصل', term_average: 'معدل الفصل', cumulative: 'المعدل التراكمي', cumulative_gpa: 'المعدل التراكمي',
+    title: 'كشف الدرجات', student: 'الطالب', klass: 'الصف الحالي', dob: 'تاريخ الميلاد',
+    generated: 'أُنشئ في', graduated: 'متخرّج', subject: 'المادة', grade: 'التقدير',
+    round_one: 'الدور الأول', round_two: 'الدور الثاني', year_average: 'المعدل السنوي',
     registrar: 'المسجّل', principal: 'المدير', no_grades: 'لا توجد درجات معتمدة في السجل.',
     page: 'صفحة', of: 'من', em: '—',
   },
   ku: {
-    title: 'پێڕستی نمرە کۆیی', student: 'خوێندکار', klass: 'پۆلی ئێستا', dob: 'بەرواری لەدایکبوون',
-    generated: 'دروستکراوە لە', graduated: 'دەرچوو', subject: 'بابەت', total: '٪', grade: 'پلە', gpa: 'تێکڕا',
-    term: 'وەرز', term_average: 'تێکڕای وەرز', cumulative: 'تێکڕای کۆیی', cumulative_gpa: 'تێکڕای کۆیی (GPA)',
+    title: 'پێڕستی نمرە', student: 'خوێندکار', klass: 'پۆلی ئێستا', dob: 'بەرواری لەدایکبوون',
+    generated: 'دروستکراوە لە', graduated: 'دەرچوو', subject: 'بابەت', grade: 'پلە',
+    round_one: 'تێکڕای خوولی یەکەم', round_two: 'تێکڕای خوولی دووەم', year_average: 'تێکڕای ساڵانە',
     registrar: 'تۆمارکار', principal: 'بەڕێوەبەر', no_grades: 'هیچ نمرەیەکی بڵاوکراوە لە تۆماردا نییە.',
     page: 'پەڕە', of: 'لە', em: '—',
   },
@@ -120,38 +128,21 @@ export async function streamTranscriptPdf(data: TranscriptData, lang: Lang, dest
   doc.moveTo(PAGE_LEFT, y).lineTo(PAGE_RIGHT, y).strokeColor(COLORS.border).stroke();
   y += 14;
 
-  // ─── Year/term blocks ───────────────────────────────────────────────
-  if (data.terms.length === 0) {
+  // ─── Year blocks ────────────────────────────────────────────────────
+  // Years stand alone (locked decision 15): each gets its own table and year
+  // average; there is deliberately NO lifetime cumulative figure.
+  if (data.years.length === 0) {
     doc.font(F.pick(l.no_grades)).fontSize(10).fillColor(COLORS.muted).text(l.no_grades, PAGE_LEFT, y);
     y = doc.y + 10;
   } else {
-    let currentYear = '';
-    for (const block of data.terms) {
-      // Year heading whenever the year changes.
-      if (block.academicYear !== currentYear) {
-        currentYear = block.academicYear;
-        if (y > 740) { doc.addPage(); y = 50; }
-        doc.rect(PAGE_LEFT, y, CONTENT_W, 20).fill(COLORS.panel);
-        doc.font(F.pick(currentYear, { bold: true })).fontSize(11).fillColor(COLORS.heading)
-          .text(currentYear, PAGE_LEFT + 8, y + 5, { width: CONTENT_W - 16 });
-        y += 26;
-      }
-      y = drawTermTable(doc, F, l, data, block, y);
-      y += 8;
-    }
-  }
-
-  // ─── Cumulative summary ─────────────────────────────────────────────
-  if (data.terms.length > 0) {
-    if (y > 720) { doc.addPage(); y = 50; }
-    const parts: string[] = [];
-    if (data.showPercent && data.cumulative.averagePercent != null) parts.push(`${l.cumulative} ${l.total}: ${num(data.cumulative.averagePercent)}`);
-    if (data.showGpa && data.cumulative.gpa != null) parts.push(`${l.cumulative_gpa}: ${num(data.cumulative.gpa, 2)}`);
-    if (parts.length) {
-      doc.rect(PAGE_LEFT, y, CONTENT_W, 24).fillAndStroke('#EEF2FF', '#C7D2FE');
-      doc.font(F.pick(parts.join('     '), { bold: true })).fontSize(11).fillColor(COLORS.heading)
-        .text(parts.join('        '), PAGE_LEFT + 8, y + 6, { width: CONTENT_W - 16, align: 'right' });
-      y += 34;
+    for (const block of data.years) {
+      if (y > 720) { doc.addPage(); y = 50; }
+      doc.rect(PAGE_LEFT, y, CONTENT_W, 20).fill(COLORS.panel);
+      doc.font(F.pick(block.academicYear, { bold: true })).fontSize(11).fillColor(COLORS.heading)
+        .text(block.academicYear, PAGE_LEFT + 8, y + 5, { width: CONTENT_W - 16 });
+      y += 26;
+      y = drawYearTable(doc, F, l, data, block, y);
+      y += 12;
     }
   }
 
@@ -185,69 +176,84 @@ export async function streamTranscriptPdf(data: TranscriptData, lang: Lang, dest
   doc.end();
 }
 
-// One term's compact table: Term header row + Subject | % | Grade rows + a
-// term-average summary row.
-function drawTermTable(
+// One year's table: Subject | <terms…> | Round One | Round Two (only when the
+// student sat retakes that year) | Grade — followed by the year-average row.
+// Values below the pass mark render red; a passing Round Two renders green so
+// the correction reads at a glance (original stays visible side-by-side —
+// locked decisions 2/21).
+function drawYearTable(
   doc: PDFKit.PDFDocument,
   F: ReturnType<typeof setupPdfFonts>,
   l: TLabels,
   data: TranscriptData,
-  block: TranscriptTerm,
+  block: TranscriptYear,
   startY: number,
 ): number {
-  const pctW = data.showPercent ? 60 : 0;
-  const gradeW = data.showGpa ? 90 : 0;
-  const subjectW = CONTENT_W - pctW - gradeW;
   const rowH = 16;
+  const gradeW = data.showGpa ? 48 : 0;
+  const r1W = 62;
+  const r2W = block.anyRoundTwo ? 62 : 0;
+  const termW = block.terms.length > 0
+    ? Math.min(52, Math.floor((CONTENT_W - 120 - r1W - r2W - gradeW) / block.terms.length))
+    : 0;
+  const subjectW = CONTENT_W - block.terms.length * termW - r1W - r2W - gradeW;
   let y = startY;
 
   const ensure = (need: number) => { if (y + need > 800) { doc.addPage(); y = 50; } };
 
-  // Term label
-  ensure(rowH + 14);
-  doc.font(F.pick(block.term, { bold: true })).fontSize(9).fillColor(COLORS.accent)
-    .text(`${block.term}`, PAGE_LEFT, y);
-  y += 14;
-
   // Column header
-  const cols: { label: string; w: number; align: 'left' | 'center' }[] = [{ label: l.subject, w: subjectW, align: 'left' }];
-  if (data.showPercent) cols.push({ label: l.total, w: pctW, align: 'center' });
-  if (data.showGpa) cols.push({ label: l.grade, w: gradeW, align: 'center' });
+  ensure(rowH * 2);
+  const heads: { label: string; w: number; align: 'left' | 'center' }[] = [
+    { label: l.subject, w: subjectW, align: 'left' },
+    ...block.terms.map(t => ({ label: t, w: termW, align: 'center' as const })),
+    { label: l.round_one, w: r1W, align: 'center' },
+  ];
+  if (block.anyRoundTwo) heads.push({ label: l.round_two, w: r2W, align: 'center' });
+  if (data.showGpa) heads.push({ label: l.grade, w: gradeW, align: 'center' });
   let x = PAGE_LEFT;
-  for (const c of cols) {
+  for (const c of heads) {
     doc.rect(x, y, c.w, rowH).fillAndStroke('#F3F4F6', '#D1D5DB');
-    doc.font(F.pick(c.label, { bold: true })).fontSize(8).fillColor(COLORS.body)
-      .text(c.label, x + 4, y + 4, { width: c.w - 8, align: c.align, ellipsis: true });
+    doc.font(F.pick(c.label, { bold: true })).fontSize(7.5).fillColor(COLORS.body)
+      .text(c.label, x + 3, y + 4, { width: c.w - 6, align: c.align, ellipsis: true });
     x += c.w;
   }
   y += rowH;
 
   // Subject rows
-  for (const s of block.subjects) {
+  for (const r of block.rows) {
     ensure(rowH);
     x = PAGE_LEFT;
-    const cell = (text: string, w: number, align: 'left' | 'center', bold = false) => {
+    const cell = (text: string, w: number, align: 'left' | 'center', opts: { bold?: boolean; color?: string } = {}) => {
       doc.rect(x, y, w, rowH).stroke('#E5E7EB');
-      doc.font(F.pick(text, { bold })).fontSize(8.5).fillColor(COLORS.body)
-        .text(text, x + 4, y + 4, { width: w - 8, align, ellipsis: true });
+      doc.font(F.pick(text, { bold: opts.bold })).fontSize(8.5).fillColor(opts.color ?? COLORS.body)
+        .text(text, x + 3, y + 4, { width: w - 6, align, ellipsis: true });
       x += w;
     };
-    cell(s.subject, subjectW, 'left', true);
-    if (data.showPercent) cell(s.percent != null ? num(s.percent) : '', pctW, 'center');
-    if (data.showGpa) cell(s.letter ? `${s.letter}${s.gradePoint != null ? ` (${s.gradePoint})` : ''}` : '', gradeW, 'center');
+    cell(r.subject, subjectW, 'left', { bold: true });
+    for (const v of r.perTerm) cell(v != null ? num(v) : l.em, termW, 'center');
+    cell(
+      r.roundOne != null ? num(r.roundOne) : l.em, r1W, 'center',
+      { bold: true, color: r.roundOne != null && r.roundOne < data.passPercent ? '#DC2626' : COLORS.body },
+    );
+    if (block.anyRoundTwo) {
+      const show = r.satRemedial && r.final != null;
+      cell(
+        show ? num(r.final) : l.em, r2W, 'center',
+        { bold: true, color: !show ? COLORS.muted : (r.final as number) < data.passPercent ? '#DC2626' : '#15803D' },
+      );
+    }
+    if (data.showGpa) cell(r.letter ?? l.em, gradeW, 'center', { bold: true });
     y += rowH;
   }
 
-  // Term average summary row
-  const sums: string[] = [];
-  if (data.showPercent && block.averagePercent != null) sums.push(`${l.total} ${num(block.averagePercent)}`);
-  if (data.showGpa && block.gpa != null) sums.push(`${l.gpa} ${num(block.gpa, 2)}`);
-  if (sums.length) {
-    ensure(rowH);
-    doc.rect(PAGE_LEFT, y, CONTENT_W, rowH).fill('#FAFAFA');
-    doc.font(F.pick(l.term_average, { bold: true })).fontSize(8).fillColor(COLORS.muted)
-      .text(`${l.term_average}:  ${sums.join('    ')}`, PAGE_LEFT + 6, y + 4, { width: CONTENT_W - 12, align: 'right' });
-    y += rowH;
+  // Year average row — the official subject-first figure.
+  if (block.yearAverage != null) {
+    ensure(rowH + 4);
+    const value = `${num(block.yearAverage)}${data.showGpa && block.yearLetter ? ` (${block.yearLetter})` : ''}`;
+    doc.rect(PAGE_LEFT, y, CONTENT_W, rowH + 2).fillAndStroke('#EEF2FF', '#C7D2FE');
+    doc.font(F.pick(`${l.year_average}: ${value}`, { bold: true })).fontSize(9).fillColor(COLORS.heading)
+      .text(`${l.year_average}:  ${value}`, PAGE_LEFT + 6, y + 4, { width: CONTENT_W - 12, align: 'right' });
+    y += rowH + 2;
   }
   return y;
 }

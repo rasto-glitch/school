@@ -465,10 +465,46 @@ CREATE TABLE IF NOT EXISTS terms (
   school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   order_index INTEGER DEFAULT 0,
+  -- 075: 'regular' terms count toward the year average (Round One); at most
+  -- one 'remedial' term per school (Round Two retake bucket, managed only
+  -- from the Remedial settings section).
+  kind TEXT NOT NULL DEFAULT 'regular' CHECK (kind IN ('regular', 'remedial')),
   created_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(school_id, name)
 );
 CREATE INDEX IF NOT EXISTS idx_terms_school ON terms(school_id, order_index);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_terms_one_remedial_per_school
+  ON terms(school_id) WHERE kind = 'remedial';
+
+-- 075: Remedial (Round Two) entries — one per (student, subject, year,
+-- corrected regular term). Own table, NOT grades rows: a student retaking
+-- both terms of a subject would collide on grades' identity index (072).
+-- Total /100 = exam_value (teacher-entered) + carry_value (auto-copied from
+-- the corrected term; 0 + carry_missing when the source mark is absent).
+CREATE TABLE IF NOT EXISTS remedial_grades (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  teacher_id UUID REFERENCES teachers(id) ON DELETE SET NULL,
+  class_id UUID REFERENCES classes(id) ON DELETE SET NULL,
+  subject TEXT NOT NULL,
+  academic_year TEXT NOT NULL,
+  for_period TEXT NOT NULL,
+  exam_value NUMERIC(5,2),
+  carry_name TEXT,
+  carry_value NUMERIC(5,2) NOT NULL DEFAULT 0,
+  carry_missing BOOLEAN NOT NULL DEFAULT false,
+  is_released BOOLEAN NOT NULL DEFAULT false,
+  released_at TIMESTAMPTZ,
+  released_by UUID REFERENCES users(id),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (student_id, subject, academic_year, for_period)
+);
+CREATE INDEX IF NOT EXISTS idx_remedial_grades_school_year
+  ON remedial_grades(school_id, academic_year);
+CREATE INDEX IF NOT EXISTS idx_remedial_grades_student
+  ON remedial_grades(student_id, academic_year);
 
 -- ============================================================
 -- GRADES
@@ -611,6 +647,12 @@ CREATE INDEX IF NOT EXISTS idx_report_card_publish_lookup
 -- Clinic-internal medical profile + nurse-visit log. Gated by the
 -- `health.manage` capability. Sensitive free-text lives encrypted in the
 -- *_ct columns (employeePiiCrypto.ts); structured tags stay plaintext.
+--
+-- RETENTION POLICY (migration 074): these records are intentionally
+-- DESTROYED when the student leaves — the student_id ON DELETE CASCADE is
+-- the mechanism, and archive snapshots deliberately exclude them (medical
+-- privacy / data minimisation). See migration 074 for the retention
+-- extension path if that decision ever changes.
 -- ============================================================
 CREATE TABLE IF NOT EXISTS student_health_profiles (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -1146,6 +1188,10 @@ CREATE INDEX IF NOT EXISTS idx_attendance_student ON attendance(student_id, date
 CREATE INDEX IF NOT EXISTS idx_attendance_class ON attendance(class_id, date DESC);
 CREATE INDEX IF NOT EXISTS idx_attendance_school_date ON attendance(school_id, date DESC);
 CREATE INDEX IF NOT EXISTS idx_grades_student_subject ON grades(student_id, subject, grading_period);
+-- Identity the grade upserts' ON CONFLICT relies on (migration 072). Must stay
+-- exactly in sync with the onConflict column list in teacher/admin controllers.
+CREATE UNIQUE INDEX IF NOT EXISTS grades_student_subject_period_year_unique
+  ON grades (student_id, subject, grading_period, academic_year);
 
 -- ============================================================
 -- BUS RIDE RECORDS
@@ -1183,6 +1229,9 @@ CREATE TABLE IF NOT EXISTS archived_students (
   reason TEXT NOT NULL CHECK (reason IN ('transferred', 'withdrew', 'graduated')),
   parent_full_name TEXT,
   parent_phone TEXT,
+  home_address TEXT,       -- migration 073: extended personal record survives archiving; in _canon_archived_student as of as.v4
+  emergency_contact TEXT,  -- migration 073 (as.v4)
+  phone_number TEXT,       -- migration 073 (as.v4)
   classes_attended JSONB DEFAULT '[]',           -- LEGACY (migration 030): attendance-derived class list, no longer populated (always []). NOT REMOVED because migration 019's tamper-evidence hash _canon_archived_student includes classes_attended::text in its canonical input — dropping the column would invalidate the integrity chain on every existing archive. Reads come from enrollment_history below.
   enrollment_history JSONB NOT NULL DEFAULT '[]', -- per-year academic progression snapshot; see migration 030. Source of truth for the archive's academic record.
   transfer_id UUID,                              -- migration 032: links back to student_transfers row when reason='transferred' was driven by the transfer wizard. Included in _canon_archived_student as of migration 045 (as.v3).
@@ -1221,7 +1270,10 @@ CREATE OR REPLACE FUNCTION archive_student_atomic(
   p_original_parent_id UUID,
   p_enrollment_history JSONB DEFAULT '[]'::jsonb,  -- migration 031
   p_transfer_id UUID DEFAULT NULL,                 -- migration 033
-  p_reports JSONB DEFAULT '[]'::jsonb              -- migration 041
+  p_reports JSONB DEFAULT '[]'::jsonb,             -- migration 041
+  p_home_address TEXT DEFAULT NULL,                -- migration 073
+  p_emergency_contact TEXT DEFAULT NULL,           -- migration 073
+  p_phone_number TEXT DEFAULT NULL                 -- migration 073
 ) RETURNS UUID
 LANGUAGE plpgsql
 AS $$
@@ -1231,12 +1283,14 @@ BEGIN
   INSERT INTO archived_students (
     school_id, original_student_id, full_name, date_of_birth, enrollment_date,
     departure_date, reason, parent_full_name, parent_phone,
+    home_address, emergency_contact, phone_number,
     classes_attended, enrollment_history, grades, payment_history, reports,
     archived_by, archived_by_name, archived_by_role, original_parent_id,
     transfer_id
   ) VALUES (
     p_school_id, p_student_id, p_full_name, p_date_of_birth, p_enrollment_date,
     p_departure_date, p_reason, p_parent_full_name, p_parent_phone,
+    p_home_address, p_emergency_contact, p_phone_number,
     COALESCE(p_classes_attended, '[]'::jsonb),
     COALESCE(p_enrollment_history, '[]'::jsonb),
     COALESCE(p_grades, '[]'::jsonb),
@@ -1712,14 +1766,19 @@ LANGUAGE sql IMMUTABLE SET search_path = public, extensions
 AS $$ SELECT encode(digest(coalesce(t,''), 'sha256'), 'hex') $$;
 
 -- Canonical form bumped to as.v3 in migration 045 (HD-2) to include
--- `enrollment_history` (added migration 031) and `transfer_id` (033).
+-- `enrollment_history` (added migration 031) and `transfer_id` (033);
+-- bumped to as.v4 in migration 073 to include the extended personal fields
+-- (home_address / emergency_contact / phone_number).
 CREATE OR REPLACE FUNCTION _canon_archived_student(r archived_students) RETURNS text
 LANGUAGE sql IMMUTABLE AS $$
-  SELECT concat_ws('|', 'as.v3',
+  SELECT concat_ws('|', 'as.v4',
     r.school_id::text, coalesce(r.original_student_id::text,''),
     coalesce(r.full_name,''), coalesce(r.date_of_birth::text,''),
     coalesce(r.enrollment_date::text,''), coalesce(r.departure_date::text,''),
     coalesce(r.reason,''), coalesce(r.parent_full_name,''), coalesce(r.parent_phone,''),
+    coalesce(r.home_address,''),        -- new in v4
+    coalesce(r.emergency_contact,''),   -- new in v4
+    coalesce(r.phone_number,''),        -- new in v4
     coalesce(r.classes_attended::text,'[]'),
     coalesce(r.enrollment_history::text,'[]'),
     coalesce(r.grades::text,'[]'),

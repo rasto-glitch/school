@@ -16,7 +16,21 @@ import LoadingSpinner from '../../components/common/LoadingSpinner';
 import EmptyState from '../../components/common/EmptyState';
 import HealthSafetyPanel, { type StudentHealthBrief } from '../../components/common/HealthSafetyPanel';
 import type { Student, Report, Grade } from '../../types';
-import { getMarkNames, getMarkValue, gradeTotal } from '../../utils/marks';
+import { getMarkNames, getMarkValue, subjectPercent, averagePercent, subjectYear, remedialTotal } from '../../utils/marks';
+import type { GradingConfig } from '../../utils/marks';
+
+// Round Two entry from the brief (admins see all, released or not) — P4.
+interface BriefRemedialRow {
+  id: string;
+  subject: string;
+  forPeriod: string;
+  academicYear: string;
+  examValue: number | null;
+  carryName: string | null;
+  carryValue: number;
+  carryMissing: boolean;
+  isReleased: boolean;
+}
 import { format, parseISO, differenceInYears } from 'date-fns';
 
 interface EnrollmentHistoryEntry {
@@ -52,7 +66,7 @@ export default function StudentBriefPage() {
   const [selectedStudentId, setSelectedStudentId] = useState(searchParams.get('id') || '');
   const [selectedSubject, setSelectedSubject] = useState('');
   const [selectedYear, setSelectedYear] = useState('');
-  const [brief, setBrief] = useState<{ student: any; reports: Report[]; grades: Grade[]; health?: StudentHealthBrief | null } | null>(null);
+  const [brief, setBrief] = useState<{ student: any; reports: Report[]; grades: Grade[]; remedial?: BriefRemedialRow[]; health?: StudentHealthBrief | null } | null>(null);
   const [previousEnrollment, setPreviousEnrollment] = useState<ArchivedSnapshot | null>(null);
   const [search, setSearch] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
@@ -60,9 +74,11 @@ export default function StudentBriefPage() {
   // Transfer wizard hidden — see FEATURE.md.
   // const [transferOpen, setTransferOpen] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
+  const [cfg, setCfg] = useState<GradingConfig>({ mode: 'scale', bands: [], markMaxes: {} });
 
   useEffect(() => {
     adminApi.getAllStudents().then(r => setStudents(r.data?.students || []));
+    adminApi.getGradeConfig().then(r => setCfg(r.data)).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -139,25 +155,45 @@ export default function StudentBriefPage() {
   }
   const markNames = Array.from(markNameSet);
 
-  // Per-term averages (mean of each subject's total within the term).
-  const termAverages: Record<string, number> = {};
+  // Per-term averages — mean of subjectPercent within the term, the SAME
+  // number the report-card PDF prints (audit M-3): normalized percents,
+  // zeros counted, subjects with no grade skipped.
+  const termAverages: Record<string, number | null> = {};
   for (const p of gradePeriods) {
-    const subjectTotals = gradeSubjects
+    const subjectPcts = gradeSubjects
       .map(subj => {
         const g = gradesByPeriod[p].find(r => canonicalLabel(r.subject) === subj);
-        return g ? gradeTotal(g, markNames) : 0;
+        return g ? subjectPercent(g, cfg.markMaxes) : null;
       })
-      .filter(t => t > 0);
-    termAverages[p] = subjectTotals.length === 0
-      ? 0
-      : Math.round((subjectTotals.reduce((a, b) => a + b, 0) / subjectTotals.length) * 10) / 10;
+      .filter((v): v is number => v != null);
+    termAverages[p] = averagePercent(subjectPcts);
   }
 
-  // Full Year Mark: mean of the term averages.
-  const validTermAvgs = gradePeriods.map(p => termAverages[p]).filter(a => a > 0);
-  const yearMark = validTermAvgs.length === 0
-    ? null
-    : (validTermAvgs.reduce((a, b) => a + b, 0) / validTermAvgs.length).toFixed(1);
+  // Official year math (M-3b/P4): per subject — Round One = mean of ORIGINAL
+  // term percents; Round Two retakes (admins see all, filed or not) substitute
+  // into the final. Full Year Mark = mean of subject finals (subject-first).
+  const remedialRows = brief?.remedial || [];
+  const filteredRemedial = selectedYear
+    ? remedialRows.filter(r => canonicalLabel(r.academicYear) === selectedYear)
+    : remedialRows;
+  const yearRows = gradeSubjects.map(subj => {
+    const originalByTerm: Record<string, number | null> = {};
+    for (const p of gradePeriods) {
+      const g = gradesByPeriod[p].find(r => canonicalLabel(r.subject) === subj);
+      originalByTerm[p] = g ? subjectPercent(g, cfg.markMaxes) : null;
+    }
+    const retakes = filteredRemedial.filter(r => canonicalLabel(r.subject) === subj);
+    const remedialByTerm: Record<string, number | null> = {};
+    for (const r of retakes) {
+      remedialByTerm[canonicalLabel(r.forPeriod)] = remedialTotal(r.examValue, r.carryValue);
+    }
+    return { subject: subj, retakes, ...subjectYear(gradePeriods, originalByTerm, remedialByTerm) };
+  });
+  const anyRoundTwo = yearRows.some(r => r.satRemedial);
+  const passMark = cfg.passPercent ?? 50;
+  const yearMark = averagePercent(
+    yearRows.map(r => r.final).filter((v): v is number => v != null)
+  )?.toFixed(1) ?? null;
 
   // ---- Reports data ----
   const subjects = [...new Set(brief?.reports?.map(r => r.subject) || [])];
@@ -381,7 +417,7 @@ export default function StudentBriefPage() {
                               {gradeSubjects.map(subj => {
                                 const g = gradesByPeriod[period]?.find(r => canonicalLabel(r.subject) === subj);
                                 if (!g) return null;
-                                const total = gradeTotal(g, markNames);
+                                const pct = subjectPercent(g, cfg.markMaxes);
                                 return (
                                   <tr key={subj} className="hover:bg-gray-50">
                                     <td className="px-3 py-2 border border-gray-200 text-gray-700 font-medium">{subj}</td>
@@ -391,7 +427,7 @@ export default function StudentBriefPage() {
                                         <td key={n} className="px-3 py-2 border border-gray-200 text-center">{v ?? '—'}</td>
                                       );
                                     })}
-                                    <td className="px-3 py-2 border border-gray-200 text-center font-semibold text-primary-700">{total.toFixed(1)}</td>
+                                    <td className="px-3 py-2 border border-gray-200 text-center font-semibold text-primary-700">{pct != null ? pct.toFixed(1) : '—'}</td>
                                   </tr>
                                 );
                               })}
@@ -402,7 +438,7 @@ export default function StudentBriefPage() {
                                   {t('admin.student_brief.average')}
                                 </td>
                                 <td className="px-3 py-2 border border-gray-200 text-center font-bold text-indigo-600">
-                                  {termAverages[period] > 0 ? termAverages[period].toFixed(1) : '—'}
+                                  {termAverages[period] != null ? termAverages[period]!.toFixed(1) : '—'}
                                 </td>
                               </tr>
                             </tfoot>
@@ -410,6 +446,39 @@ export default function StudentBriefPage() {
                         </div>
                       </div>
                     ))}
+
+                    {/* Year summary — Round One / Round Two side-by-side (P4) */}
+                    {(gradePeriods.length > 1 || anyRoundTwo) && yearRows.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">{t('grades.year_summary')}</p>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-xs border-collapse">
+                            <thead>
+                              <tr className="bg-gray-50">
+                                <th className="text-left px-3 py-2 font-medium text-gray-500 border border-gray-200">{t('admin.student_brief.subject')}</th>
+                                <th className="text-center px-3 py-2 font-medium text-gray-500 border border-gray-200">{t('grades.round_one')}</th>
+                                {anyRoundTwo && <th className="text-center px-3 py-2 font-medium text-gray-500 border border-gray-200">{t('grades.round_two')}</th>}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {yearRows.map(row => (
+                                <tr key={row.subject}>
+                                  <td className="px-3 py-2 border border-gray-200 text-gray-700 font-medium">{row.subject}</td>
+                                  <td className={`px-3 py-2 border border-gray-200 text-center font-semibold ${row.roundOne != null && row.roundOne < passMark ? 'text-red-600' : 'text-gray-800'}`}>
+                                    {row.roundOne ?? '—'}
+                                  </td>
+                                  {anyRoundTwo && (
+                                    <td className={`px-3 py-2 border border-gray-200 text-center font-semibold ${!row.satRemedial || row.final == null ? 'text-gray-300' : row.final < passMark ? 'text-red-600' : 'text-emerald-700'}`}>
+                                      {row.satRemedial && row.final != null ? row.final : '—'}
+                                    </td>
+                                  )}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Full Year Mark */}
                     {yearMark && (

@@ -11,7 +11,19 @@ import { useColors, useIsDark } from '../../store/themeStore';
 import { useBadgeStore } from '../../store/badgeStore';
 import { spacing, radius, font, shadow } from '../../theme';
 import type { Grade, Student } from '../../types';
-import { subjectPercent, bandForPercent, averageGpa, EMPTY_GRADING_CONFIG, type GradingConfig } from '../../utils/gpa';
+import { subjectPercent, bandForPercent, averagePercent, subjectYear, remedialTotal, EMPTY_GRADING_CONFIG, type GradingConfig } from '../../utils/gpa';
+
+// A released Round Two entry (REMEDIAL_TERM_PLAN.md P4).
+interface RemedialRow {
+  id: string;
+  subject: string;
+  forPeriod: string;
+  academicYear: string;
+  examValue: number | null;
+  carryName: string | null;
+  carryValue: number;
+  carryMissing: boolean;
+}
 
 function canonicalLabel(s: string | null | undefined): string {
   if (!s) return '';
@@ -47,10 +59,17 @@ function gradeTotal(g: Grade, markNames: string[]): number {
   return markNames.reduce((s, name) => s + (getMarkValue(g, name) || 0), 0);
 }
 
-function termAverage(subjects: string[], termData: Record<string, Grade>, markNames: string[]): number {
-  const totals = subjects.map(s => termData[s] ? gradeTotal(termData[s], markNames) : 0).filter(t => t > 0);
-  if (totals.length === 0) return 0;
-  return Math.round((totals.reduce((a, b) => a + b, 0) / totals.length) * 10) / 10;
+// Mean of subjectPercent across the term's subjects — the SAME number the
+// report-card PDF prints (audit M-3): normalized percents, zeros counted,
+// subjects with no grade skipped.
+function termAverage(subjects: string[], termData: Record<string, Grade>, markNames: string[], markMaxes: Record<string, number>): number | null {
+  const percents = subjects
+    .map(s => {
+      const g = termData[s];
+      return g ? subjectPercent(g.marks, gradeTotal(g, markNames), markMaxes) : null;
+    })
+    .filter((p): p is number => p != null);
+  return averagePercent(percents);
 }
 
 function MarkBadge({ value, colors }: { value?: number | null; colors: any }) {
@@ -64,22 +83,28 @@ function MarkBadge({ value, colors }: { value?: number | null; colors: any }) {
   );
 }
 
-function GpaBadge({ band }: { band: { letter: string; gradePoint: number } | null }) {
-  if (!band) return <Text style={{ color: '#9CA3AF', fontSize: font.sm }}>—</Text>;
+// A letter derived from a percent average — pure presentation, no grade
+// points (M-3b decision 16/20).
+function LetterBadge({ letter }: { letter?: string | null }) {
+  if (!letter) return <Text style={{ color: '#9CA3AF', fontSize: font.sm }}>—</Text>;
   return (
     <View style={{ backgroundColor: '#F5F3FF', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
-      <Text style={{ color: '#6D28D9', fontSize: font.xs, fontWeight: '700' }}>{band.letter} {band.gradePoint.toFixed(1)}</Text>
+      <Text style={{ color: '#6D28D9', fontSize: font.sm, fontWeight: '700' }}>{letter}</Text>
     </View>
   );
 }
 
-function GpaNum({ value, colors }: { value: number | null; colors: any }) {
-  if (value == null) return <Text style={{ color: colors.textMuted, fontSize: font.sm }}>—</Text>;
-  return (
-    <View style={{ backgroundColor: '#F5F3FF', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
-      <Text style={{ color: '#6D28D9', fontSize: font.sm, fontWeight: '800' }}>{value.toFixed(2)}</Text>
-    </View>
-  );
+// "88.4 (B+)" in both mode, "88.4" in scale mode, "B+" in letters-only mode.
+function fmtWithLetter(
+  value: number,
+  showPct: boolean,
+  showGpa: boolean,
+  letterOf: (v: number | null) => string | null,
+): string {
+  const letter = showGpa ? letterOf(value) : null;
+  if (showPct && letter) return `${value} (${letter})`;
+  if (showPct) return String(value);
+  return letter ?? String(value);
 }
 
 const SUBJECT_COL_WIDTH = 110;
@@ -163,10 +188,17 @@ export default function GradesScreen() {
 
   const showGpa = cfg.mode === 'gpa' || cfg.mode === 'both';
   const showPct = cfg.mode === 'scale' || cfg.mode === 'both';
-  const gradePoints = (g: Grade) =>
-    bandForPercent(subjectPercent(g.marks, gradeTotal(g, getMarkNames(g)), cfg.markMaxes), cfg.bands)?.gradePoint ?? null;
+  // Letters are pure presentation of the percent math (M-3b decision 16):
+  // every letter is bandForPercent of a percent AVERAGE — grade points are
+  // never averaged, and there is no lifetime cumulative figure (decision 19).
+  const letterOf = (v: number | null) => bandForPercent(v, cfg.bands)?.letter ?? null;
 
-  const load = () => parentApi.getGrades(selectedChild).then(r => setGrades(r.data || []));
+  const [remedial, setRemedial] = useState<RemedialRow[]>([]);
+
+  const load = () => Promise.all([
+    parentApi.getGrades(selectedChild).then(r => setGrades(r.data || [])),
+    parentApi.getRemedialGrades(selectedChild).then(r => setRemedial(r.data || [])).catch(() => setRemedial([])),
+  ]);
 
   useEffect(() => {
     if (!selectedChild) return;
@@ -190,7 +222,6 @@ export default function GradesScreen() {
 
   const allYears = Object.keys(byYear).sort((a, b) => b.localeCompare(a));
   const years = yearFilter ? allYears.filter(y => y === yearFilter) : allYears;
-  const cgpa = averageGpa(grades.map(g => gradePoints(g)).filter((p): p is number => p != null));
 
   return (
     <ScrollView
@@ -241,12 +272,6 @@ export default function GradesScreen() {
             <Text style={styles.transcriptBtnText}>{t('grades.transcript')}</Text>
           </TouchableOpacity>
         )}
-        {showGpa && cgpa != null && (
-          <View style={styles.cgpaCard}>
-            <Text style={styles.cgpaLabel}>{t('grades.cumulative_gpa')}</Text>
-            <Text style={styles.cgpaValue}>{cgpa.toFixed(2)}</Text>
-          </View>
-        )}
         {years.map(yr => {
           const terms = Object.keys(byYear[yr]).sort();
           const subjects = Array.from(new Set(terms.flatMap(tm => Object.keys(byYear[yr][tm])))).sort();
@@ -264,17 +289,36 @@ export default function GradesScreen() {
             }
           }
 
-          const termAvgs = terms.map(tm => termAverage(subjects, byYear[yr][tm], markNames));
-          const validTermAvgs = termAvgs.filter(a => a > 0);
-          const yearAvg = validTermAvgs.length === 0 ? 0
-            : Math.round((validTermAvgs.reduce((a, b) => a + b, 0) / validTermAvgs.length) * 10) / 10;
+          const termAvgs = terms.map(tm => termAverage(subjects, byYear[yr][tm], markNames, cfg.markMaxes));
 
-          const termGpas = terms.map(tm =>
-            averageGpa(subjects.map(s => byYear[yr][tm][s] ? gradePoints(byYear[yr][tm][s]) : null)
-              .filter((p): p is number => p != null)));
-          const yearGpa = averageGpa(terms.flatMap(tm =>
-            subjects.map(s => byYear[yr][tm][s] ? gradePoints(byYear[yr][tm][s]) : null))
-            .filter((p): p is number => p != null));
+          // Official year math (M-3b/P4): Round One per subject = mean of
+          // ORIGINAL term percents; released Round Two retakes substitute
+          // into the final. Year average = mean of subject finals.
+          const remForYear = remedial.filter(r => canonicalLabel(r.academicYear) === yr);
+          const yearRows = subjects.map(subject => {
+            const originalByTerm: Record<string, number | null> = {};
+            for (const tm of terms) {
+              const g = byYear[yr][tm][subject];
+              originalByTerm[tm] = g ? subjectPercent(g.marks, gradeTotal(g, markNames), cfg.markMaxes) : null;
+            }
+            const retakes = remForYear.filter(r => canonicalLabel(r.subject) === subject);
+            const remedialByTerm: Record<string, number | null> = {};
+            for (const r of retakes) {
+              remedialByTerm[canonicalLabel(r.forPeriod)] = remedialTotal(r.examValue, r.carryValue);
+            }
+            return { subject, retakes, ...subjectYear(terms, originalByTerm, remedialByTerm) };
+          });
+          const anyRoundTwo = yearRows.some(r => r.satRemedial);
+          const passMark = cfg.passPercent ?? 50;
+          const yearAvg = averagePercent(yearRows.map(r => r.final).filter((v): v is number => v != null));
+
+          // Round Two report card download — available once the school
+          // publishes the remedial term for this year (its own gate).
+          const sampleGrade = Object.values(byYear[yr][terms[0]] || {})[0] as Grade | undefined;
+          const rawYearForDl = sampleGrade?.academicYear || '';
+          const remedialTermName = cfg.remedial?.termName || '';
+          const canDlRoundTwo = anyRoundTwo && !!remedialTermName && !!rawYearForDl
+            && publishedKeys.has(`${rawYearForDl.toLowerCase().trim()}|||${remedialTermName.toLowerCase().trim()}`);
 
           const tableWidth = SUBJECT_COL_WIDTH + markNames.length * MARK_COL_WIDTH + MARK_COL_WIDTH;
 
@@ -335,7 +379,7 @@ export default function GradesScreen() {
                       {/* Subject rows */}
                       {subjects.map((subject, si) => {
                         const g = byYear[yr][term][subject];
-                        const total = g ? gradeTotal(g, markNames) : 0;
+                        const pct = g ? subjectPercent(g.marks, gradeTotal(g, markNames), cfg.markMaxes) : null;
                         return (
                           <View key={subject} style={[styles.tableRow, si % 2 === 0 && styles.rowEven]}>
                             <Text style={[styles.subjectCell, { width: SUBJECT_COL_WIDTH }]} numberOfLines={1}>{subject}</Text>
@@ -347,8 +391,8 @@ export default function GradesScreen() {
                             <View style={[styles.cell, { width: MARK_COL_WIDTH, gap: 2 }]}>
                               {!g ? <Text style={{ color: colors.textMuted, fontSize: font.sm }}>—</Text> : (
                                 <>
-                                  {showPct && <MarkBadge value={total > 0 ? total : null} colors={colors} />}
-                                  {showGpa && <GpaBadge band={bandForPercent(subjectPercent(g.marks, total, cfg.markMaxes), cfg.bands)} />}
+                                  {showPct && <MarkBadge value={pct} colors={colors} />}
+                                  {showGpa && <LetterBadge letter={letterOf(pct)} />}
                                 </>
                               )}
                             </View>
@@ -362,14 +406,61 @@ export default function GradesScreen() {
                           {t('grades.term_average')}
                         </Text>
                         <View style={[styles.cell, { width: MARK_COL_WIDTH, gap: 2 }]}>
-                          {showPct && <MarkBadge value={termAvgs[ti] > 0 ? termAvgs[ti] : null} colors={colors} />}
-                          {showGpa && <GpaNum value={termGpas[ti]} colors={colors} />}
+                          {showPct && <MarkBadge value={termAvgs[ti]} colors={colors} />}
+                          {showGpa && <LetterBadge letter={letterOf(termAvgs[ti])} />}
                         </View>
                       </View>
                     </View>
                   </ScrollView>
                 </View>
               ); })}
+
+              {/* Year summary — Round One (originals) and, when the student
+                  sat retakes, Round Two side-by-side (REMEDIAL_TERM_PLAN P4). */}
+              {(terms.length > 1 || anyRoundTwo) && (
+                <View style={{ paddingHorizontal: spacing.md, paddingVertical: 10, borderTopWidth: 1, borderTopColor: colors.border }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <Text style={{ fontSize: font.xs, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase' }}>
+                      {t('grades.year_summary')}
+                    </Text>
+                    {canDlRoundTwo && (
+                      <TouchableOpacity
+                        onPress={() => downloadCard(`${yr}|round2`, selectedChild, rawYearForDl, remedialTermName)}
+                        disabled={dl === `${yr}|round2`}
+                        style={{ flexDirection: 'row', alignItems: 'center', gap: 4, opacity: dl === `${yr}|round2` ? 0.5 : 1 }}
+                      >
+                        <FileText size={13} color={colors.primary} />
+                        <Text style={{ fontSize: font.xs, fontWeight: '700', color: colors.primary }}>{t('grades.round_two_card')}</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                  <View style={{ flexDirection: 'row', marginBottom: 4 }}>
+                    <Text style={{ flex: 1, fontSize: font.xs, color: colors.textMuted }}>{t('grades.subject')}</Text>
+                    <Text style={{ width: 70, fontSize: font.xs, color: colors.textMuted, textAlign: 'center' }}>{t('grades.round_one')}</Text>
+                    {anyRoundTwo && <Text style={{ width: 70, fontSize: font.xs, color: colors.textMuted, textAlign: 'center' }}>{t('grades.round_two')}</Text>}
+                  </View>
+                  {yearRows.map(row => (
+                    <View key={row.subject} style={{ flexDirection: 'row', paddingVertical: 4 }}>
+                      <Text style={{ flex: 1, fontSize: font.sm, fontWeight: '600', color: colors.text }} numberOfLines={1}>{row.subject}</Text>
+                      <Text style={{ width: 70, fontSize: font.sm, fontWeight: '700', textAlign: 'center', color: row.roundOne != null && row.roundOne < passMark ? '#DC2626' : colors.text }}>
+                        {row.roundOne != null ? fmtWithLetter(row.roundOne, showPct, showGpa, letterOf) : '—'}
+                      </Text>
+                      {anyRoundTwo && (
+                        <Text style={{ width: 70, fontSize: font.sm, fontWeight: '700', textAlign: 'center', color: !row.satRemedial || row.final == null ? colors.textMuted : row.final < passMark ? '#DC2626' : '#15803D' }}>
+                          {row.satRemedial && row.final != null ? fmtWithLetter(row.final, showPct, showGpa, letterOf) : '—'}
+                        </Text>
+                      )}
+                    </View>
+                  ))}
+                  {anyRoundTwo && yearRows.flatMap(row => row.retakes.map(r => (
+                    <Text key={r.id} style={{ fontSize: font.xs, color: colors.textMuted, marginTop: 2 }}>
+                      {row.subject} · {t('grades.retake_of', { term: r.forPeriod })}: {r.examValue ?? '—'}
+                      {r.carryName ? ` + ${r.carryName} ${r.carryValue}` : ''}
+                      {r.examValue != null ? ` = ${remedialTotal(r.examValue, r.carryValue)}` : ''}
+                    </Text>
+                  )))}
+                </View>
+              )}
 
               {/* Admin notes */}
               {notes.map((n, i) => (
@@ -381,10 +472,10 @@ export default function GradesScreen() {
 
               {/* Year average */}
               <View style={styles.yearAvgRow}>
-                <Text style={styles.yearAvgLabel}>{showGpa && !showPct ? t('grades.year_gpa') : t('grades.year_average')}</Text>
+                <Text style={styles.yearAvgLabel}>{t('grades.year_average')}</Text>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-                  {showPct && <MarkBadge value={yearAvg > 0 ? yearAvg : null} colors={colors} />}
-                  {showGpa && <GpaNum value={yearGpa} colors={colors} />}
+                  <MarkBadge value={yearAvg} colors={colors} />
+                  {showGpa && <LetterBadge letter={letterOf(yearAvg)} />}
                 </View>
               </View>
             </View>
@@ -439,7 +530,4 @@ const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').u
   noteBox: { marginHorizontal: spacing.md, marginTop: spacing.sm, backgroundColor: colors.warningLight, borderRadius: radius.md, padding: spacing.sm },
   noteLabel: { fontSize: font.xs, fontWeight: '700', color: colors.warning, marginBottom: 2 },
   noteText: { fontSize: font.sm, color: colors.text },
-  cgpaCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.card, borderRadius: radius.lg, padding: spacing.md, marginBottom: spacing.md, ...shadow.sm },
-  cgpaLabel: { fontSize: font.md, fontWeight: '700', color: colors.text },
-  cgpaValue: { fontSize: font.xxl, fontWeight: '800', color: '#6D28D9' },
 });

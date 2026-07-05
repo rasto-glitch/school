@@ -47,34 +47,122 @@ export function collectMarkNames(grades: GradeLike[]): string[] {
 // ── GPA grading ──────────────────────────────────────────────────────────
 export type GradingMode = 'scale' | 'gpa' | 'both';
 export interface GradeBand { minPercent: number; letter: string; gradePoint: number }
-export interface GradingConfig { mode: GradingMode; bands: GradeBand[]; markMaxes: Record<string, number> }
+export interface RemedialConfig { termId?: string; termName: string; examMarkType: string | null; carryMarkType: string | null }
+export interface GradingConfig {
+  mode: GradingMode;
+  bands: GradeBand[];
+  markMaxes: Record<string, number>;
+  // 075: pass mark + Round Two scheme (null/absent until the school
+  // configures the remedial term). Optional so pre-075 fixtures stay valid.
+  passPercent?: number;
+  remedial?: RemedialConfig | null;
+}
 
-// A subject's percentage. If mark maxes are known, percent = earned / max * 100.
-// Otherwise fall back to the raw total (today's behavior — assumed out of 100).
+// A subject's percentage. Normalizes (earned / max * 100) ONLY when every
+// mark present has a configured max; if ANY mark can't be matched to a max,
+// the whole subject falls back to the raw total — never silently drop a mark
+// a teacher entered (audit M-2). LOCKSTEP with backend gradeCalc.ts and
+// mobile gpa.ts.
 export function subjectPercent(g: GradeLike, markMaxes: Record<string, number>): number | null {
   if (g.marks && g.marks.length > 0) {
-    let earned = 0, max = 0;
+    let earned = 0, max = 0, allConfigured = true;
     for (const m of g.marks) {
+      earned += Number(m.value) || 0;
       const mx = markMaxes[m.name];
-      if (mx != null && mx > 0) { earned += Number(m.value) || 0; max += mx; }
+      if (mx != null && mx > 0) max += mx;
+      else allConfigured = false;
     }
-    if (max > 0) return Math.round((earned / max) * 1000) / 10;
-    return g.marks.reduce((s, m) => s + (Number(m.value) || 0), 0);
+    if (allConfigured && max > 0) return Math.round((earned / max) * 1000) / 10;
+    return earned;
   }
   const total = gradeTotal(g, getMarkNames(g));
   return total > 0 ? total : null;
 }
 
-// Map a percentage to the highest band whose minPercent it meets.
+// Map a percentage to the highest band whose minPercent it meets. A percent
+// below every threshold maps to the LOWEST band (the floor, e.g. F) rather
+// than null — a failing subject must count in the GPA, not vanish from it.
 export function bandForPercent(percent: number | null, bands: GradeBand[]): GradeBand | null {
   if (percent == null || bands.length === 0) return null;
   const sorted = [...bands].sort((a, b) => b.minPercent - a.minPercent);
   for (const b of sorted) if (percent >= b.minPercent) return b;
-  return null;
+  return sorted[sorted.length - 1];
 }
 
 // Equal-weight average of grade points, rounded to 2 dp.
 export function averageGpa(points: number[]): number | null {
   if (points.length === 0) return null;
   return Math.round((points.reduce((a, b) => a + b, 0) / points.length) * 100) / 100;
+}
+
+// Equal-weight average of subject percentages, rounded to 1 dp. Zeros count,
+// nulls don't — the same inclusion rule the report-card PDF uses (audit M-3).
+export function averagePercent(percents: number[]): number | null {
+  if (percents.length === 0) return null;
+  return Math.round((percents.reduce((a, b) => a + b, 0) / percents.length) * 10) / 10;
+}
+
+// ── Year math: Round One / Round Two (REMEDIAL_TERM_PLAN.md P2) ─────────────
+// LOCKSTEP with backend gradeCalc.ts and mobile gpa.ts.
+
+// A remedial entry's total out of 100: the teacher-entered exam mark plus the
+// carried component auto-copied from the corrected term (the Remedial settings
+// section guarantees the two maxes sum to exactly 100). Null until the exam
+// mark is filed.
+export function remedialTotal(examValue: number | null | undefined, carryValue: number | null | undefined): number | null {
+  if (examValue == null) return null;
+  return Math.round(((Number(examValue) || 0) + (Number(carryValue) || 0)) * 10) / 10;
+}
+
+export interface SubjectYear {
+  // "تێکڕای خوولی یەکەم" — mean of the ORIGINAL percents across the regular
+  // terms the subject appears in. This is the number that decides who sits
+  // Round Two (the remedial exams).
+  roundOne: number | null;
+  // Effective standing: each term's remedial total substitutes that term's
+  // original, then the same mean. Equals roundOne when no remedial was sat.
+  final: number | null;
+  // True when at least one remedial entry substituted into `final`.
+  satRemedial: boolean;
+}
+
+// Per-subject year values. `originalByTerm` = subjectPercent per REGULAR term
+// (null/absent = subject not graded that term — skipped, terms-present
+// divisor). `remedialByTerm` = remedialTotal keyed by the CORRECTED term.
+export function subjectYear(
+  regularTerms: string[],
+  originalByTerm: Record<string, number | null | undefined>,
+  remedialByTerm: Record<string, number | null | undefined> = {},
+): SubjectYear {
+  const orig: number[] = [];
+  const eff: number[] = [];
+  let satRemedial = false;
+  for (const term of regularTerms) {
+    const o = originalByTerm[term];
+    const r = remedialByTerm[term];
+    if (o == null && r == null) continue;
+    if (o != null) orig.push(o);
+    if (r != null) { eff.push(r); satRemedial = true; }
+    else if (o != null) eff.push(o);
+  }
+  return { roundOne: averagePercent(orig), final: averagePercent(eff), satRemedial };
+}
+
+// Terms this subject must be retaken for: graded AND below the pass mark.
+// (A term the subject never ran is not "failed".) The Round Two gate itself
+// is isFailing(roundOne) — a student only retakes anything when the Round One
+// AVERAGE is below the pass mark; callers compose the two.
+export function failedTerms(
+  regularTerms: string[],
+  originalByTerm: Record<string, number | null | undefined>,
+  passPercent: number,
+): string[] {
+  return regularTerms.filter(t => {
+    const o = originalByTerm[t];
+    return o != null && o < passPercent;
+  });
+}
+
+export function isFailing(value: number | null, passPercent: number): boolean {
+  return value != null && value < passPercent;
 }

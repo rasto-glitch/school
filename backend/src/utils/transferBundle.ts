@@ -249,7 +249,12 @@ export async function buildTransferBundle(
     .select('academic_year, grading_period, subject, marks, daily_grade, quiz_grade, monthly_exam_grade, term_exam_grade')
     .eq('student_id', studentId).eq('school_id', schoolId)
     .eq('is_released', true)
-    .order('academic_year');
+    // Fully deterministic order — the grades array is part of the hashed
+    // canonical payload, so ties in the sort would make the signature
+    // irreproducible across rebuilds.
+    .order('academic_year')
+    .order('grading_period')
+    .order('subject');
 
   const grades = (gradeRows || []).map((g: any) => ({
     academicYear: g.academic_year,
@@ -279,7 +284,14 @@ export async function buildTransferBundle(
   const t: any = transfer;
   const bundle: TransferBundle = {
     format: BUNDLE_FORMAT,
-    generatedAt: new Date().toISOString(),
+    // Frozen at first generation: reuse the anchored timestamp so a
+    // rebuild of unchanged data reproduces identical canonical bytes —
+    // and therefore the same sha256/signature as the persisted anchor.
+    // Normalised through toISOString() because PostgREST renders
+    // timestamptz in a different ISO variant than the one we stamped.
+    generatedAt: t.bundle_generated_at
+      ? new Date(t.bundle_generated_at).toISOString()
+      : new Date().toISOString(),
     transferId,
     sourceSchool: {
       name: school.name,

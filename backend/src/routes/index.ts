@@ -350,6 +350,9 @@ export function createRouter(io: SocketServer) {
   router.post('/admin/grades/upload', authenticate, authorizeCapability('academics.oversee'), upload.single('file'), (req, res) => admin.uploadGrades(req as AuthRequest, res));
   router.put('/admin/grades/:id', authenticate, authorizeCapability('academics.oversee'), validate({ params: vp.idParam, body: vp.updateGradeSchema }), (req, res) => admin.updateGrade(req as AuthRequest, res));
   router.post('/admin/grades/release', authenticate, authorizeCapability('academics.oversee'), validate({ body: vp.releaseGradesSchema }), (req, res) => admin.releaseGrades(req as AuthRequest, res));
+  // Remedial (Round Two) list + release (075/P4).
+  router.get('/admin/remedial-overview', authenticate, authorizeCapability('academics.oversee'), (req, res) => admin.getRemedialOverview(req as AuthRequest, res));
+  router.post('/admin/remedial-release', authenticate, authorizeCapability('academics.oversee'), validate({ body: vp.releaseGradesSchema }), (req, res) => admin.releaseRemedialGrades(req as AuthRequest, res));
 
   // ---- REPORT CARDS (migration 066) — live-rendered PDFs from released grades ----
   // Admin only (academics.oversee); parent download + publish gate land in Phase 2.
@@ -637,12 +640,17 @@ export function createRouter(io: SocketServer) {
   // Grading config (GPA). Read is shared by every role; write is admin-only.
   router.get('/grade-config', authenticate, (req, res) => admin.getGradeConfig(req as AuthRequest, res));
   router.put('/admin/grading-config', authenticate, authorizeCapability('academics.oversee'), validate({ body: vp.updateGradingConfigSchema }), (req, res) => admin.updateGradingConfig(req as AuthRequest, res));
+  // Remedial (Round Two) term + exam/carry scheme + pass threshold (075).
+  router.put('/admin/remedial-config', authenticate, authorizeCapability('academics.oversee'), validate({ body: vp.updateRemedialConfigSchema }), (req, res) => admin.updateRemedialConfig(req as AuthRequest, res));
 
   router.get('/admin/terms', authenticate, authorizeCapability('academics.oversee'), (req, res) => admin.getTerms(req as AuthRequest, res));
   router.post('/admin/terms', authenticate, authorizeCapability('academics.oversee'), validate({ body: vp.createTermSchema }), (req, res) => admin.createTerm(req as AuthRequest, res));
   router.delete('/admin/terms/:id', authenticate, authorizeCapability('academics.oversee'), validate({ params: vp.idParam }), (req, res) => admin.deleteTerm(req as AuthRequest, res));
   router.get('/teacher/terms', authenticate, authorize('teacher'), (req, res) => admin.getTerms(req as AuthRequest, res));
   router.get('/teacher/grade-windows', authenticate, authorize('teacher'), (req, res) => teacher.getGradeWindows(req as AuthRequest, res));
+  // Remedial (Round Two) filing — pre-built roster + exam-mark-only writes (075/P3).
+  router.get('/teacher/remedial-roster', authenticate, authorize('teacher'), (req, res) => teacher.getRemedialRoster(req as AuthRequest, res));
+  router.put('/teacher/remedial-grades/:id', authenticate, authorize('teacher'), validate({ params: vp.idParam, body: vp.remedialExamSchema }), (req, res) => teacher.saveRemedialExam(req as AuthRequest, res));
 
   // Audit logs — admin only (financial + student-record change history)
   router.get('/admin/audit-logs', authenticate, authorizeCapability('audit.read'), validate({ query: vq.listQuery }), (req, res) => admin.getAuditLogs(req as AuthRequest, res));
@@ -698,6 +706,7 @@ export function createRouter(io: SocketServer) {
   router.get('/parent/reports', authenticate, authorize('parent'), (req, res) => parent.getReport(req as AuthRequest, res));
   router.get('/parent/reports/:id', authenticate, authorize('parent'), (req, res) => parent.getReportById(req as AuthRequest, res));
   router.get('/parent/grades', authenticate, authorize('parent'), validate({ query: vq.listQuery }), (req, res) => parent.getGrades(req as AuthRequest, res));
+  router.get('/parent/remedial-grades', authenticate, authorize('parent'), validate({ query: vq.listQuery }), (req, res) => parent.getRemedialGrades(req as AuthRequest, res));
   router.get('/parent/bus-location', authenticate, authorize('parent'), (req, res) => parent.getBusLocation(req as AuthRequest, res));
   router.get('/parent/driver-info', authenticate, authorize('parent'), (req, res) => parent.getDriverInfo(req as AuthRequest, res));
   router.get('/parent/notifications', authenticate, authorize('parent'), validate({ query: vq.listQuery }), (req, res) => parent.getNotifications(req as AuthRequest, res));

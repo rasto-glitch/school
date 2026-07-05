@@ -315,6 +315,35 @@ export async function getGrades(req: AuthRequest, res: Response): Promise<void> 
   res.json(toCC(data));
 }
 
+// Round Two (remedial) entries for one child — released only, same gates as
+// getGrades (075/P4). The grades pages show these side-by-side with the
+// Round One averages.
+export async function getRemedialGrades(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId, userId } = req.user!;
+  const { studentId } = req.query as Record<string, string>;
+
+  const { studentIds } = await getParentAndChildren(req.db!, userId, schoolId);
+  if (studentIds.length === 0) { res.json([]); return; }
+  if (studentId && !(studentIds as string[]).includes(studentId)) {
+    res.status(403).json({ error: 'Not your student' });
+    return;
+  }
+  const targetId = studentId || studentIds[0];
+
+  const lock = await isFeatureLocked(targetId, 'grades');
+  if (lock.locked) { res.status(403).json({ error: 'feature_locked', feature: 'grades', reason: lock.reason }); return; }
+
+  const { data, error } = await req.db!
+    .from('remedial_grades')
+    .select('id, subject, for_period, academic_year, exam_value, carry_name, carry_value, carry_missing, created_at')
+    .eq('school_id', schoolId)
+    .eq('student_id', targetId)
+    .eq('is_released', true)
+    .order('academic_year', { ascending: false });
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+  res.json(toCC(data));
+}
+
 export async function getBusLocation(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId, userId } = req.user!;
   const { studentId } = req.query as Record<string, string>;

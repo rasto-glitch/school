@@ -21,6 +21,7 @@ import { toCC } from '../utils/transform';
 import { logAudit } from '../utils/audit';
 import { hasArchiveFeature } from '../utils/employeeArchive';
 import { closeCurrentEnrollment, openEnrollmentForCurrentYear } from '../utils/studentEnrollments';
+import { buildStudentArchiveSnapshot } from './admin.controller';
 import {
   buildTransferBundle,
   hashConsent,
@@ -231,6 +232,58 @@ export async function captureConsent(req: AuthRequest, res: Response): Promise<v
 
 // ─── Build bundle (JSON download) ─────────────────────────────────────
 
+// Anchor (or re-anchor) the persisted integrity fields for a freshly
+// built bundle. First generation — whichever of the JSON or PDF
+// endpoints happens first — persists signature + sha256 + the frozen
+// generatedAt and flips consented → bundle_generated. Later rebuilds
+// reproduce the same bytes (generatedAt is frozen inside the payload),
+// so the hash only changes if the underlying data changed; while the
+// bundle is still in the source's hands we move the anchor with it and
+// audit the change, so the stored hash always describes the artifact
+// actually being handed out.
+async function anchorBundleIntegrity(
+  req: AuthRequest,
+  t: any,
+  built: NonNullable<Awaited<ReturnType<typeof buildTransferBundle>>>,
+): Promise<void> {
+  const { schoolId } = req.user!;
+  const id = String(t.id);
+  const { sha256, signature, keyId } = built.signed.integrity;
+
+  if (t.status === 'consented' || !t.bundle_sha256) {
+    await supabase.from('student_transfers').update({
+      bundle_signature: signature,
+      bundle_sha256: sha256,
+      bundle_generated_at: built.bundle.generatedAt,
+      ...(t.status === 'consented' ? { status: 'bundle_generated' } : {}),
+    }).eq('id', id).eq('school_id', schoolId);
+    await logAudit({
+      req, entityType: 'student_transfer', entityId: id, action: 'update',
+      after: { _meta: {
+        kind: 'bundle_generated',
+        sha256,
+        key_id: keyId,
+      } } as Record<string, unknown>,
+      label: t.student_name_snapshot, reason: 'Bundle generated',
+    });
+  } else if (t.status === 'bundle_generated' && t.bundle_sha256 !== sha256) {
+    await supabase.from('student_transfers').update({
+      bundle_signature: signature,
+      bundle_sha256: sha256,
+    }).eq('id', id).eq('school_id', schoolId);
+    await logAudit({
+      req, entityType: 'student_transfer', entityId: id, action: 'update',
+      after: { _meta: {
+        kind: 'bundle_regenerated',
+        previous_sha256: t.bundle_sha256,
+        sha256,
+        key_id: keyId,
+      } } as Record<string, unknown>,
+      label: t.student_name_snapshot, reason: 'Bundle regenerated (source data changed)',
+    });
+  }
+}
+
 export async function downloadBundleJson(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
   const id = String(req.params.id);
@@ -247,26 +300,7 @@ export async function downloadBundleJson(req: AuthRequest, res: Response): Promi
   const built = await buildTransferBundle(schoolId, id);
   if (!built) { res.status(404).json({ error: 'Transfer student is no longer available' }); return; }
 
-  // Persist signature + hash + generated_at on the first generation so the
-  // archive flow has them to attach. Regenerations after that update the
-  // timestamp but keep the same signature (because the input is the same).
-  if (t.status === 'consented') {
-    await supabase.from('student_transfers').update({
-      bundle_signature: built.signed.integrity.signature,
-      bundle_sha256: built.signed.integrity.sha256,
-      bundle_generated_at: built.signed.integrity.signedAt,
-      status: 'bundle_generated',
-    }).eq('id', id).eq('school_id', schoolId);
-    await logAudit({
-      req, entityType: 'student_transfer', entityId: id, action: 'update',
-      after: { _meta: {
-        kind: 'bundle_generated',
-        sha256: built.signed.integrity.sha256,
-        key_id: built.signed.integrity.keyId,
-      } } as Record<string, unknown>,
-      label: t.student_name_snapshot, reason: 'Bundle generated',
-    });
-  }
+  await anchorBundleIntegrity(req, t, built);
 
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="transfer-${id}.json"`);
@@ -293,6 +327,8 @@ export async function downloadBundlePdf(req: AuthRequest, res: Response): Promis
 
   const built = await buildTransferBundle(schoolId, id);
   if (!built) { res.status(404).json({ error: 'Transfer student is no longer available' }); return; }
+
+  await anchorBundleIntegrity(req, t, built);
 
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="transfer-${id}.pdf"`);
@@ -335,84 +371,25 @@ export async function completeTransfer(req: AuthRequest, res: Response): Promise
     return;
   }
 
-  // Build a final-time snapshot we'll pass to archive_student_atomic. This
-  // mirrors what admin.archiveStudent does; we recompute it here so the
-  // archive carries the transfer's signature/hash in audit context.
-  const { data: student } = await supabase
-    .from('students')
-    .select('*, parents(full_name, phone_number)')
-    .eq('id', t.student_id).eq('school_id', schoolId).single();
-  if (!student) { res.status(404).json({ error: 'Source student no longer exists' }); return; }
-
-  // Close current enrollment as 'transferred' before snapshot so the
-  // enrollment_history row reflects the terminal state.
+  // Build the final-time snapshot via the SAME builder admin.archiveStudent
+  // uses (audit H-3): the transfer path's old hand-rolled copy skipped the
+  // day-by-day attendance capture and passed an empty payment history, so a
+  // transferred student's attendance and payment record were lost forever
+  // while an identical withdrawn student kept both. The shared builder
+  // freezes grades, reports, payment history (with refund/void handling),
+  // and enrollment history with the per-year attendance log attached.
+  //
+  // Close current enrollment as 'transferred' BEFORE the snapshot so the
+  // enrollment_history row reflects the terminal state. (No-op if the
+  // student row is already gone; the snapshot 404s right after.)
   await closeCurrentEnrollment({
     schoolId, studentId: t.student_id, status: 'transferred',
     endedOn: new Date().toISOString().slice(0, 10),
   });
 
-  // Load the freshly-closed enrollment history into a snapshot.
-  const { data: enrollmentRows } = await supabase
-    .from('student_enrollments')
-    .select('academic_year, class_id, class_name_snapshot, grade_level, status, started_on, ended_on')
-    .eq('student_id', t.student_id).eq('school_id', schoolId)
-    .order('academic_year');
-  const enrollmentHistory = (enrollmentRows || []).map((e: any) => ({
-    academicYear: String(e.academic_year),
-    gradeLevel: e.grade_level ? String(e.grade_level) : '(unknown)',
-    classId: e.class_id ?? null,
-    className: e.class_name_snapshot ?? null,
-    status: e.status ? String(e.status) : 'enrolled',
-    startedOn: e.started_on ?? null,
-    endedOn: e.ended_on ?? null,
-  }));
-
-  // Pull released grades (for the archive's grades JSONB).
-  const { data: grades } = await supabase
-    .from('grades')
-    .select('academic_year, grading_period, subject, marks, daily_grade, quiz_grade, monthly_exam_grade, term_exam_grade, class_id, classes(name)')
-    .eq('student_id', t.student_id).eq('school_id', schoolId)
-    .order('academic_year');
-
-  const gradesSnapshot = (grades || []).map((g: any) => ({
-    academicYear: g.academic_year,
-    gradingPeriod: g.grading_period,
-    subject: g.subject,
-    classId: g.class_id ?? null,
-    className: g.classes?.name ?? null,
-    marks: Array.isArray(g.marks) ? g.marks : [],
-    dailyGrade: g.daily_grade,
-    quizGrade: g.quiz_grade,
-    monthlyExamGrade: g.monthly_exam_grade,
-    termExamGrade: g.term_exam_grade,
-  }));
-
-  // Migration 041 — reports become part of the archive snapshot. Same shape
-  // as admin.controller#buildStudentArchiveSnapshot for consistency on read.
-  const { data: reports } = await supabase
-    .from('reports')
-    .select('academic_year, subject, class_id, class_name_snapshot, teacher_id, teacher_name_snapshot, attendance_notes, behavior_notes, marks, teacher_notes, quiz_marks, exam_marks, report_date, shared_with_other_teachers, created_at')
-    .eq('student_id', t.student_id).eq('school_id', schoolId)
-    .order('academic_year', { ascending: true })
-    .order('created_at', { ascending: true });
-
-  const reportsSnapshot = (reports || []).map((r: any) => ({
-    academicYear: r.academic_year,
-    subject: r.subject,
-    classId: r.class_id ?? null,
-    className: r.class_name_snapshot ?? null,
-    teacherId: r.teacher_id ?? null,
-    teacherName: r.teacher_name_snapshot ?? null,
-    attendanceNotes: r.attendance_notes ?? null,
-    behaviorNotes: r.behavior_notes ?? null,
-    marks: Array.isArray(r.marks) ? r.marks : [],
-    teacherNotes: r.teacher_notes ?? null,
-    quizMarks: r.quiz_marks,
-    examMarks: r.exam_marks,
-    reportDate: r.report_date,
-    sharedWithOtherTeachers: Boolean(r.shared_with_other_teachers),
-    createdAt: r.created_at,
-  }));
+  const snap = await buildStudentArchiveSnapshot(schoolId, t.student_id);
+  if (!snap) { res.status(404).json({ error: 'Source student no longer exists' }); return; }
+  const { student } = snap;
 
   // Archive atomically (insert + delete student). Pass transfer_id at
   // INSERT (migration 033) so the link is set before the append-only
@@ -428,16 +405,19 @@ export async function completeTransfer(req: AuthRequest, res: Response): Promise
     p_reason: 'transferred',
     p_parent_full_name: (student as any).parents?.full_name ?? null,
     p_parent_phone: (student as any).parents?.phone_number ?? null,
-    p_classes_attended: [],
-    p_enrollment_history: enrollmentHistory,
-    p_grades: gradesSnapshot,
-    p_payment_history: [],
+    p_home_address: (student as any).home_address ?? null,
+    p_emergency_contact: (student as any).emergency_contact ?? null,
+    p_phone_number: (student as any).phone_number ?? null,
+    p_classes_attended: snap.classesAttended,
+    p_enrollment_history: snap.enrollmentHistory,
+    p_grades: snap.gradesSnapshot,
+    p_payment_history: snap.paymentHistory,
     p_archived_by: userId,
     p_archived_by_name: username,
     p_archived_by_role: role,
     p_original_parent_id: (student as any).parent_id ?? null,
     p_transfer_id: id,
-    p_reports: reportsSnapshot,
+    p_reports: snap.reportsSnapshot,
   });
   if (rpcErr) { res.status(safeDbErrorStatus(rpcErr)).json({ error: safeDbErrorMessage(rpcErr) }); return; }
   const archiveUuid = (archiveId as unknown as string) || null;

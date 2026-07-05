@@ -168,7 +168,7 @@ export async function listPaymentAccounts(req: AuthRequest, res: Response): Prom
 
   const [fp, ssp, ex] = await Promise.all([
     supabase.from('fee_payments').select('payment_account_id, paid_amount, amount, is_refund').in('payment_account_id', accountIds).is('voided_at', null),
-    supabase.from('staff_salary_payments').select('payment_account_id, paid_amount, amount').in('payment_account_id', accountIds).is('voided_at', null),
+    supabase.from('staff_salary_payments').select('payment_account_id, paid_amount, amount, insurance_amount, exchange_rate').in('payment_account_id', accountIds).is('voided_at', null),
     supabase.from('expenses').select('payment_account_id, paid_amount, amount').in('payment_account_id', accountIds).is('voided_at', null),
   ]);
 
@@ -183,7 +183,13 @@ export async function listPaymentAccounts(req: AuthRequest, res: Response): Prom
   }
   const outflowByAcct = new Map<string, number>();
   for (const r of (ssp.data ?? []) as any[]) {
-    outflowByAcct.set(r.payment_account_id, (outflowByAcct.get(r.payment_account_id) ?? 0) + cashOf(r));
+    // Only the NET salary leaves the drawer — withheld insurance stays in the
+    // till as a liability until it's paid out (GL postSalary already credits
+    // cash net; this display was subtracting gross). insurance_amount is in
+    // the salary currency; convert at the payment's stored rate to match the
+    // drawer-currency paid_amount (rate 1 for pre-FX rows).
+    const insDrawer = Math.round((Number(r.insurance_amount) || 0) * (Number(r.exchange_rate) || 1) * 100) / 100;
+    outflowByAcct.set(r.payment_account_id, (outflowByAcct.get(r.payment_account_id) ?? 0) + cashOf(r) - insDrawer);
   }
   for (const r of (ex.data ?? []) as any[]) {
     outflowByAcct.set(r.payment_account_id, (outflowByAcct.get(r.payment_account_id) ?? 0) + cashOf(r));

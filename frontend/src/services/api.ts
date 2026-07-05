@@ -285,6 +285,8 @@ export const parentApi = {
     api.get<Paginated<Announcement>>('/parent/announcements', { params: cursor ? { cursor } : {} }),
   getReports: (params?: Record<string, string>) => api.get('/parent/reports', { params }),
   getGrades: (studentId?: string) => api.get('/parent/grades', { params: studentId ? { studentId } : {} }),
+  // Released Round Two entries — shown side-by-side with Round One (075/P4)
+  getRemedialGrades: (studentId?: string) => api.get('/parent/remedial-grades', { params: studentId ? { studentId } : {} }),
   getGradeConfig: () => api.get('/grade-config'),
   getBusLocation: (studentId?: string) => api.get('/parent/bus-location', { params: { studentId } }),
   getNotifications: (cursor?: string | null) =>
@@ -336,6 +338,9 @@ export const teacherApi = {
   getMarkTypes: (appliesTo?: 'report' | 'grade') => api.get('/teacher/mark-types', { params: appliesTo ? { for: appliesTo } : {} }),
   getTerms: () => api.get('/teacher/terms'),
   getGradeWindows: () => api.get('/teacher/grade-windows'),
+  // Remedial (Round Two) filing — 075/P3
+  getRemedialRoster: (classId: string, subject: string) => api.get('/teacher/remedial-roster', { params: { classId, subject } }),
+  saveRemedialExam: (id: string, examValue: number) => api.put(`/teacher/remedial-grades/${id}`, { examValue }),
   getActivePeriod: () => api.get('/supervisor/weekly-period'),
   getWeeklySummary: (params?: Record<string, string>) => api.get('/teacher/weekly-summary', { params }),
   upsertWeeklySummary: (data: object) => api.post('/teacher/weekly-summary', data),
@@ -503,6 +508,9 @@ export const adminApi = {
   updateGrade: (id: string, data: { marks?: { name: string; value: number | string }[]; adminNote?: string | null }) =>
     api.put(`/admin/grades/${id}`, data),
   releaseGrades: (ids: string[]) => api.post('/admin/grades/release', { ids }),
+  // Remedial (Round Two) list + release — 075/P4
+  getRemedialOverview: (classId: string) => api.get('/admin/remedial-overview', { params: { classId } }),
+  releaseRemedialGrades: (ids: string[]) => api.post('/admin/remedial-release', { ids }),
   gradesTemplate: (year: string, term: string) =>
     api.get('/admin/grades/template.xlsx', { params: { year, term }, responseType: 'blob' }),
   exportGrades: (year: string, term: string) =>
@@ -712,6 +720,8 @@ export const adminApi = {
   // GPA grading config
   getGradeConfig: () => api.get('/grade-config'),
   updateGradingConfig: (data: { mode?: 'scale' | 'gpa' | 'both'; bands?: { minPercent: number; letter: string; gradePoint: number }[] }) => api.put('/admin/grading-config', data),
+  // Remedial (Round Two) term + exam/carry scheme + pass threshold (075)
+  updateRemedialConfig: (data: { termName: string; examMarkType: string; carryMarkType: string | null; passPercent: number }) => api.put('/admin/remedial-config', data),
   getTerms: () => api.get('/admin/terms'),
   createTerm: (data: { name: string }) => api.post('/admin/terms', data),
   deleteTerm: (id: string) => api.delete(`/admin/terms/${id}`),

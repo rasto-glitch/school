@@ -33,6 +33,8 @@ import { defaultPasswordFor } from '../utils/defaultPasswords';
 import { propagateAdminSetPhone } from '../utils/adminPhonePropagation';
 import { isUrlSafeToFetch } from '../utils/urlSafety';
 import { logger } from '../utils/logger';
+import { loadGradingConfig } from '../utils/gradeCalc';
+import { syncClassRemedial } from '../utils/remedial';
 import { isStrongPassword, PASSWORD_POLICY_MESSAGE } from '../utils/passwordPolicy';
 import { buildAttendanceHistory, loadAttendanceDaysForYear } from '../utils/attendanceHistory';
 import { getSchoolTimezone, todayInTimezone } from '../utils/attendance';
@@ -1644,7 +1646,17 @@ export async function employeeBulkTemplate(req: AuthRequest, res: Response): Pro
 // (graduated — keeps the row). Returns null if the student isn't in this
 // school. Currency on each payment is the source of truth — never falls
 // back to the plan currency (accounting invariant).
-async function buildStudentArchiveSnapshot(schoolId: string, studentId: string): Promise<{
+// Exported: studentTransfer.controller reuses this for transfer-completion
+// archiving so the transfer path can never drift from the withdraw path
+// (audit H-3 — the transfer's hand-rolled copy silently dropped the
+// attendance log and payment history).
+//
+// Student health records (student_health_profiles / _visits) are
+// INTENTIONALLY not snapshotted: policy is destroy-on-departure via their
+// ON DELETE CASCADE (medical privacy — see migration 074). If retention is
+// ever wanted, capture them here (keeping *_ct fields encrypted), add a
+// health column to archived_students, and bump the canon to as.v5.
+export async function buildStudentArchiveSnapshot(schoolId: string, studentId: string): Promise<{
   student: any;
   classesAttended: { year: string; classId: string; className: string }[];
   enrollmentHistory: EnrollmentSnapshotEntry[];
@@ -1735,6 +1747,10 @@ async function buildStudentArchiveSnapshot(schoolId: string, studentId: string):
                  currency, receipt_year, receipt_number, tax_amount, tax_label,
                  payment_account_id, is_refund, refund_of_payment_id`)
         .in('student_fee_id', sfIds)
+        // Voided payments are corrections of mistakes — every live view skips
+        // them (and the late-fee query below does too). Without this filter
+        // they freeze into the snapshot and count as paid forever (audit H-2).
+        .is('voided_at', null)
         .order('paid_on', { ascending: true })
     : { data: [] as any[] };
 
@@ -1861,6 +1877,9 @@ async function snapshotGraduatedStudent(
       reason: 'graduated',
       parent_full_name: (student as any).parents?.full_name ?? null,
       parent_phone: (student as any).parents?.phone_number ?? null,
+      home_address: (student as any).home_address ?? null,
+      emergency_contact: (student as any).emergency_contact ?? null,
+      phone_number: (student as any).phone_number ?? null,
       classes_attended: snap.classesAttended,
       enrollment_history: snap.enrollmentHistory,
       grades: snap.gradesSnapshot,
@@ -1921,6 +1940,9 @@ export async function archiveStudent(req: AuthRequest, res: Response): Promise<v
     p_reason: reason,
     p_parent_full_name: (student as any).parents?.full_name ?? null,
     p_parent_phone: (student as any).parents?.phone_number ?? null,
+    p_home_address: (student as any).home_address ?? null,
+    p_emergency_contact: (student as any).emergency_contact ?? null,
+    p_phone_number: (student as any).phone_number ?? null,
     p_classes_attended: snap.classesAttended,
     p_enrollment_history: snap.enrollmentHistory,
     p_grades: snap.gradesSnapshot,
@@ -3898,12 +3920,14 @@ export async function getStudentBrief(req: AuthRequest, res: Response): Promise<
   const { schoolId } = req.user!;
   const { id } = req.params;
 
-  const [studentRes, reportsRes, gradesRes, health] = await Promise.all([
+  const [studentRes, reportsRes, gradesRes, remedialRes, health] = await Promise.all([
     supabase.from('students')
       .select('*, classes(name), parents(id, full_name, phone_number, email), drivers(full_name, buses(bus_number))')
       .eq('id', id).eq('school_id', schoolId).single(),
     supabase.from('reports').select('*, teachers(full_name)').eq('student_id', id).eq('school_id', schoolId).order('created_at', { ascending: false }),
     supabase.from('grades').select('*').eq('student_id', id).eq('school_id', schoolId),
+    // Round Two entries (075/P4) — admins see all, released or not.
+    supabase.from('remedial_grades').select('*').eq('student_id', id).eq('school_id', schoolId),
     // Safety subset of the clinic health profile (allergies / conditions / diet)
     // for the brief — surfaced to admins + supervisors (this endpoint) and
     // teachers (getStudentHistory). The visit log stays clinic-only.
@@ -3914,6 +3938,7 @@ export async function getStudentBrief(req: AuthRequest, res: Response): Promise<
     student: toCC(studentRes.data),
     reports: toCC(reportsRes.data) || [],
     grades: toCC(gradesRes.data) || [],
+    remedial: toCC(remedialRes.data) || [],
     health,
   });
 }
@@ -3991,6 +4016,80 @@ export async function releaseGrades(req: AuthRequest, res: Response): Promise<vo
         schoolId, userId: p.user_id,
         title: 'Grades Updated',
         message: `Grades for ${studentName} in ${g.subject} have been released.`,
+        type: 'grade',
+      });
+    }
+  }
+  if (payloads.length > 0) notifyMany(payloads).catch(() => {});
+
+  res.json({ released: (released || []).length });
+}
+
+// ---- REMEDIAL (Round Two) OVERVIEW & RELEASE — REMEDIAL_TERM_PLAN.md P4 ----
+
+// GET /admin/remedial-overview?classId=
+// The remedial list for one class in the current year: every Round One
+// failure across ALL subjects, one row per retake, with filing/release status
+// and the current effective (Round Two) standing. Runs the same idempotent
+// sync as the teacher roster, so the list exists before any teacher opens
+// their page.
+export async function getRemedialOverview(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const classId = String(req.query.classId || '').trim();
+  if (!classId) { res.status(400).json({ error: 'classId is required' }); return; }
+
+  const [academicYear, cfg] = await Promise.all([
+    resolveCurrentAcademicYear(schoolId),
+    loadGradingConfig(supabase, schoolId),
+  ]);
+  if (!cfg.remedial?.examMarkType) {
+    res.status(400).json({
+      error: 'The remedial term is not configured yet — set it up in Settings first.',
+      code: 'REMEDIAL_NOT_CONFIGURED',
+    });
+    return;
+  }
+  if (!academicYear) { res.status(400).json({ error: 'No current academic year is set.' }); return; }
+
+  try {
+    const result = await syncClassRemedial(supabase, schoolId, classId, academicYear, cfg);
+    res.json(result);
+  } catch (e) {
+    const err = e as Parameters<typeof safeDbErrorStatus>[0];
+    res.status(safeDbErrorStatus(err)).json({ error: safeDbErrorMessage(err) });
+  }
+}
+
+// POST /admin/remedial-release { ids } — release filed Round Two marks to
+// parents. Mirrors releaseGrades: stamps released_at/by and notifies each
+// student's parents. Unfiled entries (no exam mark yet) can never release.
+export async function releaseRemedialGrades(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId, userId } = req.user!;
+  const { ids } = req.body as { ids?: string[] };
+  if (!Array.isArray(ids) || ids.length === 0) { res.status(400).json({ error: 'ids required' }); return; }
+
+  const { data: released, error } = await supabase
+    .from('remedial_grades')
+    .update({ is_released: true, released_at: new Date().toISOString(), released_by: userId })
+    .eq('school_id', schoolId)
+    .in('id', ids)
+    .eq('is_released', false)
+    .not('exam_value', 'is', null)
+    .select('id, subject, student_id, students(full_name, parents(user_id))');
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+
+  const payloads: { schoolId: string; userId: string; title: string; message: string; type: string }[] = [];
+  for (const g of (released || []) as any[]) {
+    const studentName = g.students?.full_name || 'your child';
+    const parents = Array.isArray(g.students?.parents)
+      ? g.students.parents
+      : g.students?.parents ? [g.students.parents] : [];
+    for (const p of parents) {
+      if (!p?.user_id) continue;
+      payloads.push({
+        schoolId, userId: p.user_id,
+        title: 'Grades Updated',
+        message: `Remedial marks for ${studentName} in ${g.subject} have been released.`,
         type: 'grade',
       });
     }
@@ -4165,11 +4264,13 @@ export async function uploadGrades(req: AuthRequest, res: Response): Promise<voi
     return;
   }
 
-  const [{ data: classes }, { data: students }, { data: cst }] = await Promise.all([
+  const [{ data: classes }, { data: students }, { data: cst }, { data: remTerm }] = await Promise.all([
     supabase.from('classes').select('id, name').eq('school_id', schoolId),
     supabase.from('students').select('id, full_name, class_id').eq('school_id', schoolId),
     supabase.from('class_subject_teachers').select('class_id, teacher_id, subjects(name)').eq('school_id', schoolId),
+    supabase.from('terms').select('name').eq('school_id', schoolId).eq('kind', 'remedial').maybeSingle(),
   ]);
+  const remedialName = (remTerm?.name || '').trim().toLowerCase();
 
   const classByName = new Map<string, string>();
   for (const c of (classes || []) as { id: string; name: string }[]) {
@@ -4218,6 +4319,12 @@ export async function uploadGrades(req: AuthRequest, res: Response): Promise<voi
       }
     }
     if (!year || !term) { warnings.push(`Sheet "${sheetName}": missing Academic Year or Term — skipped.`); continue; }
+    // Remedial (075/P3): Round Two marks never enter grades via import — they
+    // live in remedial_grades and are filed from the teacher remedial roster.
+    if (remedialName && term.trim().toLowerCase() === remedialName) {
+      warnings.push(`Sheet "${sheetName}": "${term}" is the remedial term — Round Two marks are filed from the remedial roster, not imported — skipped.`);
+      continue;
+    }
 
     const classId = classByName.get(sheetSafe(sheetName).toLowerCase()) ?? classByName.get(sheetName.trim().toLowerCase());
     if (!classId) { warnings.push(`Sheet "${sheetName}": no class with this name — skipped.`); continue; }
@@ -6671,15 +6778,31 @@ export async function getMarkTypes(req: AuthRequest, res: Response): Promise<voi
   res.json(toCC(data));
 }
 
+// M-2 (audit): a grade-applicable mark type without an "out of" value makes
+// subjectPercent unable to normalize that component — historically it was
+// silently DROPPED from the official percentage. Grading styles vary by
+// school (not locked to /100 totals), but every grade component must declare
+// what it is out of. Report-only types stay freeform.
+const markTypeMaxError =
+  'Grade mark types must define what the mark is out of (a positive max value).';
+function normalizedMarkMax(maxValue: unknown): number | null {
+  if (maxValue === '' || maxValue == null) return null;
+  const n = Number(maxValue);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 export async function createMarkType(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
   const { name, appliesTo, maxValue } = req.body;
   if (!name?.trim()) { res.status(400).json({ error: 'name is required' }); return; }
+  const applies = appliesTo || 'both';
+  const max = normalizedMarkMax(maxValue);
+  if (applies !== 'report' && max == null) { res.status(400).json({ error: markTypeMaxError }); return; }
   const { data, error } = await supabase.from('mark_types').insert({
     school_id: schoolId,
     name: name.trim(),
-    applies_to: appliesTo || 'both',
-    max_value: (maxValue === '' || maxValue == null) ? null : Number(maxValue),
+    applies_to: applies,
+    max_value: max,
   }).select().single();
   if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.status(201).json(toCC(data));
@@ -6695,8 +6818,20 @@ export async function updateMarkType(req: AuthRequest, res: Response): Promise<v
     patch.name = name.trim();
   }
   if (appliesTo !== undefined) patch.applies_to = appliesTo;
-  if (maxValue !== undefined) patch.max_value = (maxValue === '' || maxValue == null) ? null : Number(maxValue);
+  if (maxValue !== undefined) patch.max_value = normalizedMarkMax(maxValue);
   if (Object.keys(patch).length === 0) { res.status(400).json({ error: 'Nothing to update' }); return; }
+
+  // M-2: validate the RESULTING row, not just the patch — flipping a
+  // report-only type to grade-applicable without a max (or clearing the max
+  // on a grade type) must be caught too.
+  const { data: existing } = await supabase.from('mark_types')
+    .select('applies_to, max_value').eq('id', id).eq('school_id', schoolId).maybeSingle();
+  if (!existing) { res.status(404).json({ error: 'Mark type not found' }); return; }
+  const resultingApplies = (patch.applies_to ?? (existing as any).applies_to) as string;
+  const resultingMax = maxValue !== undefined ? patch.max_value : (existing as any).max_value;
+  if (resultingApplies !== 'report' && resultingMax == null) {
+    res.status(400).json({ error: markTypeMaxError }); return;
+  }
 
   const { data, error } = await supabase.from('mark_types')
     .update(patch).eq('id', id).eq('school_id', schoolId).select().single();
@@ -6714,16 +6849,19 @@ export async function deleteMarkType(req: AuthRequest, res: Response): Promise<v
 }
 
 // ---- GRADING CONFIG (GPA) ----
-// Shared read for ALL roles: the grading mode, GPA bands, and the per-name
-// mark maxes the clients need to compute a percentage / GPA.
+// Shared read for ALL roles: the grading mode, GPA bands, the per-name mark
+// maxes, the pass threshold, and the remedial (Round Two) configuration the
+// clients need to compute percentages / letters / pass-fail (075).
 export async function getGradeConfig(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
-  const [schoolRes, bandsRes, marksRes] = await Promise.all([
+  const [schoolRes, bandsRes, marksRes, remTermRes] = await Promise.all([
     supabase.from('schools').select('grading_config').eq('id', schoolId).single(),
     supabase.from('grade_scale_bands').select('min_percent, letter, grade_point').eq('school_id', schoolId).order('order_index'),
     supabase.from('mark_types').select('name, max_value').eq('school_id', schoolId),
+    supabase.from('terms').select('id, name').eq('school_id', schoolId).eq('kind', 'remedial').maybeSingle(),
   ]);
-  const mode = (schoolRes.data?.grading_config as any)?.mode || 'scale';
+  const gc = (schoolRes.data?.grading_config as any) || {};
+  const mode = gc.mode || 'scale';
   const bands = (bandsRes.data || []).map((b: any) => ({
     minPercent: Number(b.min_percent), letter: b.letter, gradePoint: Number(b.grade_point),
   }));
@@ -6731,10 +6869,22 @@ export async function getGradeConfig(req: AuthRequest, res: Response): Promise<v
   for (const m of (marksRes.data || []) as any[]) {
     if (m.max_value != null) markMaxes[m.name] = Number(m.max_value);
   }
-  res.json({ mode, bands, markMaxes });
+  const passPercent = Number(gc.passPercent) > 0 ? Number(gc.passPercent) : 50;
+  // Remedial is "configured" only when the term exists; the mark-type pair
+  // rides along from grading_config.
+  const remedial = remTermRes.data ? {
+    termId: remTermRes.data.id as string,
+    termName: remTermRes.data.name as string,
+    examMarkType: (gc.remedial?.examMarkType as string | undefined) ?? null,
+    carryMarkType: (gc.remedial?.carryMarkType as string | undefined) ?? null,
+  } : null;
+  res.json({ mode, bands, markMaxes, passPercent, remedial });
 }
 
 // Admin write: set the mode and replace the band set in one call.
+// Validation added with audit M-2's GPA hardening: everything is checked
+// BEFORE the delete-then-insert swap so a bad payload can never wipe the
+// existing band set.
 export async function updateGradingConfig(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
   const { mode, bands } = req.body as {
@@ -6742,27 +6892,156 @@ export async function updateGradingConfig(req: AuthRequest, res: Response): Prom
     bands?: { minPercent: number; letter: string; gradePoint: number }[];
   };
 
+  if (mode !== undefined && !['scale', 'gpa', 'both'].includes(mode)) {
+    res.status(400).json({ error: "mode must be 'scale', 'gpa', or 'both'" });
+    return;
+  }
+
+  let rows: { school_id: string; min_percent: number; letter: string; grade_point: number; order_index: number }[] | null = null;
+  if (bands !== undefined) {
+    if (!Array.isArray(bands)) { res.status(400).json({ error: 'bands must be an array' }); return; }
+    rows = bands.map((b, i) => ({
+      school_id: schoolId,
+      min_percent: Number(b?.minPercent),
+      letter: String(b?.letter ?? '').trim(),
+      // Retired legacy field (M-3b decision 20) — kept in the table, never
+      // averaged or displayed.
+      grade_point: Number(b?.gradePoint ?? 0),
+      order_index: i,
+    }));
+    for (const r of rows) {
+      if (!Number.isFinite(r.min_percent) || r.min_percent < 0 || !r.letter || !Number.isFinite(r.grade_point) || r.grade_point < 0) {
+        res.status(400).json({ error: 'Each band needs a non-negative minPercent, a letter, and a non-negative gradePoint' });
+        return;
+      }
+    }
+    const thresholds = new Set(rows.map(r => r.min_percent));
+    if (thresholds.size !== rows.length) {
+      res.status(400).json({ error: 'Two bands cannot share the same minimum percentage' });
+      return;
+    }
+    // A floor band (min 0) is required whenever bands exist: without it a
+    // subject below the lowest threshold has no band, and historically a
+    // failing subject was silently EXCLUDED from the GPA average.
+    if (rows.length > 0 && !rows.some(r => r.min_percent === 0)) {
+      res.status(400).json({ error: 'Bands must include a floor band with minimum percentage 0 (e.g. F at 0) so failing subjects count in the GPA.' });
+      return;
+    }
+  }
+
   if (mode !== undefined) {
+    // Merge, don't replace: grading_config also carries passPercent and the
+    // remedial config (075) — a mode-only save must not clobber them.
+    const { data: cur } = await supabase.from('schools')
+      .select('grading_config').eq('id', schoolId).single();
+    const merged = { ...((cur?.grading_config as object) || {}), mode };
     const { error } = await supabase.from('schools')
-      .update({ grading_config: { mode } }).eq('id', schoolId);
+      .update({ grading_config: merged }).eq('id', schoolId);
     if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   }
 
-  if (bands !== undefined) {
+  if (rows !== null) {
     await supabase.from('grade_scale_bands').delete().eq('school_id', schoolId);
-    if (bands.length > 0) {
-      const rows = bands.map((b, i) => ({
-        school_id: schoolId,
-        min_percent: Number(b.minPercent),
-        letter: String(b.letter).trim(),
-        grade_point: Number(b.gradePoint),
-        order_index: i,
-      }));
+    if (rows.length > 0) {
       // tenant-check-allow: every row sets school_id: schoolId (insert can't chain .eq)
       const { error } = await supabase.from('grade_scale_bands').insert(rows);
       if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
     }
   }
+
+  res.json({ message: 'Saved' });
+}
+
+// ---- REMEDIAL CONFIG (Round Two — 075, REMEDIAL_TERM_PLAN.md P1) ----
+// Creates/renames the school's single remedial term and stores the exam/carry
+// mark-type pair + pass threshold in grading_config. The remedial term is
+// managed ONLY here (createTerm always makes 'regular'; deleteTerm refuses
+// remedial) so a school can't accidentally add a third regular term that
+// would count in the year average.
+export async function updateRemedialConfig(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId } = req.user!;
+  const { termName, examMarkType, carryMarkType, passPercent } = req.body as {
+    termName: string; examMarkType: string; carryMarkType?: string | null; passPercent: number;
+  };
+
+  const { data: mts, error: mtErr } = await supabase.from('mark_types')
+    .select('name, max_value, applies_to').eq('school_id', schoolId);
+  if (mtErr) { res.status(safeDbErrorStatus(mtErr)).json({ error: safeDbErrorMessage(mtErr) }); return; }
+  const gradeTypes = (mts || []).filter((m: any) => m.applies_to === 'grade' || m.applies_to === 'both');
+
+  const exam = gradeTypes.find((m: any) => m.name === examMarkType);
+  if (!exam || !(Number(exam.max_value) > 0)) {
+    res.status(400).json({ error: 'The exam mark type must be a grade mark type with a max value.' });
+    return;
+  }
+  const examMax = Number(exam.max_value);
+
+  let carryMax = 0;
+  if (carryMarkType != null) {
+    if (carryMarkType === examMarkType) {
+      res.status(400).json({ error: 'The carried mark type must be different from the exam mark type.' });
+      return;
+    }
+    const carry = gradeTypes.find((m: any) => m.name === carryMarkType);
+    if (!carry || !(Number(carry.max_value) > 0)) {
+      res.status(400).json({ error: 'The carried mark type must be a grade mark type with a max value.' });
+      return;
+    }
+    carryMax = Number(carry.max_value);
+  }
+  // Locked decision 12: no scaling — the pair must make exactly 100.
+  if (examMax + carryMax !== 100) {
+    res.status(400).json({
+      error: `Exam max (${examMax}) plus carried max (${carryMax}) must equal exactly 100. Adjust the mark types' max values or pick different ones.`,
+    });
+    return;
+  }
+
+  // Upsert the school's single remedial term (partial unique index enforces one).
+  const name = termName.trim();
+  const { data: existing } = await supabase.from('terms')
+    .select('id, name').eq('school_id', schoolId).eq('kind', 'remedial').maybeSingle();
+  if (existing) {
+    if (existing.name !== name) {
+      const { error } = await supabase.from('terms')
+        .update({ name }).eq('id', existing.id).eq('school_id', schoolId);
+      if (error) {
+        const isDupe = error.code === '23505' || /unique|duplicate/i.test(error.message || '');
+        res.status(isDupe ? 409 : safeDbErrorStatus(error))
+          .json({ error: isDupe ? 'A term with that name already exists.' : safeDbErrorMessage(error) });
+        return;
+      }
+    }
+  } else {
+    const { data: last } = await supabase.from('terms')
+      .select('order_index').eq('school_id', schoolId)
+      .order('order_index', { ascending: false }).limit(1).maybeSingle();
+    // tenant-check-allow: insert sets school_id: schoolId (insert can't chain .eq)
+    const { error } = await supabase.from('terms').insert({
+      school_id: schoolId,
+      name,
+      kind: 'remedial',
+      order_index: (last?.order_index ?? -1) + 1,
+    });
+    if (error) {
+      const isDupe = error.code === '23505' || /unique|duplicate/i.test(error.message || '');
+      res.status(isDupe ? 409 : safeDbErrorStatus(error))
+        .json({ error: isDupe ? 'A term with that name already exists.' : safeDbErrorMessage(error) });
+      return;
+    }
+  }
+
+  // Merge into grading_config, preserving mode.
+  const { data: cur } = await supabase.from('schools')
+    .select('grading_config').eq('id', schoolId).single();
+  const merged = {
+    ...((cur?.grading_config as object) || {}),
+    passPercent,
+    remedial: { examMarkType, carryMarkType: carryMarkType ?? null },
+  };
+  const { error: upErr } = await supabase.from('schools')
+    .update({ grading_config: merged }).eq('id', schoolId);
+  if (upErr) { res.status(safeDbErrorStatus(upErr)).json({ error: safeDbErrorMessage(upErr) }); return; }
 
   res.json({ message: 'Saved' });
 }
@@ -6802,6 +7081,14 @@ export async function createTerm(req: AuthRequest, res: Response): Promise<void>
 export async function deleteTerm(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
   const { id } = req.params;
+  // The remedial term is managed only from the Remedial settings section —
+  // deleting it here would orphan the Round Two config (075).
+  const { data: term } = await supabase.from('terms')
+    .select('kind').eq('id', id).eq('school_id', schoolId).maybeSingle();
+  if (term?.kind === 'remedial') {
+    res.status(409).json({ error: 'This is the remedial term — manage it from the Remedial settings section.' });
+    return;
+  }
   const { error } = await supabase.from('terms').delete().eq('id', id).eq('school_id', schoolId);
   if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
   res.json({ message: 'Deleted' });

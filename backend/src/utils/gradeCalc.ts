@@ -67,28 +67,40 @@ export function collectMarkNames(grades: GradeLike[]): string[] {
   return Array.from(seen.keys());
 }
 
-// A subject's percentage. If mark maxes are known, percent = earned / max * 100.
-// Otherwise fall back to the raw total (assumed out of 100).
+// A subject's percentage. Normalizes (earned / max * 100) ONLY when every
+// mark present has a configured max; if ANY mark can't be matched to a max,
+// the whole subject falls back to the raw total (regional convention:
+// components are designed to sum to the subject's total, typically 100).
+// M-2 (audit): the old behavior dropped unmatched marks from both earned and
+// max, silently discarding points a teacher entered — never do that.
+// LOCKSTEP: mirror any change in frontend/src/utils/marks.ts and
+// mobile/src/utils/gpa.ts.
 export function subjectPercent(g: GradeLike, markMaxes: Record<string, number>): number | null {
   if (g.marks && g.marks.length > 0) {
-    let earned = 0, max = 0;
+    let earned = 0, max = 0, allConfigured = true;
     for (const m of g.marks) {
+      earned += Number(m.value) || 0;
       const mx = markMaxes[m.name];
-      if (mx != null && mx > 0) { earned += Number(m.value) || 0; max += mx; }
+      if (mx != null && mx > 0) max += mx;
+      else allConfigured = false;
     }
-    if (max > 0) return Math.round((earned / max) * 1000) / 10;
-    return g.marks.reduce((s, m) => s + (Number(m.value) || 0), 0);
+    if (allConfigured && max > 0) return Math.round((earned / max) * 1000) / 10;
+    return earned;
   }
   const total = gradeTotal(g, getMarkNames(g));
   return total > 0 ? total : null;
 }
 
-// Map a percentage to the highest band whose minPercent it meets.
+// Map a percentage to the highest band whose minPercent it meets. A percent
+// below every threshold maps to the LOWEST band (the floor, e.g. F) rather
+// than null — otherwise a failing subject is excluded from the GPA average
+// entirely, inflating it (found alongside audit M-2). LOCKSTEP with web
+// marks.ts and mobile gpa.ts.
 export function bandForPercent(percent: number | null, bands: GradeBand[]): GradeBand | null {
   if (percent == null || bands.length === 0) return null;
   const sorted = [...bands].sort((a, b) => b.minPercent - a.minPercent);
   for (const b of sorted) if (percent >= b.minPercent) return b;
-  return null;
+  return sorted[sorted.length - 1];
 }
 
 // Equal-weight average of grade points, rounded to 2 dp.
@@ -103,20 +115,97 @@ export function averagePercent(percents: number[]): number | null {
   return Math.round((percents.reduce((a, b) => a + b, 0) / percents.length) * 10) / 10;
 }
 
-// Loads the school's grading config (mode + bands + mark maxes) — the same
-// triple the /grade-config endpoint returns to the frontend.
-export interface GradingConfig { mode: GradingMode; bands: GradeBand[]; markMaxes: Record<string, number> }
+// ── Year math: Round One / Round Two (REMEDIAL_TERM_PLAN.md P2) ─────────────
+// LOCKSTEP: mirror any change in frontend/src/utils/marks.ts and
+// mobile/src/utils/gpa.ts.
+
+// A remedial entry's total out of 100: the teacher-entered exam mark plus the
+// carried component auto-copied from the corrected term (the Remedial settings
+// section guarantees the two maxes sum to exactly 100). Null until the exam
+// mark is filed.
+export function remedialTotal(examValue: number | null | undefined, carryValue: number | null | undefined): number | null {
+  if (examValue == null) return null;
+  return Math.round(((Number(examValue) || 0) + (Number(carryValue) || 0)) * 10) / 10;
+}
+
+export interface SubjectYear {
+  // "تێکڕای خوولی یەکەم" — mean of the ORIGINAL percents across the regular
+  // terms the subject appears in. This is the number that decides who sits
+  // Round Two (the remedial exams).
+  roundOne: number | null;
+  // Effective standing: each term's remedial total substitutes that term's
+  // original, then the same mean. Equals roundOne when no remedial was sat.
+  final: number | null;
+  // True when at least one remedial entry substituted into `final`.
+  satRemedial: boolean;
+}
+
+// Per-subject year values. `originalByTerm` = subjectPercent per REGULAR term
+// (null/absent = subject not graded that term — skipped, terms-present
+// divisor). `remedialByTerm` = remedialTotal keyed by the CORRECTED term.
+export function subjectYear(
+  regularTerms: string[],
+  originalByTerm: Record<string, number | null | undefined>,
+  remedialByTerm: Record<string, number | null | undefined> = {},
+): SubjectYear {
+  const orig: number[] = [];
+  const eff: number[] = [];
+  let satRemedial = false;
+  for (const term of regularTerms) {
+    const o = originalByTerm[term];
+    const r = remedialByTerm[term];
+    if (o == null && r == null) continue;
+    if (o != null) orig.push(o);
+    if (r != null) { eff.push(r); satRemedial = true; }
+    else if (o != null) eff.push(o);
+  }
+  return { roundOne: averagePercent(orig), final: averagePercent(eff), satRemedial };
+}
+
+// Terms this subject must be retaken for: graded AND below the pass mark.
+// (A term the subject never ran is not "failed".) The Round Two gate itself
+// is isFailing(roundOne) — a student only retakes anything when the Round One
+// AVERAGE is below the pass mark; callers compose the two.
+export function failedTerms(
+  regularTerms: string[],
+  originalByTerm: Record<string, number | null | undefined>,
+  passPercent: number,
+): string[] {
+  return regularTerms.filter(t => {
+    const o = originalByTerm[t];
+    return o != null && o < passPercent;
+  });
+}
+
+export function isFailing(value: number | null, passPercent: number): boolean {
+  return value != null && value < passPercent;
+}
+
+// Loads the school's grading config (mode + bands + mark maxes + pass mark +
+// remedial scheme) — the same shape the /grade-config endpoint returns to the
+// frontend.
+export interface RemedialConfig { termName: string; examMarkType: string | null; carryMarkType: string | null }
+export interface GradingConfig {
+  mode: GradingMode;
+  bands: GradeBand[];
+  markMaxes: Record<string, number>;
+  passPercent: number;
+  // Null until the school configures the Round Two term (075).
+  remedial: RemedialConfig | null;
+}
 export async function loadGradingConfig(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
   schoolId: string,
 ): Promise<GradingConfig> {
-  const [schoolRes, bandsRes, marksRes] = await Promise.all([
+  const [schoolRes, bandsRes, marksRes, remTermRes] = await Promise.all([
     supabase.from('schools').select('grading_config').eq('id', schoolId).single(),
     supabase.from('grade_scale_bands').select('min_percent, letter, grade_point').eq('school_id', schoolId).order('order_index'),
     supabase.from('mark_types').select('name, max_value').eq('school_id', schoolId),
+    supabase.from('terms').select('name').eq('school_id', schoolId).eq('kind', 'remedial').maybeSingle(),
   ]);
-  const mode: GradingMode = (schoolRes.data?.grading_config?.mode as GradingMode) || 'scale';
+  const gc = schoolRes.data?.grading_config || {};
+  const mode: GradingMode = (gc.mode as GradingMode) || 'scale';
   const bands: GradeBand[] = (bandsRes.data || []).map((b: Record<string, unknown>) => ({
     minPercent: Number(b.min_percent), letter: String(b.letter), gradePoint: Number(b.grade_point),
   }));
@@ -124,5 +213,11 @@ export async function loadGradingConfig(
   for (const m of (marksRes.data || []) as Record<string, unknown>[]) {
     if (m.max_value != null) markMaxes[String(m.name)] = Number(m.max_value);
   }
-  return { mode, bands, markMaxes };
+  const passPercent = Number(gc.passPercent) > 0 ? Number(gc.passPercent) : 50;
+  const remedial: RemedialConfig | null = remTermRes.data ? {
+    termName: String(remTermRes.data.name),
+    examMarkType: (gc.remedial?.examMarkType as string | undefined) ?? null,
+    carryMarkType: (gc.remedial?.carryMarkType as string | undefined) ?? null,
+  } : null;
+  return { mode, bands, markMaxes, passPercent, remedial };
 }

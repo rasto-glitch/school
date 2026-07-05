@@ -1,14 +1,30 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'react-toastify';
-import { Star, Plus, Trash2 } from 'lucide-react';
+import { Star, Plus, Trash2, Repeat, AlertTriangle } from 'lucide-react';
 import { teacherApi } from '../../services/api';
 import { useTeacherProfile } from '../../hooks/useTeacherProfile';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
 import Select from '../../components/common/Select';
 import Button from '../../components/common/Button';
+import { remedialTotal } from '../../utils/marks';
 import type { Class, Student, MarkType, Mark, Grade, Term } from '../../types';
+
+// One pre-built Round Two entry (REMEDIAL_TERM_PLAN.md P3). The carry is
+// auto-copied server-side; the exam mark is the teacher's only input.
+interface RemedialEntry {
+  id: string;
+  studentId: string;
+  studentName: string;
+  forPeriod: string;
+  roundOne: number | null;
+  carryName: string | null;
+  carryValue: number;
+  carryMissing: boolean;
+  examValue: number | null;
+  isReleased: boolean;
+}
 
 export default function GradingPage() {
   const { t } = useTranslation();
@@ -27,6 +43,16 @@ export default function GradingPage() {
   const [gradeSummary, setGradeSummary] = useState<Grade[]>([]);
   const [gradeWindows, setGradeWindows] = useState<{ term: string; opensOn: string; closesOn: string; isOpen: boolean }[]>([]);
 
+  // Remedial (Round Two) filing mode — active when the picked term is the
+  // school's remedial term. The roster is pre-built server-side; teachers
+  // only type exam marks.
+  const [remEntries, setRemEntries] = useState<RemedialEntry[]>([]);
+  const [remMeta, setRemMeta] = useState<{ examMax: number; carryMarkType: string | null } | null>(null);
+  const [remLoading, setRemLoading] = useState(false);
+  const [remError, setRemError] = useState('');
+  const [remDraft, setRemDraft] = useState<Record<string, string>>({});
+  const [remSavingId, setRemSavingId] = useState<string | null>(null);
+
   useEffect(() => {
     teacherApi.getClasses().then(r => setClasses(r.data || []));
     teacherApi.getMarkTypes('grade').then(r => setMarkTypes(r.data || []));
@@ -40,7 +66,42 @@ export default function GradingPage() {
   // the teacher isn't surprised by a rejection after filling in marks.
   const filingClosed = !!gradingPeriod && !gradeWindows.some(w => w.term === gradingPeriod && w.isOpen);
 
+  const remedialTermName = terms.find(tm => tm.kind === 'remedial')?.name ?? null;
+  const isRemedial = !!remedialTermName && gradingPeriod === remedialTermName;
+
   const subjectOptions = subjectsForClass(selectedClass);
+
+  // Load (and server-side sync) the Round Two roster whenever the remedial
+  // term is picked for a class+subject.
+  useEffect(() => {
+    if (!isRemedial || !selectedClass || !selectedSubject) { setRemEntries([]); setRemMeta(null); setRemError(''); return; }
+    setRemLoading(true);
+    setRemError('');
+    teacherApi.getRemedialRoster(selectedClass, selectedSubject)
+      .then(r => {
+        setRemEntries(r.data?.entries || []);
+        setRemMeta({ examMax: Number(r.data?.examMax) || 0, carryMarkType: r.data?.carryMarkType ?? null });
+        setRemDraft({});
+      })
+      .catch((err: any) => setRemError(err.response?.data?.error || t('teacher.remedial_load_failed')))
+      .finally(() => setRemLoading(false));
+  }, [isRemedial, selectedClass, selectedSubject, t]);
+
+  const saveRemedial = async (entry: RemedialEntry) => {
+    const raw = remDraft[entry.id] ?? (entry.examValue != null ? String(entry.examValue) : '');
+    const v = Number(raw);
+    if (raw.trim() === '' || !Number.isFinite(v)) { toast.error(t('teacher.remedial_enter_mark')); return; }
+    setRemSavingId(entry.id);
+    try {
+      await teacherApi.saveRemedialExam(entry.id, v);
+      setRemEntries(prev => prev.map(e => e.id === entry.id ? { ...e, examValue: v, isReleased: false } : e));
+      toast.success(t('teacher.remedial_saved'));
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || t('teacher.remedial_save_failed'));
+    } finally {
+      setRemSavingId(null);
+    }
+  };
 
   useEffect(() => {
     if (!selectedClass) return;
@@ -82,6 +143,14 @@ export default function GradingPage() {
     e.preventDefault();
     if (!selectedStudent || !selectedSubject) {
       toast.error(t('teacher.select_student_subject'));
+      return;
+    }
+    // A term is required: the backend rejects term-less saves (validator +
+    // filing-window gate), and older backends silently stored an orphan
+    // grade under an empty term that no term-grouped view ever showed.
+    // Mobile has the same guard.
+    if (!gradingPeriod) {
+      toast.error(t('teacher.select_term'));
       return;
     }
     if (filingClosed) {
@@ -135,13 +204,15 @@ export default function GradingPage() {
               value={selectedClass}
               onChange={e => { setSelectedClass(e.target.value); setSelectedStudent(''); }}
             />
-            <Select
-              label={t('common.student')}
-              options={students.map(s => ({ value: s.id, label: s.fullName }))}
-              placeholder={t('teacher.select_student')}
-              value={selectedStudent}
-              onChange={e => setSelectedStudent(e.target.value)}
-            />
+            {!isRemedial && (
+              <Select
+                label={t('common.student')}
+                options={students.map(s => ({ value: s.id, label: s.fullName }))}
+                placeholder={t('teacher.select_student')}
+                value={selectedStudent}
+                onChange={e => setSelectedStudent(e.target.value)}
+              />
+            )}
             {selectedClass && (subjectOptions.length === 0 ? (
               <p className="text-sm text-amber-600">{t('teacher.no_subject_for_class')}</p>
             ) : (
@@ -176,6 +247,7 @@ export default function GradingPage() {
             )}
 
             {/* Dynamic marks */}
+            {!isRemedial && (
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label className="text-sm font-medium text-gray-700">{t('teacher.marks')}</label>
@@ -248,11 +320,104 @@ export default function GradingPage() {
                 </div>
               )}
             </div>
+            )}
 
-            <Button type="submit" loading={loading} disabled={filingClosed} fullWidth icon={<Star className="w-4 h-4" />}>
-              {t('teacher.save_grade')}
-            </Button>
+            {!isRemedial && (
+              <Button type="submit" loading={loading} disabled={filingClosed || !selectedStudent || !selectedSubject || !gradingPeriod} fullWidth icon={<Star className="w-4 h-4" />}>
+                {t('teacher.save_grade')}
+              </Button>
+            )}
           </form>
+
+          {/* Remedial (Round Two) roster — pre-built server-side; the exam
+              mark is the only input (REMEDIAL_TERM_PLAN.md P3). */}
+          {isRemedial && (
+            <div className="mt-2 space-y-3">
+              <div className="flex items-center gap-2">
+                <Repeat className="w-4 h-4 text-rose-600" />
+                <p className="text-sm font-semibold text-gray-800">{t('teacher.remedial_roster', { term: remedialTermName })}</p>
+              </div>
+              <p className="text-xs text-gray-500">{t('teacher.remedial_roster_hint')}</p>
+
+              {!selectedSubject ? (
+                <p className="text-sm text-gray-400">{t('teacher.select_subject')}</p>
+              ) : remLoading ? (
+                <div className="space-y-2">
+                  {[1, 2].map(i => <div key={i} className="h-14 bg-gray-100 rounded-xl animate-pulse" />)}
+                </div>
+              ) : remError ? (
+                <div className="rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-700">{remError}</div>
+              ) : remEntries.length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-3">{t('teacher.remedial_empty')}</p>
+              ) : (
+                <div className="space-y-2">
+                  {remEntries.map(entry => {
+                    const draft = remDraft[entry.id] ?? (entry.examValue != null ? String(entry.examValue) : '');
+                    const parsed = draft.trim() === '' ? null : Number(draft);
+                    const total = parsed != null && Number.isFinite(parsed)
+                      ? remedialTotal(parsed, entry.carryValue) : null;
+                    const overMax = parsed != null && remMeta != null && (parsed < 0 || parsed > remMeta.examMax);
+                    return (
+                      <div key={entry.id} className="bg-gray-50 rounded-xl p-3 space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <div>
+                            <p className="text-sm font-medium text-gray-800">{entry.studentName}</p>
+                            <p className="text-xs text-gray-500">
+                              {t('teacher.remedial_corrects', { term: entry.forPeriod })}
+                              {entry.roundOne != null && <> · {t('teacher.remedial_round_one', { value: entry.roundOne })}</>}
+                            </p>
+                          </div>
+                          {entry.examValue != null && (
+                            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">
+                              {t('teacher.remedial_filed')}
+                            </span>
+                          )}
+                        </div>
+
+                        {entry.carryName && (
+                          <p className="text-xs text-gray-500 flex items-center gap-1">
+                            {entry.carryMissing && <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />}
+                            {entry.carryMissing
+                              ? t('teacher.remedial_carry_missing', { name: entry.carryName, term: entry.forPeriod })
+                              : t('teacher.remedial_carry', { name: entry.carryName, value: entry.carryValue })}
+                          </p>
+                        )}
+
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            step="0.1"
+                            min={0}
+                            max={remMeta?.examMax}
+                            value={draft}
+                            onChange={e => setRemDraft(prev => ({ ...prev, [entry.id]: e.target.value }))}
+                            placeholder="0"
+                            disabled={filingClosed}
+                            className="input-field w-24 text-sm"
+                          />
+                          <span className="text-xs text-gray-500">/ {remMeta?.examMax ?? '—'}</span>
+                          <div className="flex-1 text-right text-sm">
+                            {total != null && !overMax && (
+                              <span className="font-bold text-primary-600">{t('teacher.remedial_total', { value: total })}</span>
+                            )}
+                            {overMax && <span className="text-red-600 text-xs">{t('teacher.remedial_over_max', { max: remMeta?.examMax })}</span>}
+                          </div>
+                          <Button
+                            type="button"
+                            onClick={() => saveRemedial(entry)}
+                            loading={remSavingId === entry.id}
+                            disabled={filingClosed || overMax || draft.trim() === ''}
+                          >
+                            {t('teacher.save_grade')}
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </Card>
 
         {/* Grade history */}

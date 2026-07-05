@@ -63,6 +63,7 @@ import StudentBriefPage from './pages/admin/StudentBriefPage';
 import ParentProfilePage from './pages/admin/ParentProfilePage';
 import AnnouncementsPage from './pages/admin/AnnouncementsPage';
 import GradeReviewPage from './pages/admin/GradeReviewPage';
+import RemedialPage from './pages/admin/RemedialPage';
 import StaffAttendanceManagementPage from './pages/admin/StaffAttendanceManagementPage';
 import ReportCardsPage from './pages/admin/ReportCardsPage';
 import StudentHealthPage from './pages/admin/StudentHealthPage';
@@ -251,6 +252,7 @@ export default function App() {
         <Route path="/admin/teaching-plan" element={<ProtectedRoute allowedRoles={['admin']}><TeachingPlanPage /></ProtectedRoute>} />
         <Route path="/admin/substitutions" element={<ProtectedRoute allowedRoles={['admin']}><SubstitutionsPage /></ProtectedRoute>} />
         <Route path="/admin/grade-review" element={<ProtectedRoute allowedRoles={['admin']}><GradeReviewPage /></ProtectedRoute>} />
+        <Route path="/admin/remedial" element={<ProtectedRoute allowedRoles={['admin']}><RemedialPage /></ProtectedRoute>} />
         <Route path="/admin/report-cards" element={<ProtectedRoute allowedRoles={['admin']}><ReportCardsPage /></ProtectedRoute>} />
         <Route path="/admin/health" element={<ProtectedRoute allowedRoles={['admin']}><StudentHealthPage /></ProtectedRoute>} />
         <Route path="/admin/attendance" element={<ProtectedRoute allowedRoles={['admin']}><StaffAttendanceManagementPage /></ProtectedRoute>} />

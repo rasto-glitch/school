@@ -16,6 +16,8 @@ import {
 import { resolveCurrentAcademicYear, loadEnrollmentHistory, rowsToSnapshot } from '../utils/studentEnrollments';
 import { loadHealthBrief } from '../utils/studentHealthBrief';
 import { getOpenWindowForTerm, listGradeWindows } from '../utils/gradeWindow';
+import { loadGradingConfig } from '../utils/gradeCalc';
+import { syncClassRemedial } from '../utils/remedial';
 import { logAudit } from '../utils/audit';
 // Elevated client for STORAGE-only operations — see chat.controller.ts
 // for the rationale.
@@ -303,13 +305,55 @@ export async function upsertGrade(req: AuthRequest, res: Response): Promise<void
   const { schoolId, userId } = req.user!;
   const { studentId, classId, subject, marks, gradingPeriod } = req.body;
 
-  const [teacherRes, academicYear] = await Promise.all([
+  const [teacherRes, academicYear, studentRes, markTypesRes, remTermRes] = await Promise.all([
     req.db!.from('teachers').select('id').eq('user_id', userId).eq('school_id', schoolId).single(),
     resolveCurrentAcademicYear(schoolId),
+    req.db!.from('students').select('id').eq('id', studentId).eq('school_id', schoolId).eq('class_id', classId).maybeSingle(),
+    req.db!.from('mark_types').select('name').eq('school_id', schoolId).in('applies_to', ['grade', 'both']),
+    req.db!.from('terms').select('name').eq('school_id', schoolId).eq('kind', 'remedial').maybeSingle(),
   ]);
   if (!teacherRes.data) { res.status(404).json({ error: 'Teacher not found' }); return; }
+  // Remedial (075/P3): the remedial term never takes normal grade rows —
+  // Round Two marks go through the dedicated remedial filing endpoints, which
+  // pre-build entries per corrected term and auto-copy the carried mark.
+  const remName = remTermRes.data?.name;
+  if (remName && String(gradingPeriod || '').trim().toLowerCase() === remName.trim().toLowerCase()) {
+    res.status(400).json({
+      error: `"${remName}" is the remedial term — file Round Two marks from the remedial roster.`,
+      code: 'REMEDIAL_TERM',
+    });
+    return;
+  }
   if (!(await subjectAllowedForClass(schoolId, teacherRes.data.id, classId, subject))) {
     res.status(403).json({ error: `You aren't assigned to teach ${subject} for this class.` }); return;
+  }
+  // M-1 (audit): subjectAllowedForClass answers "may this teacher grade this
+  // subject for this CLASS?" but nothing pinned the STUDENT to that class —
+  // and the upsert identity (student, subject, term, year) is class-blind, so
+  // a teacher of one class could overwrite another class's grade for the same
+  // student/subject/term (reassigning teacher_id and resetting the release
+  // gate). Require the student to currently be in the submitted class in this
+  // school.
+  if (!studentRes.data) {
+    res.status(403).json({ error: 'Student is not in this class.' }); return;
+  }
+  // M-2 (audit): when the school has configured grade mark types, every
+  // submitted mark must use one of them — an unknown name can't be matched to
+  // an "out of" value and was historically dropped from the official
+  // percentage without a trace. The web UI already constrains names to a
+  // dropdown when types exist; this enforces the same server-side. Schools
+  // with no grade mark types keep free-text names (raw-sum mode).
+  const gradeTypeNames = new Set(((markTypesRes.data ?? []) as { name: string }[]).map(m => m.name));
+  if (gradeTypeNames.size > 0) {
+    const unknown = [...new Set(
+      (Array.isArray(marks) ? marks : [])
+        .map((m: { name?: unknown }) => m?.name)
+        .filter((n: unknown): n is string => typeof n === 'string' && !gradeTypeNames.has(n)),
+    )];
+    if (unknown.length > 0) {
+      res.status(400).json({ error: `Unknown mark type(s): ${unknown.join(', ')}. Use the school's configured mark types.` });
+      return;
+    }
   }
 
   // Filing window gate (migration 060): teachers may only file grades for a
@@ -396,6 +440,109 @@ export async function getGrades(req: AuthRequest, res: Response): Promise<void> 
     .order('grading_period');
 
   if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+  res.json(toCC(data));
+}
+
+// ---- REMEDIAL (Round Two) FILING — REMEDIAL_TERM_PLAN.md P3 ----
+
+// GET /teacher/remedial-roster?classId=&subject=
+// The pre-built Round Two roster for one class+subject in the current year.
+// The heavy lifting (idempotent build-on-read sync, carry auto-copy, stale
+// cleanup) lives in utils/remedial.ts, shared with the admin overview.
+export async function getRemedialRoster(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId, userId } = req.user!;
+  const classId = String(req.query.classId || '').trim();
+  const subject = String(req.query.subject || '').trim();
+  if (!classId || !subject) { res.status(400).json({ error: 'classId and subject are required' }); return; }
+
+  const [teacherRes, academicYear, cfg] = await Promise.all([
+    req.db!.from('teachers').select('id').eq('user_id', userId).eq('school_id', schoolId).single(),
+    resolveCurrentAcademicYear(schoolId),
+    loadGradingConfig(req.db!, schoolId),
+  ]);
+  if (!teacherRes.data) { res.status(404).json({ error: 'Teacher not found' }); return; }
+  if (!(await subjectAllowedForClass(schoolId, teacherRes.data.id, classId, subject))) {
+    res.status(403).json({ error: `You aren't assigned to teach ${subject} for this class.` }); return;
+  }
+  if (!cfg.remedial?.examMarkType) {
+    res.status(400).json({
+      error: 'The remedial term is not configured yet. An admin must set it up in Settings first.',
+      code: 'REMEDIAL_NOT_CONFIGURED',
+    });
+    return;
+  }
+  if (!academicYear) { res.status(400).json({ error: 'No current academic year is set.' }); return; }
+
+  try {
+    const result = await syncClassRemedial(req.db!, schoolId, classId, academicYear, cfg, { subject });
+    res.json(result);
+  } catch (e) {
+    const err = e as Parameters<typeof safeDbErrorStatus>[0];
+    res.status(safeDbErrorStatus(err)).json({ error: safeDbErrorMessage(err) });
+  }
+}
+
+// PUT /teacher/remedial-grades/:id — file the exam mark for one entry. The
+// only teacher-writable field (the carry is auto-copied). Gated by the
+// remedial term's own filing window; lands unreleased like normal grades.
+export async function saveRemedialExam(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId, userId } = req.user!;
+  const { id } = req.params;
+  const { examValue } = req.body as { examValue: number };
+
+  const [teacherRes, rowRes, cfg] = await Promise.all([
+    req.db!.from('teachers').select('id').eq('user_id', userId).eq('school_id', schoolId).single(),
+    req.db!.from('remedial_grades').select('*').eq('id', id).eq('school_id', schoolId).maybeSingle(),
+    loadGradingConfig(req.db!, schoolId),
+  ]);
+  if (!teacherRes.data) { res.status(404).json({ error: 'Teacher not found' }); return; }
+  const row = rowRes.data as Record<string, unknown> | null;
+  if (!row) { res.status(404).json({ error: 'Remedial entry not found' }); return; }
+  if (!(await subjectAllowedForClass(schoolId, teacherRes.data.id, row.class_id as string, row.subject as string))) {
+    res.status(403).json({ error: `You aren't assigned to teach ${row.subject} for this class.` }); return;
+  }
+  if (!cfg.remedial?.examMarkType) {
+    res.status(400).json({ error: 'The remedial term is not configured.', code: 'REMEDIAL_NOT_CONFIGURED' }); return;
+  }
+  const examMax = cfg.markMaxes[cfg.remedial.examMarkType] ?? 0;
+  if (typeof examValue !== 'number' || !Number.isFinite(examValue) || examValue < 0 || examValue > examMax) {
+    res.status(400).json({ error: `The exam mark must be between 0 and ${examMax}.` }); return;
+  }
+  if (!(await getOpenWindowForTerm(schoolId, cfg.remedial.termName))) {
+    res.status(403).json({
+      error: `Grade filing isn't open for ${cfg.remedial.termName} right now.`,
+      code: 'GRADE_WINDOW_CLOSED',
+    });
+    return;
+  }
+
+  const { data, error } = await req.db!.from('remedial_grades')
+    .update({
+      exam_value: examValue,
+      teacher_id: teacherRes.data.id,
+      is_released: false,
+      released_at: null,
+      released_by: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id).eq('school_id', schoolId)
+    .select().single();
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+
+  // Same review signal as normal grade filing.
+  const { data: student } = await req.db!
+    .from('students').select('full_name').eq('id', row.student_id as string).single();
+  const { data: admins } = await req.db!
+    .from('users').select('id').eq('school_id', schoolId).eq('role', 'admin').eq('is_active', true);
+  if (admins && admins.length > 0) {
+    notifyMany((admins as { id: string }[]).map(a => ({
+      schoolId, userId: a.id,
+      title: 'Grades Pending Review',
+      message: `Remedial marks for ${(student as { full_name?: string } | null)?.full_name || 'a student'} in ${row.subject} are awaiting your review.`,
+      type: 'grade_pending',
+    }))).catch(() => {});
+  }
+
   res.json(toCC(data));
 }
 
