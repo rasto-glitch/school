@@ -2446,6 +2446,16 @@ ALTER TABLE fee_payments          ADD COLUMN IF NOT EXISTS payment_account_id UU
 ALTER TABLE staff_salary_payments ADD COLUMN IF NOT EXISTS payment_account_id UUID REFERENCES payment_accounts(id) ON DELETE SET NULL;
 ALTER TABLE expenses              ADD COLUMN IF NOT EXISTS payment_account_id UUID REFERENCES payment_accounts(id) ON DELETE SET NULL;
 
+-- Insurance payout drawer view (migration 076): the payout is a field update
+-- on staff_members (not a separate row), so the chosen drawer + the converted
+-- cash that left it are frozen on the staff row — mirrors migration 056's
+-- paid_* columns on staff_salary_payments. Lives here (not in the
+-- staff_members block above) because the FK needs payment_accounts to exist.
+ALTER TABLE staff_members ADD COLUMN IF NOT EXISTS insurance_paid_out_account_id UUID REFERENCES payment_accounts(id) ON DELETE SET NULL;
+ALTER TABLE staff_members ADD COLUMN IF NOT EXISTS insurance_paid_out_paid_amount NUMERIC(14,2);
+ALTER TABLE staff_members ADD COLUMN IF NOT EXISTS insurance_paid_out_paid_currency TEXT;
+ALTER TABLE staff_members ADD COLUMN IF NOT EXISTS insurance_paid_out_exchange_rate NUMERIC(18,8);
+
 CREATE TABLE IF NOT EXISTS fx_rates (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,

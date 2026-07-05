@@ -161,15 +161,17 @@ export async function listPaymentAccounts(req: AuthRequest, res: Response): Prom
   if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
   // Compute live balance per account: opening + tuition payments (excluding
-  // refunds since refunds reduce cash) − refunds − salaries − expenses.
-  // All filtered by voided_at IS NULL and account_id IS NOT NULL.
+  // refunds since refunds reduce cash) − refunds − salaries − expenses
+  // − insurance payouts. All filtered by voided_at IS NULL and account_id
+  // IS NOT NULL.
   const accountIds = (data ?? []).map((a: any) => a.id);
   if (accountIds.length === 0) { res.json([]); return; }
 
-  const [fp, ssp, ex] = await Promise.all([
+  const [fp, ssp, ex, ip] = await Promise.all([
     supabase.from('fee_payments').select('payment_account_id, paid_amount, amount, is_refund').in('payment_account_id', accountIds).is('voided_at', null),
     supabase.from('staff_salary_payments').select('payment_account_id, paid_amount, amount, insurance_amount, exchange_rate').in('payment_account_id', accountIds).is('voided_at', null),
     supabase.from('expenses').select('payment_account_id, paid_amount, amount').in('payment_account_id', accountIds).is('voided_at', null),
+    supabase.from('staff_members').select('insurance_paid_out_account_id, insurance_paid_out_paid_amount').eq('school_id', schoolId).eq('insurance_paid_out', true).in('insurance_paid_out_account_id', accountIds).is('voided_at', null),
   ]);
 
   // paid_amount is the cash that actually moved through the drawer (in the
@@ -193,6 +195,14 @@ export async function listPaymentAccounts(req: AuthRequest, res: Response): Prom
   }
   for (const r of (ex.data ?? []) as any[]) {
     outflowByAcct.set(r.payment_account_id, (outflowByAcct.get(r.payment_account_id) ?? 0) + cashOf(r));
+  }
+  // Insurance payouts (migration 076): the withheld cash that stayed in the
+  // till finally leaves it. paid_amount is already in the drawer's currency
+  // (converted at the payout-date rate). Pre-076 payouts have no account_id
+  // and never touched a drawer, so they're correctly absent here.
+  for (const r of (ip.data ?? []) as any[]) {
+    const paidOut = Number(r.insurance_paid_out_paid_amount) || 0;
+    outflowByAcct.set(r.insurance_paid_out_account_id, (outflowByAcct.get(r.insurance_paid_out_account_id) ?? 0) + paidOut);
   }
 
   res.json((data ?? []).map((a: any) => ({

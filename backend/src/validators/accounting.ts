@@ -188,6 +188,7 @@ export const insurancePayoutSchema = z.object({
   amount: amount.optional(),
   currency: currency.optional(),
   notes: optText(),
+  paymentAccountId: requiredId,
 });
 
 export const bulkNextPaymentSchema = z.object({

@@ -205,6 +205,35 @@ the actual code/schema. Backend is `backend/src`; DB is `database/schema.sql` + 
 - Payable (2000) credited in drawer currency on salary, debited in salary-entered currency on payout. When
   they differ, account 2000 keeps a permanent uncleared per-currency balance. Same-currency case unaffected.
 
+> **M-5 + M-6 fixed together (2026-07-05, "Part 2" of the insurance flow):** the payout now moves
+> real money like every other cash flow. Locked product decisions: FX is **always the payout-date
+> rate** (never the withholding-day rate — small residue on the payable accepted if rates moved,
+> zero in the same-currency case), and the cash leaves **one drawer** chosen at payout time
+> regardless of where the insurance accumulated. Changes: `insurancePayoutSchema` +
+> `markStaffInsurancePaid` now require `paymentAccountId` (explicitly validated school-scoped +
+> active, since `resolveDrawerAmount`'s unknown-id path silently falls back to rate 1), convert via
+> `resolveDrawerAmount(asOf = paidOn)`, and persist the drawer view on the staff row
+> (`insurance_paid_out_account_id/_paid_amount/_paid_currency/_exchange_rate`, **migration 076** —
+> mirrors 056's paid_* columns; FK ALTERs live in schema.sql after `payment_accounts` because of
+> creation order). `postInsurancePayout` takes `paymentAccountId` and credits
+> `cashFor(paymentAccountId)` instead of the phantom `byCode('1000')`, posting in the drawer's
+> currency (M-5 + M-6). The drawer display balance (`listPaymentAccounts`) gains a fourth source:
+> subtracts `insurance_paid_out_paid_amount` per drawer — the withheld cash that "stayed in the
+> till" finally leaves it on payout. `reverseStaffInsurancePayout` clears the four new fields (its
+> GL reversal already worked). Web payout dialog gets the same "paid from" picker + cross-currency
+> preview as the salary modal (reuses existing i18n keys — no new strings). **No backfill:**
+> pre-076 payouts had no drawer, NULL account_id keeps them out of drawer balances; reverse +
+> re-record upgrades them. Backend + web only, no mobile. **Deploy: run migration 076 (idempotent,
+> additive) before this backend — DONE 2026-07-05.** tsc backend+frontend clean, tenant-scoping
+> clean. **Verified end-to-end** against a locally-run backend + demo DB (accountant JWT — the
+> accounting routes are accountant-only): $500 salary with $25 withheld from an IQD drawer @1410 →
+> GL Dr 5000 705,000 / Cr drawer 669,750 / Cr 2000 35,250, drawer display −669,750 (net only);
+> payout @ payout-date rate 1450 → GL Dr 2000 36,250 / Cr DRAWER cash 36,250 in IQD (account 1000
+> untouched), staff row froze drawer/36,250 IQD/rate 1450, drawer display −706,000; payable 2000
+> net = −1,000 IQD = exactly the documented rate-move residue; probes: missing paymentAccountId →
+> 400, unknown account → 404, double payout → 409; reversal → all four fields cleared, reversal
+> entry posted, drawer display back to −669,750. Test fixtures fully cleaned from the demo DB.
+
 ---
 
 ## 🟡 LOW  [reported]

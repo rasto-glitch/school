@@ -171,6 +171,7 @@ interface InsurancePayoutBody {
   amount?: number;
   currency?: string;
   notes?: string | null;
+  paymentAccountId?: string;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────
@@ -931,6 +932,28 @@ export async function markStaffInsurancePaid(req: AuthRequest, res: Response): P
 
   const paidOn = body.paidOn || new Date().toISOString().slice(0, 10);
 
+  // The cash physically leaves ONE drawer (audit M-5): the payout requires a
+  // payment account like salaries/expenses do. Checked explicitly (not just
+  // via resolveDrawerAmount, whose unknown-id path silently falls back to
+  // rate 1) so a bad id can't mispost against the primary drawer.
+  const paymentAccountId = body.paymentAccountId;
+  if (!paymentAccountId) { res.status(400).json({ error: 'paymentAccountId is required' }); return; }
+  const { data: drawer } = await supabase
+    .from('payment_accounts').select('id, is_active')
+    .eq('id', paymentAccountId).eq('school_id', schoolId).maybeSingle();
+  if (!drawer || !(drawer as { is_active: boolean }).is_active) {
+    res.status(404).json({ error: 'Payment account not found' }); return;
+  }
+
+  // Cross-currency (audit M-6): convert at the PAYOUT-DATE rate (product
+  // decision: always today's rate, never the withholding-day rate) so the GL
+  // moves cash in the drawer's own currency book — the same book the payable
+  // was accrued in at salary time. amount/currency stay as entered; the
+  // paid_* view captures the real cash out, mirroring salary payments.
+  const fx = await resolveDrawerAmount(schoolId, { amount: payoutAmount, currency: finalCurrency, paymentAccountId, asOf: paidOn });
+  if (!fx.ok) { res.status(400).json({ error: fx.error }); return; }
+  const { paidAmount, paidCurrency, exchangeRate } = fx;
+
   const { data: beforeIns } = await supabase.from('staff_members').select('*').eq('id', id).eq('school_id', schoolId).is('voided_at', null).single();
 
   const { error } = await supabase.from('staff_members').update({
@@ -939,16 +962,21 @@ export async function markStaffInsurancePaid(req: AuthRequest, res: Response): P
     insurance_paid_out_amount: payoutAmount,
     insurance_paid_out_currency: finalCurrency,
     insurance_paid_out_notes: body.notes?.trim() || null,
+    insurance_paid_out_account_id: paymentAccountId,
+    insurance_paid_out_paid_amount: paidAmount,
+    insurance_paid_out_paid_currency: paidCurrency,
+    insurance_paid_out_exchange_rate: exchangeRate,
   }).eq('id', id).eq('school_id', schoolId);
   if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
   const { data: afterIns } = await supabase.from('staff_members').select('*').eq('id', id).eq('school_id', schoolId).single();
   await logAudit({ req, entityType: 'staff_member', entityId: id, action: 'update', before: beforeIns || undefined, after: afterIns || undefined, label: s.full_name, reason: 'Insurance paid out' });
 
-  // GL: Dr Insurance Payable / Cr Cash. Keyed on staff id.
+  // GL: Dr Insurance Payable / Cr drawer cash, in the drawer's currency.
+  // Keyed on staff id.
   await postInsurancePayout({
-    schoolId, staffId: id, amount: payoutAmount, currency: finalCurrency,
-    entryDate: paidOn, postedBy: req.user!.userId,
+    schoolId, staffId: id, amount: paidAmount, currency: paidCurrency,
+    paymentAccountId, entryDate: paidOn, postedBy: req.user!.userId,
   });
 
   // Notify linked teacher (if any) that their insurance was paid out
@@ -990,6 +1018,10 @@ export async function reverseStaffInsurancePayout(req: AuthRequest, res: Respons
     insurance_paid_out_amount: null,
     insurance_paid_out_currency: null,
     insurance_paid_out_notes: null,
+    insurance_paid_out_account_id: null,
+    insurance_paid_out_paid_amount: null,
+    insurance_paid_out_paid_currency: null,
+    insurance_paid_out_exchange_rate: null,
   }).eq('id', id).eq('school_id', schoolId);
   if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 

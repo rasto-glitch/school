@@ -85,6 +85,7 @@ interface InsurancePayoutForm {
   amount: string;
   currency: string;
   notes: string;
+  paymentAccountId: string;
 }
 
 interface BulkNextPaymentForm {
@@ -461,6 +462,7 @@ export default function StaffSalariesTab() {
       amount: String(s.insuranceHeldTotal || 0),
       currency: s.currency,
       notes: '',
+      paymentAccountId: accounts[0]?.id ?? '', // default to the primary account
     });
   };
 
@@ -469,6 +471,7 @@ export default function StaffSalariesTab() {
     const amt = Number(insurancePayoutForm.amount);
     if (isNaN(amt) || amt < 0) { toast.error(t('accounting.staff.err_amount_nonneg')); return; }
     if (!insurancePayoutForm.paidOn) { toast.error(t('accounting.staff.err_date_required')); return; }
+    if (!insurancePayoutForm.paymentAccountId) { toast.error(t('accounting.staff.err_choose_account')); return; }
 
     setSavingInsurancePayout(true);
     try {
@@ -477,6 +480,7 @@ export default function StaffSalariesTab() {
         amount: amt,
         currency: insurancePayoutForm.currency.toUpperCase(),
         notes: insurancePayoutForm.notes.trim() || null,
+        paymentAccountId: insurancePayoutForm.paymentAccountId,
       });
       toast.success(t('accounting.staff.insurance_marked_paid'));
       setInsurancePayoutTarget(null);
@@ -1126,6 +1130,48 @@ export default function StaffSalariesTab() {
               <Input label={t('accounting.staff.currency')} value={insurancePayoutForm.currency} onChange={e => setInsurancePayoutForm({ ...insurancePayoutForm, currency: e.target.value.toUpperCase() })} />
             </div>
             <Input label={t('accounting.staff.payout_date')} type="date" value={insurancePayoutForm.paidOn} onChange={e => setInsurancePayoutForm({ ...insurancePayoutForm, paidOn: e.target.value })} />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('accounting.staff.paid_from')} <span className="text-rose-500">*</span></label>
+              {accounts.length > 0 ? (
+                <>
+                  <select
+                    value={insurancePayoutForm.paymentAccountId}
+                    onChange={e => setInsurancePayoutForm({ ...insurancePayoutForm, paymentAccountId: e.target.value })}
+                    className="w-full border border-gray-300 rounded-xl px-4 py-2.5 bg-white min-h-[44px] focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    {accounts.map(a => (
+                      <option key={a.id} value={a.id}>{a.name} ({a.kind} · {a.currency})</option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">{t('accounting.staff.paid_from_hint')}</p>
+                </>
+              ) : (
+                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2">{t('accounting.staff.no_accounts_warning')}</p>
+              )}
+              {/* Cross-currency preview: payout currency ≠ drawer currency — converted at the payout-date rate. */}
+              {(() => {
+                const acct = accounts.find(a => a.id === insurancePayoutForm.paymentAccountId);
+                const drawerCcy = (acct?.currency || '').toUpperCase();
+                const payoutCcy = insurancePayoutForm.currency.toUpperCase();
+                if (!drawerCcy || !payoutCcy || drawerCcy === payoutCcy) return null;
+                const rate = fxRates
+                  .filter(r => r.fromCurrency.toUpperCase() === payoutCcy && r.toCurrency.toUpperCase() === drawerCcy && r.effectiveFrom <= insurancePayoutForm.paidOn)
+                  .sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom))[0]?.rate;
+                if (!rate) {
+                  return (
+                    <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-2 mt-2">
+                      {t('accounting.staff.fx_missing', { from: payoutCcy, to: drawerCcy, defaultValue: 'No exchange rate from {{from}} to {{to}}. Set one on the FX Rates page, or pay from a {{from}} drawer.' })}
+                    </p>
+                  );
+                }
+                const conv = Math.round((Number(insurancePayoutForm.amount) || 0) * rate * 100) / 100;
+                return (
+                  <p className="text-xs text-blue-800 bg-blue-50 border border-blue-200 rounded-lg p-2 mt-2">
+                    {t('accounting.staff.fx_preview', { amount: fmtMoney(conv, drawerCcy), rate, defaultValue: '≈ {{amount}} will leave this drawer (rate {{rate}}).' })}
+                  </p>
+                );
+              })()}
+            </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('accounting.staff.notes_optional')}</label>
               <textarea

@@ -315,20 +315,26 @@ export async function postSalary(o: {
   });
 }
 
-// Insurance held is paid out: Dr Insurance Payable / Cr Cash. Keyed on staff id
-// (the payout is a field update on staff_members, not a separate row).
+// Insurance held is paid out: Dr Insurance Payable / Cr drawer cash. Keyed on
+// staff id (the payout is a field update on staff_members, not a separate
+// row). The caller passes amount/currency already converted to the drawer's
+// currency at the payout-date rate, so the payable is debited in the same
+// currency book it was credited in at salary time and the drawer's cash
+// account moves the real amount that left the till (audit M-5 + M-6 — this
+// used to credit the phantom system Cash 1000 in the salary-entered currency).
 export async function postInsurancePayout(o: {
   schoolId: string;
   staffId: string;
   amount: number;
   currency: string;
+  paymentAccountId?: string | null;
   entryDate: string;
   postedBy?: string | null;
 }): Promise<void> {
   if (!(o.amount > 0)) return;
   const acc = await loadAccounts(o.schoolId);
   const insPayable = acc.byCode('2000');
-  const cash = acc.byCode('1000');
+  const cash = acc.cashFor(o.paymentAccountId);
   if (!insPayable || !cash) { console.error('[gl] insurance payout skipped: account missing'); return; }
   await postEntry({
     schoolId: o.schoolId, entryDate: o.entryDate, currency: o.currency,

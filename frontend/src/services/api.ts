@@ -888,7 +888,7 @@ export const staffApi = {
     api.post<{ updated: number }>('/accounting/staff/bulk-next-payment', data),
   downloadSalaryPdf: (id: string) => api.get(`/accounting/staff/${id}/export.pdf`, { responseType: 'blob' }),
   downloadSalaryXlsx: (id: string) => api.get(`/accounting/staff/${id}/export.xlsx`, { responseType: 'blob' }),
-  payInsurance: (id: string, data: { paidOn?: string; amount?: number; currency?: string; notes?: string | null }) =>
+  payInsurance: (id: string, data: { paidOn?: string; amount?: number; currency?: string; notes?: string | null; paymentAccountId: string }) =>
     api.post(`/accounting/staff/${id}/insurance/pay`, data),
   reverseInsurancePayout: (id: string) => api.post(`/accounting/staff/${id}/insurance/reverse`),
 };
