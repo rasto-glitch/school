@@ -1,0 +1,23 @@
+-- ============================================================
+-- Migration 077 — grades.teacher_id: drop the NOT NULL drift (audit M-7)
+--
+-- schema.sql has always declared grades.teacher_id as
+--   teacher_id UUID REFERENCES teachers(id) ON DELETE SET NULL
+-- i.e. nullable by design: a grade survives its teacher leaving, and the
+-- grades xlsx import intentionally writes teacher_id = NULL when a subject
+-- resolves to zero or 2+ class-subject teachers (no single owner).
+--
+-- Prod drifted: the live column carries a NOT NULL constraint. Two
+-- consequences (discovered 2026-07-05 while verifying the import fixes):
+--   1. ONE subject without exactly one assigned teacher fails the WHOLE
+--      grades import batch with a generic 400 ("A required field is
+--      missing" — SQLSTATE 23502).
+--   2. NOT NULL + ON DELETE SET NULL is self-contradictory: deleting a
+--      teacher who has grades would error instead of detaching them.
+--
+-- Fix: align prod with the declared schema. DROP NOT NULL is a no-op when
+-- the column is already nullable, so this is idempotent and instant (no
+-- table rewrite, no data change).
+-- ============================================================
+
+ALTER TABLE grades ALTER COLUMN teacher_id DROP NOT NULL;

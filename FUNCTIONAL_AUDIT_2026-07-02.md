@@ -264,6 +264,15 @@ the actual code/schema. Backend is `backend/src`; DB is `database/schema.sql` + 
 > import batch with a generic 400 "A required field is missing". Proposed fix: migration 077
 > `ALTER TABLE grades ALTER COLUMN teacher_id DROP NOT NULL;` (aligns prod with schema.sql intent).
 > NOT yet fixed — awaiting decision.
+>
+> **M-7 fixed (2026-07-06):** migration 077 (`ALTER TABLE grades ALTER COLUMN teacher_id DROP NOT
+> NULL;` — idempotent, no table rewrite) written and RUN in prod; no schema.sql change needed (it
+> already declared the column nullable — prod was the drift). Verified end-to-end: one import
+> batch across three subjects — no assigned teacher, co-taught (2 teachers), solo (1 teacher) —
+> returned 200 with `placed: 3` and zero warnings (pre-077 the first two subjects failed the WHOLE
+> batch with a generic 400); grades landed with `teacher_id` null / null / the solo teacher's id
+> respectively. The self-contradictory NOT NULL + ON DELETE SET NULL combo is also gone, so
+> deleting a teacher who has grades detaches them as designed. Test fixtures cleaned.
 
 - **AR-aging buckets ignore `adjustment`** → per-row buckets don't reconcile to balance.
   `backend/src/controllers/accountingReports.controller.ts:184` (vs `dueTotal` incl. adjustment at `:177`).
