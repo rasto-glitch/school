@@ -171,7 +171,7 @@ export async function scan(req: AuthRequest, res: Response): Promise<void> {
 
   const { data: existing } = await supabase
     .from('staff_attendance')
-    .select('id, status')
+    .select('id, status, check_in_at, is_late')
     .eq('school_id', schoolId)
     .eq('user_id', userId)
     .eq('work_date', workDate)
@@ -220,8 +220,23 @@ export async function scan(req: AuthRequest, res: Response): Promise<void> {
     return;
   }
 
-  // Open row → check OUT.
+  // Open row → check OUT — unless the check-in was moments ago. A second scan
+  // within the dwell window is almost always a "did it register?" re-scan at
+  // the reception screen, not a real end of the workday; treating it as a
+  // check-out locked the employee out for the rest of the day (multi-punch is
+  // Phase 2) until an admin correction. Return the check-in state
+  // idempotently instead — same shape as the double-fire INSERT guard above.
+  const MIN_DWELL_MS = 5 * 60 * 1000;
   if (existing.status === 'open') {
+    const checkedInMs = existing.check_in_at ? new Date(existing.check_in_at as string).getTime() : NaN;
+    if (Number.isFinite(checkedInMs) && Date.now() - checkedInMs < MIN_DWELL_MS) {
+      res.json({
+        action: 'check_in', workDate, status: 'open',
+        isLate: !!existing.is_late, checkInAt: existing.check_in_at,
+        distanceMeters: Math.round(distanceMeters),
+      });
+      return;
+    }
     const { error: updErr } = await supabase
       .from('staff_attendance')
       .update({

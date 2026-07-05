@@ -26,9 +26,20 @@ export async function loadHealthBrief(db: any, schoolId: string, studentId: stri
     .maybeSingle();
   if (!data) return null;
 
+  // Per-field guard: the brief is best-effort safety info embedded in the
+  // whole student brief — one corrupt ciphertext must degrade to a missing
+  // field, not 500 the entire teacher/admin page (the clinic controller
+  // guards the same decrypt; this path forgot to).
+  const safeDecrypt = (ct: string | null): string | null => {
+    try { return decryptPii(ct, schoolId); }
+    catch (e) {
+      console.error(`[healthBrief] decrypt failed for student ${studentId}:`, e instanceof Error ? e.message : e);
+      return null;
+    }
+  };
   const allergyTags = Array.isArray(data.allergy_tags) ? (data.allergy_tags as string[]) : [];
-  const chronicConditions = (decryptPii(data.chronic_conditions_ct as string | null, schoolId) || '').trim() || null;
-  const dietaryNotes = (decryptPii(data.dietary_notes_ct as string | null, schoolId) || '').trim() || null;
+  const chronicConditions = (safeDecrypt(data.chronic_conditions_ct as string | null) || '').trim() || null;
+  const dietaryNotes = (safeDecrypt(data.dietary_notes_ct as string | null) || '').trim() || null;
   const hasAny = allergyTags.length > 0 || !!chronicConditions || !!dietaryNotes;
   return { allergyTags, chronicConditions, dietaryNotes, hasAny };
 }

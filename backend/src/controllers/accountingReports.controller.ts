@@ -183,7 +183,12 @@ export async function getArAging(req: AuthRequest, res: Response): Promise<void>
     // installment lands in a bucket based on (today − due_date).
     const installments = (instByPlan.get(sf.fee_plan_id) ?? []).sort((a, b) => a.sequence - b.sequence);
     const bucket = emptyBucket();
-    let remainingPaid = paid;
+    // The adjustment is part of dueTotal/balance, so the buckets must carry it
+    // too or the row doesn't cross-foot. A discount (negative) consumes the
+    // OLDEST overdue first — exactly like a payment — and a surcharge
+    // (positive) is an addition due today, payment-aware like the walk.
+    const adjustment = Number(sf.adjustment) || 0;
+    let remainingPaid = paid + (adjustment < 0 ? -adjustment : 0);
     if (installments.length === 0) {
       // No schedule — treat as fully due today (current bucket)
       bucket.current += balance;
@@ -194,6 +199,10 @@ export async function getArAging(req: AuthRequest, res: Response): Promise<void>
         if (unpaid < 0.01) continue;
         const daysOverdue = Math.round((todayMs - new Date(inst.due_date + 'T00:00:00Z').getTime()) / 86400000);
         placeBucket(bucket, daysOverdue, unpaid);
+      }
+      if (adjustment > 0) {
+        bucket.current += Math.max(0, adjustment - remainingPaid);
+        remainingPaid = Math.max(0, remainingPaid - adjustment);
       }
       // Late-fee component lands in current bucket (it's an addition for today)
       if (lateFee > 0) bucket.current += lateFee;

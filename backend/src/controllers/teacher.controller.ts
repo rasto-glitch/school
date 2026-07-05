@@ -17,6 +17,7 @@ import { resolveCurrentAcademicYear, loadEnrollmentHistory, rowsToSnapshot } fro
 import { loadHealthBrief } from '../utils/studentHealthBrief';
 import { getOpenWindowForTerm, listGradeWindows } from '../utils/gradeWindow';
 import { loadGradingConfig } from '../utils/gradeCalc';
+import { checkGradeMarks, GradeMarkType } from '../utils/markRules';
 import { syncClassRemedial } from '../utils/remedial';
 import { logAudit } from '../utils/audit';
 // Elevated client for STORAGE-only operations — see chat.controller.ts
@@ -309,7 +310,7 @@ export async function upsertGrade(req: AuthRequest, res: Response): Promise<void
     req.db!.from('teachers').select('id').eq('user_id', userId).eq('school_id', schoolId).single(),
     resolveCurrentAcademicYear(schoolId),
     req.db!.from('students').select('id').eq('id', studentId).eq('school_id', schoolId).eq('class_id', classId).maybeSingle(),
-    req.db!.from('mark_types').select('name').eq('school_id', schoolId).in('applies_to', ['grade', 'both']),
+    req.db!.from('mark_types').select('name, max_value').eq('school_id', schoolId).in('applies_to', ['grade', 'both']),
     req.db!.from('terms').select('name').eq('school_id', schoolId).eq('kind', 'remedial').maybeSingle(),
   ]);
   if (!teacherRes.data) { res.status(404).json({ error: 'Teacher not found' }); return; }
@@ -337,24 +338,14 @@ export async function upsertGrade(req: AuthRequest, res: Response): Promise<void
   if (!studentRes.data) {
     res.status(403).json({ error: 'Student is not in this class.' }); return;
   }
-  // M-2 (audit): when the school has configured grade mark types, every
-  // submitted mark must use one of them — an unknown name can't be matched to
-  // an "out of" value and was historically dropped from the official
-  // percentage without a trace. The web UI already constrains names to a
-  // dropdown when types exist; this enforces the same server-side. Schools
-  // with no grade mark types keep free-text names (raw-sum mode).
-  const gradeTypeNames = new Set(((markTypesRes.data ?? []) as { name: string }[]).map(m => m.name));
-  if (gradeTypeNames.size > 0) {
-    const unknown = [...new Set(
-      (Array.isArray(marks) ? marks : [])
-        .map((m: { name?: unknown }) => m?.name)
-        .filter((n: unknown): n is string => typeof n === 'string' && !gradeTypeNames.has(n)),
-    )];
-    if (unknown.length > 0) {
-      res.status(400).json({ error: `Unknown mark type(s): ${unknown.join(', ')}. Use the school's configured mark types.` });
-      return;
-    }
-  }
+  // Mark rules (audit M-2 + LOW): unknown-name rejection when the school has
+  // configured grade mark types, and value bounds (≥ 0, ≤ the type's
+  // max_value). Shared with the admin edit path via checkGradeMarks so the
+  // two write surfaces can't drift. The web UI already constrains names to a
+  // dropdown when types exist; schools with no grade mark types keep
+  // free-text names (raw-sum mode) with only the ≥ 0 bound.
+  const markErr = checkGradeMarks(marks, (markTypesRes.data ?? []) as GradeMarkType[]);
+  if (markErr) { res.status(400).json({ error: markErr }); return; }
 
   // Filing window gate (migration 060): teachers may only file grades for a
   // term while its grade-filing window is open today (school-local). This is

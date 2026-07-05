@@ -238,6 +238,33 @@ the actual code/schema. Backend is `backend/src`; DB is `database/schema.sql` + 
 
 ## 🟡 LOW  [reported]
 
+> **Top-5 LOWs fixed + E2E-verified (2026-07-05):** ① **Import same-name collision** — template +
+> export gained a "Student ID" column; import prefers it (validated against the class roster), and
+> name-resolution now detects duplicate names per class and skips those rows with an explicit
+> warning instead of guessing (old files without the column keep working). ② **Mark value bounds**
+> — new shared `utils/markRules.ts` `checkGradeMarks()` (unknown-name M-2 rule + value ≥ 0 + value
+> ≤ type `max_value`) used by BOTH teacher `upsertGrade` and admin `updateGrade` (which previously
+> had no mark validation at all); the xlsx import rejects negative cells with a warning. Verified:
+> 855 against max-100 → 400 "exceeds the maximum", negative → 400, unknown name → 400, valid → 200.
+> ③ **Double-scan check-out** — 5-minute minimum dwell in `scan`: a re-scan within the window
+> returns the check-in state idempotently; verified live (2nd scan stays checked in; a backdated
+> check-in still checks out). ④ **Health-brief decrypt** — per-field try/catch in
+> `loadHealthBrief`; verified a garbage ciphertext now yields a 200 brief with the field null
+> (allergy tags intact) instead of a 500. ⑤ **AR-aging adjustment** — discount consumes the oldest
+> overdue first (extra "payment" in the walk), surcharge is a payment-aware addition due today;
+> verified both signs: balance 80,000 = buckets 80,000 (50k/30k) and balance 115,000 = buckets
+> 115,000 (50k/50k/15k current). All backend-only, no migration. tsc + tenant-scoping clean; full
+> E2E against locally-run backend + demo DB, fixtures cleaned.
+>
+> ⚠️ **NEW finding discovered during verification — grades.teacher_id NOT NULL drift (proposed
+> M-7):** prod `grades.teacher_id` has a NOT NULL constraint; `database/schema.sql:516` declares it
+> nullable with `ON DELETE SET NULL` (contradictory with NOT NULL — deleting a teacher who has
+> grades would 23502). Impact today: the grades xlsx import sets `teacher_id: null` whenever a
+> subject has zero or 2+ assigned class-subject teachers, so ONE such subject fails the WHOLE
+> import batch with a generic 400 "A required field is missing". Proposed fix: migration 077
+> `ALTER TABLE grades ALTER COLUMN teacher_id DROP NOT NULL;` (aligns prod with schema.sql intent).
+> NOT yet fixed — awaiting decision.
+
 - **AR-aging buckets ignore `adjustment`** → per-row buckets don't reconcile to balance.
   `backend/src/controllers/accountingReports.controller.ts:184` (vs `dueTotal` incl. adjustment at `:177`).
 - **All-zero subject counted vs skipped** depending on marks-array (returns 0, counted) vs legacy columns
@@ -254,8 +281,9 @@ the actual code/schema. Backend is `backend/src`; DB is `database/schema.sql` + 
   `studentHealth.controller.ts:47-54`).
 - **`acceptIncomingTransfer` double-import race** — no status-guarded UPDATE.
   `backend/src/controllers/studentTransfer.controller.ts:680-744`.
-- **Receipt "paid before" unsigned** — refunds inflate the running total on the printed receipt.
-  `backend/src/controllers/fees.controller.ts:1847`.
+- ~~**Receipt "paid before" unsigned** — refunds inflate the running total on the printed receipt.~~
+  **Already fixed as part of H-2:** the prior-payments sum at `fees.controller.ts:1841-1847` now
+  signs refunds negative (carries the "audit H-2" comment). Noticed 2026-07-05 while triaging LOWs.
 - **`onLeave` double-count** with overlapping leave rows (`createLeave` has no overlap check).
   `backend/src/controllers/staffAttendance.controller.ts:509-523,543,745-787`.
 - **`is_late` midnight quirk** — en-GB `hour12:false` may render "24:00" for 00:00 on some engines.

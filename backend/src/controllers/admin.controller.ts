@@ -20,6 +20,7 @@ import { loadArchiveSnapshot, streamPdf, buildXlsx } from '../utils/archiveExpor
 import { loadEmployeeArchiveSnapshot, streamPdf as streamEmployeePdf, buildXlsx as buildEmployeeXlsx } from '../utils/employeeArchiveExport';
 import { streamCredentialsPdf, type CredentialEntry } from '../utils/credentialsPdf';
 import { logAudit } from '../utils/audit';
+import { checkGradeMarks, GradeMarkType } from '../utils/markRules';
 import { resolveSkeleton, normalizeSkeleton, defaultSkeleton, lessonCount } from '../utils/scheduleSkeleton';
 import { solveTimetable, type SolverRequirement, type SolverLocked } from '../utils/timetableSolver';
 import { hasArchiveFeature, normalizeArchiveReason, resolveEmployeeArchiveId, rewriteOwnershipToArchive } from '../utils/employeeArchive';
@@ -3971,7 +3972,16 @@ export async function updateGrade(req: AuthRequest, res: Response): Promise<void
   const { marks, adminNote } = req.body as { marks?: { name: string; value: unknown }[]; adminNote?: string | null };
 
   const patch: Record<string, unknown> = {};
-  if (marks !== undefined) patch.marks = marks || [];
+  if (marks !== undefined) {
+    // Same mark rules as the teacher write path (unknown names + value
+    // bounds) — shared via checkGradeMarks so an admin correction can't
+    // introduce what a teacher submission would be rejected for.
+    const { data: markTypes } = await supabase
+      .from('mark_types').select('name, max_value').eq('school_id', schoolId).in('applies_to', ['grade', 'both']);
+    const markErr = checkGradeMarks(marks, (markTypes ?? []) as GradeMarkType[]);
+    if (markErr) { res.status(400).json({ error: markErr }); return; }
+    patch.marks = marks || [];
+  }
   if (adminNote !== undefined) patch.admin_note = (typeof adminNote === 'string' && adminNote.trim()) ? adminNote.trim() : null;
   if (Object.keys(patch).length === 0) { res.status(400).json({ error: 'Nothing to update' }); return; }
 
@@ -4214,7 +4224,7 @@ export async function gradesTemplate(req: AuthRequest, res: Response): Promise<v
 
   const [{ data: classes }, { data: students }, { data: cst }] = await Promise.all([
     supabase.from('classes').select('id, name').eq('school_id', schoolId).order('name'),
-    supabase.from('students').select('full_name, class_id').eq('school_id', schoolId).eq('is_graduated', false).order('full_name'),
+    supabase.from('students').select('id, full_name, class_id').eq('school_id', schoolId).eq('is_graduated', false).order('full_name'),
     supabase.from('class_subject_teachers').select('class_id, subjects(name)').eq('school_id', schoolId),
   ]);
 
@@ -4225,26 +4235,29 @@ export async function gradesTemplate(req: AuthRequest, res: Response): Promise<v
     if (!arr.includes(nm)) arr.push(nm);
     subjectsByClass.set(r.class_id, arr);
   }
-  const studentsByClass = new Map<string, string[]>();
-  for (const s of (students || []) as { full_name: string; class_id: string | null }[]) {
+  const studentsByClass = new Map<string, { id: string; name: string }[]>();
+  for (const s of (students || []) as { id: string; full_name: string; class_id: string | null }[]) {
     if (!s.class_id) continue;
     const arr = studentsByClass.get(s.class_id) || [];
-    arr.push(s.full_name);
+    arr.push({ id: s.id, name: s.full_name });
     studentsByClass.set(s.class_id, arr);
   }
 
   const wb = XLSX.utils.book_new();
   for (const c of (classes || []) as { id: string; name: string }[]) {
     const subjects = (subjectsByClass.get(c.id) || []).sort((a, b) => a.localeCompare(b));
+    // "Student ID" column: same-name students in one class are impossible to
+    // tell apart by name alone, so the import resolves by this id when the
+    // column is present (name stays for the human filling the sheet in).
     const rows: (string | number)[][] = [
       ['Academic Year', year, 'Term', term],
-      ['Student', ...subjects],
-      ...(studentsByClass.get(c.id) || []).map(name => [name]),
+      ['Student', 'Student ID', ...subjects],
+      ...(studentsByClass.get(c.id) || []).map(s => [s.name, s.id]),
     ];
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), sheetSafe(c.name));
   }
   if (wb.SheetNames.length === 0) {
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Academic Year', year, 'Term', term], ['Student']]), 'Grades');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Academic Year', year, 'Term', term], ['Student', 'Student ID']]), 'Grades');
   }
   const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -4278,11 +4291,26 @@ export async function uploadGrades(req: AuthRequest, res: Response): Promise<voi
     classByName.set(c.name.trim().toLowerCase(), c.id);
   }
   const studentsByClass = new Map<string, Map<string, string>>(); // classId → name.lower → id
+  const studentIdsByClass = new Map<string, Set<string>>();       // classId → ids (for the Student ID column)
+  // Same-name students in one class are ambiguous by name — resolving them by
+  // name silently lands both spreadsheet rows on ONE student (last map write
+  // wins), giving that student the other child's marks and the other nothing.
+  // Track duplicates so name-resolution refuses instead of guessing.
+  const dupNamesByClass = new Map<string, Set<string>>();
   for (const s of (students || []) as { id: string; full_name: string; class_id: string | null }[]) {
     if (!s.class_id) continue;
     const m = studentsByClass.get(s.class_id) || new Map<string, string>();
-    m.set((s.full_name || '').trim().toLowerCase(), s.id);
+    const key = (s.full_name || '').trim().toLowerCase();
+    if (m.has(key)) {
+      const d = dupNamesByClass.get(s.class_id) || new Set<string>();
+      d.add(key);
+      dupNamesByClass.set(s.class_id, d);
+    }
+    m.set(key, s.id);
     studentsByClass.set(s.class_id, m);
+    const ids = studentIdsByClass.get(s.class_id) || new Set<string>();
+    ids.add(s.id);
+    studentIdsByClass.set(s.class_id, ids);
   }
   const teacherByClassSubject = new Map<string, string[]>(); // `${classId}|${subjectLower}` → teacherIds
   for (const r of (cst || []) as { class_id: string; teacher_id: string; subjects?: { name?: string } }[]) {
@@ -4329,22 +4357,43 @@ export async function uploadGrades(req: AuthRequest, res: Response): Promise<voi
     const classId = classByName.get(sheetSafe(sheetName).toLowerCase()) ?? classByName.get(sheetName.trim().toLowerCase());
     if (!classId) { warnings.push(`Sheet "${sheetName}": no class with this name — skipped.`); continue; }
     const studentMap = studentsByClass.get(classId) || new Map<string, string>();
+    const idSet = studentIdsByClass.get(classId) || new Set<string>();
+    const dupNames = dupNamesByClass.get(classId) || new Set<string>();
 
     const header = aoa[headerIdx] as unknown[];
+    // Template/export sheets carry a "Student ID" column; when present it's
+    // the authoritative resolver (names collide, ids don't). Detected by
+    // header text so old files without it keep working.
+    let idCol = -1;
+    for (let i = 1; i < header.length; i++) {
+      if (String(header[i] ?? '').trim().toLowerCase() === 'student id') { idCol = i; break; }
+    }
     for (let r = headerIdx + 1; r < aoa.length; r++) {
       const row = aoa[r] as unknown[];
       const studentName = String(row[0] ?? '').trim();
       if (!studentName) continue;
-      const studentId = studentMap.get(studentName.toLowerCase());
-      if (!studentId) { warnings.push(`${sheetName}: student "${studentName}" isn't in this class — skipped.`); continue; }
+      const providedId = idCol >= 0 ? String(row[idCol] ?? '').trim() : '';
+      let studentId: string | undefined;
+      if (providedId) {
+        if (!idSet.has(providedId)) { warnings.push(`${sheetName}: "${studentName}" — Student ID doesn't match any student in this class — skipped.`); continue; }
+        studentId = providedId;
+      } else if (dupNames.has(studentName.toLowerCase())) {
+        warnings.push(`${sheetName}: "${studentName}" matches more than one student in this class — re-export the template (it now includes a Student ID column) or enter these grades in the grading UI — skipped.`);
+        continue;
+      } else {
+        studentId = studentMap.get(studentName.toLowerCase());
+        if (!studentId) { warnings.push(`${sheetName}: student "${studentName}" isn't in this class — skipped.`); continue; }
+      }
 
       for (let col = 1; col < header.length; col++) {
+        if (col === idCol) continue;
         const subject = String(header[col] ?? '').trim();
         if (!subject) continue;
         const cell = String(row[col] ?? '').trim();
         if (!cell) continue; // blank = no grade
         const val = Number(cell);
         if (!Number.isFinite(val)) { warnings.push(`${sheetName} · ${studentName} · ${subject}: "${cell}" isn't a number — skipped.`); continue; }
+        if (val < 0) { warnings.push(`${sheetName} · ${studentName} · ${subject}: negative marks aren't allowed — skipped.`); continue; }
 
         const teachers = teacherByClassSubject.get(`${classId}|${subject.toLowerCase()}`) || [];
         upserts.set(`${studentId}|${subject.toLowerCase()}|${term.toLowerCase()}|${year.toLowerCase()}`, {
@@ -4413,10 +4462,12 @@ export async function exportGrades(req: AuthRequest, res: Response): Promise<voi
     const ordered = sids.sort((a, b) => studentsById.get(a)!.full_name.localeCompare(studentsById.get(b)!.full_name));
     const rows: (string | number)[][] = [
       ['Academic Year', year, 'Term', term],
-      ['Student', ...subjects.map(sl => subjectDisplay.get(sl)!)],
+      // "Student ID" column mirrors the template: re-imports of an exported
+      // grid resolve by id, so same-name students can't collide.
+      ['Student', 'Student ID', ...subjects.map(sl => subjectDisplay.get(sl)!)],
       ...ordered.map(sid => {
         const sm = studentSubjects.get(sid)!;
-        return [studentsById.get(sid)!.full_name, ...subjects.map(sl => (sm.has(sl) ? sm.get(sl)! : ''))];
+        return [studentsById.get(sid)!.full_name, sid, ...subjects.map(sl => (sm.has(sl) ? sm.get(sl)! : ''))];
       }),
     ];
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), sheetSafe(name));
