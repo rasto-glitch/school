@@ -13,8 +13,8 @@
 // class), so the remedial list exists regardless of who opens it first.
 
 import {
-  type GradingConfig, type GradeLike, rowToGrade, subjectPercent, subjectYear,
-  failedTerms, isFailing, getMarkValue, remedialTotal,
+  type GradingConfig, type GradeLike, type CreditAllocation, rowToGrade, subjectPercent, subjectYear,
+  failedTerms, isFailing, getMarkValue, remedialTotal, creditFor, applyCredit,
 } from './gradeCalc';
 
 export const canonTerm = (s: unknown): string => String(s ?? '').trim().toLowerCase();
@@ -25,10 +25,17 @@ export interface RemedialEntry {
   studentName: string;
   subject: string;
   forPeriod: string;
-  // Round One average for this student+subject (originals only).
+  // Round One average for this student+subject (originals only, no credit).
   roundOne: number | null;
+  // Credit marks (079): round1 support credit on this subject + the effective
+  // Round One after it — the number the retake decision actually uses.
+  roundOneCredit: number;
+  roundOneEffective: number | null;
   // Current effective standing: filed remedial totals substituted per term.
   final: number | null;
+  // round2 support credit on this subject + the year standing after it.
+  finalCredit: number;
+  finalEffective: number | null;
   carryName: string | null;
   carryValue: number;
   carryMissing: boolean;
@@ -83,7 +90,18 @@ export async function syncClassRemedial(
     gradesQ = gradesQ.eq('subject', opts.subject);
     remQ = remQ.eq('subject', opts.subject);
   }
-  const [gradesRes, remRes] = await Promise.all([gradesQ, remQ]);
+  // Credit marks (079): round1 credits change WHO retakes (the gate below
+  // uses the effective Round One); round2 credits change the final standing.
+  const creditQ = db.from('grade_credit_allocations')
+    .select('student_id, round, subject, amount')
+    .eq('school_id', schoolId).eq('academic_year', academicYear).in('student_id', studentIds);
+  const [gradesRes, remRes, creditRes] = await Promise.all([gradesQ, remQ, creditQ]);
+  const creditsByStudent = new Map<string, CreditAllocation[]>();
+  for (const r of (creditRes.data || []) as Record<string, unknown>[]) {
+    const arr = creditsByStudent.get(String(r.student_id)) || [];
+    arr.push({ round: r.round as CreditAllocation['round'], subject: String(r.subject), amount: Number(r.amount) || 0 });
+    creditsByStudent.set(String(r.student_id), arr);
+  }
 
   // (student, canonical subject) → term → GradeLike; remember display names.
   const subjectDisplay = new Map<string, string>();
@@ -132,7 +150,11 @@ export async function syncClassRemedial(
         originalByTerm[term] = gradesByTerm[term] ? subjectPercent(gradesByTerm[term], cfg.markMaxes) : null;
       }
       const { roundOne } = subjectYear(regularTerms, originalByTerm);
-      const retakes = isFailing(roundOne, cfg.passPercent)
+      // Credit gate: a round1 credit that lifts the subject to pass removes
+      // it from Round Two entirely (its unfiled entries go stale below).
+      const roundOneCredit = creditFor(creditsByStudent.get(st.id), 'round1', subject);
+      const roundOneEffective = applyCredit(roundOne, roundOneCredit, cfg.passPercent);
+      const retakes = isFailing(roundOneEffective, cfg.passPercent)
         ? failedTerms(regularTerms, originalByTerm, cfg.passPercent)
         : [];
       const retakeSet = new Set(retakes.map(canonTerm));
@@ -155,7 +177,8 @@ export async function syncClassRemedial(
           });
           subjectEntries.push({
             id: '', studentId: st.id, studentName: st.full_name, subject, forPeriod: term,
-            roundOne, final: null, carryName, carryValue, carryMissing, examValue: null, isReleased: false,
+            roundOne, roundOneCredit, roundOneEffective, final: null, finalCredit: 0, finalEffective: null,
+            carryName, carryValue, carryMissing, examValue: null, isReleased: false,
           });
         } else {
           if (existing.exam_value == null
@@ -166,7 +189,7 @@ export async function syncClassRemedial(
           }
           subjectEntries.push({
             id: String(existing.id), studentId: st.id, studentName: st.full_name, subject, forPeriod: term,
-            roundOne, final: null,
+            roundOne, roundOneCredit, roundOneEffective, final: null, finalCredit: 0, finalEffective: null,
             carryName: (existing.carry_name as string | null) ?? carryName,
             carryValue: Number(existing.carry_value) || 0,
             carryMissing: Boolean(existing.carry_missing),
@@ -182,7 +205,8 @@ export async function syncClassRemedial(
           // Filed but no longer required — keep it visible.
           subjectEntries.push({
             id: String(r.id), studentId: st.id, studentName: st.full_name, subject,
-            forPeriod: String(r.for_period), roundOne, final: null,
+            forPeriod: String(r.for_period), roundOne, roundOneCredit, roundOneEffective,
+            final: null, finalCredit: 0, finalEffective: null,
             carryName: (r.carry_name as string | null) ?? null,
             carryValue: Number(r.carry_value) || 0,
             carryMissing: Boolean(r.carry_missing),
@@ -194,14 +218,17 @@ export async function syncClassRemedial(
         }
       }
 
-      // Effective standing with the filed retakes substituted in.
+      // Effective standing with the filed retakes substituted in; a round2
+      // credit then lifts the subject's year standing (capped at pass).
       const remedialByTerm: Record<string, number | null> = {};
       for (const e of subjectEntries) {
         const canon = regularByCanon.get(canonTerm(e.forPeriod));
         if (canon) remedialByTerm[canon] = remedialTotal(e.examValue, e.carryValue);
       }
       const { final } = subjectYear(regularTerms, originalByTerm, remedialByTerm);
-      for (const e of subjectEntries) e.final = final;
+      const finalCredit = creditFor(creditsByStudent.get(st.id), 'round2', subject);
+      const finalEffective = applyCredit(final, finalCredit, cfg.passPercent);
+      for (const e of subjectEntries) { e.final = final; e.finalCredit = finalCredit; e.finalEffective = finalEffective; }
       entries.push(...subjectEntries);
     }
   }

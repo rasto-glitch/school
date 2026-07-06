@@ -56,6 +56,8 @@ export interface GradingConfig {
   // configures the remedial term). Optional so pre-075 fixtures stay valid.
   passPercent?: number;
   remedial?: RemedialConfig | null;
+  // Credit marks (079): per-round support pool per student; 0/absent = off.
+  creditPool?: number;
 }
 
 // A subject's percentage. Normalizes (earned / max * 100) ONLY when every
@@ -63,6 +65,11 @@ export interface GradingConfig {
 // the whole subject falls back to the raw total — never silently drop a mark
 // a teacher entered (audit M-2). LOCKSTEP with backend gradeCalc.ts and
 // mobile gpa.ts.
+// Rounds to 6 dp — kills float dust WITHOUT the old 1-dp rounding that
+// silently promoted 49.96 → 50.0 across a band cutoff (CREDIT_MARKS_PLAN.md
+// decision 5). Only displayPercent() reduces precision, and it floors.
+const round6 = (x: number): number => Math.round(x * 1e6) / 1e6;
+
 export function subjectPercent(g: GradeLike, markMaxes: Record<string, number>): number | null {
   if (g.marks && g.marks.length > 0) {
     let earned = 0, max = 0, allConfigured = true;
@@ -72,11 +79,41 @@ export function subjectPercent(g: GradeLike, markMaxes: Record<string, number>):
       if (mx != null && mx > 0) max += mx;
       else allConfigured = false;
     }
-    if (allConfigured && max > 0) return Math.round((earned / max) * 1000) / 10;
+    if (allConfigured && max > 0) return round6((earned / max) * 100);
     return earned;
   }
   const total = gradeTotal(g, getMarkNames(g));
   return total > 0 ? total : null;
+}
+
+// Display form of a percent: FLOORED to 1 dp, so a failing 49.96 shows "49.9"
+// and can never read as a pass the banding math didn't grant. LOCKSTEP ×3.
+export function displayPercent(p: number | null): number | null {
+  if (p == null) return null;
+  return Math.floor(round6(p) * 10) / 10;
+}
+
+// ── Credit marks (نمرەی هاوکاری) — CREDIT_MARKS_PLAN.md; LOCKSTEP ×3 ────────
+export type CreditRound = 'round1' | 'round2';
+export interface CreditAllocation { round: CreditRound; subject: string; amount: number }
+
+export function creditFor(allocs: CreditAllocation[] | null | undefined, round: CreditRound, subject: string): number {
+  if (!allocs?.length) return 0;
+  const key = subject.trim().toLowerCase();
+  let sum = 0;
+  for (const a of allocs) {
+    if (a.round === round && a.subject.trim().toLowerCase() === key) sum += Number(a.amount) || 0;
+  }
+  return sum;
+}
+
+// Effective value after credit: a passing value is untouched; a failing one
+// rises by the credit but never past the pass mark (47 + 3 → 50, never 51).
+export function applyCredit(value: number | null, credit: number | null | undefined, passPercent: number): number | null {
+  if (value == null) return null;
+  const c = Number(credit) || 0;
+  if (c <= 0 || value >= passPercent) return value;
+  return Math.min(passPercent, round6(value + c));
 }
 
 // Map a percentage to the highest band whose minPercent it meets. A percent
@@ -95,11 +132,13 @@ export function averageGpa(points: number[]): number | null {
   return Math.round((points.reduce((a, b) => a + b, 0) / points.length) * 100) / 100;
 }
 
-// Equal-weight average of subject percentages, rounded to 1 dp. Zeros count,
-// nulls don't — the same inclusion rule the report-card PDF uses (audit M-3).
+// Equal-weight average of subject percentages. Zeros count, nulls don't — the
+// same inclusion rule the report-card PDF uses (audit M-3). Near-exact (6 dp);
+// the 1-dp rounding moved to displayPercent() so pass/fail can't be swayed by
+// display rounding.
 export function averagePercent(percents: number[]): number | null {
   if (percents.length === 0) return null;
-  return Math.round((percents.reduce((a, b) => a + b, 0) / percents.length) * 10) / 10;
+  return round6(percents.reduce((a, b) => a + b, 0) / percents.length);
 }
 
 // ── Year math: Round One / Round Two (REMEDIAL_TERM_PLAN.md P2) ─────────────
@@ -111,7 +150,7 @@ export function averagePercent(percents: number[]): number | null {
 // mark is filed.
 export function remedialTotal(examValue: number | null | undefined, carryValue: number | null | undefined): number | null {
   if (examValue == null) return null;
-  return Math.round(((Number(examValue) || 0) + (Number(carryValue) || 0)) * 10) / 10;
+  return round6((Number(examValue) || 0) + (Number(carryValue) || 0));
 }
 
 export interface SubjectYear {

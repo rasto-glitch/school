@@ -20,14 +20,24 @@ export interface TranscriptYearRow {
   final: number | null;
   satRemedial: boolean;
   letter: string | null;
+  // Credit marks (079): support credit applied per round + the effective
+  // values the official standing actually uses. 0 credit = raw shown as-is.
+  roundOneCredit: number;
+  roundOneEffective: number | null;
+  finalCredit: number;
+  finalEffective: number | null;
 }
+export interface TranscriptCreditLine { round: 'round1' | 'round2'; subject: string; amount: number }
 export interface TranscriptYear {
   academicYear: string;
   terms: string[];              // regular terms present, school order
   rows: TranscriptYearRow[];
   anyRoundTwo: boolean;
-  yearAverage: number | null;   // mean of subject finals (subject-first)
+  yearAverage: number | null;   // mean of subject EFFECTIVE finals (subject-first)
   yearLetter: string | null;
+  // Support-mark disclosures for the year: which subjects got how much, per
+  // round (user requirement: every grade surface names the round + subjects).
+  credits: TranscriptCreditLine[];
 }
 export interface TranscriptData {
   school: { name: string; logoUrl: string | null };
@@ -44,6 +54,7 @@ interface TLabels {
   title: string; student: string; klass: string; dob: string; generated: string;
   graduated: string; subject: string; grade: string;
   round_one: string; round_two: string; year_average: string;
+  credits: string; round_one_short: string; round_two_short: string;
   registrar: string; principal: string; no_grades: string; page: string; of: string; em: string;
 }
 
@@ -52,6 +63,7 @@ const TL: Record<Lang, TLabels> = {
     title: 'Academic Transcript', student: 'Student', klass: 'Current class', dob: 'Date of birth',
     generated: 'Generated', graduated: 'Graduated', subject: 'Subject', grade: 'Grade',
     round_one: 'Round One', round_two: 'Round Two', year_average: 'Year average',
+    credits: 'Support marks', round_one_short: 'Round One', round_two_short: 'Round Two',
     registrar: 'Registrar', principal: 'Principal', no_grades: 'No released grades on record.',
     page: 'Page', of: 'of', em: '—',
   },
@@ -59,6 +71,7 @@ const TL: Record<Lang, TLabels> = {
     title: 'كشف الدرجات', student: 'الطالب', klass: 'الصف الحالي', dob: 'تاريخ الميلاد',
     generated: 'أُنشئ في', graduated: 'متخرّج', subject: 'المادة', grade: 'التقدير',
     round_one: 'الدور الأول', round_two: 'الدور الثاني', year_average: 'المعدل السنوي',
+    credits: 'درجات المساعدة', round_one_short: 'الدور الأول', round_two_short: 'الدور الثاني',
     registrar: 'المسجّل', principal: 'المدير', no_grades: 'لا توجد درجات معتمدة في السجل.',
     page: 'صفحة', of: 'من', em: '—',
   },
@@ -66,6 +79,7 @@ const TL: Record<Lang, TLabels> = {
     title: 'پێڕستی نمرە', student: 'خوێندکار', klass: 'پۆلی ئێستا', dob: 'بەرواری لەدایکبوون',
     generated: 'دروستکراوە لە', graduated: 'دەرچوو', subject: 'بابەت', grade: 'پلە',
     round_one: 'تێکڕای خوولی یەکەم', round_two: 'تێکڕای خوولی دووەم', year_average: 'تێکڕای ساڵانە',
+    credits: 'نمرەی هاوکاری', round_one_short: 'خولی یەکەم', round_two_short: 'خولی دووەم',
     registrar: 'تۆمارکار', principal: 'بەڕێوەبەر', no_grades: 'هیچ نمرەیەکی بڵاوکراوە لە تۆماردا نییە.',
     page: 'پەڕە', of: 'لە', em: '—',
   },
@@ -83,7 +97,12 @@ function fmtDate(iso: string): string {
 }
 function num(n: number | null, dp = 1): string {
   if (n == null) return '—';
-  return Number.isInteger(n) ? String(n) : n.toFixed(dp);
+  // FLOOR to dp — toFixed rounds, and display must never lift a failing
+  // value across the pass mark (CREDIT_MARKS_PLAN.md decision 5: 49.96
+  // prints 49.9, and only audited credit marks can turn it into 50).
+  const scale = Math.pow(10, dp);
+  const f = Math.floor((Math.round(n * 1e6) / 1e6) * scale) / scale;
+  return Number.isInteger(f) ? String(f) : f.toFixed(dp);
 }
 
 export async function streamTranscriptPdf(data: TranscriptData, lang: Lang, dest: NodeJS.WritableStream): Promise<void> {
@@ -231,19 +250,47 @@ function drawYearTable(
     };
     cell(r.subject, subjectW, 'left', { bold: true });
     for (const v of r.perTerm) cell(v != null ? num(v) : l.em, termW, 'center');
+    // Round One: with support credit → "50 (+3)"; color follows the
+    // EFFECTIVE value (the official standing). The per-year Support-marks
+    // line below names every credited subject with its round + amount.
+    const r1Eff = r.roundOneEffective ?? r.roundOne;
     cell(
-      r.roundOne != null ? num(r.roundOne) : l.em, r1W, 'center',
-      { bold: true, color: r.roundOne != null && r.roundOne < data.passPercent ? '#DC2626' : COLORS.body },
+      r.roundOne != null
+        ? (r.roundOneCredit > 0 ? `${num(r1Eff)} (+${num(r.roundOneCredit)})` : num(r.roundOne))
+        : l.em,
+      r1W, 'center',
+      { bold: true, color: r1Eff != null && r1Eff < data.passPercent ? '#DC2626' : COLORS.body },
     );
     if (block.anyRoundTwo) {
       const show = r.satRemedial && r.final != null;
+      const r2Eff = r.finalEffective ?? r.final;
       cell(
-        show ? num(r.final) : l.em, r2W, 'center',
-        { bold: true, color: !show ? COLORS.muted : (r.final as number) < data.passPercent ? '#DC2626' : '#15803D' },
+        show
+          ? (r.finalCredit > 0 ? `${num(r2Eff)} (+${num(r.finalCredit)})` : num(r.final))
+          : l.em,
+        r2W, 'center',
+        { bold: true, color: !show ? COLORS.muted : (r2Eff as number) < data.passPercent ? '#DC2626' : '#15803D' },
       );
     }
     if (data.showGpa) cell(r.letter ?? l.em, gradeW, 'center', { bold: true });
     y += rowH;
+  }
+
+  // Support-marks disclosure: which subjects got how much, per round — the
+  // user-locked requirement that every grade surface names the round(s).
+  if (block.credits.length > 0) {
+    ensure(rowH + 4);
+    const byRound = (round: 'round1' | 'round2') => block.credits
+      .filter(c => c.round === round)
+      .map(c => `${c.subject} +${num(c.amount)}`).join(' · ');
+    const parts: string[] = [];
+    const r1 = byRound('round1'); const r2 = byRound('round2');
+    if (r1) parts.push(`${l.round_one_short}: ${r1}`);
+    if (r2) parts.push(`${l.round_two_short}: ${r2}`);
+    const line = `${l.credits} — ${parts.join(' · ')}`;
+    doc.font(F.pick(line)).fontSize(8).fillColor(COLORS.muted)
+      .text(line, PAGE_LEFT + 3, y + 3, { width: CONTENT_W - 6 });
+    y = doc.y + 4;
   }
 
   // Year average row — the official subject-first figure.

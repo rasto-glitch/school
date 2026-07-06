@@ -7,7 +7,8 @@ import { pickLang } from '../utils/archivePdfShared';
 import {
   rowToGrade, subjectPercent, bandForPercent, averagePercent,
   collectMarkNames, getMarkValue, loadGradingConfig, subjectYear, remedialTotal,
-  type GradeLike, type GradingConfig,
+  creditFor, applyCredit,
+  type GradeLike, type GradingConfig, type CreditAllocation,
 } from '../utils/gradeCalc';
 import { streamReportCardPdf, streamClassReportCardsPdf, type ReportCardData } from '../utils/reportCardPdf';
 import { streamTranscriptPdf, type TranscriptData, type TranscriptYear, type TranscriptYearRow } from '../utils/transcriptPdf';
@@ -334,7 +335,7 @@ async function assembleRemedialCardData(
 ): Promise<{ data: ReportCardData; safeName: string; defaultLang: string; empty?: boolean }> {
   const canon = (s: unknown): string => String(s ?? '').trim().toLowerCase();
   const studentId = String(student.id);
-  const [remRes, gradesRes, remarkRes, termRes] = await Promise.all([
+  const [remRes, gradesRes, remarkRes, termRes, creditRes] = await Promise.all([
     supabase.from('remedial_grades')
       .select('subject, for_period, exam_value, carry_name, carry_value')
       .eq('school_id', schoolId).eq('student_id', studentId).eq('academic_year', year)
@@ -350,9 +351,15 @@ async function assembleRemedialCardData(
       .eq('academic_year', year).eq('term', term)
       .maybeSingle(),
     supabase.from('terms').select('name, kind').eq('school_id', schoolId).order('order_index'),
+    supabase.from('grade_credit_allocations')
+      .select('round, subject, amount')
+      .eq('school_id', schoolId).eq('student_id', studentId).eq('academic_year', year),
   ]);
   if (remRes.error) throw remRes.error;
   if (gradesRes.error) throw gradesRes.error;
+  const credits = ((creditRes.data ?? []) as Record<string, unknown>[]).map(c => ({
+    round: c.round as CreditAllocation['round'], subject: String(c.subject), amount: Number(c.amount) || 0,
+  }));
 
   const entries = (remRes.data ?? []) as Record<string, unknown>[];
   const regularTerms = ((termRes.data ?? []) as { name: string; kind: string }[])
@@ -411,8 +418,14 @@ async function assembleRemedialCardData(
     for (const t of regularTerms) {
       originalByTerm[t] = s.byTerm[t] ? subjectPercent(s.byTerm[t], cfg.markMaxes) : null;
     }
-    const { final } = subjectYear(regularTerms, originalByTerm, remBySubject.get(key) ?? {});
-    if (final != null) finals.push(final);
+    const { roundOne, final, satRemedial } = subjectYear(regularTerms, originalByTerm, remBySubject.get(key) ?? {});
+    // Credit marks (079): the official standing uses the credits of the round
+    // that concluded the subject — round2 credit when retakes were sat,
+    // round1 credit otherwise.
+    const effective = satRemedial
+      ? applyCredit(final, creditFor(credits, 'round2', s.subject), cfg.passPercent)
+      : applyCredit(roundOne, creditFor(credits, 'round1', s.subject), cfg.passPercent);
+    if (effective != null) finals.push(effective);
   }
 
   const tpl = normalizeConfig(school.report_card_config);
@@ -437,6 +450,7 @@ async function assembleRemedialCardData(
       const avg = averagePercent(finals);
       return { averagePercent: avg, letter: bandForPercent(avg, cfg.bands)?.letter ?? null };
     })(),
+    credits: credits.length > 0 ? credits : undefined,
     remarks: {
       homeroom: (remark?.homeroom_comment as string | null) ?? null,
       principal: (remark?.principal_comment as string | null) ?? null,
@@ -587,6 +601,20 @@ async function assembleTranscriptData(
     .eq('school_id', schoolId).eq('student_id', studentId)
     .eq('is_released', true).not('exam_value', 'is', null);
   if (remErr) throw remErr;
+
+  // Credit marks (079): allocations per year, applied to the round that
+  // concluded each subject and disclosed per year block.
+  const { data: creditRows } = await supabase
+    .from('grade_credit_allocations')
+    .select('academic_year, round, subject, amount')
+    .eq('school_id', schoolId).eq('student_id', studentId);
+  const creditsByYear = new Map<string, CreditAllocation[]>();
+  for (const c of (creditRows ?? []) as Record<string, unknown>[]) {
+    const key = canon(c.academic_year);
+    const arr = creditsByYear.get(key) || [];
+    arr.push({ round: c.round as CreditAllocation['round'], subject: String(c.subject), amount: Number(c.amount) || 0 });
+    creditsByYear.set(key, arr);
+  }
   const remedialName = cfgGrading.remedial?.termName ?? null;
   const remedialVisible = (year: string): boolean =>
     !publishedSet || (remedialName != null && publishedSet.has(`${canon(year)}|||${canon(remedialName)}`));
@@ -631,6 +659,10 @@ async function assembleTranscriptData(
       .map(([, display]) => display);
 
     const remForYear = remedialVisible(year) ? (remByYear.get(canon(year)) ?? new Map()) : new Map();
+    // Round2 credits only surface once the remedial term is visible for the
+    // year (same publish gate as the remedial marks they attach to).
+    const yearCredits = (creditsByYear.get(canon(year)) || [])
+      .filter(c => c.round === 'round1' || remedialVisible(year));
     const rows: TranscriptYearRow[] = [...subjMap.values()]
       .sort((a, b) => a.subject.localeCompare(b.subject))
       .map(s => {
@@ -646,15 +678,24 @@ async function assembleTranscriptData(
           if (v != null) remedialByTerm[term] = v;
         }
         const { roundOne, final, satRemedial } = subjectYear(terms, originalByTerm, remedialByTerm);
+        // Credit marks: effective values per round; the official standing
+        // (letter + year average) uses the round that concluded the subject.
+        const roundOneCredit = creditFor(yearCredits, 'round1', s.subject);
+        const roundOneEffective = applyCredit(roundOne, roundOneCredit, cfgGrading.passPercent);
+        const finalCredit = satRemedial ? creditFor(yearCredits, 'round2', s.subject) : 0;
+        const finalEffective = satRemedial
+          ? applyCredit(final, finalCredit, cfgGrading.passPercent)
+          : roundOneEffective;
         return {
           subject: s.subject,
           perTerm: terms.map(t => originalByTerm[t]),
           roundOne, final, satRemedial,
-          letter: bandForPercent(final, cfgGrading.bands)?.letter ?? null,
+          roundOneCredit, roundOneEffective, finalCredit, finalEffective,
+          letter: bandForPercent(finalEffective, cfgGrading.bands)?.letter ?? null,
         };
       });
 
-    const yearAverage = averagePercent(rows.map(r => r.final).filter((v): v is number => v != null));
+    const yearAverage = averagePercent(rows.map(r => r.finalEffective).filter((v): v is number => v != null));
     years.push({
       academicYear: year,
       terms,
@@ -662,6 +703,7 @@ async function assembleTranscriptData(
       anyRoundTwo: rows.some(r => r.satRemedial),
       yearAverage,
       yearLetter: bandForPercent(yearAverage, cfgGrading.bands)?.letter ?? null,
+      credits: yearCredits,
     });
   }
 

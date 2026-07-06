@@ -3921,7 +3921,7 @@ export async function getStudentBrief(req: AuthRequest, res: Response): Promise<
   const { schoolId } = req.user!;
   const { id } = req.params;
 
-  const [studentRes, reportsRes, gradesRes, remedialRes, health] = await Promise.all([
+  const [studentRes, reportsRes, gradesRes, remedialRes, creditsRes, health] = await Promise.all([
     supabase.from('students')
       .select('*, classes(name), parents(id, full_name, phone_number, email), drivers(full_name, buses(bus_number))')
       .eq('id', id).eq('school_id', schoolId).single(),
@@ -3929,6 +3929,10 @@ export async function getStudentBrief(req: AuthRequest, res: Response): Promise<
     supabase.from('grades').select('*').eq('student_id', id).eq('school_id', schoolId),
     // Round Two entries (075/P4) — admins see all, released or not.
     supabase.from('remedial_grades').select('*').eq('student_id', id).eq('school_id', schoolId),
+    // Credit-mark allocations (079) — applied to the year figures via the
+    // lockstep applyCredit math on the brief page.
+    supabase.from('grade_credit_allocations')
+      .select('academic_year, round, subject, amount').eq('student_id', id).eq('school_id', schoolId),
     // Safety subset of the clinic health profile (allergies / conditions / diet)
     // for the brief — surfaced to admins + supervisors (this endpoint) and
     // teachers (getStudentHistory). The visit log stays clinic-only.
@@ -3940,6 +3944,7 @@ export async function getStudentBrief(req: AuthRequest, res: Response): Promise<
     reports: toCC(reportsRes.data) || [],
     grades: toCC(gradesRes.data) || [],
     remedial: toCC(remedialRes.data) || [],
+    credits: toCC(creditsRes.data) || [],
     health,
   });
 }
@@ -6921,6 +6926,8 @@ export async function getGradeConfig(req: AuthRequest, res: Response): Promise<v
     if (m.max_value != null) markMaxes[m.name] = Number(m.max_value);
   }
   const passPercent = Number(gc.passPercent) > 0 ? Number(gc.passPercent) : 50;
+  // Credit marks (079): per-round support pool per student; 0/absent = off.
+  const creditPool = Number(gc.creditMarks?.perRoundPool) > 0 ? Number(gc.creditMarks.perRoundPool) : 0;
   // Remedial is "configured" only when the term exists; the mark-type pair
   // rides along from grading_config.
   const remedial = remTermRes.data ? {
@@ -6929,7 +6936,7 @@ export async function getGradeConfig(req: AuthRequest, res: Response): Promise<v
     examMarkType: (gc.remedial?.examMarkType as string | undefined) ?? null,
     carryMarkType: (gc.remedial?.carryMarkType as string | undefined) ?? null,
   } : null;
-  res.json({ mode, bands, markMaxes, passPercent, remedial });
+  res.json({ mode, bands, markMaxes, passPercent, creditPool, remedial });
 }
 
 // Admin write: set the mode and replace the band set in one call.
@@ -6938,13 +6945,18 @@ export async function getGradeConfig(req: AuthRequest, res: Response): Promise<v
 // existing band set.
 export async function updateGradingConfig(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId } = req.user!;
-  const { mode, bands } = req.body as {
+  const { mode, bands, creditPool } = req.body as {
     mode?: string;
     bands?: { minPercent: number; letter: string; gradePoint: number }[];
+    creditPool?: number;
   };
 
   if (mode !== undefined && !['scale', 'gpa', 'both'].includes(mode)) {
     res.status(400).json({ error: "mode must be 'scale', 'gpa', or 'both'" });
+    return;
+  }
+  if (creditPool !== undefined && (!Number.isFinite(creditPool) || creditPool < 0 || creditPool > 100)) {
+    res.status(400).json({ error: 'creditPool must be a number between 0 (off) and 100' });
     return;
   }
 
@@ -6980,12 +6992,16 @@ export async function updateGradingConfig(req: AuthRequest, res: Response): Prom
     }
   }
 
-  if (mode !== undefined) {
+  if (mode !== undefined || creditPool !== undefined) {
     // Merge, don't replace: grading_config also carries passPercent and the
-    // remedial config (075) — a mode-only save must not clobber them.
+    // remedial config (075) — a partial save must not clobber the rest.
     const { data: cur } = await supabase.from('schools')
       .select('grading_config').eq('id', schoolId).single();
-    const merged = { ...((cur?.grading_config as object) || {}), mode };
+    const merged: Record<string, unknown> = { ...((cur?.grading_config as object) || {}) };
+    if (mode !== undefined) merged.mode = mode;
+    if (creditPool !== undefined) {
+      merged.creditMarks = { ...((merged.creditMarks as object) || {}), perRoundPool: creditPool };
+    }
     const { error } = await supabase.from('schools')
       .update({ grading_config: merged }).eq('id', schoolId);
     if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }

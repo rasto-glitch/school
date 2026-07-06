@@ -247,6 +247,9 @@ export const parentApi = {
   getGrades: (studentId?: string) => api.get('/parent/grades', { params: studentId ? { studentId } : {} }),
   // Released Round Two entries — shown side-by-side with Round One (075/P4)
   getRemedialGrades: (studentId?: string) => api.get('/parent/remedial-grades', { params: studentId ? { studentId } : {} }),
+  // Credit-mark allocations (نمرەی هاوکاری, 079) — applied via the lockstep
+  // applyCredit math and disclosed per round.
+  getCreditAllocations: (studentId?: string) => api.get('/parent/credit-allocations', { params: studentId ? { studentId } : {} }),
   getGradeConfig: () => api.get('/grade-config'),
   // Published (academic_year, term) pairs the school has released as report
   // cards. A term only shows a "Report card" download button once published.

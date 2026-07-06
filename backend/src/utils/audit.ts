@@ -39,6 +39,8 @@ export type AuditEntityType =
   | 'archived_student'
   // Class-level admin actions (e.g. year-end promote wizard, migration 030)
   | 'class'
+  // Credit marks — support-mark allocations (migration 079)
+  | 'grade_credit'
   // Cross-school student transfer (migration 032, phase A)
   | 'student_transfer'
   // Supervisor overrides on locked-day attendance (Phase A daily lock)

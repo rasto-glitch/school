@@ -16,7 +16,8 @@ import LoadingSpinner from '../../components/common/LoadingSpinner';
 import EmptyState from '../../components/common/EmptyState';
 import HealthSafetyPanel, { type StudentHealthBrief } from '../../components/common/HealthSafetyPanel';
 import type { Student, Report, Grade } from '../../types';
-import { getMarkNames, getMarkValue, subjectPercent, averagePercent, subjectYear, remedialTotal } from '../../utils/marks';
+import { getMarkNames, getMarkValue, subjectPercent, averagePercent, subjectYear, remedialTotal, displayPercent, applyCredit, creditFor } from '../../utils/marks';
+import type { CreditAllocation } from '../../utils/marks';
 import type { GradingConfig } from '../../utils/marks';
 
 // Round Two entry from the brief (admins see all, released or not) — P4.
@@ -66,7 +67,7 @@ export default function StudentBriefPage() {
   const [selectedStudentId, setSelectedStudentId] = useState(searchParams.get('id') || '');
   const [selectedSubject, setSelectedSubject] = useState('');
   const [selectedYear, setSelectedYear] = useState('');
-  const [brief, setBrief] = useState<{ student: any; reports: Report[]; grades: Grade[]; remedial?: BriefRemedialRow[]; health?: StudentHealthBrief | null } | null>(null);
+  const [brief, setBrief] = useState<{ student: any; reports: Report[]; grades: Grade[]; remedial?: BriefRemedialRow[]; credits?: { academicYear: string; round: 'round1' | 'round2'; subject: string; amount: number }[]; health?: StudentHealthBrief | null } | null>(null);
   const [previousEnrollment, setPreviousEnrollment] = useState<ArchivedSnapshot | null>(null);
   const [search, setSearch] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
@@ -176,6 +177,13 @@ export default function StudentBriefPage() {
   const filteredRemedial = selectedYear
     ? remedialRows.filter(r => canonicalLabel(r.academicYear) === selectedYear)
     : remedialRows;
+  const passMark = cfg.passPercent ?? 50;
+  // Credit marks (079): support credits lift failing round values up to
+  // (never past) the pass mark; the official standing uses the round that
+  // concluded the subject.
+  const filteredCredits: CreditAllocation[] = (brief?.credits || [])
+    .filter(c => !selectedYear || canonicalLabel(c.academicYear) === selectedYear)
+    .map(c => ({ round: c.round, subject: c.subject, amount: c.amount }));
   const yearRows = gradeSubjects.map(subj => {
     const originalByTerm: Record<string, number | null> = {};
     for (const p of gradePeriods) {
@@ -187,13 +195,18 @@ export default function StudentBriefPage() {
     for (const r of retakes) {
       remedialByTerm[canonicalLabel(r.forPeriod)] = remedialTotal(r.examValue, r.carryValue);
     }
-    return { subject: subj, retakes, ...subjectYear(gradePeriods, originalByTerm, remedialByTerm) };
+    const y = subjectYear(gradePeriods, originalByTerm, remedialByTerm);
+    const roundOneCredit = creditFor(filteredCredits, 'round1', subj);
+    const roundOneEffective = applyCredit(y.roundOne, roundOneCredit, passMark);
+    const finalCredit = y.satRemedial ? creditFor(filteredCredits, 'round2', subj) : 0;
+    const finalEffective = y.satRemedial ? applyCredit(y.final, finalCredit, passMark) : roundOneEffective;
+    return { subject: subj, retakes, ...y, roundOneCredit, roundOneEffective, finalCredit, finalEffective };
   });
   const anyRoundTwo = yearRows.some(r => r.satRemedial);
-  const passMark = cfg.passPercent ?? 50;
-  const yearMark = averagePercent(
-    yearRows.map(r => r.final).filter((v): v is number => v != null)
-  )?.toFixed(1) ?? null;
+  const yearMark = (() => {
+    const avg = averagePercent(yearRows.map(r => r.finalEffective).filter((v): v is number => v != null));
+    return avg == null ? null : String(displayPercent(avg));
+  })();
 
   // ---- Reports data ----
   const subjects = [...new Set(brief?.reports?.map(r => r.subject) || [])];
@@ -427,7 +440,7 @@ export default function StudentBriefPage() {
                                         <td key={n} className="px-3 py-2 border border-gray-200 text-center">{v ?? '—'}</td>
                                       );
                                     })}
-                                    <td className="px-3 py-2 border border-gray-200 text-center font-semibold text-primary-700">{pct != null ? pct.toFixed(1) : '—'}</td>
+                                    <td className="px-3 py-2 border border-gray-200 text-center font-semibold text-primary-700">{pct != null ? displayPercent(pct) : '—'}</td>
                                   </tr>
                                 );
                               })}
@@ -438,7 +451,7 @@ export default function StudentBriefPage() {
                                   {t('admin.student_brief.average')}
                                 </td>
                                 <td className="px-3 py-2 border border-gray-200 text-center font-bold text-indigo-600">
-                                  {termAverages[period] != null ? termAverages[period]!.toFixed(1) : '—'}
+                                  {termAverages[period] != null ? displayPercent(termAverages[period]) : '—'}
                                 </td>
                               </tr>
                             </tfoot>
@@ -464,12 +477,22 @@ export default function StudentBriefPage() {
                               {yearRows.map(row => (
                                 <tr key={row.subject}>
                                   <td className="px-3 py-2 border border-gray-200 text-gray-700 font-medium">{row.subject}</td>
-                                  <td className={`px-3 py-2 border border-gray-200 text-center font-semibold ${row.roundOne != null && row.roundOne < passMark ? 'text-red-600' : 'text-gray-800'}`}>
-                                    {row.roundOne ?? '—'}
+                                  <td className={`px-3 py-2 border border-gray-200 text-center font-semibold ${row.roundOne != null && (row.roundOneEffective ?? row.roundOne) < passMark ? 'text-red-600' : 'text-gray-800'}`}>
+                                    {row.roundOne == null ? '—' : (
+                                      <>
+                                        {displayPercent(row.roundOneEffective ?? row.roundOne)}
+                                        {row.roundOneCredit > 0 && <span className="text-violet-600 font-normal"> ({displayPercent(row.roundOne)}+{row.roundOneCredit})</span>}
+                                      </>
+                                    )}
                                   </td>
                                   {anyRoundTwo && (
-                                    <td className={`px-3 py-2 border border-gray-200 text-center font-semibold ${!row.satRemedial || row.final == null ? 'text-gray-300' : row.final < passMark ? 'text-red-600' : 'text-emerald-700'}`}>
-                                      {row.satRemedial && row.final != null ? row.final : '—'}
+                                    <td className={`px-3 py-2 border border-gray-200 text-center font-semibold ${!row.satRemedial || row.final == null ? 'text-gray-300' : (row.finalEffective ?? row.final) < passMark ? 'text-red-600' : 'text-emerald-700'}`}>
+                                      {row.satRemedial && row.final != null ? (
+                                        <>
+                                          {displayPercent(row.finalEffective ?? row.final)}
+                                          {row.finalCredit > 0 && <span className="text-violet-600 font-normal"> ({displayPercent(row.final)}+{row.finalCredit})</span>}
+                                        </>
+                                      ) : '—'}
                                     </td>
                                   )}
                                 </tr>

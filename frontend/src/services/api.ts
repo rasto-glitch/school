@@ -287,6 +287,9 @@ export const parentApi = {
   getGrades: (studentId?: string) => api.get('/parent/grades', { params: studentId ? { studentId } : {} }),
   // Released Round Two entries — shown side-by-side with Round One (075/P4)
   getRemedialGrades: (studentId?: string) => api.get('/parent/remedial-grades', { params: studentId ? { studentId } : {} }),
+  // Credit-mark allocations (نمرەی هاوکاری, 079) — applied client-side via the
+  // lockstep applyCredit math and disclosed per round.
+  getCreditAllocations: (studentId?: string) => api.get('/parent/credit-allocations', { params: studentId ? { studentId } : {} }),
   getGradeConfig: () => api.get('/grade-config'),
   getBusLocation: (studentId?: string) => api.get('/parent/bus-location', { params: { studentId } }),
   getNotifications: (cursor?: string | null) =>
@@ -719,7 +722,10 @@ export const adminApi = {
   deleteMarkType: (id: string) => api.delete(`/admin/mark-types/${id}`),
   // GPA grading config
   getGradeConfig: () => api.get('/grade-config'),
-  updateGradingConfig: (data: { mode?: 'scale' | 'gpa' | 'both'; bands?: { minPercent: number; letter: string; gradePoint: number }[] }) => api.put('/admin/grading-config', data),
+  updateGradingConfig: (data: { mode?: 'scale' | 'gpa' | 'both'; bands?: { minPercent: number; letter: string; gradePoint: number }[]; creditPool?: number }) => api.put('/admin/grading-config', data),
+  // Credit marks (نمرەی هاوکاری, 079) — per-class review + allocation
+  getCreditsOverview: (classId: string, year: string) => api.get('/admin/credits/overview', { params: { classId, year } }),
+  setCreditAllocation: (data: { studentId: string; academicYear: string; round: 'round1' | 'round2'; subject: string; amount: number; note?: string | null }) => api.put('/admin/credits', data),
   // Remedial (Round Two) term + exam/carry scheme + pass threshold (075)
   updateRemedialConfig: (data: { termName: string; examMarkType: string; carryMarkType: string | null; passPercent: number }) => api.put('/admin/remedial-config', data),
   getTerms: () => api.get('/admin/terms'),

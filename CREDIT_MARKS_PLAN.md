@@ -1,7 +1,15 @@
 # Credit Marks (نمرەی هاوکاری) — support-mark rounding under school control
 
-**Status: PROPOSED 2026-07-06 — core decisions locked with the user; phase plan awaiting
-build approval.** Origin: the functional-audit LOW "grade band from 1-dp-rounded percent
+**Status: SHIPPED 2026-07-06 — all four phases (P1 strict banding, P2 backend, P3 admin UI,
+P4 presentation) built and E2E-verified.** Migration 079 run; **migration 080 (audit_logs
+CHECK gains 'grade_credit') pending** — allocation audit rows are silently dropped until it
+runs (found during E2E; everything else works). E2E evidence: 49.96 stays failing (strict
+banding); 47+4 → 400 capped-to-pass; 47+3 → effective 50; pool 5 enforced (3+3 → 400, 3+2 →
+ok, remaining 0); round2-without-retakes → 400; feature-off → 409; removal restores failing;
+allocations flow to the admin brief and the parent endpoint. PDF credit-disclosure lines are
+code-verified (typecheck + shared data), not pixel-verified.
+
+Origin: the functional-audit LOW "grade band from 1-dp-rounded percent
 promotes 49.96 → 50.0". The user rejected automatic rounding entirely: some schools may not
 round freely; instead schools have a **credit system** — each student carries a pool of
 "support" marks per round, and the school decides per student per subject how much of the

@@ -344,6 +344,33 @@ export async function getRemedialGrades(req: AuthRequest, res: Response): Promis
   res.json(toCC(data));
 }
 
+// Credit-mark allocations for one child (079). Same child/lock gates as
+// getGrades; the grades pages apply these with the lockstep applyCredit math
+// and show the per-round support annotation.
+export async function getCreditAllocations(req: AuthRequest, res: Response): Promise<void> {
+  const { schoolId, userId } = req.user!;
+  const { studentId } = req.query as Record<string, string>;
+
+  const { studentIds } = await getParentAndChildren(req.db!, userId, schoolId);
+  if (studentIds.length === 0) { res.json([]); return; }
+  if (studentId && !(studentIds as string[]).includes(studentId)) {
+    res.status(403).json({ error: 'Not your student' });
+    return;
+  }
+  const targetId = studentId || studentIds[0];
+
+  const lock = await isFeatureLocked(targetId, 'grades');
+  if (lock.locked) { res.status(403).json({ error: 'feature_locked', feature: 'grades', reason: lock.reason }); return; }
+
+  const { data, error } = await req.db!
+    .from('grade_credit_allocations')
+    .select('academic_year, round, subject, amount')
+    .eq('school_id', schoolId)
+    .eq('student_id', targetId);
+  if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
+  res.json(toCC(data));
+}
+
 export async function getBusLocation(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId, userId } = req.user!;
   const { studentId } = req.query as Record<string, string>;

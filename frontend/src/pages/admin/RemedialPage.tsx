@@ -8,6 +8,7 @@ import Card from '../../components/common/Card';
 import Select from '../../components/common/Select';
 import Button from '../../components/common/Button';
 import EmptyState from '../../components/common/EmptyState';
+import { displayPercent } from '../../utils/marks';
 import type { Class } from '../../types';
 
 // One Round Two entry from /admin/remedial-overview (REMEDIAL_TERM_PLAN.md P4).
@@ -18,7 +19,13 @@ interface RemedialRow {
   subject: string;
   forPeriod: string;
   roundOne: number | null;
+  // Credit marks (079): support credit per round + the effective values the
+  // retake decision / official standing use.
+  roundOneCredit: number;
+  roundOneEffective: number | null;
   final: number | null;
+  finalCredit: number;
+  finalEffective: number | null;
   carryName: string | null;
   carryValue: number;
   carryMissing: boolean;
@@ -83,12 +90,17 @@ export default function RemedialPage() {
     }
   };
 
-  const passBadge = (value: number | null) => {
+  // Shows the EFFECTIVE value (after any support credit) and annotates the
+  // credit — "50 (47+3)" — so the reviewer sees why a subject counts as
+  // passing (credit marks, 079). Display floors to 1 dp (strict banding).
+  const passBadge = (value: number | null, credit = 0, effective: number | null = null) => {
     if (value == null || !meta) return <span className="text-gray-300">—</span>;
-    const failing = value < meta.passPercent;
+    const eff = effective ?? value;
+    const failing = eff < meta.passPercent;
     return (
       <span className={`text-sm font-semibold ${failing ? 'text-red-600' : 'text-gray-800'}`}>
-        {value}
+        {displayPercent(eff)}
+        {credit > 0 && <span className="text-violet-600 font-normal"> ({displayPercent(value)}+{credit})</span>}
       </span>
     );
   };
@@ -170,7 +182,7 @@ export default function RemedialPage() {
                       <td className="px-3 py-2.5 font-medium text-gray-800">{r.studentName}</td>
                       <td className="px-3 py-2.5 text-gray-700">{r.subject}</td>
                       <td className="px-3 py-2.5 text-gray-700">{r.forPeriod}</td>
-                      <td className="px-3 py-2.5 text-center">{passBadge(r.roundOne)}</td>
+                      <td className="px-3 py-2.5 text-center">{passBadge(r.roundOne, r.roundOneCredit, r.roundOneEffective)}</td>
                       <td className="px-3 py-2.5 text-center text-gray-700">
                         {r.carryName ? (
                           r.carryMissing ? (
@@ -184,7 +196,7 @@ export default function RemedialPage() {
                       <td className="px-3 py-2.5 text-center text-gray-800">
                         {r.examValue != null ? r.examValue : <span className="text-gray-300">—</span>}
                       </td>
-                      <td className="px-3 py-2.5 text-center">{passBadge(r.final)}</td>
+                      <td className="px-3 py-2.5 text-center">{passBadge(r.final, r.finalCredit, r.finalEffective)}</td>
                       <td className="px-3 py-2.5 text-center">
                         {r.examValue == null ? (
                           <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">

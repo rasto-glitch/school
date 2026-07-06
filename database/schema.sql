@@ -446,6 +446,30 @@ CREATE TABLE IF NOT EXISTS mark_types (
 -- grading_config.mode ∈ 'scale' (default, % only) | 'gpa' | 'both'.
 -- grade_scale_bands maps a percentage to a letter + grade point.
 -- ============================================================
+-- Credit marks (نمرەی هاوکاری, migration 079): per-round, per-school support
+-- marks the school allocates to FAILING subjects during review, capped at the
+-- pass mark. Never mutates raw marks — effective = raw + credit at read time.
+-- round1 = the subject's Round One YEAR average; round2 = the remedial total.
+-- Pool size lives in grading_config.creditMarks.perRoundPool (0/absent = off).
+CREATE TABLE IF NOT EXISTS grade_credit_allocations (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  academic_year TEXT NOT NULL,
+  round TEXT NOT NULL CHECK (round IN ('round1', 'round2')),
+  subject TEXT NOT NULL,
+  amount NUMERIC(5,2) NOT NULL CHECK (amount > 0),
+  note TEXT,
+  granted_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  granted_by_name TEXT,
+  granted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (school_id, student_id, academic_year, round, subject)
+);
+CREATE INDEX IF NOT EXISTS idx_credit_alloc_student
+  ON grade_credit_allocations(school_id, student_id, academic_year);
+CREATE INDEX IF NOT EXISTS idx_credit_alloc_year
+  ON grade_credit_allocations(school_id, academic_year, round);
+
 CREATE TABLE IF NOT EXISTS grade_scale_bands (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   school_id UUID NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
@@ -1724,7 +1748,9 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     -- Migration 066 — report cards (config / remarks / publish)
     'report_card',
     -- Migration 067 — student health / clinic records
-    'student_health'
+    'student_health',
+    -- Migration 080 — credit marks (نمرەی هاوکاری)
+    'grade_credit'
   )),
   entity_id UUID NOT NULL,
   action TEXT NOT NULL CHECK (action IN ('create','update','delete')),

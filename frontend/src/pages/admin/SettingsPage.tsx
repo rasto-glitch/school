@@ -86,6 +86,9 @@ export default function SettingsPage() {
   type BandRow = { minPercent: string; letter: string; gradePoint: string };
   const [gradingMode, setGradingMode] = useState<'scale' | 'gpa' | 'both'>('scale');
   const [bands, setBands] = useState<BandRow[]>([]);
+  // Credit marks (نمرەی هاوکاری, 079): per-round support pool per student.
+  // '0' / empty = feature off.
+  const [creditPool, setCreditPool] = useState('0');
   const [savingGrading, setSavingGrading] = useState(false);
 
   // Remedial (Round Two) config — 075. The term itself is created/renamed
@@ -145,6 +148,7 @@ export default function SettingsPage() {
           minPercent: String(b.minPercent), letter: b.letter, gradePoint: String(b.gradePoint),
         })));
         setPassPercent(String(r.data?.passPercent ?? 50));
+        setCreditPool(String(r.data?.creditPool ?? 0));
         if (r.data?.remedial) {
           setRemedialConfigured(true);
           setRemTermName(r.data.remedial.termName || '');
@@ -270,7 +274,7 @@ export default function SettingsPage() {
         setSavingGrading(false);
         return;
       }
-      await adminApi.updateGradingConfig({ mode: gradingMode, bands: cleaned });
+      await adminApi.updateGradingConfig({ mode: gradingMode, bands: cleaned, creditPool: Number(creditPool) || 0 });
       toast.success(t('admin.settings.grading_saved'));
     } catch (err: any) {
       toast.error(err.response?.data?.error || t('admin.settings.failed_save_grading'));
@@ -626,6 +630,22 @@ export default function SettingsPage() {
                 </button>
               </div>
             )}
+
+            {/* Credit marks (نمرەی هاوکاری) — per-round support pool. */}
+            <div className="mb-4">
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+                {t('admin.settings.credit_pool', 'Support marks per round (نمرەی هاوکاری)')}
+              </label>
+              <input
+                type="number" min="0" max="100" step="0.5"
+                value={creditPool}
+                onChange={e => setCreditPool(e.target.value)}
+                className="input-field w-full text-sm"
+              />
+              <p className="text-xs text-gray-400 mt-1">
+                {t('admin.settings.credit_pool_hint', 'Credits each student can receive per round, split across failing subjects and capped at the pass mark (47 + 3 → 50, never 51). 0 turns the feature off.')}
+              </p>
+            </div>
 
             <Button onClick={saveGrading} loading={savingGrading}>{t('admin.settings.save_grading')}</Button>
           </Card>

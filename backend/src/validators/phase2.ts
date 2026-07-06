@@ -476,6 +476,24 @@ export const updateGradingConfigSchema = z.object({
     letter: nonEmptyStr(8),
     gradePoint: z.number().min(0).max(10).optional(),
   })).max(40).optional(),
+  // Credit marks (079): per-round support pool per student; 0 = off.
+  creditPool: z.number().min(0).max(100).optional(),
+});
+
+// Credit marks allocation (CREDIT_MARKS_PLAN.md P2). amount 0 = remove;
+// failing/cap/pool semantics are validated in the controller.
+export const creditAllocationSchema = z.object({
+  studentId: uuid,
+  academicYear: nonEmptyStr(20),
+  round: z.enum(['round1', 'round2']),
+  subject: nonEmptyStr(160),
+  amount: z.number().finite().min(0).max(100),
+  note: optText(500),
+});
+export const creditsOverviewQuery = z.object({
+  classId: uuid,
+  // Absent → the controller resolves the school's current academic year.
+  year: z.string().trim().min(1).max(20).optional(),
 });
 export const createTermSchema = z.object({ name: nonEmptyStr(120) });
 // Remedial (Round Two) settings — 075. Mark-type semantics (existence, maxes

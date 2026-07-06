@@ -45,6 +45,7 @@ import * as attention from '../controllers/attention.controller';
 import * as staffAttendance from '../controllers/staffAttendance.controller';
 import * as reportCard from '../controllers/reportCard.controller';
 import * as studentHealth from '../controllers/studentHealth.controller';
+import * as gradeCredits from '../controllers/gradeCredits.controller';
 import { validate } from '../middleware/validate';
 import * as v from '../validators/auth';
 import * as va from '../validators/accounting';
@@ -640,6 +641,9 @@ export function createRouter(io: SocketServer) {
   // Grading config (GPA). Read is shared by every role; write is admin-only.
   router.get('/grade-config', authenticate, (req, res) => admin.getGradeConfig(req as AuthRequest, res));
   router.put('/admin/grading-config', authenticate, authorizeCapability('academics.oversee'), validate({ body: vp.updateGradingConfigSchema }), (req, res) => admin.updateGradingConfig(req as AuthRequest, res));
+  // Credit marks (نمرەی هاوکاری) — CREDIT_MARKS_PLAN.md P2.
+  router.get('/admin/credits/overview', authenticate, authorizeCapability('academics.oversee'), validate({ query: vp.creditsOverviewQuery }), (req, res) => gradeCredits.getCreditsOverview(req as AuthRequest, res));
+  router.put('/admin/credits', authenticate, authorizeCapability('academics.oversee'), validate({ body: vp.creditAllocationSchema }), (req, res) => gradeCredits.setCreditAllocation(req as AuthRequest, res));
   // Remedial (Round Two) term + exam/carry scheme + pass threshold (075).
   router.put('/admin/remedial-config', authenticate, authorizeCapability('academics.oversee'), validate({ body: vp.updateRemedialConfigSchema }), (req, res) => admin.updateRemedialConfig(req as AuthRequest, res));
 
@@ -707,6 +711,7 @@ export function createRouter(io: SocketServer) {
   router.get('/parent/reports/:id', authenticate, authorize('parent'), (req, res) => parent.getReportById(req as AuthRequest, res));
   router.get('/parent/grades', authenticate, authorize('parent'), validate({ query: vq.listQuery }), (req, res) => parent.getGrades(req as AuthRequest, res));
   router.get('/parent/remedial-grades', authenticate, authorize('parent'), validate({ query: vq.listQuery }), (req, res) => parent.getRemedialGrades(req as AuthRequest, res));
+  router.get('/parent/credit-allocations', authenticate, authorize('parent'), validate({ query: vq.listQuery }), (req, res) => parent.getCreditAllocations(req as AuthRequest, res));
   router.get('/parent/bus-location', authenticate, authorize('parent'), (req, res) => parent.getBusLocation(req as AuthRequest, res));
   router.get('/parent/driver-info', authenticate, authorize('parent'), (req, res) => parent.getDriverInfo(req as AuthRequest, res));
   router.get('/parent/notifications', authenticate, authorize('parent'), validate({ query: vq.listQuery }), (req, res) => parent.getNotifications(req as AuthRequest, res));

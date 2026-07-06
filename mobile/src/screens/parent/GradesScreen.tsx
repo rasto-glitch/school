@@ -11,7 +11,7 @@ import { useColors, useIsDark } from '../../store/themeStore';
 import { useBadgeStore } from '../../store/badgeStore';
 import { spacing, radius, font, shadow } from '../../theme';
 import type { Grade, Student } from '../../types';
-import { subjectPercent, bandForPercent, averagePercent, subjectYear, remedialTotal, EMPTY_GRADING_CONFIG, type GradingConfig } from '../../utils/gpa';
+import { subjectPercent, bandForPercent, averagePercent, subjectYear, remedialTotal, displayPercent, applyCredit, creditFor, EMPTY_GRADING_CONFIG, type GradingConfig, type CreditAllocation } from '../../utils/gpa';
 
 // A released Round Two entry (REMEDIAL_TERM_PLAN.md P4).
 interface RemedialRow {
@@ -78,7 +78,7 @@ function MarkBadge({ value, colors }: { value?: number | null; colors: any }) {
   const color = value >= 90 ? '#15803D' : value >= 75 ? '#1D4ED8' : value >= 60 ? '#B45309' : '#DC2626';
   return (
     <View style={{ backgroundColor: bg, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
-      <Text style={{ color, fontSize: font.sm, fontWeight: '700' }}>{value}</Text>
+      <Text style={{ color, fontSize: font.sm, fontWeight: '700' }}>{displayPercent(value)}</Text>
     </View>
   );
 }
@@ -101,10 +101,13 @@ function fmtWithLetter(
   showGpa: boolean,
   letterOf: (v: number | null) => string | null,
 ): string {
+  // Banding uses the near-exact value; display FLOORS to 1 dp so a failing
+  // 49.96 can never print as 50 (CREDIT_MARKS_PLAN.md decision 5).
   const letter = showGpa ? letterOf(value) : null;
-  if (showPct && letter) return `${value} (${letter})`;
-  if (showPct) return String(value);
-  return letter ?? String(value);
+  const shown = displayPercent(value);
+  if (showPct && letter) return `${shown} (${letter})`;
+  if (showPct) return String(shown);
+  return letter ?? String(shown);
 }
 
 const SUBJECT_COL_WIDTH = 110;
@@ -194,10 +197,14 @@ export default function GradesScreen() {
   const letterOf = (v: number | null) => bandForPercent(v, cfg.bands)?.letter ?? null;
 
   const [remedial, setRemedial] = useState<RemedialRow[]>([]);
+  // Credit-mark allocations (نمرەی هاوکاری, 079) — applied via the lockstep
+  // applyCredit math and disclosed per round below the year summary.
+  const [credits, setCredits] = useState<{ academicYear: string; round: 'round1' | 'round2'; subject: string; amount: number }[]>([]);
 
   const load = () => Promise.all([
     parentApi.getGrades(selectedChild).then(r => setGrades(r.data || [])),
     parentApi.getRemedialGrades(selectedChild).then(r => setRemedial(r.data || [])).catch(() => setRemedial([])),
+    parentApi.getCreditAllocations(selectedChild).then(r => setCredits(r.data || [])).catch(() => setCredits([])),
   ]);
 
   useEffect(() => {
@@ -295,6 +302,13 @@ export default function GradesScreen() {
           // ORIGINAL term percents; released Round Two retakes substitute
           // into the final. Year average = mean of subject finals.
           const remForYear = remedial.filter(r => canonicalLabel(r.academicYear) === yr);
+          // Credit marks (079): support credits lift failing round values up
+          // to (never past) the pass mark; the official standing uses the
+          // round that concluded the subject.
+          const passMark = cfg.passPercent ?? 50;
+          const yearCredits: CreditAllocation[] = credits
+            .filter(c => canonicalLabel(c.academicYear) === yr)
+            .map(c => ({ round: c.round, subject: c.subject, amount: c.amount }));
           const yearRows = subjects.map(subject => {
             const originalByTerm: Record<string, number | null> = {};
             for (const tm of terms) {
@@ -306,11 +320,19 @@ export default function GradesScreen() {
             for (const r of retakes) {
               remedialByTerm[canonicalLabel(r.forPeriod)] = remedialTotal(r.examValue, r.carryValue);
             }
-            return { subject, retakes, ...subjectYear(terms, originalByTerm, remedialByTerm) };
+            const y = subjectYear(terms, originalByTerm, remedialByTerm);
+            const roundOneCredit = creditFor(yearCredits, 'round1', subject);
+            const roundOneEffective = applyCredit(y.roundOne, roundOneCredit, passMark);
+            const finalCredit = y.satRemedial ? creditFor(yearCredits, 'round2', subject) : 0;
+            const finalEffective = y.satRemedial ? applyCredit(y.final, finalCredit, passMark) : roundOneEffective;
+            return { subject, retakes, ...y, roundOneCredit, roundOneEffective, finalCredit, finalEffective };
           });
           const anyRoundTwo = yearRows.some(r => r.satRemedial);
-          const passMark = cfg.passPercent ?? 50;
-          const yearAvg = averagePercent(yearRows.map(r => r.final).filter((v): v is number => v != null));
+          const appliedCredits = yearRows.flatMap(r => ([
+            ...(r.roundOneCredit > 0 ? [{ round: 'round1' as const, subject: r.subject, amount: r.roundOneCredit }] : []),
+            ...(r.finalCredit > 0 ? [{ round: 'round2' as const, subject: r.subject, amount: r.finalCredit }] : []),
+          ]));
+          const yearAvg = averagePercent(yearRows.map(r => r.finalEffective).filter((v): v is number => v != null));
 
           // Round Two report card download — available once the school
           // publishes the remedial term for this year (its own gate).
@@ -442,16 +464,32 @@ export default function GradesScreen() {
                   {yearRows.map(row => (
                     <View key={row.subject} style={{ flexDirection: 'row', paddingVertical: 4 }}>
                       <Text style={{ flex: 1, fontSize: font.sm, fontWeight: '600', color: colors.text }} numberOfLines={1}>{row.subject}</Text>
-                      <Text style={{ width: 70, fontSize: font.sm, fontWeight: '700', textAlign: 'center', color: row.roundOne != null && row.roundOne < passMark ? '#DC2626' : colors.text }}>
-                        {row.roundOne != null ? fmtWithLetter(row.roundOne, showPct, showGpa, letterOf) : '—'}
+                      <Text style={{ width: 70, fontSize: font.sm, fontWeight: '700', textAlign: 'center', color: row.roundOne != null && (row.roundOneEffective ?? row.roundOne) < passMark ? '#DC2626' : colors.text }}>
+                        {row.roundOne != null ? fmtWithLetter(row.roundOneEffective ?? row.roundOne, showPct, showGpa, letterOf) : '—'}
+                        {row.roundOneCredit > 0 ? ` (+${row.roundOneCredit})` : ''}
                       </Text>
                       {anyRoundTwo && (
-                        <Text style={{ width: 70, fontSize: font.sm, fontWeight: '700', textAlign: 'center', color: !row.satRemedial || row.final == null ? colors.textMuted : row.final < passMark ? '#DC2626' : '#15803D' }}>
-                          {row.satRemedial && row.final != null ? fmtWithLetter(row.final, showPct, showGpa, letterOf) : '—'}
+                        <Text style={{ width: 70, fontSize: font.sm, fontWeight: '700', textAlign: 'center', color: !row.satRemedial || row.final == null ? colors.textMuted : (row.finalEffective ?? row.final) < passMark ? '#DC2626' : '#15803D' }}>
+                          {row.satRemedial && row.final != null ? fmtWithLetter(row.finalEffective ?? row.final, showPct, showGpa, letterOf) : '—'}
+                          {row.satRemedial && row.finalCredit > 0 ? ` (+${row.finalCredit})` : ''}
                         </Text>
                       )}
                     </View>
                   ))}
+                  {appliedCredits.length > 0 && (
+                    <Text style={{ fontSize: font.xs, color: '#6D28D9', marginTop: 4 }}>
+                      {t('grades.support_marks', 'Support marks')}{' — '}
+                      {(['round1', 'round2'] as const)
+                        .map(round => {
+                          const list = appliedCredits.filter(c => c.round === round);
+                          if (list.length === 0) return null;
+                          const label = round === 'round1' ? t('grades.round_one_short', 'Round One') : t('grades.round_two_short', 'Round Two');
+                          return `${label}: ${list.map(c => `${c.subject} +${c.amount}`).join(' · ')}`;
+                        })
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </Text>
+                  )}
                   {anyRoundTwo && yearRows.flatMap(row => row.retakes.map(r => (
                     <Text key={r.id} style={{ fontSize: font.xs, color: colors.textMuted, marginTop: 2 }}>
                       {row.subject} · {t('grades.retake_of', { term: r.forPeriod })}: {r.examValue ?? '—'}

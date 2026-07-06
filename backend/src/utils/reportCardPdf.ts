@@ -28,6 +28,10 @@ export interface ReportCardData {
   markColumns: string[];     // union of component names, in order
   subjects: ReportCardSubject[];
   overall: { averagePercent: number | null; letter: string | null };
+  // Credit marks (079): support-mark disclosures — which subjects got how
+  // much, per round. Populated on the Round Two card (year-level figures);
+  // regular term cards carry no credits (credits apply to rounds, not terms).
+  credits?: { round: 'round1' | 'round2'; subject: string; amount: number }[];
   remarks: { homeroom: string | null; principal: string | null };
   config: { classTeacher: string; principal: string; headerNote: string; footerNote: string };
 }
@@ -37,6 +41,7 @@ interface RCLabels {
   dob: string; generated: string; subject: string; total: string; grade: string; gpa: string;
   overall: string; remarks: string; homeroom: string; principal_remark: string;
   class_teacher: string; principal: string; signature: string; no_grades: string;
+  credits: string; round_one_short: string; round_two_short: string;
   page: string; of: string; em: string;
 }
 
@@ -46,21 +51,27 @@ const RL: Record<Lang, RCLabels> = {
     klass: 'Class', dob: 'Date of birth', generated: 'Generated', subject: 'Subject', total: '%',
     grade: 'Grade', gpa: 'GPA', overall: 'Overall', remarks: 'Remarks', homeroom: 'Class teacher’s comment',
     principal_remark: 'Principal’s comment', class_teacher: 'Class teacher', principal: 'Principal',
-    signature: 'Signature', no_grades: 'No released grades for this term.', page: 'Page', of: 'of', em: '—',
+    signature: 'Signature', no_grades: 'No released grades for this term.',
+    credits: 'Support marks', round_one_short: 'Round One', round_two_short: 'Round Two',
+    page: 'Page', of: 'of', em: '—',
   },
   ar: {
     title: 'بطاقة الدرجات', academic_year: 'العام الدراسي', term: 'الفصل', student: 'الطالب',
     klass: 'الصف', dob: 'تاريخ الميلاد', generated: 'أُنشئت في', subject: 'المادة', total: '٪',
     grade: 'التقدير', gpa: 'المعدل', overall: 'المجموع', remarks: 'الملاحظات', homeroom: 'ملاحظة مربي الصف',
     principal_remark: 'ملاحظة المدير', class_teacher: 'مربي الصف', principal: 'المدير',
-    signature: 'التوقيع', no_grades: 'لا توجد درجات معتمدة لهذا الفصل.', page: 'صفحة', of: 'من', em: '—',
+    signature: 'التوقيع', no_grades: 'لا توجد درجات معتمدة لهذا الفصل.',
+    credits: 'درجات المساعدة', round_one_short: 'الدور الأول', round_two_short: 'الدور الثاني',
+    page: 'صفحة', of: 'من', em: '—',
   },
   ku: {
     title: 'کارتی نمرە', academic_year: 'ساڵی خوێندن', term: 'وەرز', student: 'خوێندکار',
     klass: 'پۆل', dob: 'بەرواری لەدایکبوون', generated: 'دروستکراوە لە', subject: 'بابەت', total: '٪',
     grade: 'پلە', gpa: 'تێکڕا', overall: 'گشتی', remarks: 'تێبینییەکان', homeroom: 'تێبینیی مامۆستای پۆل',
     principal_remark: 'تێبینیی بەڕێوەبەر', class_teacher: 'مامۆستای پۆل', principal: 'بەڕێوەبەر',
-    signature: 'واژوو', no_grades: 'هیچ نمرەیەکی بڵاوکراوە بۆ ئەم وەرزە نییە.', page: 'پەڕە', of: 'لە', em: '—',
+    signature: 'واژوو', no_grades: 'هیچ نمرەیەکی بڵاوکراوە بۆ ئەم وەرزە نییە.',
+    credits: 'نمرەی هاوکاری', round_one_short: 'خولی یەکەم', round_two_short: 'خولی دووەم',
+    page: 'پەڕە', of: 'لە', em: '—',
   },
 };
 
@@ -77,7 +88,12 @@ function fmtDate(iso: string): string {
 }
 function num(n: number | null, dp = 1): string {
   if (n == null) return '—';
-  return Number.isInteger(n) ? String(n) : n.toFixed(dp);
+  // FLOOR to dp — toFixed rounds, and display must never lift a failing
+  // value across the pass mark (CREDIT_MARKS_PLAN.md decision 5: 49.96
+  // prints 49.9, and only audited credit marks can turn it into 50).
+  const scale = Math.pow(10, dp);
+  const f = Math.floor((Math.round(n * 1e6) / 1e6) * scale) / scale;
+  return Number.isInteger(f) ? String(f) : f.toFixed(dp);
 }
 
 export async function streamReportCardPdf(data: ReportCardData, lang: Lang, dest: NodeJS.WritableStream): Promise<void> {
@@ -195,6 +211,25 @@ async function drawOneCard(
         .text(parts.join('        '), PAGE_LEFT + 8, y + 6, { width: CONTENT_W - 16, align: 'right' });
       y += 32;
     }
+  }
+
+  // ─── Support-marks disclosure (credit marks, 079) ───────────────────
+  // Which subjects received how much, per round — the user-locked rule that
+  // every grade surface names the round(s) and subject(s).
+  if (data.credits && data.credits.length > 0) {
+    if (y > 730) { doc.addPage(); y = 50; }
+    const fmtAmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
+    const byRound = (round: 'round1' | 'round2') => data.credits!
+      .filter(c => c.round === round)
+      .map(c => `${c.subject} +${fmtAmt(c.amount)}`).join(' · ');
+    const parts: string[] = [];
+    const r1 = byRound('round1'); const r2 = byRound('round2');
+    if (r1) parts.push(`${l.round_one_short}: ${r1}`);
+    if (r2) parts.push(`${l.round_two_short}: ${r2}`);
+    const line = `${l.credits} — ${parts.join(' · ')}`;
+    doc.font(F.pick(line)).fontSize(8.5).fillColor(COLORS.muted)
+      .text(line, PAGE_LEFT, y, { width: CONTENT_W });
+    y = doc.y + 10;
   }
 
   // ─── Remarks ────────────────────────────────────────────────────────

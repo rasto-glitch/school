@@ -67,6 +67,13 @@ export function collectMarkNames(grades: GradeLike[]): string[] {
   return Array.from(seen.keys());
 }
 
+// Rounds to 6 dp — kills float dust (49.999999999999996 → 50) WITHOUT the old
+// 1-dp rounding that silently promoted 49.96 → 50.0 across a band cutoff.
+// Banding / pass-fail / remedial eligibility all use these near-exact values;
+// only displayPercent() below reduces precision, and it floors (CREDIT_MARKS_
+// PLAN.md decision 5: no automatic rounding mercy — credits are the only way up).
+const round6 = (x: number): number => Math.round(x * 1e6) / 1e6;
+
 // A subject's percentage. Normalizes (earned / max * 100) ONLY when every
 // mark present has a configured max; if ANY mark can't be matched to a max,
 // the whole subject falls back to the raw total (regional convention:
@@ -84,11 +91,44 @@ export function subjectPercent(g: GradeLike, markMaxes: Record<string, number>):
       if (mx != null && mx > 0) max += mx;
       else allConfigured = false;
     }
-    if (allConfigured && max > 0) return Math.round((earned / max) * 1000) / 10;
+    if (allConfigured && max > 0) return round6((earned / max) * 100);
     return earned;
   }
   const total = gradeTotal(g, getMarkNames(g));
   return total > 0 ? total : null;
+}
+
+// Display form of a percent: FLOORED to 1 dp, so a failing 49.96 shows "49.9"
+// and can never read as a pass the banding math didn't grant. LOCKSTEP ×3.
+export function displayPercent(p: number | null): number | null {
+  if (p == null) return null;
+  return Math.floor(round6(p) * 10) / 10;
+}
+
+// ── Credit marks (نمرەی هاوکاری) — CREDIT_MARKS_PLAN.md ────────────────────
+// Support marks the school allocates to a FAILING subject, capped so the
+// effective value never exceeds the pass mark. Never mutates raw marks.
+// LOCKSTEP ×3 (parent web + mobile apply the same math to their payloads).
+export type CreditRound = 'round1' | 'round2';
+export interface CreditAllocation { round: CreditRound; subject: string; amount: number }
+
+export function creditFor(allocs: CreditAllocation[] | null | undefined, round: CreditRound, subject: string): number {
+  if (!allocs?.length) return 0;
+  const key = subject.trim().toLowerCase();
+  let sum = 0;
+  for (const a of allocs) {
+    if (a.round === round && a.subject.trim().toLowerCase() === key) sum += Number(a.amount) || 0;
+  }
+  return sum;
+}
+
+// Effective value after credit: a passing value is untouched; a failing one
+// rises by the credit but never past the pass mark (47 + 3 → 50, never 51).
+export function applyCredit(value: number | null, credit: number | null | undefined, passPercent: number): number | null {
+  if (value == null) return null;
+  const c = Number(credit) || 0;
+  if (c <= 0 || value >= passPercent) return value;
+  return Math.min(passPercent, round6(value + c));
 }
 
 // Map a percentage to the highest band whose minPercent it meets. A percent
@@ -109,10 +149,12 @@ export function averageGpa(points: number[]): number | null {
   return Math.round((points.reduce((a, b) => a + b, 0) / points.length) * 100) / 100;
 }
 
-// Equal-weight average of subject percentages, rounded to 1 dp.
+// Equal-weight average of subject percentages. Near-exact (6 dp) — the 1-dp
+// rounding moved to displayPercent() so pass/fail decisions can't be swayed
+// by display rounding.
 export function averagePercent(percents: number[]): number | null {
   if (percents.length === 0) return null;
-  return Math.round((percents.reduce((a, b) => a + b, 0) / percents.length) * 10) / 10;
+  return round6(percents.reduce((a, b) => a + b, 0) / percents.length);
 }
 
 // ── Year math: Round One / Round Two (REMEDIAL_TERM_PLAN.md P2) ─────────────
@@ -125,7 +167,7 @@ export function averagePercent(percents: number[]): number | null {
 // mark is filed.
 export function remedialTotal(examValue: number | null | undefined, carryValue: number | null | undefined): number | null {
   if (examValue == null) return null;
-  return Math.round(((Number(examValue) || 0) + (Number(carryValue) || 0)) * 10) / 10;
+  return round6((Number(examValue) || 0) + (Number(carryValue) || 0));
 }
 
 export interface SubjectYear {
@@ -190,6 +232,9 @@ export interface GradingConfig {
   bands: GradeBand[];
   markMaxes: Record<string, number>;
   passPercent: number;
+  // Credit marks (نمرەی هاوکاری): per-round support-mark pool per student.
+  // 0 = feature off for this school.
+  creditPool: number;
   // Null until the school configures the Round Two term (075).
   remedial: RemedialConfig | null;
 }
@@ -214,10 +259,11 @@ export async function loadGradingConfig(
     if (m.max_value != null) markMaxes[String(m.name)] = Number(m.max_value);
   }
   const passPercent = Number(gc.passPercent) > 0 ? Number(gc.passPercent) : 50;
+  const creditPool = Number(gc.creditMarks?.perRoundPool) > 0 ? Number(gc.creditMarks.perRoundPool) : 0;
   const remedial: RemedialConfig | null = remTermRes.data ? {
     termName: String(remTermRes.data.name),
     examMarkType: (gc.remedial?.examMarkType as string | undefined) ?? null,
     carryMarkType: (gc.remedial?.carryMarkType as string | undefined) ?? null,
   } : null;
-  return { mode, bands, markMaxes, passPercent, remedial };
+  return { mode, bands, markMaxes, passPercent, creditPool, remedial };
 }

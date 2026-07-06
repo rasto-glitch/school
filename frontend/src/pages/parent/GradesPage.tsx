@@ -10,8 +10,8 @@ import EmptyState from '../../components/common/EmptyState';
 import ErrorMessage from '../../components/common/ErrorMessage';
 import { GradesTableSkeleton } from '../../components/common/Skeleton';
 import type { Student, Grade } from '../../types';
-import { getMarkNames, getMarkValue, subjectPercent, bandForPercent, averagePercent, subjectYear, remedialTotal } from '../../utils/marks';
-import type { GradingConfig } from '../../utils/marks';
+import { getMarkNames, getMarkValue, subjectPercent, bandForPercent, averagePercent, subjectYear, remedialTotal, displayPercent, applyCredit, creditFor } from '../../utils/marks';
+import type { GradingConfig, CreditAllocation } from '../../utils/marks';
 
 // A released Round Two entry (REMEDIAL_TERM_PLAN.md P4).
 interface RemedialRow {
@@ -23,6 +23,14 @@ interface RemedialRow {
   carryName: string | null;
   carryValue: number;
   carryMissing: boolean;
+}
+
+// A credit-mark allocation (نمرەی هاوکاری, 079) from /parent/credit-allocations.
+interface CreditRow {
+  academicYear: string;
+  round: 'round1' | 'round2';
+  subject: string;
+  amount: number;
 }
 
 export default function GradesPage() {
@@ -105,6 +113,7 @@ export default function GradesPage() {
   const letterOf = (v: number | null) => bandForPercent(v, cfg.bands)?.letter ?? null;
 
   const [remedial, setRemedial] = useState<RemedialRow[]>([]);
+  const [credits, setCredits] = useState<CreditRow[]>([]);
 
   useEffect(() => {
     if (!selectedChild) return;
@@ -117,6 +126,9 @@ export default function GradesPage() {
     parentApi.getRemedialGrades(selectedChild)
       .then(r => setRemedial(r.data || []))
       .catch(() => setRemedial([]));
+    parentApi.getCreditAllocations(selectedChild)
+      .then(r => setCredits(r.data || []))
+      .catch(() => setCredits([]));
   }, [selectedChild, retryKey]);
 
   // Group: year → term → subject → Grade. Normalize the labels so case
@@ -215,6 +227,13 @@ export default function GradesPage() {
             // ORIGINAL term percents; released Round Two retakes substitute
             // into the final. Year average = mean of subject finals.
             const remForYear = remedial.filter(r => canonicalLabel(r.academicYear) === yr);
+            // Credit marks (079): support credits lift a failing round value
+            // up to (never past) the pass mark; the official standing uses
+            // the round that concluded the subject.
+            const passMark = cfg.passPercent ?? 50;
+            const yearCredits: CreditAllocation[] = credits
+              .filter(c => canonicalLabel(c.academicYear) === yr)
+              .map(c => ({ round: c.round, subject: c.subject, amount: c.amount }));
             const yearRows = subjects.map(subject => {
               const originalByTerm: Record<string, number | null> = {};
               for (const term of terms) {
@@ -226,11 +245,19 @@ export default function GradesPage() {
               for (const r of retakes) {
                 remedialByTerm[canonicalLabel(r.forPeriod)] = remedialTotal(r.examValue, r.carryValue);
               }
-              return { subject, retakes, ...subjectYear(terms, originalByTerm, remedialByTerm) };
+              const y = subjectYear(terms, originalByTerm, remedialByTerm);
+              const roundOneCredit = creditFor(yearCredits, 'round1', subject);
+              const roundOneEffective = applyCredit(y.roundOne, roundOneCredit, passMark);
+              const finalCredit = y.satRemedial ? creditFor(yearCredits, 'round2', subject) : 0;
+              const finalEffective = y.satRemedial ? applyCredit(y.final, finalCredit, passMark) : roundOneEffective;
+              return { subject, retakes, ...y, roundOneCredit, roundOneEffective, finalCredit, finalEffective };
             });
             const anyRoundTwo = yearRows.some(r => r.satRemedial);
-            const passMark = cfg.passPercent ?? 50;
-            const overallYearAvg = averagePercent(yearRows.map(r => r.final).filter((v): v is number => v != null));
+            const appliedCredits = yearRows.flatMap(r => ([
+              ...(r.roundOneCredit > 0 ? [{ round: 'round1' as const, subject: r.subject, amount: r.roundOneCredit }] : []),
+              ...(r.finalCredit > 0 ? [{ round: 'round2' as const, subject: r.subject, amount: r.finalCredit }] : []),
+            ]));
+            const overallYearAvg = averagePercent(yearRows.map(r => r.finalEffective).filter((v): v is number => v != null));
 
             // Round Two report card download — available once the school
             // publishes the remedial term for this year (its own gate).
@@ -358,16 +385,22 @@ export default function GradesPage() {
                             <td className="py-1.5 font-medium text-gray-800">{row.subject}</td>
                             <td className="py-1.5 text-center">
                               {row.roundOne == null ? <span className="text-gray-300">—</span> : (
-                                <span className={`font-semibold ${row.roundOne < passMark ? 'text-red-600' : 'text-gray-800'}`}>
-                                  {fmtWithLetter(row.roundOne, showPct, showGpa, letterOf)}
+                                <span className={`font-semibold ${(row.roundOneEffective ?? row.roundOne) < passMark ? 'text-red-600' : 'text-gray-800'}`}>
+                                  {fmtWithLetter(row.roundOneEffective ?? row.roundOne, showPct, showGpa, letterOf)}
+                                  {row.roundOneCredit > 0 && (
+                                    <span className="text-violet-600"> (+{row.roundOneCredit})</span>
+                                  )}
                                 </span>
                               )}
                             </td>
                             {anyRoundTwo && (
                               <td className="py-1.5 text-center">
                                 {!row.satRemedial ? <span className="text-gray-300">—</span> : row.final == null ? <span className="text-gray-300">—</span> : (
-                                  <span className={`font-semibold ${row.final < passMark ? 'text-red-600' : 'text-emerald-700'}`}>
-                                    {fmtWithLetter(row.final, showPct, showGpa, letterOf)}
+                                  <span className={`font-semibold ${(row.finalEffective ?? row.final) < passMark ? 'text-red-600' : 'text-emerald-700'}`}>
+                                    {fmtWithLetter(row.finalEffective ?? row.final, showPct, showGpa, letterOf)}
+                                    {row.finalCredit > 0 && (
+                                      <span className="text-violet-600"> (+{row.finalCredit})</span>
+                                    )}
                                   </span>
                                 )}
                               </td>
@@ -376,6 +409,20 @@ export default function GradesPage() {
                         ))}
                       </tbody>
                     </table>
+                    {appliedCredits.length > 0 && (
+                      <p className="mt-2 text-xs text-violet-700 bg-violet-50 border border-violet-100 rounded-lg px-3 py-2">
+                        {t('grades.support_marks', 'Support marks')}{' — '}
+                        {(['round1', 'round2'] as const)
+                          .map(round => {
+                            const list = appliedCredits.filter(c => c.round === round);
+                            if (list.length === 0) return null;
+                            const label = round === 'round1' ? t('grades.round_one_short', 'Round One') : t('grades.round_two_short', 'Round Two');
+                            return `${label}: ${list.map(c => `${c.subject} +${c.amount}`).join(' · ')}`;
+                          })
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </p>
+                    )}
                     {anyRoundTwo && (
                       <div className="mt-2 space-y-1">
                         {yearRows.flatMap(row => row.retakes.map(r => (
@@ -467,10 +514,13 @@ function fmtWithLetter(
   showGpa: boolean,
   letterOf: (v: number | null) => string | null,
 ): string {
+  // Banding uses the near-exact value; display FLOORS to 1 dp so a failing
+  // 49.96 can never print as 50 (CREDIT_MARKS_PLAN.md decision 5).
   const letter = showGpa ? letterOf(value) : null;
-  if (showPct && letter) return `${value} (${letter})`;
-  if (showPct) return String(value);
-  return letter ?? String(value);
+  const shown = displayPercent(value);
+  if (showPct && letter) return `${shown} (${letter})`;
+  if (showPct) return String(shown);
+  return letter ?? String(shown);
 }
 
 function MarkBadge({ value }: { value?: number | null }) {
@@ -481,7 +531,7 @@ function MarkBadge({ value }: { value?: number | null }) {
     : 'text-red-700 bg-red-50';
   return (
     <span className={`inline-block px-2 py-0.5 rounded-lg text-sm font-semibold ${color}`}>
-      {value}
+      {displayPercent(value)}
     </span>
   );
 }
