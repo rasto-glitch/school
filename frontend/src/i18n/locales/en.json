@@ -3914,6 +3914,7 @@
       "f_currency": "Currency",
       "f_cadence": "Cadence",
       "f_next_due": "Next due date",
+      "f_auto_paid_from": "Auto-record pays from",
       "f_vendor": "Vendor / payee",
       "f_notes": "Notes",
       "f_expense_date": "Expense date",

@@ -955,6 +955,7 @@ export const expensesApi = {
     categoryId?: string | null;
     vendor?: string | null;
     notes?: string | null;
+    paymentAccountId?: string | null;
   }) => api.post<ExpenseTemplate>('/accounting/expense-templates', data),
   updateTemplate: (id: string, data: Partial<{
     name: string;
@@ -966,6 +967,7 @@ export const expensesApi = {
     vendor: string | null;
     notes: string | null;
     isActive: boolean;
+    paymentAccountId: string | null;
   }>) => api.patch<ExpenseTemplate>(`/accounting/expense-templates/${id}`, data),
   deleteTemplate: (id: string) => api.delete(`/accounting/expense-templates/${id}`),
   recordTemplate: (id: string, data?: { expenseDate?: string; amount?: number; notes?: string | null; paymentMethod?: string | null; taxAmount?: number; taxLabel?: string | null; paymentAccountId?: string | null }) =>

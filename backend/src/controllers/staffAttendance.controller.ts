@@ -70,9 +70,11 @@ function weekdayInTz(tz: string): string {
 }
 
 // Current local clock time as "HH:MM" (24h) in the school's timezone.
+// hourCycle 'h23' (not hour12:false) — some ICU builds render midnight as
+// "24:00" under hour12:false, which string-compares as later than any cutoff.
 function localHm(tz: string): string {
   return new Intl.DateTimeFormat('en-GB', {
-    timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false,
+    timeZone: tz, hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
   }).format(new Date());
 }
 
@@ -776,6 +778,25 @@ export async function createLeave(req: AuthRequest, res: Response): Promise<void
   if (tErr) { res.status(safeDbErrorStatus(tErr)).json({ error: safeDbErrorMessage(tErr) }); return; }
   if (!target || !(EMPLOYEE_ROLES as unknown as string[]).includes(target.role as string)) {
     res.status(400).json({ error: 'That user is not an employee at this school.', code: 'BAD_TARGET' });
+    return;
+  }
+
+  // Overlap guard: a second marker covering any of the same days would list
+  // (and count) the employee twice on the day board.
+  const { data: overlap } = await supabase
+    .from('staff_leave')
+    .select('id, start_date, end_date')
+    .eq('school_id', schoolId)
+    .eq('user_id', body.userId)
+    .lte('start_date', body.endDate)
+    .gte('end_date', body.startDate)
+    .limit(1)
+    .maybeSingle();
+  if (overlap) {
+    res.status(409).json({
+      error: `This employee already has leave covering ${overlap.start_date} – ${overlap.end_date}. Delete it first or pick non-overlapping dates.`,
+      code: 'LEAVE_OVERLAP',
+    });
     return;
   }
 

@@ -320,7 +320,15 @@ export async function downloadBundlePdf(req: AuthRequest, res: Response): Promis
     .from('student_transfers').select('*').eq('id', id).eq('school_id', schoolId).single();
   if (!transfer) { res.status(404).json({ error: 'Transfer not found' }); return; }
   const t = transfer as any;
-  if (t.status !== 'consented' && t.status !== 'bundle_generated' && t.status !== 'completed') {
+  // Completed = the student is archived and the live rows the bundle is built
+  // from are gone; regeneration is impossible by design (the parent received
+  // the bundle before completion). Say so clearly instead of the confusing
+  // 404 the doomed rebuild used to produce.
+  if (t.status === 'completed') {
+    res.status(409).json({ error: 'This transfer is completed and the student is archived — the bundle can no longer be regenerated. Use the student\'s archive record instead.' });
+    return;
+  }
+  if (t.status !== 'consented' && t.status !== 'bundle_generated') {
     res.status(409).json({ error: `PDF can only be generated after consent is captured (current status: ${t.status}).` });
     return;
   }
@@ -713,16 +721,35 @@ export async function acceptIncomingTransfer(req: AuthRequest, res: Response): P
     schoolId, studentId: (newStudent as any).id, classId: body.classId,
   });
 
-  // Flip the transfer to destination_imported. Source can now archive.
-  const { data: updatedTransfer, error: updErr } = await supabase.from('student_transfers').update({
+  // Flip the transfer to destination_imported — GUARDED on the status still
+  // being awaiting_destination. Two admins accepting simultaneously both pass
+  // the read-time status check above; without this guard both would import,
+  // creating the student twice. The loser gets zero rows back, undoes its
+  // just-created rows, and reports the conflict.
+  const { data: updatedRows, error: updErr } = await supabase.from('student_transfers').update({
     status: 'destination_imported',
     destination_accepted_at: new Date().toISOString(),
     destination_imported_student_id: (newStudent as any).id,
     destination_admin_id: userId,
     destination_admin_name: username,
     destination_admin_role: role,
-  }).eq('id', id).eq('destination_school_id', schoolId).select().single();
+  }).eq('id', id).eq('destination_school_id', schoolId)
+    .eq('status', 'awaiting_destination')
+    .select();
   if (updErr) { res.status(safeDbErrorStatus(updErr)).json({ error: safeDbErrorMessage(updErr) }); return; }
+  const updatedTransfer = (updatedRows ?? [])[0] ?? null;
+  if (!updatedTransfer) {
+    // Lost the race — another accept (or a recall) changed the status first.
+    await supabase.from('student_enrollments').delete()
+      .eq('school_id', schoolId).eq('student_id', (newStudent as any).id);
+    await supabase.from('students').delete()
+      .eq('id', (newStudent as any).id).eq('school_id', schoolId);
+    if (parentId) {
+      await supabase.from('parents').delete().eq('id', parentId).eq('school_id', schoolId);
+    }
+    res.status(409).json({ error: 'This transfer was just processed by someone else. Refresh to see its current state.' });
+    return;
+  }
 
   await logAudit({
     req, entityType: 'student_transfer', entityId: id, action: 'update',

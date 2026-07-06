@@ -264,7 +264,13 @@ function TemplateForm({ template, categories, onClose, onSaved }: {
   const [categoryId, setCategoryId] = useState(template?.categoryId ?? '');
   const [vendor, setVendor] = useState(template?.vendor ?? '');
   const [notes, setNotes] = useState(template?.notes ?? '');
+  const [paymentAccountId, setPaymentAccountId] = useState((template as any)?.paymentAccountId ?? '');
+  const [accounts, setAccounts] = useState<PaymentAccount[]>([]);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    accountingApi.listPaymentAccounts().then(r => setAccounts(r.data.filter(a => a.isActive))).catch(() => {});
+  }, []);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -281,6 +287,7 @@ function TemplateForm({ template, categories, onClose, onSaved }: {
       categoryId: categoryId || null,
       vendor: vendor.trim() || null,
       notes: notes.trim() || null,
+      paymentAccountId: paymentAccountId || null,
     };
     try {
       if (isEdit) await expensesApi.updateTemplate(template!.id, payload);
@@ -318,6 +325,13 @@ function TemplateForm({ template, categories, onClose, onSaved }: {
           onChange={e => setCadence(e.target.value as 'monthly' | 'quarterly' | 'yearly')}
         />
         <Input label={t('accounting.exp.f_next_due')} type="date" value={nextDueDate} onChange={e => setNextDueDate(e.target.value)} />
+        <Select
+          label={t('accounting.exp.f_auto_paid_from', 'Auto-record pays from')}
+          options={accounts.map(a => ({ value: a.id, label: `${a.name} (${a.kind} · ${a.currency})` }))}
+          placeholder={t('accounting.exp.ph_optional')}
+          value={paymentAccountId}
+          onChange={e => setPaymentAccountId(e.target.value)}
+        />
         <Input label={t('accounting.exp.f_vendor')} value={vendor} onChange={e => setVendor(e.target.value)} placeholder={t('accounting.exp.ph_optional')} />
         <Input label={t('accounting.exp.f_notes')} value={notes} onChange={e => setNotes(e.target.value)} placeholder={t('accounting.exp.ph_optional')} />
         <div className="md:col-span-2 flex gap-2 justify-end mt-2">

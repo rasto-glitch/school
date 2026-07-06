@@ -109,22 +109,38 @@ export interface JournalRow {
 }
 
 export async function computeJournal(schoolId: string, limit: number): Promise<JournalRow[]> {
-  const { data: entries, error } = await supabase
-    .from('journal_entries')
-    .select('id, entry_no, entry_date, currency, memo, source, source_id, is_reversal')
-    .eq('school_id', schoolId)
-    .order('entry_no', { ascending: false })
-    .limit(limit);
-  if (error) throw new Error(error.message);
+  // Paged fetch: a single .limit(N) request is silently capped at the
+  // PostgREST max-rows setting (~1000), so the "export the full journal"
+  // path used to quietly export only the first page. Page size stays
+  // under the cap; the loop stops at `limit` or when the table runs out.
+  const PAGE = 500;
+  const entries: any[] = [];
+  for (let from = 0; entries.length < limit; from += PAGE) {
+    const to = Math.min(from + PAGE, limit) - 1;
+    const { data, error } = await supabase
+      .from('journal_entries')
+      .select('id, entry_no, entry_date, currency, memo, source, source_id, is_reversal')
+      .eq('school_id', schoolId)
+      .order('entry_no', { ascending: false })
+      .range(from, to);
+    if (error) throw new Error(error.message);
+    entries.push(...(data ?? []));
+    if (!data || data.length < to - from + 1) break;
+  }
 
-  const ids = (entries ?? []).map(e => (e as any).id);
-  const { data: lines } = ids.length
-    ? await supabase
-        .from('journal_lines')
-        .select('entry_id, debit, credit, currency, description, account_id, chart_of_accounts!inner(code, name)')
-        .eq('school_id', schoolId)
-        .in('entry_id', ids)
-    : { data: [] as any[] };
+  // Lines in chunks: one giant .in() would blow the URL length long before
+  // the id list blew the row cap.
+  const ids = entries.map(e => e.id as string);
+  const lines: any[] = [];
+  for (let i = 0; i < ids.length; i += 100) {
+    const { data: chunk, error } = await supabase
+      .from('journal_lines')
+      .select('entry_id, debit, credit, currency, description, account_id, chart_of_accounts!inner(code, name)')
+      .eq('school_id', schoolId)
+      .in('entry_id', ids.slice(i, i + 100));
+    if (error) throw new Error(error.message);
+    lines.push(...(chunk ?? []));
+  }
 
   const linesByEntry = new Map<string, JournalRow['lines']>();
   for (const l of (lines ?? []) as any[]) {
@@ -167,26 +183,27 @@ interface AggAccount {
   debit: number; credit: number;
 }
 async function aggregateLines(schoolId: string, opts: { startDate?: string | null; endDate?: string | null }): Promise<AggAccount[]> {
-  let q = supabase
-    .from('journal_lines')
-    .select('debit, credit, currency, account_id, chart_of_accounts!inner(code, name, type), journal_entries!inner(entry_date)')
-    .eq('school_id', schoolId);
-  if (opts.startDate) q = q.gte('journal_entries.entry_date', opts.startDate);
-  if (opts.endDate) q = q.lte('journal_entries.entry_date', opts.endDate);
-  const { data, error } = await q;
+  // SQL-side aggregation (migration 078, gl_aggregate_lines): the old
+  // fetch-all-lines-and-sum-in-JS version silently truncated at the
+  // PostgREST response cap (~1000 rows), so the trial balance / P&L /
+  // balance sheet went quietly wrong once a school had real GL volume.
+  // The RPC's result set is bounded by (currencies × chart accounts),
+  // never by transaction volume.
+  const { data, error } = await supabase.rpc('gl_aggregate_lines', {
+    p_school_id: schoolId,
+    p_start: opts.startDate ?? null,
+    p_end: opts.endDate ?? null,
+  });
   if (error) throw new Error(error.message);
-  const map = new Map<string, AggAccount>();
-  for (const row of (data ?? []) as any[]) {
-    const cur = row.currency as string;
-    const acc = row.account_id as string;
-    const coa = row.chart_of_accounts ?? {};
-    const k = `${cur}|${acc}`;
-    let a = map.get(k);
-    if (!a) { a = { currency: cur, accountId: acc, code: coa.code ?? '', name: coa.name ?? '', type: coa.type ?? '', debit: 0, credit: 0 }; map.set(k, a); }
-    a.debit += Number(row.debit) || 0;
-    a.credit += Number(row.credit) || 0;
-  }
-  return Array.from(map.values());
+  return ((data ?? []) as any[]).map(r => ({
+    currency: r.currency as string,
+    accountId: r.account_id as string,
+    code: (r.code as string) ?? '',
+    name: (r.name as string) ?? '',
+    type: (r.type as string) ?? '',
+    debit: Number(r.debit) || 0,
+    credit: Number(r.credit) || 0,
+  }));
 }
 
 // ── Income Statement (P&L) over [startDate, endDate] ─────────────────────────

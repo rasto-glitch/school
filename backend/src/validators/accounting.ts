@@ -132,6 +132,9 @@ const templateBase = {
   categoryId: optionalId,
   vendor: optText(200),
   notes: optText(),
+  // Drawer the nightly auto-record run pays from (migration 078). Optional:
+  // templates without one fall back to the legacy system-Cash posting.
+  paymentAccountId: optionalId,
 };
 export const createTemplateSchema = z.object(templateBase);
 export const updateTemplateSchema = z.object({ ...templateBase, isActive: z.boolean() }).partial();

@@ -25,6 +25,15 @@ async function getDefaultCurrency(schoolId: string): Promise<string> {
   return cfg.currency ?? 'USD';
 }
 
+// A payment account must exist, be active, and belong to this school before a
+// template may name it as the nightly auto-record drawer (migration 078).
+async function paymentAccountBelongs(schoolId: string, paymentAccountId: string): Promise<boolean> {
+  const { data } = await supabase
+    .from('payment_accounts').select('id, is_active')
+    .eq('id', paymentAccountId).eq('school_id', schoolId).maybeSingle();
+  return !!data && (data as { is_active: boolean }).is_active;
+}
+
 // Bumps a date by the given cadence. Returns ISO YYYY-MM-DD.
 function bumpDate(dateStr: string, cadence: 'monthly' | 'quarterly' | 'yearly'): string {
   const d = new Date(dateStr + 'T00:00:00Z');
@@ -148,14 +157,18 @@ export async function createTemplate(req: AuthRequest, res: Response): Promise<v
   const guard = await ensurePremium(schoolId);
   if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
 
-  const { name, amount, currency, cadence, nextDueDate, categoryId, vendor, notes } = req.body as {
+  const { name, amount, currency, cadence, nextDueDate, categoryId, vendor, notes, paymentAccountId } = req.body as {
     name?: string; amount?: number; currency?: string; cadence?: 'monthly' | 'quarterly' | 'yearly';
     nextDueDate?: string | null; categoryId?: string | null; vendor?: string | null; notes?: string | null;
+    paymentAccountId?: string | null;
   };
   if (!name?.trim()) { res.status(400).json({ error: 'Name is required' }); return; }
   if (typeof amount !== 'number' || !isFinite(amount) || amount < 0) { res.status(400).json({ error: 'Amount must be a non-negative number' }); return; }
   if (!cadence || !['monthly', 'quarterly', 'yearly'].includes(cadence)) {
     res.status(400).json({ error: 'Cadence must be monthly, quarterly, or yearly' }); return;
+  }
+  if (paymentAccountId && !(await paymentAccountBelongs(schoolId, paymentAccountId))) {
+    res.status(404).json({ error: 'Payment account not found' }); return;
   }
 
   const insertRow = {
@@ -168,6 +181,7 @@ export async function createTemplate(req: AuthRequest, res: Response): Promise<v
     category_id: categoryId || null,
     vendor: vendor?.trim() || null,
     notes: notes ?? null,
+    payment_account_id: paymentAccountId || null,
     created_by: req.user!.userId,
   };
   const { data, error } = await supabase.from('expense_recurring_templates').insert(insertRow).select().single();
@@ -182,9 +196,10 @@ export async function updateTemplate(req: AuthRequest, res: Response): Promise<v
   if (!guard.ok) { res.status(guard.status).json({ error: guard.error }); return; }
 
   const { id } = req.params;
-  const { name, amount, currency, cadence, nextDueDate, categoryId, vendor, notes, isActive } = req.body as {
+  const { name, amount, currency, cadence, nextDueDate, categoryId, vendor, notes, isActive, paymentAccountId } = req.body as {
     name?: string; amount?: number; currency?: string; cadence?: 'monthly' | 'quarterly' | 'yearly';
     nextDueDate?: string | null; categoryId?: string | null; vendor?: string | null; notes?: string | null; isActive?: boolean;
+    paymentAccountId?: string | null;
   };
 
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
@@ -206,6 +221,12 @@ export async function updateTemplate(req: AuthRequest, res: Response): Promise<v
   if (vendor !== undefined) updates.vendor = vendor?.trim() || null;
   if (notes !== undefined) updates.notes = notes;
   if (typeof isActive === 'boolean') updates.is_active = isActive;
+  if (paymentAccountId !== undefined) {
+    if (paymentAccountId && !(await paymentAccountBelongs(schoolId, paymentAccountId))) {
+      res.status(404).json({ error: 'Payment account not found' }); return;
+    }
+    updates.payment_account_id = paymentAccountId || null;
+  }
 
   const { data: before } = await supabase.from('expense_recurring_templates').select('*').eq('id', id).eq('school_id', schoolId).single();
   if (!before) { res.status(404).json({ error: 'Template not found' }); return; }

@@ -2445,6 +2445,9 @@ CREATE INDEX IF NOT EXISTS idx_payment_accounts_school ON payment_accounts(schoo
 ALTER TABLE fee_payments          ADD COLUMN IF NOT EXISTS payment_account_id UUID REFERENCES payment_accounts(id) ON DELETE SET NULL;
 ALTER TABLE staff_salary_payments ADD COLUMN IF NOT EXISTS payment_account_id UUID REFERENCES payment_accounts(id) ON DELETE SET NULL;
 ALTER TABLE expenses              ADD COLUMN IF NOT EXISTS payment_account_id UUID REFERENCES payment_accounts(id) ON DELETE SET NULL;
+-- Recurring-expense templates name the drawer the nightly auto-record run
+-- pays from (migration 078); NULL = legacy fallback (system Cash 1000).
+ALTER TABLE expense_recurring_templates ADD COLUMN IF NOT EXISTS payment_account_id UUID REFERENCES payment_accounts(id) ON DELETE SET NULL;
 
 -- Insurance payout drawer view (migration 076): the payout is a field update
 -- on staff_members (not a separate row), so the chosen drawer + the converted

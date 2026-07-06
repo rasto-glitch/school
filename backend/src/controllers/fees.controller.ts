@@ -1009,12 +1009,20 @@ export async function recordPayment(req: AuthRequest, res: Response): Promise<vo
     }
   }
 
-  // Resolve currency: explicit > plan > school default
+  // The fee's denomination is authoritative: plan currency, else school
+  // default. A client-supplied currency may only CONFIRM it — the balance
+  // math sums raw payment amounts against the plan total, so accepting a
+  // different currency here would count 1,000 IQD as 1,000 USD paid.
+  // (Cross-currency cash is handled below via the drawer conversion.)
   const cfgForCurrency = await getTuitionConfig(schoolId);
-  const resolvedCurrency = (typeof currency === 'string' && currency.trim())
-    || (sf as any).fee_plans?.currency
+  const resolvedCurrency = ((sf as any).fee_plans?.currency
     || cfgForCurrency.currency
-    || 'USD';
+    || 'USD').toUpperCase();
+  if (typeof currency === 'string' && currency.trim()
+      && currency.trim().toUpperCase() !== resolvedCurrency) {
+    res.status(400).json({ error: `Payments on this fee must be recorded in ${resolvedCurrency}. To pay from a drawer in another currency, pick that drawer — the conversion is automatic.` });
+    return;
+  }
 
   // Cross-currency: the fee is denominated in resolvedCurrency; if the chosen
   // drawer is in another currency, convert so the cash entering the drawer is

@@ -256,6 +256,31 @@ the actual code/schema. Backend is `backend/src`; DB is `database/schema.sql` + 
 > 115,000 (50k/50k/15k current). All backend-only, no migration. tsc + tenant-scoping clean; full
 > E2E against locally-run backend + demo DB, fixtures cleaned.
 >
+> **Tail of the LOW pile fixed + E2E-verified (2026-07-06), migration 078:** ① **GL reports
+> truncation** (upgraded from "no pagination guard" — the real failure was SILENT: PostgREST caps
+> responses at ~1000 rows, so TB/P&L/balance-sheet went quietly wrong past that volume) —
+> `gl_aggregate_lines()` RPC aggregates in SQL; journal list/export paginate via `.range()` +
+> chunked line fetches. Verified with 1,200 seeded lines: TB block exact (6,000/6,000), export
+> carries all rows. ② **Recurring-expense cron** — templates gained `payment_account_id` (+ web
+> "Auto-record pays from" picker, EN/AR/KU); `auto_record_recurring_expenses()` reworked: posts
+> Cr drawer cash in drawer currency at the due-date fx rate (was phantom 1000 — M-5's pattern),
+> stamps paid_* so the drawer display sees nightly expenses, and clamps posting past closed
+> periods (original due date kept in notes). Legacy fallback (no drawer / no rate) unchanged.
+> Verified both paths + clamp + drawer balance −15,000. ③ **acceptIncomingTransfer race** —
+> status-guarded UPDATE; loser deletes its just-created student/enrollment/parent and 409s.
+> Verified with two parallel accepts: one 200, one 409, ONE student. ④ **Leave overlap** → 409
+> LEAVE_OVERLAP (verified 201/409/201). ⑤ **is_late midnight** → `hourCycle:'h23'` (probe: 00:00).
+> ⑥ **Payment currency pinned** to the fee's denomination — explicit mismatching currency → 400
+> (verified 400/201); refunds already inherit the original's currency. ⑦ **Completed-transfer
+> PDF** → clear 409 pointing at the archive record (verified end-to-end through completion; web
+> wizard never showed a PDF button post-completion, so backend-only).
+>
+> **Accepted as-is (2026-07-06, user decisions):** all-zero LEGACY subject skip stays (legacy
+> columns default to 0 — can't distinguish ungraded from zero; all current entry paths use marks
+> arrays where 0 counts as 0). The **1-dp rounding promotion (49.96→50.0) is NOT accepted** — it
+> will be REMOVED as part of the approved credit-marks (نمرەی هاوکاری) feature: all rounding
+> mercy moves to per-school, per-round, audited credit allocations (see CREDIT_MARKS_PLAN.md).
+>
 > ⚠️ **NEW finding discovered during verification — grades.teacher_id NOT NULL drift (proposed
 > M-7):** prod `grades.teacher_id` has a NOT NULL constraint; `database/schema.sql:516` declares it
 > nullable with `ON DELETE SET NULL` (contradictory with NOT NULL — deleting a teacher who has
