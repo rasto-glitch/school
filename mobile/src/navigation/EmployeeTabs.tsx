@@ -93,9 +93,10 @@ export default function EmployeeTabs() {
           component={StaffAttendanceScreen}
           options={{
             tabBarLabel: t('nav.clock_in', 'Clock In'),
-            // Same focused treatment as every other tab icon (and the teacher
-            // navigator's clock): solid fill, stroke in the active tint.
-            tabBarIcon: ({ color, focused }) => <Clock size={ICON_SIZE} color={color} fill={focused ? activeFill : 'transparent'} />,
+            // Focused: keep the filled disc but stroke the ring + hands in a
+            // contrasting colour (white on light, indigo on dark) so it still
+            // reads as a clock, not a solid blob. SAME across all role tabs.
+            tabBarIcon: ({ color, focused }) => <Clock size={ICON_SIZE} color={focused ? (isDark ? colors.primary : '#FFFFFF') : color} fill={focused ? activeFill : 'transparent'} />,
           }}
         />
         <Tab.Screen
