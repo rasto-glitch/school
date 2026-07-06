@@ -732,7 +732,7 @@ CREATE TABLE IF NOT EXISTS announcements (
   link_url TEXT,
   attachment_url TEXT,
   -- 081: 'students' folded into 'parents' (students don't log in); 'admins'
-  -- covers admin + reception, 'staff' covers staff + accountant.
+  -- covers admin + reception + accountant, 'staff' is the generic staff role.
   target_audience TEXT DEFAULT 'all' CHECK (target_audience IN ('all','parents','teachers','admins','supervisors','staff')),
   created_by UUID REFERENCES users(id),
   created_at TIMESTAMPTZ DEFAULT NOW()

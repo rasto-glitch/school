@@ -3511,17 +3511,17 @@ const ANNOUNCEMENT_AUDIENCE_BY_ROLE: Record<string, string[]> = {
   teacher: ['all', 'teachers'],
   supervisor: ['all', 'supervisors'],
   reception: ['all', 'admins'],
+  accountant: ['all', 'admins'],
   staff: ['all', 'staff'],
-  accountant: ['all', 'staff'],
 };
 
 // Which user roles an audience notifies (inverse of the map above).
 const ANNOUNCEMENT_AUDIENCE_ROLES: Record<string, string[]> = {
   parents: ['parent'],
   teachers: ['teacher'],
-  admins: ['admin', 'reception'],
+  admins: ['admin', 'reception', 'accountant'],
   supervisors: ['supervisor'],
-  staff: ['staff', 'accountant'],
+  staff: ['staff'],
 };
 
 const VALID_ANNOUNCEMENT_AUDIENCES = ['all', ...Object.keys(ANNOUNCEMENT_AUDIENCE_ROLES)];
@@ -3538,8 +3538,8 @@ export async function getAnnouncements(req: AuthRequest, res: Response): Promise
     .gte('created_at', cutoff);
   // Audience targeting (081). Admin sees everything (they moderate the feed);
   // every other role sees 'all' plus its own audience — 'admins' covers
-  // reception and 'staff' covers accountant. (Parents have their own filtered
-  // endpoint in parent.controller.)
+  // reception + accountant. (Parents have their own filtered endpoint in
+  // parent.controller.)
   const audiences = ANNOUNCEMENT_AUDIENCE_BY_ROLE[role];
   if (audiences) query = query.in('target_audience', audiences);
   if (cursor) {

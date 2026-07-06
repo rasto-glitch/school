@@ -3,9 +3,9 @@
 -- 'students' was never a real audience — students don't log in; their parents
 -- represent them (the parent feed already treated 'students' as parent-visible).
 -- Fold existing rows into 'parents' and drop the value. New audiences:
---   admins      → admin + reception accounts (front desk works under admin)
+--   admins      → admin + reception + accountant accounts (desk roles under admin)
 --   supervisors → supervisor accounts
---   staff       → generic staff + accountant accounts
+--   staff       → generic staff accounts
 -- Visibility per role lives in getAnnouncements (admin.controller.ts); the
 -- notification fan-out map lives in createAnnouncement.
 --
