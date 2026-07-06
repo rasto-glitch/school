@@ -1,11 +1,9 @@
-import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Virtuoso } from 'react-virtuoso';
 import { usePaginated } from '../../hooks/usePaginated';
 import { useTranslation } from 'react-i18next';
 import { Megaphone, Heart, MessageCircle } from 'lucide-react';
-import { adminApi, parentApi, announcementApi } from '../../services/api';
-import { useNotificationStore } from '../../store/notificationStore';
+import { adminApi, announcementApi } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import PageLayout from '../../components/layout/PageLayout';
 import EmptyState from '../../components/common/EmptyState';
@@ -15,20 +13,17 @@ import { bodyTeaser } from '../../utils/bodyTeaser';
 import type { Announcement } from '../../types';
 import { format, parseISO } from 'date-fns';
 
-export default function AnnouncementsPage() {
+// Role-generic announcements feed (reception + staff). Same card layout as the
+// parent feed; the backend filters the list to the caller's audiences. Cards
+// open the shared /announcements/:id detail (comments + replies live there).
+
+export default function AnnouncementsFeedPage() {
   const { t } = useTranslation();
   const { school } = useAuthStore();
-  const setUnreadCount = useNotificationStore(s => s.setUnreadCount);
   const {
     items: announcements, setItems: setAnnouncements, loading, loadingMore, error, reload, loadMore,
   } = usePaginated<Announcement>(adminApi.getAnnouncements);
   const navigate = useNavigate();
-
-  useEffect(() => {
-    parentApi.markTypeRead('announcement')
-      .then(() => parentApi.getUnreadCount().then(r => setUnreadCount(r.data?.count ?? 0)))
-      .catch(() => {});
-  }, [setUnreadCount]);
 
   const handleToggleLike = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -67,7 +62,7 @@ export default function AnnouncementsPage() {
             return (
               <article
                 className="bg-white border border-gray-100 rounded-2xl hover:shadow-md transition-all overflow-hidden cursor-pointer mb-4"
-                onClick={() => navigate(`/parent/announcements/${ann.id}`)}
+                onClick={() => navigate(`/announcements/${ann.id}`)}
               >
                 <div className="p-5">
                   <div className="flex items-center gap-3 mb-3">

@@ -1,4 +1,4 @@
-export type Role = 'parent' | 'teacher' | 'admin' | 'driver' | 'supervisor' | 'reception' | 'accountant';
+export type Role = 'parent' | 'teacher' | 'admin' | 'driver' | 'supervisor' | 'reception' | 'accountant' | 'staff';
 
 export interface School {
   id: string;

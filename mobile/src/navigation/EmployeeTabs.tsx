@@ -4,21 +4,23 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { Clock, User, Settings } from 'lucide-react-native';
+import { Clock, User, Settings, Megaphone } from 'lucide-react-native';
 import HeaderBrand from '../components/HeaderBrand';
 import { makeSlideTransition } from './tabSlide';
 import { useColors, useIsDark } from '../store/themeStore';
 import StaffAttendanceScreen from '../screens/staff/StaffAttendanceScreen';
+import EmployeeFeedScreen from '../screens/staff/EmployeeFeedScreen';
 import EmployeeMeScreen from '../screens/staff/EmployeeMeScreen';
 
-// Minimal tab app for roles whose ONLY mobile purpose is clocking in/out:
-// admin, accountant, staff. Two fixed tabs — Clock In + Me. The Clock In screen
-// itself handles the staff_attendance-off case, so the tab is always present.
+// Tab app for the desk roles: admin, accountant, staff. Three fixed tabs —
+// the announcements Feed (their regular main page, like parent/teacher/
+// supervisor), Clock In, and Me. The Clock In screen itself handles the
+// staff_attendance-off case, so the tab is always present.
 const Tab = createBottomTabNavigator();
 
 const ICON_SIZE = 22;
 const INDICATOR_WIDTH = 32;
-const TAB_COUNT = 2;
+const TAB_COUNT = 3;
 
 export default function EmployeeTabs() {
   const { t } = useTranslation();
@@ -78,6 +80,14 @@ export default function EmployeeTabs() {
           tabBarLabelStyle: { fontSize: 11, fontWeight: '500' },
         }}
       >
+        <Tab.Screen
+          name="EmployeeFeed"
+          component={EmployeeFeedScreen}
+          options={{
+            tabBarLabel: t('nav.announcements', 'Feed'),
+            tabBarIcon: ({ color, focused }) => <Megaphone size={ICON_SIZE} color={color} fill={focused ? activeFill : 'transparent'} />,
+          }}
+        />
         <Tab.Screen
           name="EmployeeAttendance"
           component={StaffAttendanceScreen}

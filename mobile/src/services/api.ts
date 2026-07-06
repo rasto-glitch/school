@@ -314,6 +314,10 @@ export const feesApi = {
 
 // ---- ANNOUNCEMENTS (shared) ----
 export const announcementApi = {
+  // Role-generic feed (admin/accountant/staff/reception) — the backend filters
+  // the list to the caller's audiences (081).
+  getAnnouncements: (cursor?: string | null) =>
+    api.get<Paginated<Announcement>>('/admin/announcements', { params: cursor ? { cursor } : {} }),
   toggleLike: (id: string) => api.post(`/announcements/${id}/like`),
   getComments: (id: string) => api.get(`/announcements/${id}/comments`),
   createComment: (id: string, body: string, parentId?: string) =>

@@ -93,6 +93,9 @@ import ParentAppointmentsPage from './pages/parent/AppointmentsPage';
 import ParentTuitionPage from './pages/parent/TuitionPage';
 import WriteAssignmentsPage from './pages/teacher/WriteAssignmentsPage';
 
+// Shared (multi-role)
+import AnnouncementsFeedPage from './pages/shared/AnnouncementsFeedPage';
+
 // Reception
 import ReceptionDashboard from './pages/reception/ReceptionDashboard';
 import ReceptionAppointmentsPage from './pages/reception/AppointmentsPage';
@@ -156,6 +159,7 @@ const ROLE_REDIRECTS: Record<string, string> = {
   supervisor: '/supervisor/dashboard',
   reception: '/reception/dashboard',
   accountant: '/accounting',
+  staff: '/announcements',
 };
 
 function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode; allowedRoles?: string[] }) {
@@ -205,7 +209,7 @@ export default function App() {
         <Route path="/force-change-password" element={<ForceChangeRoute><ForceChangePasswordPage /></ForceChangeRoute>} />
 
         {/* Account settings — full-screen page, all roles */}
-        <Route path="/settings" element={<ProtectedRoute allowedRoles={['admin', 'parent', 'teacher', 'reception', 'accountant', 'driver', 'supervisor']}><AccountSettingsPage /></ProtectedRoute>} />
+        <Route path="/settings" element={<ProtectedRoute allowedRoles={['admin', 'parent', 'teacher', 'reception', 'accountant', 'driver', 'supervisor', 'staff']}><AccountSettingsPage /></ProtectedRoute>} />
 
         {/* Parent Portal */}
         <Route path="/parent/dashboard" element={<ProtectedRoute allowedRoles={['parent']}><ParentDashboard /></ProtectedRoute>} />
@@ -215,6 +219,9 @@ export default function App() {
         <Route path="/parent/assignments/:id" element={<ProtectedRoute allowedRoles={['parent']}><AssignmentDetailPage /></ProtectedRoute>} />
         <Route path="/parent/announcements" element={<ProtectedRoute allowedRoles={['parent']}><ParentAnnouncementsPage /></ProtectedRoute>} />
         <Route path="/parent/announcements/:id" element={<ProtectedRoute allowedRoles={['parent']}><AnnouncementDetailPage /></ProtectedRoute>} />
+        {/* Role-generic announcements (081): reception + staff feed; the detail page (comments + replies) is shared by every non-parent role. */}
+        <Route path="/announcements" element={<ProtectedRoute allowedRoles={['reception', 'staff']}><AnnouncementsFeedPage /></ProtectedRoute>} />
+        <Route path="/announcements/:id" element={<ProtectedRoute allowedRoles={['reception', 'staff', 'admin', 'teacher', 'supervisor', 'accountant']}><AnnouncementDetailPage /></ProtectedRoute>} />
         <Route path="/parent/reports" element={<ProtectedRoute allowedRoles={['parent']}><ReportsPage /></ProtectedRoute>} />
         <Route path="/parent/reports/:id" element={<ProtectedRoute allowedRoles={['parent']}><ReportDetailPage /></ProtectedRoute>} />
         <Route path="/parent/bus" element={<ProtectedRoute allowedRoles={['parent']}><BusTrackingPage /></ProtectedRoute>} />

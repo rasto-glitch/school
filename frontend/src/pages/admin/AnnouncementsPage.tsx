@@ -14,6 +14,7 @@ import Select from '../../components/common/Select';
 import Button from '../../components/common/Button';
 import EmptyState from '../../components/common/EmptyState';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
+import AnnouncementComments from '../../components/common/AnnouncementComments';
 import type { Announcement } from '../../types';
 import { format, parseISO } from 'date-fns';
 
@@ -21,9 +22,19 @@ export default function AnnouncementsPage() {
   const { t } = useTranslation();
   const { school } = useAuthStore();
   const {
-    items: announcements, loading, loadingMore, reload, loadMore,
+    items: announcements, setItems: setAnnouncements, loading, loadingMore, reload, loadMore,
   } = usePaginated<Announcement>(adminApi.getAnnouncements);
   const [submitting, setSubmitting] = useState(false);
+  // Post cards whose comment thread is expanded (admin reads + replies inline).
+  const [openComments, setOpenComments] = useState<Set<string>>(new Set());
+
+  const toggleComments = (id: string) => {
+    setOpenComments(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
 
   const { register, handleSubmit, reset } = useForm<{
     title: string; content: string; targetAudience: string; linkUrl: string;
@@ -136,7 +147,9 @@ export default function AnnouncementsPage() {
                 { value: 'all', label: t('admin.announce.aud_all') },
                 { value: 'parents', label: t('admin.announce.aud_parents_only') },
                 { value: 'teachers', label: t('admin.announce.aud_teachers_only') },
-                { value: 'students', label: t('admin.announce.aud_students_only') },
+                { value: 'admins', label: t('admin.announce.aud_admins_only') },
+                { value: 'supervisors', label: t('admin.announce.aud_supervisors_only') },
+                { value: 'staff', label: t('admin.announce.aud_staff_only') },
               ]}
               {...register('targetAudience')}
             />
@@ -225,10 +238,22 @@ export default function AnnouncementsPage() {
                       <span className="flex items-center gap-1 text-xs text-gray-500">
                         <Heart className="w-4 h-4" /> {ann.likesCount ?? 0}
                       </span>
-                      <span className="flex items-center gap-1 text-xs text-gray-500">
+                      <button
+                        onClick={() => toggleComments(ann.id)}
+                        className={`flex items-center gap-1 text-xs font-medium ${openComments.has(ann.id) ? 'text-primary-600' : 'text-gray-500 hover:text-primary-600'}`}
+                      >
                         <MessageCircle className="w-4 h-4" /> {ann.commentsCount ?? 0}
-                      </span>
+                        <span className="ms-1">{openComments.has(ann.id) ? t('admin.announce.hide_comments') : t('admin.announce.view_comments')}</span>
+                      </button>
                     </div>
+                    {openComments.has(ann.id) && (
+                      <div className="px-4 pb-4 border-t border-gray-100 pt-3">
+                        <AnnouncementComments
+                          announcementId={ann.id}
+                          onCountChange={count => setAnnouncements(prev => prev.map(a => a.id === ann.id ? { ...a, commentsCount: count } : a))}
+                        />
+                      </div>
+                    )}
                   </article>
                 );
               }}

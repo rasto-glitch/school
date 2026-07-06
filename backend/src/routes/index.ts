@@ -611,14 +611,14 @@ export function createRouter(io: SocketServer) {
   router.post('/admin/substitutions/assign', authenticate, authorizeCapability('academics.oversee'), validate({ body: vp.assignSubstitutionSchema }), (req, res) => admin.assignSubstitution(req as AuthRequest, res));
   router.delete('/admin/substitutions/:id', authenticate, authorizeCapability('academics.oversee'), validate({ params: vp.idParam }), (req, res) => admin.deleteSubstitution(req as AuthRequest, res));
 
-  router.get('/admin/announcements', authenticate, authorize('admin', 'teacher', 'parent', 'supervisor'), validate({ query: vq.listQuery }), (req, res) => admin.getAnnouncements(req as AuthRequest, res));
+  router.get('/admin/announcements', authenticate, authorize('admin', 'teacher', 'parent', 'supervisor', 'reception', 'staff', 'accountant'), validate({ query: vq.listQuery }), (req, res) => admin.getAnnouncements(req as AuthRequest, res));
   router.get('/link-preview', authenticate, (req, res) => admin.getLinkPreview(req as AuthRequest, res));
   router.post('/admin/announcements', authenticate, authorizeCapability('announcements.moderate'), upload.single('attachment'), validate({ body: vupl.createAnnouncementSchema }), (req, res) => admin.createAnnouncement(req as AuthRequest, res));
   router.post('/admin/announcements/upload', authenticate, authorizeCapability('announcements.moderate'), upload.single('file'), (req, res) => admin.uploadAnnouncementFile(req as AuthRequest, res));
   router.delete('/admin/announcements/:id', authenticate, authorizeCapability('announcements.moderate'), validate({ params: vp.idParam }), (req, res) => admin.deleteAnnouncement(req as AuthRequest, res));
 
   // Announcement social (any logged-in role can read/like/comment)
-  const announcementRoles = ['admin', 'teacher', 'parent', 'supervisor', 'reception'] as const;
+  const announcementRoles = ['admin', 'teacher', 'parent', 'supervisor', 'reception', 'staff', 'accountant'] as const;
   router.get('/announcements/:id', authenticate, authorize(...announcementRoles), (req, res) => admin.getAnnouncementById(req as AuthRequest, res));
   router.post('/announcements/:id/like', authenticate, authorize(...announcementRoles), validate({ params: vp.idParam }), (req, res) => admin.toggleAnnouncementLike(req as AuthRequest, res));
   router.get('/announcements/:id/comments', authenticate, authorize(...announcementRoles), (req, res) => admin.getAnnouncementComments(req as AuthRequest, res));

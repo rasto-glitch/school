@@ -4,24 +4,8 @@ import { Heart, MessageCircle, Megaphone } from 'lucide-react-native';
 import { useColors } from '../store/themeStore';
 import { useAuthStore } from '../store/authStore';
 import { spacing, radius, shadow, font } from '../theme';
+import { bodyTeaser } from '../utils/bodyTeaser';
 import type { Announcement } from '../types';
-
-function bodyTeaser(raw: string): { text: string; truncated: boolean } {
-  const trimmed = raw.trim();
-  if (!trimmed) return { text: '', truncated: false };
-  const sentences = trimmed.match(/[^.!?\n]+[.!?\n]+/g);
-  if (sentences && sentences.length >= 2) {
-    const first2 = sentences.slice(0, 2).join('').trim();
-    return { text: first2, truncated: first2.length < trimmed.length };
-  }
-  const limit = 140;
-  if (trimmed.length > limit) {
-    const cut = trimmed.slice(0, limit);
-    const lastSpace = cut.lastIndexOf(' ');
-    return { text: (lastSpace > 60 ? cut.slice(0, lastSpace) : cut).trim(), truncated: true };
-  }
-  return { text: trimmed, truncated: false };
-}
 
 interface Props {
   announcement: Announcement;

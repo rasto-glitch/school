@@ -3504,6 +3504,28 @@ export async function decorateAnnouncements(rows: any[], viewerUserId: string): 
 
 const ANNOUNCEMENT_SELECT = '*, users:created_by(id, first_name, last_name, role, profile_picture)';
 
+// Announcement audiences (081). Keys = users.role; absent key (admin) = sees
+// every audience. Keep in lockstep with the audience Select on the web admin
+// AnnouncementsPage and ANNOUNCEMENT_AUDIENCE_ROLES below.
+const ANNOUNCEMENT_AUDIENCE_BY_ROLE: Record<string, string[]> = {
+  teacher: ['all', 'teachers'],
+  supervisor: ['all', 'supervisors'],
+  reception: ['all', 'admins'],
+  staff: ['all', 'staff'],
+  accountant: ['all', 'staff'],
+};
+
+// Which user roles an audience notifies (inverse of the map above).
+const ANNOUNCEMENT_AUDIENCE_ROLES: Record<string, string[]> = {
+  parents: ['parent'],
+  teachers: ['teacher'],
+  admins: ['admin', 'reception'],
+  supervisors: ['supervisor'],
+  staff: ['staff', 'accountant'],
+};
+
+const VALID_ANNOUNCEMENT_AUDIENCES = ['all', ...Object.keys(ANNOUNCEMENT_AUDIENCE_ROLES)];
+
 export async function getAnnouncements(req: AuthRequest, res: Response): Promise<void> {
   const { schoolId, userId, role } = req.user!;
   const { limit, cursor } = parseCursorParams(req.query as Record<string, unknown>);
@@ -3514,10 +3536,12 @@ export async function getAnnouncements(req: AuthRequest, res: Response): Promise
     .select(ANNOUNCEMENT_SELECT)
     .eq('school_id', schoolId)
     .gte('created_at', cutoff);
-  // Audience targeting. Admin and supervisor see everything (they manage /
-  // oversee the school); teachers see only announcements meant for them.
-  // (Parents have their own filtered endpoint in parent.controller.)
-  if (role === 'teacher') query = query.in('target_audience', ['all', 'teachers']);
+  // Audience targeting (081). Admin sees everything (they moderate the feed);
+  // every other role sees 'all' plus its own audience — 'admins' covers
+  // reception and 'staff' covers accountant. (Parents have their own filtered
+  // endpoint in parent.controller.)
+  const audiences = ANNOUNCEMENT_AUDIENCE_BY_ROLE[role];
+  if (audiences) query = query.in('target_audience', audiences);
   if (cursor) {
     query = query.or(
       `created_at.lt.${cursor.createdAt},and(created_at.eq.${cursor.createdAt},id.lt.${cursor.id})`,
@@ -3569,6 +3593,11 @@ export async function createAnnouncement(req: AuthRequest, res: Response): Promi
   const { schoolId, userId } = req.user!;
   const { title, content, targetAudience, linkUrl, imageUrl } = req.body;
 
+  if (targetAudience && !VALID_ANNOUNCEMENT_AUDIENCES.includes(targetAudience)) {
+    res.status(400).json({ error: `targetAudience must be one of: ${VALID_ANNOUNCEMENT_AUDIENCES.join(', ')}` });
+    return;
+  }
+
   // Legacy: multipart with `attachment` file is still supported.
   let attachmentUrl: string | null = null;
   const file = (req as any).file;
@@ -3598,14 +3627,13 @@ export async function createAnnouncement(req: AuthRequest, res: Response): Promi
 
   if (error) { res.status(safeDbErrorStatus(error)).json({ error: safeDbErrorMessage(error) }); return; }
 
-  // Notify target audience in real-time + push.
-  // target_audience values are plural ('parents'|'teachers'|'students'|'all') but
-  // users.role is singular — map before filtering, otherwise no users match.
+  // Notify target audience in real-time + push. Audience values are plural
+  // group names but users.role is singular — map via ANNOUNCEMENT_AUDIENCE_ROLES
+  // (one audience can span several roles, e.g. admins = admin + reception).
   const audience = targetAudience || 'all';
-  const audienceRoleMap: Record<string, string> = { parents: 'parent', teachers: 'teacher', students: 'student' };
   const roleFilter = audience === 'all'
     ? supabase.from('users').select('id').eq('school_id', schoolId).eq('is_active', true)
-    : supabase.from('users').select('id').eq('school_id', schoolId).eq('role', audienceRoleMap[audience] ?? audience).eq('is_active', true);
+    : supabase.from('users').select('id').eq('school_id', schoolId).in('role', ANNOUNCEMENT_AUDIENCE_ROLES[audience] ?? []).eq('is_active', true);
   const { data: targets } = await roleFilter;
   if (targets && targets.length > 0) {
     const preview = content.length > 80 ? content.substring(0, 80) + '…' : content;

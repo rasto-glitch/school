@@ -4,9 +4,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { Calendar, Clock, ChevronRight } from 'lucide-react-native';
-import { receptionApi } from '../../services/api';
+import { receptionApi, announcementApi } from '../../services/api';
 import { useColors } from '../../store/themeStore';
 import { spacing, radius, font, shadow } from '../../theme';
+import AnnouncementCard from '../../components/AnnouncementCard';
+import type { Announcement } from '../../types';
 
 export default function ReceptionDashboardScreen() {
   const { t } = useTranslation();
@@ -16,13 +18,30 @@ export default function ReceptionDashboardScreen() {
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [pendingCount, setPendingCount] = useState<number | null>(null);
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(() =>
-    receptionApi.getPendingAppointmentCount()
-      .then(r => setPendingCount(r.data?.count ?? 0))
-      .catch(() => {}),
+    Promise.allSettled([
+      receptionApi.getPendingAppointmentCount(),
+      announcementApi.getAnnouncements(),
+    ]).then(([count, ann]) => {
+      if (count.status === 'fulfilled') setPendingCount(count.value.data?.count ?? 0);
+      if (ann.status === 'fulfilled') {
+        const b = ann.value.data;
+        setAnnouncements(Array.isArray(b) ? b : b?.data ?? []);
+      }
+    }),
   []);
+
+  const handleToggleAnnouncementLike = async (id: string) => {
+    setAnnouncements(prev => prev.map(a => a.id === id ? {
+      ...a,
+      likedByMe: !a.likedByMe,
+      likesCount: (a.likesCount ?? 0) + (a.likedByMe ? -1 : 1),
+    } : a));
+    try { await announcementApi.toggleLike(id); } catch {}
+  };
 
   // Refresh the pending count every time the tab regains focus so the badge
   // stays current after reception confirms/rejects from the Appointments tab.
@@ -61,6 +80,22 @@ export default function ReceptionDashboardScreen() {
           </View>
           <ChevronRight size={20} color={colors.textMuted} />
         </TouchableOpacity>
+
+        {/* Announcements feed (081): reception sees 'all' + admin-targeted posts. */}
+        {announcements.length > 0 && (
+          <>
+            <Text style={styles.sectionLabel}>{t('announcements.title', 'Announcements')}</Text>
+            {announcements.map(ann => (
+              <AnnouncementCard
+                key={ann.id}
+                announcement={ann}
+                onPress={() => navigation.navigate('AnnouncementDetail', { announcement: ann })}
+                onPressComment={() => navigation.navigate('AnnouncementDetail', { announcement: ann, focusComment: true })}
+                onToggleLike={() => handleToggleAnnouncementLike(ann.id)}
+              />
+            ))}
+          </>
+        )}
       </ScrollView>
     </View>
   );
@@ -80,4 +115,5 @@ const makeStyles = (colors: ReturnType<typeof import('../../store/themeStore').u
   cardCount: { fontSize: font.xxl, fontWeight: '800', color: colors.text },
   cardPending: { fontSize: font.xs, fontWeight: '600', color: '#D97706', marginTop: 2 },
   cardHint: { fontSize: font.xs, color: colors.textMuted, marginTop: 4 },
+  sectionLabel: { fontSize: font.xs, fontWeight: '700', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: spacing.md, marginBottom: spacing.sm },
 });

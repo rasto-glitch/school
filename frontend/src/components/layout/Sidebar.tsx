@@ -271,7 +271,11 @@ const navItems: Partial<Record<Role, NavItem[]>> = {
   reception: [
     { to: '/reception/dashboard', icon: Home, label: 'Dashboard' },
     { to: '/reception/appointments', icon: Calendar, label: 'Appointments', feature: 'appointments' },
+    { to: '/announcements', icon: Megaphone, label: 'Announcements', feature: 'announcements' },
     { to: '/reception/qr-display', icon: QrCode, label: 'Clock In QR', feature: 'staff_attendance' },
+  ],
+  staff: [
+    { to: '/announcements', icon: Megaphone, label: 'Announcements', feature: 'announcements' },
   ],
   accountant: [
     { to: '/accounting/dashboard', icon: Home, label: 'Dashboard', feature: 'tuition_fees' },

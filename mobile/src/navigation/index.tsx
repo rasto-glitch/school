@@ -254,6 +254,11 @@ export default function Navigation() {
               component={SettingsScreen}
               options={{ headerShown: true, headerTitle: 'Settings', headerBackTitle: 'Back', presentation: 'card' }}
             />
+            <Stack.Screen
+              name="AnnouncementDetail"
+              component={AnnouncementDetailScreen}
+              options={{ headerShown: true, headerTitle: 'Announcement', headerBackTitle: 'Back' }}
+            />
             <Stack.Screen name="Security" component={SecurityScreen} options={{ headerShown: false }} />
             <Stack.Screen name="MfaSettings" component={MfaSettingsScreen} options={{ headerShown: false }} />
             <Stack.Screen name="PhoneSettings" component={PhoneSettingsScreen} options={{ headerShown: false }} />
@@ -273,6 +278,11 @@ export default function Navigation() {
               name="EmployeeSettings"
               component={SettingsScreen}
               options={{ headerShown: true, headerTitle: 'Settings', headerBackTitle: 'Back', presentation: 'card' }}
+            />
+            <Stack.Screen
+              name="AnnouncementDetail"
+              component={AnnouncementDetailScreen}
+              options={{ headerShown: true, headerTitle: 'Announcement', headerBackTitle: 'Back' }}
             />
             <Stack.Screen name="Security" component={SecurityScreen} options={{ headerShown: false }} />
             <Stack.Screen name="MfaSettings" component={MfaSettingsScreen} options={{ headerShown: false }} />
