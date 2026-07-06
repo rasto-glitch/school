@@ -1,9 +1,11 @@
 # Credit Marks (نمرەی هاوکاری) — support-mark rounding under school control
 
 **Status: SHIPPED 2026-07-06 — all four phases (P1 strict banding, P2 backend, P3 admin UI,
-P4 presentation) built and E2E-verified. Migrations 079 + 080 both run in prod.** One
-verification outstanding: confirm allocation audit rows persist post-080 (pre-080 the audit
-CHECK silently rejected 'grade_credit'). E2E evidence: 49.96 stays failing (strict
+P4 presentation) built and E2E-verified. Migrations 079 + 080 both run in prod. Post-080
+audit-row persistence verified 2026-07-06 (grant → audit_logs `create` row with reason
+"Credit granted (round1, …: +3)"; removal → `delete` row; no `[audit] insert failed` in the
+server log; pre-080 the audit CHECK silently rejected 'grade_credit'). Feature fully
+closed.** E2E evidence: 49.96 stays failing (strict
 banding); 47+4 → 400 capped-to-pass; 47+3 → effective 50; pool 5 enforced (3+3 → 400, 3+2 →
 ok, remaining 0); round2-without-retakes → 400; feature-off → 409; removal restores failing;
 allocations flow to the admin brief and the parent endpoint. PDF credit-disclosure lines are

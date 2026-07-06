@@ -882,3 +882,130 @@ bursts (negligible). The existing rate limits cap abuse, not legitimate
 cost.
 
 
+---
+
+## MFA follow-ups: recovery-code decouple (Phase 2b) + school MFA policy (Phase 4)
+
+**Status:** Not built — deferred phases of the shipped phone/email OTP login
+feature (Phases 1–3 live since 2026-06-14; end-to-end functional on web +
+mobile). Shelved 2026-07-06.
+
+### The gap (Phase 2b — recovery-code decouple)
+
+Recovery codes are minted ONLY on TOTP enrollment because
+`recovery_codes_hash` lives in the TOTP row of `user_mfa`
+([mfa.controller.ts](backend/src/controllers/mfa.controller.ts)). A user who
+arms **only phone OTP** has no recovery codes: if they lose their phone,
+their only way back in is the admin-disable break-glass cascade
+(self-service is impossible). Bounded today because admin rescue exists and
+adoption is voluntary.
+
+### What it needs
+
+- An **account-level recovery-code store** (new table or a user-level row
+  distinct from the TOTP secret vault). Do NOT reuse the `user_mfa` TOTP row —
+  `getMfaStatus` treats that row's presence as "TOTP enrolled" and would
+  corrupt.
+- Mint codes when the FIRST login factor of any channel is armed
+  ([mfaFactors.controller.ts](backend/src/controllers/mfaFactors.controller.ts));
+  `verifyMfaCodeForUser` already accepts recovery codes, so the verify path
+  mostly exists.
+- Regen/count surfaces in the web + mobile security hubs (the TOTP recovery
+  UI is the template).
+
+### Phase 4 — optional school MFA policy
+
+Enforcement is voluntary per user (locked decision 2026-06-14). Phase 4 =
+a per-school policy knob ("require MFA for role X"), checked at login next
+to the existing armed-factor condition. Explicitly optional — build only if
+a school asks. The locked decisions (all roles eligible; email never solo;
+per-user voluntary default) still stand.
+
+---
+
+## Student health records — Phase 3 polish + Phase 4 extensions
+
+**Status:** Phases 1–2 shipped (migrations 066+067 run; `/admin/health` page
++ `health.manage` capability live; staff-brief safety subset shipped
+c70f4ad). These are the deliberately deferred tails. Shelved 2026-07-06.
+
+### Phase 3 — small polish (each item veto-able)
+
+- **Per-visit parent notification:** `student_health_visits.parent_notified`
+  is recorded today but fires NO actual notification. Wire a generic
+  heads-up ("your child visited the clinic today — contact the school")
+  through the existing notify infra. Keep it generic: clinic details stay
+  clinic-internal (locked decision — no parent record access).
+- **Admin-dashboard signal:** "N nurse visits today" card/row.
+- **Health badge on the student brief** (beyond the shipped safety subset).
+
+### Phase 4 — deferred extensions
+
+- Document uploads (immunization cards, medical certificates) — reuse the
+  private-bucket + magic-byte + ClamAV pattern from employee documents.
+- Medication-administration record (MAR).
+- Parent read-only view (would REVERSE locked decision #2 — needs an
+  explicit user decision, not a default).
+- Immunization expiry reminders.
+
+### Notes for whoever picks this up
+
+Free-text stays encrypted via [employeePiiCrypto.ts](backend/src/utils/employeePiiCrypto.ts)
+(`EMPLOYEE_PII_KEY`, per-school HKDF). Retention policy is locked: health
+records are DESTROYED on student departure in all paths (migration 074,
+comment-only); archives deliberately exclude health.
+
+---
+
+## Report cards — Phase 5 extras (sealed snapshots, attendance, ranking, archived transcripts)
+
+**Status:** Phases 1–4 shipped and live (migration 066 run). These are the
+consciously punted P5 items. Shelved 2026-07-06.
+
+### The items
+
+- **Sealed snapshots.** Cards + transcripts render LIVE from released
+  grades ([reportCardPdf.ts](backend/src/utils/reportCardPdf.ts),
+  [transcriptPdf.ts](backend/src/utils/transcriptPdf.ts)) — a grade edit
+  after printing changes the next download. A sealed snapshot freezes the
+  officially issued copy (issue → persist payload/PDF + hash, list of
+  issued documents, re-download returns the sealed version). This is the
+  first P5 item worth building once real schools issue official documents.
+- **Attendance summary on the card** — excluded from v1 by locked decision;
+  data exists in `attendance`.
+- **School-internal ranking** — class rank NEVER goes on the parent card
+  (locked). A separate school-internal ranking surface was envisioned.
+- **Archived-student transcripts** — departed/archived students keep only
+  their archive PDF today; the live-transcript path doesn't cover them.
+  Overlaps with the "Lifetime transcript view" shelf entry above — build
+  them together.
+
+---
+
+## Schedule 2.0 — solver soft-constraints + mobile scheduling surfaces
+
+**Status:** All 4 phases shipped and live (migrations 068–071 run). These
+are the plan's explicitly-deferred optimisation items. Shelved 2026-07-06.
+
+### Solver soft-constraints
+
+[timetableSolver.ts](backend/src/utils/timetableSolver.ts) auto-generates
+timetables under hard constraints only (teacher/class/room clashes,
+`teacher_unavailability`, pinned cells). Missing preference terms:
+
+- **No back-to-back same subject** for a class across adjacent periods.
+- **Double-period support** (deliberate adjacent pairs for lab-style
+  subjects) — needs a per-subject "wants double periods" flag.
+- **Even daily load spread** — avoid stacking one subject's weekly hours
+  early in the week / one teacher's day solid with no gaps.
+
+Without these, generated timetables are legal but can be lopsided; admins
+fix by pin-and-regenerate. Approach: score candidate slots in the greedy
+placement loop (soft penalty sum) rather than reject.
+
+### Optional mobile
+
+Teachers/parents have read-only schedule views (Phase 1). The admin
+surfaces (day structure, generate/grid, teaching plan, substitutions) are
+web-only. If demand appears, substitutions is the one admins would want on
+a phone (morning sick-calls).
