@@ -38,7 +38,7 @@ import * as employeeAcks from '../controllers/employeeAcknowledgements.controlle
 import * as employeeActions from '../controllers/employeeActions.controller';
 import * as employeeTermination from '../controllers/employeeTermination.controller';
 import * as meEmployee from '../controllers/meEmployee.controller';
-import { authenticate, authorize, authorizeCapability, authorizeAnyCapability } from '../middleware/auth';
+import { authenticate, authorize, authorizeCapability, authorizeAnyCapability, requireFeature } from '../middleware/auth';
 import type { AuthRequest } from '../middleware/auth';
 import * as clearance from '../controllers/clearance.controller';
 import * as attention from '../controllers/attention.controller';
@@ -377,13 +377,15 @@ export function createRouter(io: SocketServer) {
   // Medical profile + nurse-visit log. Gated by the `health.manage` capability;
   // sensitive free-text is field-level encrypted (employeePiiCrypto). No parent
   // surface in v1.
+  // Premium feature flag (master-provisioned, opt-in) on top of the capability.
+  const healthFeature = requireFeature('student_health');
   const healthManage = authorizeCapability('health.manage');
-  router.get('/admin/health/students/:id/profile', authenticate, healthManage, validate({ params: vp.idParam }), (req, res) => studentHealth.getProfile(req as AuthRequest, res));
-  router.put('/admin/health/students/:id/profile', authenticate, healthManage, validate({ params: vp.idParam, body: vp.healthProfileSchema }), (req, res) => studentHealth.upsertProfile(req as AuthRequest, res));
-  router.get('/admin/health/students/:id/visits', authenticate, healthManage, validate({ params: vp.idParam }), (req, res) => studentHealth.listVisits(req as AuthRequest, res));
-  router.post('/admin/health/students/:id/visits', authenticate, healthManage, validate({ params: vp.idParam, body: vp.healthVisitSchema }), (req, res) => studentHealth.createVisit(req as AuthRequest, res));
-  router.put('/admin/health/visits/:id', authenticate, healthManage, validate({ params: vp.idParam, body: vp.healthVisitSchema }), (req, res) => studentHealth.updateVisit(req as AuthRequest, res));
-  router.delete('/admin/health/visits/:id', authenticate, healthManage, validate({ params: vp.idParam }), (req, res) => studentHealth.deleteVisit(req as AuthRequest, res));
+  router.get('/admin/health/students/:id/profile', authenticate, healthFeature, healthManage, validate({ params: vp.idParam }), (req, res) => studentHealth.getProfile(req as AuthRequest, res));
+  router.put('/admin/health/students/:id/profile', authenticate, healthFeature, healthManage, validate({ params: vp.idParam, body: vp.healthProfileSchema }), (req, res) => studentHealth.upsertProfile(req as AuthRequest, res));
+  router.get('/admin/health/students/:id/visits', authenticate, healthFeature, healthManage, validate({ params: vp.idParam }), (req, res) => studentHealth.listVisits(req as AuthRequest, res));
+  router.post('/admin/health/students/:id/visits', authenticate, healthFeature, healthManage, validate({ params: vp.idParam, body: vp.healthVisitSchema }), (req, res) => studentHealth.createVisit(req as AuthRequest, res));
+  router.put('/admin/health/visits/:id', authenticate, healthFeature, healthManage, validate({ params: vp.idParam, body: vp.healthVisitSchema }), (req, res) => studentHealth.updateVisit(req as AuthRequest, res));
+  router.delete('/admin/health/visits/:id', authenticate, healthFeature, healthManage, validate({ params: vp.idParam }), (req, res) => studentHealth.deleteVisit(req as AuthRequest, res));
 
   // ── Dashboard "Needs your attention" signals + actions (migration 060) ──
   // Per-term grade filing windows (academics.oversee).
@@ -496,6 +498,12 @@ export function createRouter(io: SocketServer) {
   // employee record; separate from the self-set app avatar.
   router.post('/admin/employees/:role/:id/photo', authenticate, authorizeCapability('staff.manage'), upload.single('photo'), validate({ params: vu.employeePhotoParams }), (req, res) => admin.uploadEmployeePhoto(req as AuthRequest, res));
 
+  // ── Employee records — `hr` feature flag (premium, requires archive) ────
+  // Everything from here to the self-service block is the HR build (Waves
+  // 1-2.5). Basic employee CRUD (add/archive/photo/lists) above and the
+  // clearance panel below stay ungated — they're core school operation.
+  const hrFeature = requireFeature('hr');
+
   // ── Employee profile (Wave 1: read + export) ────────────────────────────
   // GET /admin/employees/:role/:id              → full record (HR fields +
   //                                                role-specific joins +
@@ -504,48 +512,54 @@ export function createRouter(io: SocketServer) {
   // GET /admin/employees/:role/:id/export.pdf   → printable HR file
   // Static export paths come BEFORE the catch-all :id endpoint so they
   // aren't shadowed.
-  router.get('/admin/employees/:role/:id/export.json', authenticate, authorizeCapability('staff.manage'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeProfile.exportProfileJson(req as AuthRequest, res));
-  router.get('/admin/employees/:role/:id/export.pdf',  authenticate, authorizeCapability('staff.manage'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeProfile.exportProfilePdf(req as AuthRequest, res));
+  router.get('/admin/employees/:role/:id/export.json', authenticate, hrFeature, authorizeCapability('staff.manage'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeProfile.exportProfileJson(req as AuthRequest, res));
+  router.get('/admin/employees/:role/:id/export.pdf',  authenticate, hrFeature, authorizeCapability('staff.manage'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeProfile.exportProfilePdf(req as AuthRequest, res));
+  // The base record read stays UNGATED: it powers the profile page that also
+  // hosts basic identity editing + archiving (core CRUD). The HR-only
+  // sub-resources (documents/extended/contacts/acks/actions/exports) are
+  // each gated individually.
   router.get('/admin/employees/:role/:id',             authenticate, authorizeCapability('staff.manage'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeProfile.getProfile(req as AuthRequest, res));
 
   // ── Employee documents (Wave 1) ─────────────────────────────────────────
   // Per-employee list + upload (multipart 'file'). Sensitivity gating +
   // magic-byte sniff + SHA-256 + private-bucket upload happen inside the
   // controller — see backend/src/utils/employeeDocs.ts.
-  router.get( '/admin/employees/:role/:id/documents', authenticate, authorizeCapability('staff.manage'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeDocs.listForEmployee(req as AuthRequest, res));
-  router.post('/admin/employees/:role/:id/documents', authenticate, authorizeCapability('staff.manage'), upload.single('file'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeDocs.uploadForEmployee(req as AuthRequest, res));
+  router.get( '/admin/employees/:role/:id/documents', authenticate, hrFeature, authorizeCapability('staff.manage'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeDocs.listForEmployee(req as AuthRequest, res));
+  router.post('/admin/employees/:role/:id/documents', authenticate, hrFeature, authorizeCapability('staff.manage'), upload.single('file'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeDocs.uploadForEmployee(req as AuthRequest, res));
 
   // Per-document (static paths before :id).
-  router.get('/admin/employee-document-categories', authenticate, authorizeCapability('staff.manage'), (req, res) => employeeDocs.listCategories(req as AuthRequest, res));
-  router.get('/admin/employee-documents/expiring',  authenticate, authorizeCapability('staff.manage'), (req, res) => employeeDocs.listExpiring(req as AuthRequest, res));
-  router.get(   '/admin/employee-documents/:id/signed-url', authenticate, authorizeCapability('staff.manage'), validate({ params: vu.idParam }), (req, res) => employeeDocs.issueSignedUrl(req as AuthRequest, res));
-  router.patch( '/admin/employee-documents/:id', authenticate, authorizeCapability('staff.manage'), validate({ params: vu.idParam, body: vu.updateDocumentSchema }), (req, res) => employeeDocs.updateDocument(req as AuthRequest, res));
-  router.delete('/admin/employee-documents/:id', authenticate, authorizeCapability('staff.manage'), validate({ params: vu.idParam, body: vu.voidDocumentSchema   }), (req, res) => employeeDocs.voidDocument(req as AuthRequest, res));
+  router.get('/admin/employee-document-categories', authenticate, hrFeature, authorizeCapability('staff.manage'), (req, res) => employeeDocs.listCategories(req as AuthRequest, res));
+  router.get('/admin/employee-documents/expiring',  authenticate, hrFeature, authorizeCapability('staff.manage'), (req, res) => employeeDocs.listExpiring(req as AuthRequest, res));
+  router.get(   '/admin/employee-documents/:id/signed-url', authenticate, hrFeature, authorizeCapability('staff.manage'), validate({ params: vu.idParam }), (req, res) => employeeDocs.issueSignedUrl(req as AuthRequest, res));
+  router.patch( '/admin/employee-documents/:id', authenticate, hrFeature, authorizeCapability('staff.manage'), validate({ params: vu.idParam, body: vu.updateDocumentSchema }), (req, res) => employeeDocs.updateDocument(req as AuthRequest, res));
+  router.delete('/admin/employee-documents/:id', authenticate, hrFeature, authorizeCapability('staff.manage'), validate({ params: vu.idParam, body: vu.voidDocumentSchema   }), (req, res) => employeeDocs.voidDocument(req as AuthRequest, res));
 
   // ── Employee extended profile (Wave 2) ──────────────────────────────────
-  router.get(  '/admin/employees/:role/:id/extended', authenticate, authorizeCapability('staff.manage'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeExtended.getExtended(req as AuthRequest, res));
-  router.put(  '/admin/employees/:role/:id/extended', authenticate, authorizeCapability('staff.manage'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeExtended.upsertExtended(req as AuthRequest, res));
-  router.post( '/admin/employees/:role/:id/extended/redact', authenticate, authorizeCapability('staff.manage'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeExtended.redactExtended(req as AuthRequest, res));
+  router.get(  '/admin/employees/:role/:id/extended', authenticate, hrFeature, authorizeCapability('staff.manage'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeExtended.getExtended(req as AuthRequest, res));
+  router.put(  '/admin/employees/:role/:id/extended', authenticate, hrFeature, authorizeCapability('staff.manage'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeExtended.upsertExtended(req as AuthRequest, res));
+  router.post( '/admin/employees/:role/:id/extended/redact', authenticate, hrFeature, authorizeCapability('staff.manage'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeExtended.redactExtended(req as AuthRequest, res));
 
   // ── Emergency contacts (Wave 2) ─────────────────────────────────────────
-  router.get(  '/admin/employees/:role/:id/emergency-contacts', authenticate, authorizeCapability('staff.manage'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeEmergency.listForEmployee(req as AuthRequest, res));
-  router.post( '/admin/employees/:role/:id/emergency-contacts', authenticate, authorizeCapability('staff.manage'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeEmergency.createForEmployee(req as AuthRequest, res));
-  router.patch( '/admin/emergency-contacts/:id', authenticate, authorizeCapability('staff.manage'), validate({ params: vu.idParam }), (req, res) => employeeEmergency.update(req as AuthRequest, res));
-  router.delete('/admin/emergency-contacts/:id', authenticate, authorizeCapability('staff.manage'), validate({ params: vu.idParam }), (req, res) => employeeEmergency.remove(req as AuthRequest, res));
+  router.get(  '/admin/employees/:role/:id/emergency-contacts', authenticate, hrFeature, authorizeCapability('staff.manage'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeEmergency.listForEmployee(req as AuthRequest, res));
+  router.post( '/admin/employees/:role/:id/emergency-contacts', authenticate, hrFeature, authorizeCapability('staff.manage'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeEmergency.createForEmployee(req as AuthRequest, res));
+  router.patch( '/admin/emergency-contacts/:id', authenticate, hrFeature, authorizeCapability('staff.manage'), validate({ params: vu.idParam }), (req, res) => employeeEmergency.update(req as AuthRequest, res));
+  router.delete('/admin/emergency-contacts/:id', authenticate, hrFeature, authorizeCapability('staff.manage'), validate({ params: vu.idParam }), (req, res) => employeeEmergency.remove(req as AuthRequest, res));
 
   // ── School acknowledgement policies + employee acks (Wave 2) ────────────
-  router.get( '/admin/school-policies', authenticate, authorizeCapability('staff.manage'), (req, res) => schoolPolicies.listPolicies(req as AuthRequest, res));
-  router.post('/admin/school-policies', authenticate, authorizeCapability('hr.manage'), (req, res) => schoolPolicies.createOrBumpPolicy(req as AuthRequest, res));
-  router.patch( '/admin/school-policies/:id', authenticate, authorizeCapability('hr.manage'), validate({ params: vu.idParam }), (req, res) => schoolPolicies.updatePolicyMeta(req as AuthRequest, res));
-  router.delete('/admin/school-policies/:id', authenticate, authorizeCapability('hr.manage'), validate({ params: vu.idParam }), (req, res) => schoolPolicies.deletePolicy(req as AuthRequest, res));
+  router.get( '/admin/school-policies', authenticate, hrFeature, authorizeCapability('staff.manage'), (req, res) => schoolPolicies.listPolicies(req as AuthRequest, res));
+  router.post('/admin/school-policies', authenticate, hrFeature, authorizeCapability('hr.manage'), (req, res) => schoolPolicies.createOrBumpPolicy(req as AuthRequest, res));
+  router.patch( '/admin/school-policies/:id', authenticate, hrFeature, authorizeCapability('hr.manage'), validate({ params: vu.idParam }), (req, res) => schoolPolicies.updatePolicyMeta(req as AuthRequest, res));
+  router.delete('/admin/school-policies/:id', authenticate, hrFeature, authorizeCapability('hr.manage'), validate({ params: vu.idParam }), (req, res) => schoolPolicies.deletePolicy(req as AuthRequest, res));
 
-  router.get( '/admin/employees/:role/:id/acknowledgements', authenticate, authorizeCapability('staff.manage'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeAcks.listForEmployee(req as AuthRequest, res));
-  router.post('/admin/employees/:role/:id/acknowledgements', authenticate, authorizeCapability('staff.manage'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeAcks.createForEmployee(req as AuthRequest, res));
+  router.get( '/admin/employees/:role/:id/acknowledgements', authenticate, hrFeature, authorizeCapability('staff.manage'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeAcks.listForEmployee(req as AuthRequest, res));
+  router.post('/admin/employees/:role/:id/acknowledgements', authenticate, hrFeature, authorizeCapability('staff.manage'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeAcks.createForEmployee(req as AuthRequest, res));
 
   // ── Employee actions log + termination workflow (Wave 2) ────────────────
-  router.get( '/admin/employees/:role/:id/actions', authenticate, authorizeCapability('staff.manage'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeActions.listForEmployee(req as AuthRequest, res));
-  router.post('/admin/employees/:role/:id/actions', authenticate, authorizeCapability('staff.manage'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeActions.createForEmployee(req as AuthRequest, res));
-  router.post('/admin/employees/:role/:id/terminate', authenticate, authorizeCapability('hr.manage'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeTermination.terminate(req as AuthRequest, res));
+  // Termination is the formal HR workflow; the plain archive flow (basic
+  // CRUD, ungated) remains available to non-HR schools.
+  router.get( '/admin/employees/:role/:id/actions', authenticate, hrFeature, authorizeCapability('staff.manage'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeActions.listForEmployee(req as AuthRequest, res));
+  router.post('/admin/employees/:role/:id/actions', authenticate, hrFeature, authorizeCapability('staff.manage'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeActions.createForEmployee(req as AuthRequest, res));
+  router.post('/admin/employees/:role/:id/terminate', authenticate, hrFeature, authorizeCapability('hr.manage'), validate({ params: vu.employeePhotoParams }), (req, res) => employeeTermination.terminate(req as AuthRequest, res));
 
   // HR-officer promote/demote routes removed in Phase B — hr.read / hr.manage
   // are now capabilities granted through the clearance panel below.
@@ -561,13 +575,13 @@ export function createRouter(io: SocketServer) {
   // accountant) read + edit their own low + medium PII fields and
   // emergency contacts. Religion + SSN remain HR-officer-only and are
   // stripped from inputs here. Parents 403 (not employees).
-  router.get(   '/me/employee-profile', authenticate, (req, res) => meEmployee.getMyProfile(req as AuthRequest, res));
-  router.put(   '/me/extended', authenticate, (req, res) => meEmployee.putMyExtended(req as AuthRequest, res));
-  router.post(  '/me/emergency-contacts', authenticate, (req, res) => meEmployee.createMyContact(req as AuthRequest, res));
-  router.patch( '/me/emergency-contacts/:id', authenticate, validate({ params: vu.idParam }), (req, res) => meEmployee.updateMyContact(req as AuthRequest, res));
-  router.delete('/me/emergency-contacts/:id', authenticate, validate({ params: vu.idParam }), (req, res) => meEmployee.deleteMyContact(req as AuthRequest, res));
-  router.get( '/me/acknowledgements', authenticate, (req, res) => meEmployee.listMyAcknowledgements(req as AuthRequest, res));
-  router.post('/me/acknowledgements', authenticate, (req, res) => meEmployee.createMyAcknowledgement(req as AuthRequest, res));
+  router.get(   '/me/employee-profile', authenticate, hrFeature, (req, res) => meEmployee.getMyProfile(req as AuthRequest, res));
+  router.put(   '/me/extended', authenticate, hrFeature, (req, res) => meEmployee.putMyExtended(req as AuthRequest, res));
+  router.post(  '/me/emergency-contacts', authenticate, hrFeature, (req, res) => meEmployee.createMyContact(req as AuthRequest, res));
+  router.patch( '/me/emergency-contacts/:id', authenticate, hrFeature, validate({ params: vu.idParam }), (req, res) => meEmployee.updateMyContact(req as AuthRequest, res));
+  router.delete('/me/emergency-contacts/:id', authenticate, hrFeature, validate({ params: vu.idParam }), (req, res) => meEmployee.deleteMyContact(req as AuthRequest, res));
+  router.get( '/me/acknowledgements', authenticate, hrFeature, (req, res) => meEmployee.listMyAcknowledgements(req as AuthRequest, res));
+  router.post('/me/acknowledgements', authenticate, hrFeature, (req, res) => meEmployee.createMyAcknowledgement(req as AuthRequest, res));
   router.get('/admin/reset-requests', authenticate, authorizeCapability('accounts.manage'), (req, res) => admin.getResetRequests(req as AuthRequest, res));
   router.post('/admin/users/:userId/reset-password', authenticate, authorizeCapability('accounts.manage'), validate({ params: vu.userIdParam, body: vu.resetUserPasswordSchema }), (req, res) => admin.resetUserPassword(req as AuthRequest, res));
   router.get('/admin/users/inactive/search', authenticate, authorizeCapability('accounts.manage'), validate({ query: vq.listQuery }), (req, res) => admin.searchInactiveUsers(req as AuthRequest, res));
@@ -588,28 +602,34 @@ export function createRouter(io: SocketServer) {
   router.get('/admin/schedule/template.xlsx', authenticate, authorizeCapability('academics.oversee'), (req, res) => admin.scheduleTemplate(req as AuthRequest, res));
   router.get('/admin/schedule/pdf', authenticate, authorizeCapability('academics.oversee'), (req, res) => admin.downloadSchedulePdf(req as AuthRequest, res));
   router.post('/admin/schedule/upload', authenticate, authorizeCapability('academics.oversee'), upload.single('file'), (req, res) => admin.uploadSchedule(req as AuthRequest, res));
+  // ── Schedule 2.0 premium additions — `timetable` feature flag ────────────
+  // The bare-bones manual grid above (config / cell / xlsx / pdf / upload)
+  // stays ungated; rooms, teaching plan, the auto-generator, teacher
+  // availability and substitutions are the sellable 2.0 suite.
+  const timetableFeature = requireFeature('timetable');
+  const academicsOversee = authorizeCapability('academics.oversee');
   // Rooms (Schedule 2.0, migration 068) — physical rooms/labs for timetabling.
-  router.get('/admin/rooms', authenticate, authorizeCapability('academics.oversee'), (req, res) => admin.listRooms(req as AuthRequest, res));
-  router.post('/admin/rooms', authenticate, authorizeCapability('academics.oversee'), validate({ body: vp.roomSchema }), (req, res) => admin.createRoom(req as AuthRequest, res));
-  router.put('/admin/rooms/:id', authenticate, authorizeCapability('academics.oversee'), validate({ params: vp.idParam, body: vp.roomSchema }), (req, res) => admin.updateRoom(req as AuthRequest, res));
-  router.delete('/admin/rooms/:id', authenticate, authorizeCapability('academics.oversee'), validate({ params: vp.idParam }), (req, res) => admin.deleteRoom(req as AuthRequest, res));
-  router.put('/admin/classes/:id/room', authenticate, authorizeCapability('academics.oversee'), validate({ params: vp.idParam, body: vp.setClassRoomSchema }), (req, res) => admin.setClassRoom(req as AuthRequest, res));
+  router.get('/admin/rooms', authenticate, timetableFeature, academicsOversee, (req, res) => admin.listRooms(req as AuthRequest, res));
+  router.post('/admin/rooms', authenticate, timetableFeature, academicsOversee, validate({ body: vp.roomSchema }), (req, res) => admin.createRoom(req as AuthRequest, res));
+  router.put('/admin/rooms/:id', authenticate, timetableFeature, academicsOversee, validate({ params: vp.idParam, body: vp.roomSchema }), (req, res) => admin.updateRoom(req as AuthRequest, res));
+  router.delete('/admin/rooms/:id', authenticate, timetableFeature, academicsOversee, validate({ params: vp.idParam }), (req, res) => admin.deleteRoom(req as AuthRequest, res));
+  router.put('/admin/classes/:id/room', authenticate, timetableFeature, academicsOversee, validate({ params: vp.idParam, body: vp.setClassRoomSchema }), (req, res) => admin.setClassRoom(req as AuthRequest, res));
   // Teaching plan / بەشە وانە (Schedule 2.0, migration 069) — per-(class,subject)
   // weekly demand + per-teacher load cap. Feeds the Phase-3 auto-generator.
-  router.get('/admin/teaching-plan', authenticate, authorizeCapability('academics.oversee'), (req, res) => admin.getTeachingPlan(req as AuthRequest, res));
-  router.post('/admin/teaching-plan/requirements', authenticate, authorizeCapability('academics.oversee'), validate({ body: vp.teachingRequirementSchema }), (req, res) => admin.upsertTeachingRequirement(req as AuthRequest, res));
-  router.delete('/admin/teaching-plan/requirements/:id', authenticate, authorizeCapability('academics.oversee'), validate({ params: vp.idParam }), (req, res) => admin.deleteTeachingRequirement(req as AuthRequest, res));
-  router.put('/admin/teaching-plan/teachers/:id/cap', authenticate, authorizeCapability('academics.oversee'), validate({ params: vp.idParam, body: vp.teacherLoadCapSchema }), (req, res) => admin.setTeacherLoadCap(req as AuthRequest, res));
-  router.post('/admin/teaching-plan/seed', authenticate, authorizeCapability('academics.oversee'), (req, res) => admin.seedTeachingPlan(req as AuthRequest, res));
+  router.get('/admin/teaching-plan', authenticate, timetableFeature, academicsOversee, (req, res) => admin.getTeachingPlan(req as AuthRequest, res));
+  router.post('/admin/teaching-plan/requirements', authenticate, timetableFeature, academicsOversee, validate({ body: vp.teachingRequirementSchema }), (req, res) => admin.upsertTeachingRequirement(req as AuthRequest, res));
+  router.delete('/admin/teaching-plan/requirements/:id', authenticate, timetableFeature, academicsOversee, validate({ params: vp.idParam }), (req, res) => admin.deleteTeachingRequirement(req as AuthRequest, res));
+  router.put('/admin/teaching-plan/teachers/:id/cap', authenticate, timetableFeature, academicsOversee, validate({ params: vp.idParam, body: vp.teacherLoadCapSchema }), (req, res) => admin.setTeacherLoadCap(req as AuthRequest, res));
+  router.post('/admin/teaching-plan/seed', authenticate, timetableFeature, academicsOversee, (req, res) => admin.seedTeachingPlan(req as AuthRequest, res));
   // Auto-generate the weekly grid from the teaching plan + teacher availability (Phase 3).
-  router.post('/admin/schedule/generate', authenticate, authorizeCapability('academics.oversee'), validate({ body: vp.generateScheduleSchema }), (req, res) => admin.generateSchedule(req as AuthRequest, res));
-  router.get('/admin/teacher-unavailability', authenticate, authorizeCapability('academics.oversee'), (req, res) => admin.getTeacherUnavailability(req as AuthRequest, res));
-  router.post('/admin/teacher-unavailability/toggle', authenticate, authorizeCapability('academics.oversee'), validate({ body: vp.toggleUnavailabilitySchema }), (req, res) => admin.toggleTeacherUnavailability(req as AuthRequest, res));
+  router.post('/admin/schedule/generate', authenticate, timetableFeature, academicsOversee, validate({ body: vp.generateScheduleSchema }), (req, res) => admin.generateSchedule(req as AuthRequest, res));
+  router.get('/admin/teacher-unavailability', authenticate, timetableFeature, academicsOversee, (req, res) => admin.getTeacherUnavailability(req as AuthRequest, res));
+  router.post('/admin/teacher-unavailability/toggle', authenticate, timetableFeature, academicsOversee, validate({ body: vp.toggleUnavailabilitySchema }), (req, res) => admin.toggleTeacherUnavailability(req as AuthRequest, res));
   // Substitute management (Phase 4) — cover an absent teacher's lessons.
-  router.get('/admin/substitutions', authenticate, authorizeCapability('academics.oversee'), validate({ query: vp.substitutionsBoardQuery }), (req, res) => admin.getSubstitutions(req as AuthRequest, res));
-  router.get('/admin/substitutions/lessons', authenticate, authorizeCapability('academics.oversee'), validate({ query: vp.substituteLessonsQuery }), (req, res) => admin.getSubstituteLessons(req as AuthRequest, res));
-  router.post('/admin/substitutions/assign', authenticate, authorizeCapability('academics.oversee'), validate({ body: vp.assignSubstitutionSchema }), (req, res) => admin.assignSubstitution(req as AuthRequest, res));
-  router.delete('/admin/substitutions/:id', authenticate, authorizeCapability('academics.oversee'), validate({ params: vp.idParam }), (req, res) => admin.deleteSubstitution(req as AuthRequest, res));
+  router.get('/admin/substitutions', authenticate, timetableFeature, academicsOversee, validate({ query: vp.substitutionsBoardQuery }), (req, res) => admin.getSubstitutions(req as AuthRequest, res));
+  router.get('/admin/substitutions/lessons', authenticate, timetableFeature, academicsOversee, validate({ query: vp.substituteLessonsQuery }), (req, res) => admin.getSubstituteLessons(req as AuthRequest, res));
+  router.post('/admin/substitutions/assign', authenticate, timetableFeature, academicsOversee, validate({ body: vp.assignSubstitutionSchema }), (req, res) => admin.assignSubstitution(req as AuthRequest, res));
+  router.delete('/admin/substitutions/:id', authenticate, timetableFeature, academicsOversee, validate({ params: vp.idParam }), (req, res) => admin.deleteSubstitution(req as AuthRequest, res));
 
   router.get('/admin/announcements', authenticate, authorize('admin', 'teacher', 'parent', 'supervisor', 'reception', 'staff', 'accountant'), validate({ query: vq.listQuery }), (req, res) => admin.getAnnouncements(req as AuthRequest, res));
   router.get('/link-preview', authenticate, (req, res) => admin.getLinkPreview(req as AuthRequest, res));

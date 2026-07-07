@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'react-toastify';
 import { AlertTriangle, FileText, Check } from 'lucide-react';
 import { adminApi } from '../../../services/api';
+import { useAuthStore } from '../../../store/authStore';
 import Modal from '../../common/Modal';
 import Button from '../../common/Button';
 import Input from '../../common/Input';
@@ -38,6 +39,11 @@ const ALLOWED_ACCEPT = 'image/jpeg,image/png,image/webp,application/pdf';
 
 export default function TerminationModal({ isOpen, onClose, role, employeeId, employeeName, onCompleted }: Props) {
   const { t } = useTranslation();
+  const { school } = useAuthStore();
+  // Paid `hr` feature: letter upload + terminate-action record. Without it,
+  // the modal degrades to the plain archive flow (review → archive) so
+  // non-HR schools can still remove employees.
+  const hrOn = school?.features?.hr === true;
   const [step, setStep] = useState<Step>('review');
   const [file, setFile] = useState<File | null>(null);
   const [documentId, setDocumentId] = useState<string | null>(null);
@@ -81,17 +87,20 @@ export default function TerminationModal({ isOpen, onClose, role, employeeId, em
   };
 
   const finalize = async () => {
-    if (!documentId) { toast.error(t('admin.term.no_doc')); return; }
-    if (!summary.trim()) { toast.error(t('admin.term.no_summary')); return; }
+    if (hrOn && !documentId) { toast.error(t('admin.term.no_doc')); return; }
+    if (hrOn && !summary.trim()) { toast.error(t('admin.term.no_summary')); return; }
     setWorking(true);
     try {
-      // Step 1: record the termination action (employee_actions row + audit).
-      await adminApi.terminateEmployee(role, employeeId, {
-        documentId,
-        summary: summary.trim(),
-        occurredOn: departureDate,
-        departureDate,
-      });
+      // Step 1 (hr feature only): record the termination action
+      // (employee_actions row + audit).
+      if (hrOn && documentId) {
+        await adminApi.terminateEmployee(role, employeeId, {
+          documentId,
+          summary: summary.trim(),
+          occurredOn: departureDate,
+          departureDate,
+        });
+      }
       // Step 2: archive via the role-specific DELETE endpoint. Server-side
       // rewriteOwnershipToArchive() repoints all polymorphic rows (docs,
       // extended profile, emergency contacts, acks, actions) at the new
@@ -122,18 +131,30 @@ export default function TerminationModal({ isOpen, onClose, role, employeeId, em
               <Check className="w-4 h-4 text-emerald-600 mt-0.5" />
               {t('admin.term.step1_review')}
             </li>
-            <li className="flex items-start gap-2">
-              <Check className="w-4 h-4 text-emerald-600 mt-0.5" />
-              {t('admin.term.step2_upload')}
-            </li>
+            {hrOn && (
+              <li className="flex items-start gap-2">
+                <Check className="w-4 h-4 text-emerald-600 mt-0.5" />
+                {t('admin.term.step2_upload')}
+              </li>
+            )}
             <li className="flex items-start gap-2">
               <Check className="w-4 h-4 text-emerald-600 mt-0.5" />
               {t('admin.term.step3_archive')}
             </li>
           </ul>
+          {!hrOn && (
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">{t('admin.term.departure_date')}</label>
+              <Input type="date" value={departureDate} onChange={e => setDepartureDate(e.target.value)} />
+            </div>
+          )}
           <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
             <Button variant="ghost" onClick={handleClose}>{t('common.cancel')}</Button>
-            <Button onClick={() => setStep('upload')}>{t('admin.term.continue')}</Button>
+            {hrOn ? (
+              <Button onClick={() => setStep('upload')}>{t('admin.term.continue')}</Button>
+            ) : (
+              <Button variant="danger" onClick={finalize} loading={working}>{t('admin.term.finalize')}</Button>
+            )}
           </div>
         </div>
       )}

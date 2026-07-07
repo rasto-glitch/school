@@ -4,6 +4,7 @@ import { Edit, FileJson, FileText, ShieldAlert, UserX } from 'lucide-react';
 import { format, parseISO, differenceInYears, differenceInMonths } from 'date-fns';
 import Card from '../../common/Card';
 import Button from '../../common/Button';
+import { useAuthStore } from '../../../store/authStore';
 import DocumentsTab from './DocumentsTab';
 import { ExtendedProfileTab, EmergencyContactsTab, AcknowledgementsTab, ActionsTab } from './Wave2Tabs';
 import TerminationModal from './TerminationModal';
@@ -85,6 +86,11 @@ function InfoRow({ label, value, sensitive = false }: { label: string; value: st
 export default function EmployeeProfileView({ profile: p, documents: _docs, hrOfficer, onSaved, onExportJson, onExportPdf, onTerminated, initialTab = 'personal' }: Props) {
   void _docs; // DocumentsTab refetches on its own; we don't need the prop here, but consumers pass it for symmetry / SSR.
   const { t } = useTranslation();
+  const { school } = useAuthStore();
+  // Paid `hr` feature: deep-record tabs (extended PII / emergency contacts /
+  // documents / acks / actions), exports and the termination workflow. The
+  // base profile, identity editing and plain archiving stay for every school.
+  const hrOn = school?.features?.hr === true;
   const [tab, setTab] = useState<Tab>(initialTab);
   const [exporting, setExporting] = useState<'json' | 'pdf' | null>(null);
   const [showTerminate, setShowTerminate] = useState(false);
@@ -102,6 +108,7 @@ export default function EmployeeProfileView({ profile: p, documents: _docs, hrOf
     try { await fn(); } finally { setExporting(null); }
   };
 
+  const HR_TABS: Tab[] = ['extended', 'emergency', 'documents', 'acknowledgements', 'history'];
   const tabs: { key: Tab; label: string }[] = [
     { key: 'personal',         label: t('admin.profile.tab_personal') },
     { key: 'extended',         label: t('admin.profile.tab_extended') },
@@ -112,7 +119,7 @@ export default function EmployeeProfileView({ profile: p, documents: _docs, hrOf
     { key: 'acknowledgements', label: t('admin.profile.tab_acks') },
     { key: 'history',          label: t('admin.profile.tab_history') },
     { key: 'notes',            label: t('admin.profile.tab_notes') },
-  ];
+  ].filter(tt => hrOn || !HR_TABS.includes(tt.key as Tab)) as { key: Tab; label: string }[];
 
   return (
     <div className="space-y-4">
@@ -160,12 +167,12 @@ export default function EmployeeProfileView({ profile: p, documents: _docs, hrOf
                 {editing ? t('admin.profile.cancel_edit', 'Cancel edit') : t('admin.profile.edit')}
               </Button>
             )}
-            {onExportJson && (
+            {hrOn && onExportJson && (
               <Button variant="outline" size="sm" icon={<FileJson className="w-4 h-4" />} onClick={() => handleExport('json')} loading={exporting === 'json'}>
                 {t('admin.profile.export_json')}
               </Button>
             )}
-            {onExportPdf && (
+            {hrOn && onExportPdf && (
               <Button variant="outline" size="sm" icon={<FileText className="w-4 h-4" />} onClick={() => handleExport('pdf')} loading={exporting === 'pdf'}>
                 {t('admin.profile.export_pdf')}
               </Button>

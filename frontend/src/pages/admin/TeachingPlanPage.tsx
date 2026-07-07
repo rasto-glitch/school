@@ -3,9 +3,11 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'react-toastify';
 import { GraduationCap, Plus, Trash2, RefreshCw, Users, AlertTriangle } from 'lucide-react';
 import { adminApi } from '../../services/api';
+import { useAuthStore } from '../../store/authStore';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
+import FeatureNotEnabled from '../../components/common/FeatureNotEnabled';
 
 interface Line {
   requirementId: string | null; classId: string; className: string | null;
@@ -20,6 +22,14 @@ interface Pick { id: string; name: string }
 interface UnassignedLine { classId: string; className: string | null; subjectId: string; subjectName: string | null; periodsPerWeek: number }
 
 export default function TeachingPlanPage() {
+  const { t } = useTranslation();
+  const { school } = useAuthStore();
+  // Part of the Schedule 2.0 premium suite (`timetable` flag).
+  if (school?.features?.timetable !== true) return <FeatureNotEnabled title={t('nav.teaching_plan', 'Teaching Plan')} />;
+  return <TeachingPlanInner />;
+}
+
+function TeachingPlanInner() {
   const { t } = useTranslation();
   const [teachers, setTeachers] = useState<TeacherPlan[]>([]);
   const [classes, setClasses] = useState<Pick[]>([]);

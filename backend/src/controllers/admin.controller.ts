@@ -3963,8 +3963,9 @@ export async function getStudentBrief(req: AuthRequest, res: Response): Promise<
       .select('academic_year, round, subject, amount').eq('student_id', id).eq('school_id', schoolId),
     // Safety subset of the clinic health profile (allergies / conditions / diet)
     // for the brief — surfaced to admins + supervisors (this endpoint) and
-    // teachers (getStudentHistory). The visit log stays clinic-only.
-    loadHealthBrief(supabase, schoolId, String(id)),
+    // teachers (getStudentHistory). The visit log stays clinic-only. Only
+    // when the school has the student_health feature.
+    req.schoolFeatures?.student_health === true ? loadHealthBrief(supabase, schoolId, String(id)) : Promise.resolve(null),
   ]);
 
   res.json({

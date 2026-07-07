@@ -802,7 +802,10 @@ export async function getStudentBrief(req: AuthRequest, res: Response): Promise<
   if (gradesRes.error) { res.status(500).json({ error: gradesRes.error.message }); return; }
 
   // Safety subset of the clinic health profile — same as getStudentHistory.
-  const health = await loadHealthBrief(req.db!, schoolId, String(studentId));
+  // Only when the school has the student_health feature.
+  const health = req.schoolFeatures?.student_health === true
+    ? await loadHealthBrief(req.db!, schoolId, String(studentId))
+    : null;
 
   res.json({
     student: toCC(student),
@@ -940,7 +943,10 @@ export async function getStudentHistory(req: AuthRequest, res: Response): Promis
 
   // Safety subset of the clinic health profile (allergies / conditions / diet)
   // for this student the teacher already teaches. Visit log stays clinic-only.
-  const health = await loadHealthBrief(req.db!, schoolId, String(studentId));
+  // Only when the school has the student_health feature.
+  const health = req.schoolFeatures?.student_health === true
+    ? await loadHealthBrief(req.db!, schoolId, String(studentId))
+    : null;
 
   res.json({
     student: toCC(student),

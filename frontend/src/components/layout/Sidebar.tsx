@@ -87,8 +87,8 @@ const adminNav: AdminNavNode[] = [
     ],
   },
   { kind: 'leaf', path: '/admin/schedule', icon: Calendar, labelKey: 'nav.schedule', labelFallback: 'Schedule', capabilities: ['academics.oversee'] },
-  { kind: 'leaf', path: '/admin/teaching-plan', icon: GraduationCap, labelKey: 'nav.teaching_plan', labelFallback: 'Teaching Plan', capabilities: ['academics.oversee'] },
-  { kind: 'leaf', path: '/admin/substitutions', icon: Replace, labelKey: 'nav.substitutions', labelFallback: 'Substitutes', capabilities: ['academics.oversee'] },
+  { kind: 'leaf', path: '/admin/teaching-plan', icon: GraduationCap, labelKey: 'nav.teaching_plan', labelFallback: 'Teaching Plan', feature: 'timetable', capabilities: ['academics.oversee'] },
+  { kind: 'leaf', path: '/admin/substitutions', icon: Replace, labelKey: 'nav.substitutions', labelFallback: 'Substitutes', feature: 'timetable', capabilities: ['academics.oversee'] },
   { kind: 'leaf', path: '/admin/grade-review', icon: Star, labelKey: 'nav.grade_review', labelFallback: 'Grade Review', feature: 'grades', capabilities: ['academics.oversee'] },
   { kind: 'leaf', path: '/admin/remedial', icon: Repeat, labelKey: 'nav.remedial', labelFallback: 'Remedial (Round Two)', feature: 'grades', capabilities: ['academics.oversee'] },
   { kind: 'leaf', path: '/admin/credits', icon: HeartHandshake, labelKey: 'nav.credits', labelFallback: 'Support Marks', feature: 'grades', capabilities: ['academics.oversee'] },
@@ -96,8 +96,8 @@ const adminNav: AdminNavNode[] = [
   { kind: 'leaf', path: '/admin/weekly-summary', icon: Clock, labelKey: 'nav.weekly_summary', labelFallback: 'Weekly Summary', feature: 'weekly_summary', capabilities: ['academics.oversee'] },
   { kind: 'leaf', path: '/admin/content-moderation', icon: BookOpen, labelKey: 'nav.content_moderation', labelFallback: 'Homework & Assignments', capabilities: ['academics.oversee'] },
   { kind: 'leaf', path: '/admin/announcements', icon: Megaphone, labelKey: 'nav.announcements', labelFallback: 'Announcements', feature: 'announcements', capabilities: ['announcements.moderate'] },
-  // Clinic-internal student health records (sensitive). Capability-gated only.
-  { kind: 'leaf', path: '/admin/health', icon: HeartPulse, labelKey: 'nav.student_health', labelFallback: 'Student Health', capabilities: ['health.manage'] },
+  // Clinic-internal student health records (sensitive). Premium feature + capability.
+  { kind: 'leaf', path: '/admin/health', icon: HeartPulse, labelKey: 'nav.student_health', labelFallback: 'Student Health', feature: 'student_health', capabilities: ['health.manage'] },
   {
     kind: 'group', key: 'employees', icon: Users,
     labelKey: 'nav.employees', labelFallback: 'Employees',
@@ -111,15 +111,10 @@ const adminNav: AdminNavNode[] = [
   { kind: 'leaf', path: '/admin/drivers', icon: Bus, labelKey: 'nav.drivers', labelFallback: 'Drivers', feature: 'bus_tracking', capabilities: ['staff.manage'] },
   // Premium (platform-provisioned, in PREMIUM_FEATURES) + capability-gated.
   { kind: 'leaf', path: '/admin/attendance', icon: ClipboardCheck, labelKey: 'nav.staff_attendance', labelFallback: 'Staff Attendance', feature: 'staff_attendance', capabilities: ['staff_attendance.manage'] },
-  {
-    kind: 'group', key: 'hr', icon: ClipboardCheck,
-    labelKey: 'nav.hr', labelFallback: 'HR',
-    capabilities: ['hr.manage'],
-    children: [
-      { kind: 'leaf', path: '/admin/school-policies', icon: ClipboardCheck, labelKey: 'nav.policies', labelFallback: 'Policies' },
-      { kind: 'leaf', path: '/admin/clearance', icon: ShieldCheck, labelKey: 'nav.clearance', labelFallback: 'Admin Clearance' },
-    ],
-  },
+  // Policies is part of the paid HR feature; the clearance panel is NOT — it's
+  // how an Owner delegates admin capabilities, so every school keeps it.
+  { kind: 'leaf', path: '/admin/school-policies', icon: ClipboardCheck, labelKey: 'nav.policies', labelFallback: 'Policies', feature: 'hr', capabilities: ['hr.manage'] },
+  { kind: 'leaf', path: '/admin/clearance', icon: ShieldCheck, labelKey: 'nav.clearance', labelFallback: 'Admin Clearance', capabilities: ['hr.manage'] },
   { kind: 'leaf', path: '/admin/accounts', icon: UserCog, labelKey: 'nav.accounts', labelFallback: 'Accounts', capabilities: ['accounts.manage'] },
   { kind: 'leaf', path: '/admin/audit-log', icon: History, labelKey: 'nav.audit_log', labelFallback: 'Audit Log', capabilities: ['audit.read'] },
   { kind: 'leaf', path: '/admin/security', icon: ShieldAlert, labelKey: 'nav.security', labelFallback: 'Security', capabilities: ['audit.read'] },
@@ -427,7 +422,7 @@ export default function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobile
   // pre-dates the flag. Covers paid-premium plans (tuition_fees, archive) and
   // admin-enabled features like staff_attendance (mirrors the backend's
   // `features.staff_attendance === true` gate; absent key = not enabled).
-  const PREMIUM_FEATURES = ['tuition_fees', 'archive', 'staff_attendance'];
+  const PREMIUM_FEATURES = ['tuition_fees', 'archive', 'staff_attendance', 'timetable', 'student_health', 'hr'];
   const isFeatureEnabled = (feature?: string) => {
     if (!feature) return true;
     if (PREMIUM_FEATURES.includes(feature)) return school?.features?.[feature] === true;

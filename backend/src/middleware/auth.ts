@@ -34,6 +34,10 @@ export interface AuthRequest extends Request {
   // when a route gates on a capability; controllers can also load it on
   // demand via loadClearance().
   clearance?: Clearance;
+  // The school's feature flags, attached by authenticate() (already fetched
+  // there for the features_version check) so requireFeature() costs no
+  // extra query.
+  schoolFeatures?: Record<string, boolean> | null;
 }
 
 // Endpoints a user with must_change_password=true may still reach — the
@@ -144,11 +148,30 @@ export async function authenticate(req: AuthRequest, res: Response, next: NextFu
   }
 
   req.user = decoded;
+  req.schoolFeatures = school.features ?? null;
   // Attach a per-request, RLS-bound client. Phase 1 is inert (no policies
   // enforced yet, or envs not set → falls back to adminDb). Controllers
   // start using req.db in Phase 3.
   req.db = tenantDb(decoded);
   next();
+}
+
+// ── Feature flags (master-portal provisioned) ───────────────────────────────
+// Opt-in gate: the flag must be exactly true in schools.features — a missing
+// key means not enabled, so a school whose JSONB pre-dates the flag never
+// gets it silently. `hr` additionally requires `archive` (employee records
+// sit on the archive retention tier); the master portal enforces that
+// dependency at write time, this re-check covers hand-edited rows.
+export function requireFeature(flag: string) {
+  return (req: AuthRequest, res: Response, next: NextFunction): void => {
+    const f = req.schoolFeatures;
+    const on = f?.[flag] === true && (flag !== 'hr' || f?.archive === true);
+    if (!on) {
+      res.status(403).json({ error: 'This feature is not enabled for your school.', code: 'FEATURE_DISABLED', feature: flag });
+      return;
+    }
+    next();
+  };
 }
 
 export function authorize(...roles: string[]) {

@@ -171,7 +171,8 @@ export default function AdminDashboard() {
         const r = await safe(adminApi.getAccountRequestSummary());
         if (r?.data) setAccountReq(r.data as AccountReq);
       }
-      if (has('hr.read')) {
+      // Expiring-documents card is part of the paid `hr` feature.
+      if (has('hr.read') && school?.features?.hr === true) {
         const e = await safe(adminApi.listExpiringEmployeeDocuments(30));
         setAttn(a => ({ ...a, expiring: e?.data?.total || 0 }));
       }

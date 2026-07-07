@@ -148,6 +148,8 @@
     "download": "Download",
     "download_pdf": "Download PDF",
     "download_attachment": "Download Attachment",
+    "feature_not_enabled_title": "This feature is not enabled",
+    "feature_not_enabled_body": "Your school's plan does not include this feature. Contact the platform operator to enable it.",
     "loading_more": "Loading…",
     "see_more": "see more",
     "total": "Total",

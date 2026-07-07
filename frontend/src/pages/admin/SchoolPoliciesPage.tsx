@@ -4,6 +4,8 @@ import { toast } from 'react-toastify';
 import { Plus, Edit2, Trash2, ShieldCheck, FileText, History as HistoryIcon } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { adminApi } from '../../services/api';
+import { useAuthStore } from '../../store/authStore';
+import FeatureNotEnabled from '../../components/common/FeatureNotEnabled';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
@@ -37,6 +39,14 @@ const EMPTY_FORM: PolicyFormState = {
 };
 
 export default function SchoolPoliciesPage() {
+  const { t } = useTranslation();
+  const { school } = useAuthStore();
+  // Part of the paid `hr` feature (employee records).
+  if (school?.features?.hr !== true) return <FeatureNotEnabled title={t('nav.policies', 'Policies')} />;
+  return <SchoolPoliciesInner />;
+}
+
+function SchoolPoliciesInner() {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
   const [policies, setPolicies] = useState<SchoolPolicy[]>([]);

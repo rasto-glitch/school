@@ -5,6 +5,8 @@ import {
   HeartPulse, Search, ChevronLeft, Plus, Trash2, Pencil, Save, BadgeAlert, Bell,
 } from 'lucide-react';
 import { adminApi, healthApi, type HealthEmergencyContact, type HealthImmunization } from '../../services/api';
+import { useAuthStore } from '../../store/authStore';
+import FeatureNotEnabled from '../../components/common/FeatureNotEnabled';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
@@ -44,6 +46,14 @@ const emptyProfile = {
 };
 
 export default function StudentHealthPage() {
+  const { t } = useTranslation();
+  const { school } = useAuthStore();
+  // Premium `student_health` flag (master-provisioned).
+  if (school?.features?.student_health !== true) return <FeatureNotEnabled title={t('nav.student_health', 'Student Health')} />;
+  return <StudentHealthInner />;
+}
+
+function StudentHealthInner() {
   const { t } = useTranslation();
   const catLabel = (c: string) => t(`health.cat_${c}`, c);
   const outLabel = (o: string) => t(`health.out_${o}`, o);

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'react-toastify';
 import { Calendar, X, Download, Upload, FileSpreadsheet, Plus, Trash2, ArrowUp, ArrowDown, Coffee, DoorOpen, Wand2, Lock, Unlock, Ban, CheckCircle2 } from 'lucide-react';
 import { adminApi, type ScheduleSlot } from '../../services/api';
+import { useAuthStore } from '../../store/authStore';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
@@ -30,6 +31,10 @@ function addMinutes(hhmm: string, mins: number): string {
 
 export default function SchedulePage() {
   const { t, i18n } = useTranslation();
+  const { school } = useAuthStore();
+  // Schedule 2.0 premium suite (rooms / availability / auto-generate / pinning).
+  // The bare-bones manual grid + day structure stays available to every school.
+  const timetableOn = school?.features?.timetable === true;
   const dayLabel = (day: string) => t(`common.days.${day}`);
 
   const [scheduleDays, setScheduleDays] = useState<string[]>(['sunday', 'monday', 'tuesday', 'wednesday', 'thursday']);
@@ -270,19 +275,21 @@ export default function SchedulePage() {
           <p className="text-xs text-amber-600 mt-2">{t('admin.reduce_periods_warning')}</p>
         </Card>
 
-        {/* Rooms */}
-        <RoomsCard rooms={rooms} classes={classes} onChange={load} />
+        {/* Rooms (Schedule 2.0 — timetable feature) */}
+        {timetableOn && <RoomsCard rooms={rooms} classes={classes} onChange={load} />}
 
-        {/* Teacher availability (feeds the generator) */}
-        <AvailabilityCard
-          teachers={teachers}
-          periods={columns.filter(c => c.kind === 'lesson').map(c => c.period as number)}
-          orderedDays={orderedDays}
-          dayLabel={dayLabel}
-        />
+        {/* Teacher availability (feeds the generator; timetable feature) */}
+        {timetableOn && (
+          <AvailabilityCard
+            teachers={teachers}
+            periods={columns.filter(c => c.kind === 'lesson').map(c => c.period as number)}
+            orderedDays={orderedDays}
+            dayLabel={dayLabel}
+          />
+        )}
 
-        {/* Auto-generate */}
-        <Card>
+        {/* Auto-generate (timetable feature) */}
+        {timetableOn && <Card>
           <h2 className="font-semibold text-gray-900 mb-1 flex items-center gap-2"><Wand2 className="w-4 h-4" /> {t('schedule2.generate.title', 'Auto-generate timetable')}</h2>
           <p className="text-sm text-gray-500 mb-3">{t('schedule2.generate.hint', 'Fill the grid from the teaching plan, honoring teacher/class/room clashes, availability, weekly load and the daily subject cap. Locked (pinned) lessons are always kept.')}</p>
           <div className="flex flex-wrap items-center gap-4">
@@ -312,7 +319,7 @@ export default function SchedulePage() {
               )}
             </div>
           )}
-        </Card>
+        </Card>}
 
         {/* Bulk upload */}
         <Card>
@@ -396,7 +403,7 @@ export default function SchedulePage() {
                                     <option value="">—</option>
                                     {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                                   </select>
-                                  {cell && (
+                                  {cell && timetableOn && (
                                     <button type="button" onClick={() => toggleLock(cell)} title={cell.isLocked ? t('schedule2.unpin', 'Unpin') : t('schedule2.pin', 'Pin (keep on regenerate)')}
                                       className={cell.isLocked ? 'text-amber-600' : 'text-gray-300 hover:text-amber-500'}>
                                       {cell.isLocked ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}

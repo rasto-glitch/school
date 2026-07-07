@@ -16,6 +16,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Plus } from 'lucide-react';
 import Button from '../../../common/Button';
+import { useAuthStore } from '../../../../store/authStore';
 import WizardSection from './WizardSection';
 import TeacherIdentityForm, { type CreatedEmployee } from './TeacherIdentityForm';
 import AccountIdentityForm, { type AccountRole } from './AccountIdentityForm';
@@ -61,6 +62,10 @@ function IdentitySummary({ employee }: { employee: CreatedEmployee }) {
 export default function NewEmployeeWizard({ role }: Props) {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { school } = useAuthStore();
+  // Sections 3-5 (extended PII / emergency contacts / documents) belong to
+  // the paid `hr` feature; identity + photo are basic CRUD for every school.
+  const hrOn = school?.features?.hr === true;
 
   const [createdEmployee, setCreatedEmployee] = useState<CreatedEmployee | null>(null);
   const [photoUploaded, setPhotoUploaded] = useState(false);
@@ -138,7 +143,7 @@ export default function NewEmployeeWizard({ role }: Props) {
           )}
         </WizardSection>
 
-        <WizardSection
+        {hrOn && <WizardSection
           number={3}
           title={t('admin.wizard.section_extended', 'Extended profile')}
           description={t('admin.wizard.section_extended_desc', 'Sensitive fields are encrypted at rest.')}
@@ -155,9 +160,9 @@ export default function NewEmployeeWizard({ role }: Props) {
           ) : (
             <LockedPlaceholder message={lockedMessage} />
           )}
-        </WizardSection>
+        </WizardSection>}
 
-        <WizardSection
+        {hrOn && <WizardSection
           number={4}
           title={t('admin.wizard.section_contacts', 'Emergency contacts')}
           status={ec > 0 ? 'saved' : 'optional'}
@@ -173,9 +178,9 @@ export default function NewEmployeeWizard({ role }: Props) {
           ) : (
             <LockedPlaceholder message={lockedMessage} />
           )}
-        </WizardSection>
+        </WizardSection>}
 
-        <WizardSection
+        {hrOn && <WizardSection
           number={5}
           title={t('admin.wizard.section_documents', 'Documents')}
           status={dc > 0 ? 'saved' : 'optional'}
@@ -191,7 +196,7 @@ export default function NewEmployeeWizard({ role }: Props) {
           ) : (
             <LockedPlaceholder message={lockedMessage} />
           )}
-        </WizardSection>
+        </WizardSection>}
 
         {createdEmployee && (
           <div className="flex justify-between items-center pt-2">

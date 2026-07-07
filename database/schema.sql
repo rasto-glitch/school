@@ -18,6 +18,10 @@ CREATE TABLE IF NOT EXISTS schools (
   secondary_color TEXT DEFAULT '#06B6D4',
   domain TEXT,
   subscription_plan TEXT DEFAULT 'basic',
+  -- Per-school override of the plan's $/student/YEAR price (migration 082).
+  -- NULL = plan list price. Master-portal-only; outside `features` so editing
+  -- it never bumps features_version.
+  price_per_student NUMERIC(8,2) CHECK (price_per_student IS NULL OR price_per_student >= 0),
   is_active BOOLEAN DEFAULT TRUE,
   periods_per_day INT NOT NULL DEFAULT 6,
   schedule_days TEXT[] NOT NULL DEFAULT ARRAY['sunday','monday','tuesday','wednesday','thursday'],
@@ -65,6 +69,7 @@ CREATE TABLE IF NOT EXISTS schools (
 -- ALTER TABLE schools ADD COLUMN IF NOT EXISTS grade_scale_max NUMERIC(5,2) DEFAULT 100;
 -- ALTER TABLE schools ADD COLUMN IF NOT EXISTS staff_attendance_config JSONB NOT NULL DEFAULT '{"geofence":{"lat":null,"lng":null,"radiusMeters":250},"schedule":{"startTime":"08:00","endTime":"15:00","lateGraceMinutes":15}}'::jsonb;
 -- ALTER TABLE schools ADD COLUMN IF NOT EXISTS report_card_config JSONB NOT NULL DEFAULT '{"signatories":{"classTeacher":"","principal":""},"headerNote":"","footerNote":"","defaultLang":"en"}'::jsonb;
+-- ALTER TABLE schools ADD COLUMN IF NOT EXISTS price_per_student NUMERIC(8,2) CHECK (price_per_student IS NULL OR price_per_student >= 0);
 
 -- Trigger: auto-increment features_version whenever the features JSONB column changes
 CREATE OR REPLACE FUNCTION increment_features_version()

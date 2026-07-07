@@ -148,6 +148,8 @@
     "download": "تنزيل",
     "download_pdf": "تنزيل PDF",
     "download_attachment": "تنزيل المرفق",
+    "feature_not_enabled_title": "هذه الميزة غير مفعّلة",
+    "feature_not_enabled_body": "خطة مدرستكم لا تشمل هذه الميزة. تواصلوا مع مشغّل المنصة لتفعيلها.",
     "loading_more": "جارٍ التحميل…",
     "see_more": "عرض المزيد",
     "total": "المجموع",

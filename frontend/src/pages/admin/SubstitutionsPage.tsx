@@ -3,9 +3,11 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'react-toastify';
 import { Replace, Calendar, Star, Check, X, UserX, Bell } from 'lucide-react';
 import { adminApi } from '../../services/api';
+import { useAuthStore } from '../../store/authStore';
 import PageLayout from '../../components/layout/PageLayout';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
+import FeatureNotEnabled from '../../components/common/FeatureNotEnabled';
 
 const DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 const todayStr = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
@@ -28,6 +30,14 @@ interface Lesson {
 }
 
 export default function SubstitutionsPage() {
+  const { t } = useTranslation();
+  const { school } = useAuthStore();
+  // Part of the Schedule 2.0 premium suite (`timetable` flag).
+  if (school?.features?.timetable !== true) return <FeatureNotEnabled title={t('nav.substitutions', 'Substitutes')} />;
+  return <SubstitutionsInner />;
+}
+
+function SubstitutionsInner() {
   const { t } = useTranslation();
   const [date, setDate] = useState(todayStr());
   const [dayOfWeek, setDayOfWeek] = useState<number | null>(null);
