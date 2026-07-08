@@ -99,6 +99,25 @@ function flattenRefs(refs: ParsedEmail['references']): string | undefined {
   return refs;
 }
 
+// SPF/DKIM/DMARC verdicts from the Authentication-Results header that
+// Cloudflare's inbound MTA stamps on every message, e.g.
+//   mx.cloudflare.net; dkim=pass header.d=…; spf=pass smtp.mailfrom=…; dmarc=fail …
+// The backend (identity migration 003) stores them and flags a hard DMARC
+// fail as spam. Missing header → undefined, nothing gets flagged.
+function parseAuthResults(headers: Headers): { spf?: string; dkim?: string; dmarc?: string } | undefined {
+  const raw = headers.get('authentication-results');
+  if (!raw) return undefined;
+  const pick = (mech: string): string | undefined => {
+    const m = raw.match(new RegExp(`(?:^|;)\\s*${mech}=([a-zA-Z]+)`, 'i'));
+    return m ? m[1].toLowerCase() : undefined;
+  };
+  const spf = pick('spf');
+  const dkim = pick('dkim');
+  const dmarc = pick('dmarc');
+  if (!spf && !dkim && !dmarc) return undefined;
+  return { spf, dkim, dmarc };
+}
+
 export default {
   async email(message: ForwardableEmailMessage, env: Env, ctx: ExecutionContext): Promise<void> {
     // Backend webhook is the only destination. The previous personal-Gmail
@@ -153,6 +172,7 @@ export default {
           };
         }),
         rawSize: raw.byteLength,
+        auth: parseAuthResults(message.headers),
       };
 
       try {
