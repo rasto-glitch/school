@@ -36,8 +36,10 @@ TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }: TaskManager.T
       body: JSON.stringify({
         latitude: loc.coords.latitude,
         longitude: loc.coords.longitude,
-        speed: loc.coords.speed ?? 0,
-        heading: loc.coords.heading ?? 0,
+        // iOS reports -1 for speed/heading when unavailable (stationary) —
+        // clamp so the backend validator doesn't reject the whole fix.
+        speed: Math.max(0, loc.coords.speed ?? 0),
+        heading: Math.max(0, loc.coords.heading ?? 0),
         isDriving: true,
         // Age of this GPS fix at send time, computed on-device so it's immune
         // to device/server clock skew. The backend suppresses proximity alerts

@@ -144,8 +144,11 @@ export const respondToAppointmentSchema = z.object({
 export const updateLocationSchema = z.object({
   latitude: z.number().min(-90).max(90),
   longitude: z.number().min(-180).max(180),
-  speed: z.number().nonnegative().max(1000).optional(),
-  heading: z.number().min(0).max(360).optional(),
+  // iOS CoreLocation reports -1 for speed/course when the value is unavailable
+  // (always while stationary — e.g. right at drive start). Accept the sentinel
+  // and clamp to 0 instead of rejecting the whole fix.
+  speed: z.number().min(-1).max(1000).transform(v => Math.max(0, v)).optional(),
+  heading: z.number().min(-1).max(360).transform(v => Math.max(0, v)).optional(),
   isDriving: z.boolean().optional(),
   // Age of the GPS fix (ms) as measured on-device. Used to drop proximity
   // alerts off stale cached positions. Capped at 24h to reject garbage.
